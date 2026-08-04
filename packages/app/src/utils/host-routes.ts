@@ -420,6 +420,23 @@ export function buildHostSessionsRoute(serverId: string) {
   return `${base}/sessions` as const;
 }
 
+export function buildHostRoomsRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/rooms` as const;
+}
+
+export function buildHostRoomRoute(serverId: string, roomId: string) {
+  const base = buildHostRoomsRoute(serverId);
+  const normalizedRoomId = trimNonEmpty(roomId);
+  if (base === "/" || !normalizedRoomId) {
+    return base;
+  }
+  return `${base}/${encodeSegment(normalizedRoomId)}` as const;
+}
+
 export function buildSessionsRoute() {
   return "/sessions" as const;
 }

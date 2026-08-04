@@ -2948,6 +2948,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceScriptManagement: z.boolean().optional(),
         // COMPAT(projectCustomIcon): added in v0.2.0, remove after 2027-01-20.
         projectCustomIcon: z.boolean().optional(),
+        // COMPAT(chatRooms): added in v0.2.6, remove gate after 2027-02-04.
+        chatRooms: z.boolean().optional(),
       })
       .optional(),
   })

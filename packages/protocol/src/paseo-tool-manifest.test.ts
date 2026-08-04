@@ -26,6 +26,8 @@ const EXPECTED_TOOL_IDS = [
   "kill_terminal",
   "capture_terminal",
   "send_terminal_keys",
+  "read_room",
+  "post_room",
   "create_schedule",
   "create_heartbeat",
   "delete_heartbeat",
@@ -82,6 +84,10 @@ describe("Paseo tool manifest", () => {
       label: "List providers",
       group: "Providers",
     });
+    expect(PASEO_TOOL_MANIFEST.find((entry) => entry.id === "post_room")).toMatchObject({
+      label: "Post room message",
+      group: "Rooms",
+    });
     expect(PASEO_TOOL_MANIFEST.find((entry) => entry.id === "browser_snapshot")).toMatchObject({
       label: "Snapshot browser page",
       group: "Browser",
@@ -94,6 +100,6 @@ describe("Paseo tool manifest", () => {
     }
 
     expect(PASEO_TOOL_MANIFEST.filter((entry) => entry.browser)).toHaveLength(22);
-    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(38);
+    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(40);
   });
 });

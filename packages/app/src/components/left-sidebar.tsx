@@ -4,6 +4,7 @@ import {
   FolderPlus,
   History,
   Home,
+  MessagesSquare,
   Plus,
   Search,
   Server,
@@ -49,7 +50,10 @@ import type { StatusGroup } from "@/hooks/sidebar-status-view-model";
 import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useHosts } from "@/runtime/host-runtime";
-import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import {
+  useActiveWorkspaceSelection,
+  useLastWorkspaceSelection,
+} from "@/stores/navigation-active-workspace-store";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import { usePanelStore } from "@/stores/panel-store";
 import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop-window";
@@ -58,6 +62,7 @@ import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
 import {
   buildOpenProjectRoute,
+  buildHostRoomsRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
@@ -104,6 +109,7 @@ interface SidebarLabels {
   searchHosts: string;
   sessions: string;
   schedules: string;
+  rooms: string;
   closeSidebar: string;
 }
 
@@ -113,6 +119,7 @@ interface MobileSidebarProps extends SidebarSharedProps {
   closeSidebar: () => void;
   handleViewMoreNavigate: () => void;
   handleViewSchedulesNavigate: () => void;
+  handleViewRoomsNavigate: () => void;
 }
 
 interface DesktopSidebarProps extends SidebarSharedProps {
@@ -120,6 +127,7 @@ interface DesktopSidebarProps extends SidebarSharedProps {
   active: boolean;
   handleViewMore: () => void;
   handleViewSchedules: () => void;
+  handleViewRooms: () => void;
 }
 
 export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boolean }) {
@@ -128,6 +136,9 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const insets = useSafeAreaInsets();
   const isCompactLayout = useIsCompactFormFactor();
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
+  const hosts = useHosts();
+  const lastWorkspaceSelection = useLastWorkspaceSelection();
+  const roomsServerId = lastWorkspaceSelection?.serverId ?? hosts[0]?.serverId ?? null;
 
   const {
     projects,
@@ -215,6 +226,12 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     router.push(buildSchedulesRoute());
   }, []);
 
+  const handleViewRoomsNavigate = useCallback(() => {
+    if (roomsServerId) {
+      router.push(buildHostRoomsRoute(roomsServerId));
+    }
+  }, [roomsServerId]);
+
   const newWorkspaceKeys = useShortcutKeys("new-workspace");
   const labels = useMemo(
     (): SidebarLabels => ({
@@ -226,6 +243,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
       searchHosts: t("sidebar.host.searchPlaceholder"),
       sessions: t("sidebar.sections.sessions"),
       schedules: t("sidebar.sections.schedules"),
+      rooms: "Rooms",
       closeSidebar: t("sidebar.actions.closeSidebar"),
     }),
     [t],
@@ -264,6 +282,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
           handleOpenHostSettings={handleOpenHostSettingsMobile}
           handleViewMoreNavigate={handleViewMoreNavigate}
           handleViewSchedulesNavigate={handleViewSchedulesNavigate}
+          handleViewRoomsNavigate={handleViewRoomsNavigate}
         />
       </RetainedPanelActivity>
     );
@@ -282,6 +301,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
         handleOpenHostSettings={handleOpenHostSettingsDesktop}
         handleViewMore={handleViewMoreNavigate}
         handleViewSchedules={handleViewSchedulesNavigate}
+        handleViewRooms={handleViewRoomsNavigate}
       />
     </RetainedPanelActivity>
   );
@@ -610,11 +630,13 @@ function MobileSidebar({
   closeSidebar,
   handleViewMoreNavigate,
   handleViewSchedulesNavigate,
+  handleViewRoomsNavigate,
 }: MobileSidebarProps) {
   const pathname = usePathname();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
+  const isRoomsActive = pathname.includes("/rooms");
   const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
   const dragGestureHostPresented = useIsMobilePanelPresented("agent-list");
 
@@ -627,6 +649,11 @@ function MobileSidebar({
     closeSidebar();
     handleViewSchedulesNavigate();
   }, [closeSidebar, handleViewSchedulesNavigate]);
+
+  const handleViewRooms = useCallback(() => {
+    closeSidebar();
+    handleViewRoomsNavigate();
+  }, [closeSidebar, handleViewRoomsNavigate]);
 
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
@@ -663,6 +690,14 @@ function MobileSidebar({
             onPress={handleViewMore}
             isActive={isSessionsActive}
             testID="sidebar-sessions"
+            variant="compact"
+          />
+          <SidebarHeaderRow
+            icon={MessagesSquare}
+            label={labels.rooms}
+            onPress={handleViewRooms}
+            isActive={isRoomsActive}
+            testID="sidebar-rooms"
             variant="compact"
           />
           <SidebarHeaderRow
@@ -755,12 +790,14 @@ function DesktopSidebar({
   active,
   handleViewMore,
   handleViewSchedules,
+  handleViewRooms,
 }: DesktopSidebarProps) {
   const ownsTopLeft = useOwnsWindowChromeCorner("top-left");
   const pathname = usePathname();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
+  const isRoomsActive = pathname.includes("/rooms");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
@@ -847,6 +884,14 @@ function DesktopSidebar({
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
+              variant="compact"
+            />
+            <SidebarHeaderRow
+              icon={MessagesSquare}
+              label={labels.rooms}
+              onPress={handleViewRooms}
+              isActive={isRoomsActive}
+              testID="sidebar-rooms"
               variant="compact"
             />
             <SidebarHeaderRow

@@ -59,6 +59,9 @@ import {
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
+import { ChatMessageSchema } from "@getpaseo/protocol/chat/types";
+import type { FileBackedChatService } from "../../chat/chat-service.js";
+import { postChatMessageWithMentions } from "../../chat/post.js";
 import { respondToAgentPermission } from "../permission-response.js";
 import {
   archiveAgentCommand,
@@ -99,6 +102,11 @@ export interface PaseoToolHostDependencies {
   terminalManager?: TerminalManager | null;
   getDaemonTcpPort?: () => number | null;
   scheduleService?: ScheduleService | null;
+  chatService?: FileBackedChatService | null;
+  resolveAgentIdentifier?: (
+    identifier: string,
+  ) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
+  sendAgentMessage?: (agentId: string, text: string) => Promise<void>;
   providerSnapshotManager: ProviderSnapshotManager;
   github?: ForgeService;
   workspaceGitService?: Pick<
@@ -1205,6 +1213,68 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       callerAgentId,
       resolveCallerAgent,
     });
+  }
+
+  if (callerAgentId && options.chatService) {
+    registerTool(
+      "read_room",
+      {
+        title: "Read room",
+        description: "Read recent messages from a Paseo room by name or ID.",
+        inputSchema: {
+          room: z.string().trim().min(1).describe("Room name or ID."),
+          limit: z.number().int().positive().max(100).optional().default(50),
+          since: z.string().datetime().optional(),
+        },
+        outputSchema: {
+          messages: z.array(ChatMessageSchema),
+        },
+      },
+      async ({ room, limit = 50, since }) => {
+        const messages = await options.chatService!.readMessages({ room, limit, since });
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ messages }),
+        };
+      },
+    );
+
+    if (options.resolveAgentIdentifier && options.sendAgentMessage) {
+      registerTool(
+        "post_room",
+        {
+          title: "Post room message",
+          description:
+            "Post to a Paseo room as the calling agent. Use replyToMessageId to reply and @agent-id to wake another agent.",
+          inputSchema: {
+            room: z.string().trim().min(1).describe("Room name or ID."),
+            body: z.string().trim().min(1),
+            replyToMessageId: z.string().trim().min(1).optional(),
+          },
+          outputSchema: {
+            message: ChatMessageSchema,
+          },
+        },
+        async ({ room, body, replyToMessageId }) => {
+          const message = await postChatMessageWithMentions({
+            chatService: options.chatService!,
+            room,
+            authorAgentId: callerAgentId,
+            body,
+            replyToMessageId,
+            logger: childLogger,
+            listStoredAgents: () => agentStorage.list(),
+            listLiveAgents: () => agentManager.listAgents(),
+            resolveAgentIdentifier: options.resolveAgentIdentifier!,
+            sendAgentMessage: options.sendAgentMessage!,
+          });
+          return {
+            content: [],
+            structuredContent: ensureValidJson({ message }),
+          };
+        },
+      );
+    }
   }
 
   registerTool(
