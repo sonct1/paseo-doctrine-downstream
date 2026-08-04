@@ -1,6 +1,7 @@
 import { spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import path from "node:path";
 import { loadConfig, resolvePaseoHome, spawnProcess } from "@getpaseo/server";
 import treeKill from "tree-kill";
@@ -118,6 +119,30 @@ const startupExited = (details: ProcessExitDetails): DetachedStartupResult => ({
   ...details,
 });
 
+const POSIX_USER_EXECUTABLE_DIRS = [
+  ["bin"],
+  [".local", "bin"],
+  [".opencode", "bin"],
+  [".bun", "bin"],
+] as const;
+
+function appendUserExecutableDirs(env: NodeJS.ProcessEnv): void {
+  if (process.platform === "win32") return;
+
+  const home = env.HOME?.trim() || homedir();
+  const existingEntries = env.PATH ? env.PATH.split(path.delimiter) : [];
+  const seen = new Set(existingEntries.filter(Boolean));
+
+  for (const segments of POSIX_USER_EXECUTABLE_DIRS) {
+    const candidate = path.join(home, ...segments);
+    if (seen.has(candidate)) continue;
+    existingEntries.push(candidate);
+    seen.add(candidate);
+  }
+
+  env.PATH = existingEntries.join(path.delimiter);
+}
+
 function envWithHome(home?: string): NodeJS.ProcessEnv {
   if (!home) {
     return process.env;
@@ -156,6 +181,9 @@ function buildRunnerArgs(options: DaemonStartOptions): string[] {
 
 function buildChildEnv(options: DaemonStartOptions): NodeJS.ProcessEnv {
   const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  // Detached launches do not load shell startup files. Keep the inherited PATH
+  // precedence, then add common user-level install locations for agent CLIs.
+  appendUserExecutableDirs(childEnv);
   if (options.home) {
     childEnv.PASEO_HOME = options.home;
   }
