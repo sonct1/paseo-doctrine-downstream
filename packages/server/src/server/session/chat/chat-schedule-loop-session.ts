@@ -2,12 +2,8 @@ import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
 import type { StoredAgentRecord } from "../../agent/agent-storage.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
-import {
-  ChatServiceError,
-  type FileBackedChatService,
-  parseMentionAgentIds,
-} from "../../chat/chat-service.js";
-import { notifyChatMentions, prepareChatMentionFanout } from "../../chat/chat-mentions.js";
+import { ChatServiceError, type FileBackedChatService } from "../../chat/chat-service.js";
+import { postChatMessageWithMentions } from "../../chat/post.js";
 import type { LoopService } from "../../loop-service.js";
 import type { ScheduleService } from "../../schedule/service.js";
 
@@ -161,25 +157,17 @@ export class ChatScheduleLoopSession {
   ): Promise<void> {
     try {
       const authorAgentId = request.authorAgentId?.trim() || this.clientId;
-      const mentionAgentIds = parseMentionAgentIds(request.body);
-      const storedAgents = await this.host.listStoredAgents();
-      const liveAgents = this.host.listLiveAgents();
-      const fanout = await prepareChatMentionFanout({
-        authorAgentId,
-        mentionAgentIds,
-        storedAgents,
-        liveAgents,
-        listRoomPosterAgentIds: () =>
-          this.chatService.listRoomPosterAgentIds({ room: request.room }),
-      });
-      if (!fanout.ok) {
-        throw new ChatServiceError("chat_mention_fanout_limit_exceeded", fanout.error);
-      }
-      const message = await this.chatService.dispatchMessage({
+      const message = await postChatMessageWithMentions({
+        chatService: this.chatService,
         room: request.room,
         authorAgentId,
         body: request.body,
         replyToMessageId: request.replyToMessageId,
+        logger: this.logger,
+        listStoredAgents: () => this.host.listStoredAgents(),
+        listLiveAgents: () => this.host.listLiveAgents(),
+        resolveAgentIdentifier: (identifier) => this.host.resolveAgentIdentifier(identifier),
+        sendAgentMessage: (agentId, text) => this.host.sendAgentMessage(agentId, text),
       });
       this.host.emit({
         type: "chat/post/response",
@@ -188,18 +176,6 @@ export class ChatScheduleLoopSession {
           message,
           error: null,
         },
-      });
-      void notifyChatMentions({
-        room: request.room,
-        authorAgentId,
-        body: request.body,
-        mentionAgentIds: message.mentionAgentIds,
-        logger: this.logger,
-        storedAgents,
-        liveAgents,
-        prepared: fanout.prepared,
-        resolveAgentIdentifier: (identifier) => this.host.resolveAgentIdentifier(identifier),
-        sendAgentMessage: (agentId, text) => this.host.sendAgentMessage(agentId, text),
       });
     } catch (error) {
       this.emitChatRpcError(request, error);

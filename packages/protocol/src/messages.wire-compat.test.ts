@@ -104,6 +104,16 @@ describe("wire schema compatibility", () => {
     expect(parsed.features?.paseoToolPolicies).toBe(true);
   });
 
+  test("server info accepts the optional chat rooms feature flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "room-server",
+      features: { chatRooms: true },
+    });
+
+    expect(parsed.features?.chatRooms).toBe(true);
+  });
+
   test("assistant timeline message ids are optional on the wire", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

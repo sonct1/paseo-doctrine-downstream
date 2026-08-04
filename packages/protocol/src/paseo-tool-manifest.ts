@@ -10,6 +10,7 @@ export type PaseoToolManifestGroup =
   | "Terminals"
   | "Schedules"
   | "Providers"
+  | "Rooms"
   | "Browser";
 
 export interface PaseoToolManifestEntry {
@@ -175,6 +176,19 @@ export const PASEO_TOOL_MANIFEST = [
     label: "Send terminal keys",
     description: "Send literal text or special key tokens to a terminal session.",
     group: "Terminals",
+  },
+  {
+    id: "read_room",
+    label: "Read room",
+    description: "Read recent messages from a Paseo room by name or ID.",
+    group: "Rooms",
+  },
+  {
+    id: "post_room",
+    label: "Post room message",
+    description:
+      "Post to a Paseo room as the calling agent, optionally replying to a message or mentioning another agent.",
+    group: "Rooms",
   },
   {
     id: "create_schedule",
