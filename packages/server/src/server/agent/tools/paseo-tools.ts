@@ -90,6 +90,8 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "./types.js";
+import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -125,6 +127,7 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
   /**
@@ -572,6 +575,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tool handlers are schema-validated at registration boundaries.
     handler: (input: any, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>,
   ) => {
+    if (!isPaseoToolEnabled(options.paseoToolPolicy, name)) {
+      return;
+    }
     tools.set(name, {
       name,
       title: config.title,

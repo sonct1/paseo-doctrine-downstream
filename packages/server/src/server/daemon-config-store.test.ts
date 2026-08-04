@@ -22,6 +22,7 @@ describe("applyMutableProviderConfigToOverrides", () => {
             enabled: false,
             description: "Gemini ACP",
             env: { GEMINI_AUTO_UPDATE: "0" },
+            paseoTools: { disabledTools: ["list_agents"] },
           },
           claude: {
             additionalModels: [
@@ -41,6 +42,7 @@ describe("applyMutableProviderConfigToOverrides", () => {
         command: ["gemini", "--acp"],
         env: { GEMINI_AUTO_UPDATE: "0" },
         enabled: false,
+        paseoTools: { disabledTools: ["list_agents"] },
       },
       claude: {
         additionalModels: [
@@ -220,6 +222,37 @@ describe("DaemonConfigStore", () => {
       label: "Gemini",
       command: ["gemini", "--acp"],
       enabled: false,
+    });
+  });
+
+  test("patch persists provider Paseo-tool policy without changing availability", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      mcp: { injectIntoAgents: true },
+      browserTools: { enabled: false },
+      providers: { claude: { enabled: false } },
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({
+      providers: {
+        claude: {
+          paseoTools: { enabled: true, disabledTools: ["list_agents"] },
+        },
+      },
+    });
+
+    expect(store.get().providers.claude).toEqual({
+      enabled: false,
+      paseoTools: { enabled: true, disabledTools: ["list_agents"] },
+    });
+    expect(loadPersistedConfig(paseoHome).agents?.providers?.claude).toEqual({
+      enabled: false,
+      paseoTools: { enabled: true, disabledTools: ["list_agents"] },
     });
   });
 

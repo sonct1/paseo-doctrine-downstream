@@ -2204,8 +2204,37 @@ export const ru: TranslationResources = {
       updateErrorTitle: "Невозможно обновить провайдера",
       actions: {
         menu: "{{name}} actions",
+        configureTools: "Настроить инструменты",
         remove: "Remove provider",
         removing: "Removing...",
+      },
+      tools: {
+        title: "Настроить инструменты {{name}}",
+        searchPlaceholder: "Поиск инструментов",
+        updateRequired: {
+          title: "Обновите хост, чтобы настроить инструменты Paseo",
+          description: "Настройки инструментов для отдельных провайдеров недоступны на этом хосте.",
+        },
+        master: {
+          title: "Включить инструменты Paseo",
+          hint: "Разрешить этому провайдеру использовать инструменты Paseo",
+          accessibilityLabel: "Включить инструменты Paseo для {{name}}",
+        },
+        enableAll: "Включить все",
+        disableAll: "Отключить все",
+        globalOverride: {
+          title: "Инструменты Paseo отключены",
+          description:
+            "Глобальная настройка внедрения инструментов Paseo переопределяет эти сохраненные выборы",
+        },
+        browserUnavailable: {
+          title: "Инструменты браузера недоступны",
+          description:
+            "Включите инструменты браузера в настройках хоста. Сохраненные выборы не изменятся",
+        },
+        toolAccessibilityLabel: "Инструмент Paseo: {{name}}",
+        noSearchMatches: "Нет инструментов, соответствующих поиску",
+        updateErrorTitle: "Не удалось обновить настройки инструментов Paseo",
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
