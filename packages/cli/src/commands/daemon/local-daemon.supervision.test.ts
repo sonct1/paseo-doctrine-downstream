@@ -97,6 +97,7 @@ describe("local daemon launch supervision", () => {
     await Promise.all(
       tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
     );
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -134,6 +135,53 @@ describe("local daemon launch supervision", () => {
     expectSupervisorLaunch(launch?.args ?? []);
     expect(launch?.args).toContain("--no-mcp");
   });
+
+  test.skipIf(process.platform === "win32")(
+    "detached start appends known user binary directories to PATH",
+    async () => {
+      vi.useFakeTimers();
+      vi.stubEnv("PATH", ["/usr/bin", "/bin"].join(path.delimiter));
+      const runtime = new FakeDaemonRuntime();
+
+      const resultPromise = startLocalDaemonDetached({ home: "/tmp/paseo-test" }, runtime);
+      await vi.advanceTimersByTimeAsync(1200);
+      await resultPromise;
+
+      const launch = runtime.recordedLaunches[0];
+      expect(launch?.mode).toBe("detached");
+      expect(launch?.options.env?.PATH?.split(path.delimiter)).toEqual([
+        "/usr/bin",
+        "/bin",
+        path.join(os.homedir(), "bin"),
+        path.join(os.homedir(), ".local", "bin"),
+        path.join(os.homedir(), ".opencode", "bin"),
+        path.join(os.homedir(), ".bun", "bin"),
+      ]);
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "foreground start preserves PATH precedence and does not duplicate user binary directories",
+    () => {
+      const home = path.join(os.tmpdir(), "paseo-path-user");
+      const openCodeBin = path.join(home, ".opencode", "bin");
+      vi.stubEnv("HOME", home);
+      vi.stubEnv("PATH", [openCodeBin, "/usr/bin"].join(path.delimiter));
+      const runtime = new FakeDaemonRuntime();
+
+      startLocalDaemonForeground({ home: "/tmp/paseo-test" }, runtime);
+
+      const launch = runtime.recordedLaunches[0];
+      expect(launch?.mode).toBe("foreground");
+      expect(launch?.options.env?.PATH?.split(path.delimiter)).toEqual([
+        openCodeBin,
+        "/usr/bin",
+        path.join(home, "bin"),
+        path.join(home, ".local", "bin"),
+        path.join(home, ".bun", "bin"),
+      ]);
+    },
+  );
 
   test("relay TLS flag is passed to the supervised daemon", async () => {
     const runtime = new FakeDaemonRuntime();
