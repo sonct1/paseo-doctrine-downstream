@@ -1802,6 +1802,20 @@ describe("Codex app-server provider", () => {
     expect(env.PASEO_TEST_FLAG).toBe(launchContext.env?.PASEO_TEST_FLAG);
   });
 
+  test("isolates command-backed auth from inherited API keys", () => {
+    const env = buildCodexAppServerEnv(
+      {
+        env: {
+          PASEO_PROVIDER_CREDENTIAL_FILE: "/private/credentials/codex-command-auth.json",
+        },
+      },
+      { OPENAI_API_KEY: "sk-inherited" },
+    );
+
+    expect(env.PASEO_PROVIDER_CREDENTIAL_FILE).toBe("/private/credentials/codex-command-auth.json");
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+  });
+
   test("projects request_user_input into a question permission and running timeline tool call", () => {
     const session = createSession();
     const events: AgentStreamEvent[] = [];

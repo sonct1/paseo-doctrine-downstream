@@ -3020,8 +3020,17 @@ export function buildCodexAppServerEnv(
 ): NodeJS.ProcessEnv {
   return createProviderEnv({
     runtimeSettings,
-    overlays: [launchEnv],
+    overlays: [launchEnv, buildCodexCredentialIsolationOverlay(runtimeSettings)],
   });
+}
+
+function buildCodexCredentialIsolationOverlay(
+  runtimeSettings: ProviderRuntimeSettings | undefined,
+): Record<string, undefined> | undefined {
+  if (!runtimeSettings?.env?.PASEO_PROVIDER_CREDENTIAL_FILE?.trim()) {
+    return undefined;
+  }
+  return { OPENAI_API_KEY: undefined };
 }
 
 function buildCodexAppServerInitializeParams(): {
@@ -6440,7 +6449,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       stdio: ["pipe", "pipe", "pipe"],
       ...createProviderEnvSpec({
         runtimeSettings: this.runtimeSettings,
-        overlays: [launchEnv],
+        overlays: [launchEnv, buildCodexCredentialIsolationOverlay(this.runtimeSettings)],
       }),
     });
     assertChildWithPipes(child);
