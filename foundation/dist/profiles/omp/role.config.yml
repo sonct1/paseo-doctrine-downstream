@@ -1,0 +1,6 @@
+advisor:
+  enabled: false
+  subagents: false
+tools:
+  approval:
+    task: deny

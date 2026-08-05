@@ -1590,6 +1590,8 @@ export class VoiceAssistantWebSocketServer {
         providerRemoval: true,
         // COMPAT(paseoToolPolicies): added in v0.2.6, remove gate after 2027-01-31.
         paseoToolPolicies: true,
+        // COMPAT(foundationCredentials): added in v0.3.0, remove after 2027-08-05.
+        foundationCredentials: true,
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,
         // COMPAT(forgeProviders): added in v0.1.106, drop the gate when daemon floor >= v0.1.106.
@@ -2198,13 +2200,16 @@ export class VoiceAssistantWebSocketServer {
   } {
     let rawPayload: string | null = null;
     let parsedPayload: unknown = null;
+    let payloadBytes = 0;
     try {
       const buffer = bufferFromWsData(data);
+      payloadBytes = buffer.byteLength;
       rawPayload = buffer.toString();
-      parsedPayload = JSON.parse(rawPayload);
+      parsedPayload = redactSensitiveWsPayload(JSON.parse(rawPayload));
+      rawPayload = JSON.stringify(parsedPayload);
     } catch (payloadError) {
-      rawPayload = rawPayload ?? "<unreadable>";
-      parsedPayload = parsedPayload ?? rawPayload;
+      rawPayload = `<unparseable WebSocket payload: ${payloadBytes} bytes>`;
+      parsedPayload = null;
       const payloadErr =
         payloadError instanceof Error ? payloadError : new Error(String(payloadError));
       this.logger.error({ err: payloadErr }, "Failed to decode raw payload");
@@ -2717,6 +2722,19 @@ function stringifyCloseReason(reason: unknown): string | null {
   }
   const text = String(reason);
   return text.length > 0 ? text : null;
+}
+
+const SENSITIVE_WS_FIELD_PATTERN = /(?:api[-_]?key|authorization|password|secret|token)/iu;
+
+function redactSensitiveWsPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitiveWsPayload);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nested]) => [
+      key,
+      SENSITIVE_WS_FIELD_PATTERN.test(key) ? "[redacted]" : redactSensitiveWsPayload(nested),
+    ]),
+  );
 }
 
 function getControlRpcLogInfo(

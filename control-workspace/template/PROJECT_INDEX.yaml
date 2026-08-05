@@ -1,0 +1,12 @@
+schemaVersion: 1
+projects: []
+
+# Mỗi project row chỉ giữ routing metadata:
+# - key
+# - repositoryRoot
+# - humanObjectiveSource
+# - workspaceSelector
+# - expectedLeadRole
+# - reportingTarget
+# - observationBoundary
+# - heartbeatPolicy

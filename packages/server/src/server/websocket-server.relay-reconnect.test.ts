@@ -826,6 +826,39 @@ describe("relay external socket reconnect behavior", () => {
     await server.close();
   });
 
+  test("redacts credential bytes when a credential request fails", async () => {
+    const logger = createLogger();
+    const server = createServer({ logger });
+    const socket = new MockSocket();
+    await attachRelayAndHello({
+      server,
+      socket,
+      clientId: "cid-credential-request-failure",
+    });
+
+    const session = sessionMock.instances[0];
+    session.handleMessage.mockRejectedValueOnce(new Error("credential store unavailable"));
+    const secret = "sk-must-never-reach-logs";
+    socket.emit(
+      "message",
+      JSON.stringify({
+        type: "session",
+        message: {
+          type: "foundation.credentials.set.request",
+          requestId: "failing-credential-set",
+          credentialRef: "codex-proxy",
+          apiKey: secret,
+        },
+      }),
+    );
+
+    await vi.waitFor(() => expect(logger.error).toHaveBeenCalled());
+    const serializedLogs = JSON.stringify(logger.error.mock.calls);
+    expect(serializedLogs).not.toContain(secret);
+    expect(serializedLogs).toContain("[redacted]");
+    await server.close();
+  });
+
   test("reuses direct session when same clientId reconnects within grace window", async () => {
     const server = createServer();
     const clientId = "cid-direct-reconnect";

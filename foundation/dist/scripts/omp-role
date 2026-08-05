@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  echo "usage: omp-role <lead|peer|supervisor> [omp args...]" >&2
+  exit 64
+}
+
+[ "$#" -ge 1 ] || usage
+role=$1
+shift
+
+case "$role" in
+  lead|peer|supervisor) ;;
+  *) usage ;;
+esac
+
+binary=${PASEO_OMP_BINARY:-}
+case "$binary" in
+  /*) ;;
+  *) echo "omp-role: PASEO_OMP_BINARY must be an absolute path" >&2; exit 64 ;;
+esac
+[ -x "$binary" ] || { echo "omp-role: OMP binary is not executable: $binary" >&2; exit 64; }
+
+script=$0
+while [ -L "$script" ]; do
+  script_dir=$(CDPATH= cd -P -- "$(dirname -- "$script")" && pwd)
+  target=$(readlink "$script")
+  case "$target" in
+    /*) script=$target ;;
+    *) script=$script_dir/$target ;;
+  esac
+done
+foundation_root=$(CDPATH= cd -P -- "$(dirname -- "$script")/.." && pwd)
+prompt_file=$foundation_root/profiles/omp/paseo-$role.md
+config_file=$foundation_root/profiles/omp/role.config.yml
+[ -r "$prompt_file" ] || { echo "omp-role: role prompt is not readable: $prompt_file" >&2; exit 66; }
+[ -r "$config_file" ] || { echo "omp-role: role config is not readable: $config_file" >&2; exit 66; }
+
+# Preserve OMP's ordinary engineering surface while removing its native
+# delegation/collaboration planes (`task` and `hub`). Paseo remains the only
+# agent delegation/lifecycle plane; dynamic Paseo MCP tools are projected by
+# the daemon policy, not by this built-in tool list.
+tool_allowlist=read,write,edit,ast_edit,ast_grep,grep,glob,bash,eval,lsp,debug,security_scan,inspect_image,browser,computer,todo,ask,web_search,github,checkpoint,rewind,memory_edit,retain,recall,reflect,learn,manage_skill,yield,goal
+
+for argument in "$@"; do
+  case "$argument" in
+    --system-prompt|--system-prompt=*|--append-system-prompt|--append-system-prompt=*|--config|--config=*|--profile|--profile=*|--tools|--tools=*|--no-tools)
+      echo "omp-role: caller may not override standing role transport: $argument" >&2
+      exit 64
+      ;;
+  esac
+done
+
+prompt=$(sed -n '1,$p' "$prompt_file")
+exec "$binary" --config "$config_file" --append-system-prompt "$prompt" --tools="$tool_allowlist" "$@"

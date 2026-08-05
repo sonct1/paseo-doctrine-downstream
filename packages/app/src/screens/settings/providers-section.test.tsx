@@ -49,6 +49,7 @@ const {
   hostFeatureState: {
     providerRemoval: false,
     paseoToolPolicies: true,
+    foundationCredentials: false,
   },
 }));
 
@@ -192,6 +193,31 @@ vi.mock("@/components/ui/switch", () => ({
 
 vi.mock("@/components/ui/loading-spinner", () => ({
   LoadingSpinner: () => React.createElement("span", { "data-testid": "loading-spinner" }),
+}));
+
+vi.mock("@/components/ui/button", () => ({
+  Button: ({
+    children,
+    onPress,
+    testID,
+  }: {
+    children?: React.ReactNode;
+    onPress?: () => void;
+    testID?: string;
+  }) =>
+    React.createElement(
+      "button",
+      { type: "button", "data-testid": testID, onClick: onPress },
+      children,
+    ),
+}));
+
+vi.mock("@/components/provider-connection-sheet", () => ({
+  ProviderConnectionSheet: ({ mode }: { mode: string }) =>
+    React.createElement("div", {
+      "data-testid": "provider-connection-sheet",
+      "data-mode": mode,
+    }),
 }));
 
 vi.mock("@/components/ui/dropdown-menu", () => ({
@@ -383,6 +409,7 @@ describe("ProvidersSection", () => {
     configState.config = null;
     hostFeatureState.providerRemoval = false;
     hostFeatureState.paseoToolPolicies = true;
+    hostFeatureState.foundationCredentials = false;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     openProviderSettingsMock.mockReset();
@@ -534,5 +561,23 @@ describe("ProvidersSection", () => {
     ).toBe(
       "Update the host to configure Paseo tools Per-provider tool settings are unavailable on this host.",
     );
+  });
+
+  it("opens the OpenAI-compatible provider form only when the host advertises support", () => {
+    hostFeatureState.foundationCredentials = true;
+    snapshotState.entries = [];
+    configState.config = makeConfig();
+
+    render();
+    const addButton = container?.querySelector<HTMLElement>(
+      '[data-testid="add-openai-compatible-provider"]',
+    );
+    expect(addButton).not.toBeNull();
+    act(() => addButton?.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
+    expect(
+      container
+        ?.querySelector('[data-testid="provider-connection-sheet"]')
+        ?.getAttribute("data-mode"),
+    ).toBe("create");
   });
 });

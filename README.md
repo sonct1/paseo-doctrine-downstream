@@ -82,6 +82,7 @@ For full setup and configuration, see:
 - [Docs](https://paseo.sh/docs)
 - [Connectivity guide](https://paseo.sh/docs/connectivity)
 - [Configuration reference](https://paseo.sh/docs/configuration)
+- [Paseo Foundation product guide](docs/foundation-product.md)
 
 ### Docker
 
@@ -138,6 +139,7 @@ Quick monorepo package map:
 - `packages/server`: Paseo daemon (agent process orchestration, WebSocket API, MCP server)
 - `packages/app`: Expo client (iOS, Android, web)
 - `packages/cli`: `paseo` CLI for daemon and agent workflows
+- `packages/foundation-cli`: macOS Foundation inspection, install, upgrade, doctor, rollback, and uninstall
 - `packages/desktop`: Electron desktop app
 - `packages/relay`: Relay transport and encryption used by the daemon and clients
 - `packages/website`: Marketing site and documentation (`paseo.sh`)

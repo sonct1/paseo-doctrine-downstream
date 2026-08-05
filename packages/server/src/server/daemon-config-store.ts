@@ -8,6 +8,7 @@ import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
 } from "@getpaseo/protocol/messages";
+import { resolveFoundationCredentialFile } from "./foundation-credential-store.js";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 
@@ -142,6 +143,30 @@ function isEqualValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function withCredentialFileEnvironment(
+  config: MutableDaemonConfig,
+  paseoHome: string,
+): MutableDaemonConfig {
+  const providers = Object.fromEntries(
+    Object.entries(config.providers).map(([providerId, provider]) => {
+      if (!provider.credentialRef) return [providerId, provider];
+      const credentialFile = resolveFoundationCredentialFile(paseoHome, provider.credentialRef);
+      return [
+        providerId,
+        {
+          ...provider,
+          env: {
+            ...provider.env,
+            PASEO_PROVIDER_CREDENTIAL_FILE: credentialFile,
+            PASEO_CLIPROXY_AUTH_FILE: credentialFile,
+          },
+        },
+      ];
+    }),
+  );
+  return { ...config, providers };
+}
+
 export function applyMutableProviderConfigToOverrides(
   baseOverrides: Record<string, ProviderOverride> | undefined,
   mutableProviders: MutableDaemonConfig["providers"] | undefined,
@@ -177,10 +202,11 @@ export class DaemonConfigStore {
   ) {
     this.paseoHome = paseoHome;
     this.logger = getLogger(logger);
-    this.current = MutableDaemonConfigSchema.parse({
+    const parsedInitial = MutableDaemonConfigSchema.parse({
       ...initial,
       relay: initial.relay ?? { enabled: true },
     });
+    this.current = withCredentialFileEnvironment(parsedInitial, paseoHome);
     this.relayEnabledMutable = options.relayEnabledMutable ?? true;
   }
 
@@ -198,12 +224,13 @@ export class DaemonConfigStore {
     const { removeProviders = [], ...configPatch } = parsedPatch;
     const removedProviders = Array.from(new Set(removeProviders));
     const merged = deepMerge(this.current, configPatch);
-    const next = MutableDaemonConfigSchema.parse(
+    const parsedNext = MutableDaemonConfigSchema.parse(
       omitMetadataGenerationProvidersFromConfig(
         omitProvidersFromConfig(merged, removedProviders),
         removedProviders,
       ),
     );
+    const next = withCredentialFileEnvironment(parsedNext, this.paseoHome);
 
     const changedFieldPaths = Array.from(this.fieldChangeHandlers.keys()).filter((path) => {
       return !isEqualValue(getValueAtPath(this.current, path), getValueAtPath(next, path));

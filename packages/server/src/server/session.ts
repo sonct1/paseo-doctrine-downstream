@@ -170,6 +170,7 @@ import { HubExecutionController } from "./hub/execution-controller.js";
 import type { HubExecutionAgents } from "./hub/daemon-executions.js";
 import { DownloadTokenStore } from "./file-download/token-store.js";
 import { PushTokenStore } from "./push/token-store.js";
+import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import {
   archivePersistedWorkspaceRecord,
   archiveWorkspaceContents,
@@ -601,6 +602,7 @@ export class Session {
     | null;
   private readonly sessionLogger: pino.Logger;
   private readonly paseoHome: string;
+  private readonly foundationCredentialStore: FoundationCredentialStore;
   private readonly worktreesRoot: string | undefined;
 
   private agentManager: AgentManager;
@@ -732,6 +734,7 @@ export class Session {
     this.onWorkspaceRecovered = onWorkspaceRecovered ?? null;
     this.pushTokenStore = pushTokenStore;
     this.paseoHome = paseoHome;
+    this.foundationCredentialStore = new FoundationCredentialStore(paseoHome);
     this.worktreesRoot = worktreesRoot;
     this.sessionLogger = logger.child({
       module: "session",
@@ -2037,6 +2040,30 @@ export class Session {
           },
         });
         return undefined;
+      case "foundation.credentials.get_status.request": {
+        const status = this.foundationCredentialStore.getStatus(msg.credentialRef);
+        this.emit({
+          type: "foundation.credentials.get_status.response",
+          payload: { requestId: msg.requestId, ...status },
+        });
+        return undefined;
+      }
+      case "foundation.credentials.set.request": {
+        const status = this.foundationCredentialStore.set(msg.credentialRef, msg.apiKey);
+        this.emit({
+          type: "foundation.credentials.set.response",
+          payload: { requestId: msg.requestId, ...status },
+        });
+        return undefined;
+      }
+      case "foundation.credentials.delete.request": {
+        const status = this.foundationCredentialStore.delete(msg.credentialRef);
+        this.emit({
+          type: "foundation.credentials.delete.response",
+          payload: { requestId: msg.requestId, ...status },
+        });
+        return undefined;
+      }
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":

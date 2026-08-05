@@ -67,5 +67,12 @@ browser:
 relay:
   - "packages/relay/**"
 
+foundation_cli:
+  - "packages/foundation-cli/**"
+  - "foundation/**"
+  - "control-workspace/**"
+  - "docs/foundation-product.md"
+  - "scripts/import-foundation.mjs"
+
 cli:
   - "packages/cli/**"

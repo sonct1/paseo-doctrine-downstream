@@ -1,0 +1,189 @@
+{
+  "agents": {
+    "providers": {
+      "claude-lead": {
+        "extends": "claude",
+        "label": "Claude Paseo Lead candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": true },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-lead"]
+      },
+      "claude-peer": {
+        "extends": "claude",
+        "label": "Claude Paseo Peer candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": false },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-peer"]
+      },
+      "claude-supervisor": {
+        "extends": "claude",
+        "label": "Claude Paseo Supervisor candidate",
+        "enabled": false,
+        "paseoTools": {
+          "enabled": true,
+          "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-supervisor"]
+      },
+      "codex-lead-cliproxy": {
+        "extends": "codex",
+        "label": "Codex Paseo Lead via cliproxyapi candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": true },
+        "env": {
+          "PASEO_CLIPROXY_BASE_URL": "{{REQUIRED_HTTPS_URL: CLIPROXY_BASE_URL}}",
+          "PASEO_CLIPROXY_AUTH_FILE": "{{REQUIRED_ABSOLUTE_PATH: CLIPROXY_AUTH_FILE}}"
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CODEX_CLIPROXY_PROFILE}}", "lead"]
+      },
+      "codex-peer-cliproxy": {
+        "extends": "codex",
+        "label": "Codex Paseo Peer via cliproxyapi candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": false },
+        "env": {
+          "PASEO_CLIPROXY_BASE_URL": "{{REQUIRED_HTTPS_URL: CLIPROXY_BASE_URL}}",
+          "PASEO_CLIPROXY_AUTH_FILE": "{{REQUIRED_ABSOLUTE_PATH: CLIPROXY_AUTH_FILE}}"
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CODEX_CLIPROXY_PROFILE}}", "peer"]
+      },
+      "codex-supervisor-cliproxy": {
+        "extends": "codex",
+        "label": "Codex Paseo Supervisor via cliproxyapi candidate",
+        "enabled": false,
+        "paseoTools": {
+          "enabled": true,
+          "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
+        },
+        "env": {
+          "PASEO_CLIPROXY_BASE_URL": "{{REQUIRED_HTTPS_URL: CLIPROXY_BASE_URL}}",
+          "PASEO_CLIPROXY_AUTH_FILE": "{{REQUIRED_ABSOLUTE_PATH: CLIPROXY_AUTH_FILE}}"
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CODEX_CLIPROXY_PROFILE}}", "supervisor"]
+      },
+      "antigravity-lead": {
+        "extends": "acp",
+        "label": "Antigravity Paseo Lead candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": true },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: AGY_ACP_BINARY}}", "--agy-binary", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_ANTIGRAVITY_ROLE_WRAPPER}}"],
+        "env": {
+          "PASEO_AGY_BINARY": "{{REQUIRED_ABSOLUTE_PATH: AGY_BINARY}}",
+          "PASEO_AGY_ROLE": "lead"
+        },
+        "params": {
+          "supportsMcpServers": false,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": false,
+              "writeTextFile": false
+            },
+            "terminal": false
+          }
+        }
+      },
+      "antigravity-peer": {
+        "extends": "acp",
+        "label": "Antigravity Paseo Peer candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": false },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: AGY_ACP_BINARY}}", "--agy-binary", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_ANTIGRAVITY_ROLE_WRAPPER}}"],
+        "env": {
+          "PASEO_AGY_BINARY": "{{REQUIRED_ABSOLUTE_PATH: AGY_BINARY}}",
+          "PASEO_AGY_ROLE": "peer"
+        },
+        "params": {
+          "supportsMcpServers": false,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": false,
+              "writeTextFile": false
+            },
+            "terminal": false
+          }
+        }
+      },
+      "antigravity-supervisor": {
+        "extends": "acp",
+        "label": "Antigravity Paseo Supervisor candidate",
+        "enabled": false,
+        "paseoTools": {
+          "enabled": true,
+          "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: AGY_ACP_BINARY}}", "--agy-binary", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_ANTIGRAVITY_ROLE_WRAPPER}}"],
+        "env": {
+          "PASEO_AGY_BINARY": "{{REQUIRED_ABSOLUTE_PATH: AGY_BINARY}}",
+          "PASEO_AGY_ROLE": "supervisor"
+        },
+        "params": {
+          "supportsMcpServers": false,
+          "clientCapabilities": {
+            "fs": {
+              "readTextFile": false,
+              "writeTextFile": false
+            },
+            "terminal": false
+          }
+        }
+      },
+      "omp-lead": {
+        "extends": "omp",
+        "label": "OMP Paseo Lead candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": true },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_OMP_ROLE_WRAPPER}}", "lead"],
+        "env": {
+          "PASEO_OMP_BINARY": "{{REQUIRED_ABSOLUTE_PATH: OMP_BINARY}}"
+        }
+      },
+      "omp-peer": {
+        "extends": "omp",
+        "label": "OMP Paseo Peer candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": false },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_OMP_ROLE_WRAPPER}}", "peer"],
+        "env": {
+          "PASEO_OMP_BINARY": "{{REQUIRED_ABSOLUTE_PATH: OMP_BINARY}}"
+        }
+      },
+      "omp-supervisor": {
+        "extends": "omp",
+        "label": "OMP Paseo Supervisor candidate",
+        "enabled": false,
+        "paseoTools": {
+          "enabled": true,
+          "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_OMP_ROLE_WRAPPER}}", "supervisor"],
+        "env": {
+          "PASEO_OMP_BINARY": "{{REQUIRED_ABSOLUTE_PATH: OMP_BINARY}}"
+        }
+      },
+      "cursor-lead": {
+        "extends": "acp",
+        "label": "Cursor Paseo Lead candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": true },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CURSOR_AGENT_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: CURSOR_LEAD_PLUGIN_ROOT}}", "acp"]
+      },
+      "cursor-peer": {
+        "extends": "acp",
+        "label": "Cursor Paseo Peer candidate",
+        "enabled": false,
+        "paseoTools": { "enabled": false },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CURSOR_AGENT_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: CURSOR_PEER_PLUGIN_ROOT}}", "acp"]
+      },
+      "cursor-supervisor": {
+        "extends": "acp",
+        "label": "Cursor Paseo Supervisor candidate",
+        "enabled": false,
+        "paseoTools": {
+          "enabled": true,
+          "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
+        },
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CURSOR_AGENT_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: CURSOR_SUPERVISOR_PLUGIN_ROOT}}", "acp"]
+      }
+    }
+  }
+}

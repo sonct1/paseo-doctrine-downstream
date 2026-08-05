@@ -1,5 +1,13 @@
 import * as Clipboard from "expo-clipboard";
-import { AlertTriangle, Copy, FileText, Plus, RotateCw, Trash2 } from "lucide-react-native";
+import {
+  AlertTriangle,
+  Copy,
+  FileText,
+  KeyRound,
+  Plus,
+  RotateCw,
+  Trash2,
+} from "lucide-react-native";
 import type { TFunction } from "i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,12 +28,14 @@ import { CODE_SURFACE_DATASET } from "@/styles/code-surface";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
 import { settingsStyles } from "@/styles/settings";
 import { resolveProviderLabel } from "@/utils/provider-definitions";
 import { formatTimeAgo } from "@/utils/time";
 import { compareMatchScores, scoreTextFields } from "@/utils/score-match";
 import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import { ProviderConnectionSheet } from "@/components/provider-connection-sheet";
 import {
   resolveProviderDiscoveredModels,
   type ProviderDiscoveredModelsCache,
@@ -413,20 +423,24 @@ interface ProviderSheetFooterInput {
   fetchedAtLabel: string | null;
   isCompact: boolean;
   modelsRefreshing: boolean;
+  showConnection: boolean;
   t: TFunction;
   onOpenAddSheet: () => void;
   onOpenDiagSheet: () => void;
   onRefreshModels: () => void;
+  onOpenConnectionSheet: () => void;
 }
 
 function renderProviderSheetFooter({
   fetchedAtLabel,
   isCompact,
   modelsRefreshing,
+  showConnection,
   t,
   onOpenAddSheet,
   onOpenDiagSheet,
   onRefreshModels,
+  onOpenConnectionSheet,
 }: ProviderSheetFooterInput) {
   const contentStyle = isCompact ? sheetStyles.compactFooterContent : sheetStyles.footerContent;
   const actionsStyle = isCompact ? sheetStyles.compactFooterActions : sheetStyles.footerActions;
@@ -443,6 +457,17 @@ function renderProviderSheetFooter({
         </Text>
       ) : null}
       <View style={actionsStyle}>
+        {showConnection ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={KeyRound}
+            onPress={onOpenConnectionSheet}
+            style={buttonStyle}
+          >
+            {t("settings.providers.connection.button")}
+          </Button>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"
@@ -567,6 +592,46 @@ function ProviderModalBody(props: ProviderModalBodyProps) {
   );
 }
 
+function canConfigureProviderConnection(
+  featureAvailable: boolean,
+  source: unknown,
+  baseProvider: unknown,
+): boolean {
+  return featureAvailable && source === "custom" && baseProvider === "codex";
+}
+
+function ProviderConnectionEditor({
+  visible,
+  provider,
+  providerLabel,
+  serverId,
+  baseUrl,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  provider: string;
+  providerLabel: string;
+  serverId: string;
+  baseUrl: string;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  if (!visible) return null;
+  return (
+    <ProviderConnectionSheet
+      key={`${serverId}:${provider}:connection`}
+      mode="edit"
+      provider={provider}
+      providerLabel={providerLabel}
+      serverId={serverId}
+      baseUrl={baseUrl}
+      onClose={onClose}
+      onSaved={onSaved}
+    />
+  );
+}
+
 export function ProviderDiagnosticSheet({
   provider,
   visible,
@@ -577,10 +642,12 @@ export function ProviderDiagnosticSheet({
   const { theme } = useUnistyles();
   const isCompact = useIsCompactFormFactor();
   const { entries: snapshotEntries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
+  const supportsFoundationCredentials = useHostFeature(serverId, "foundationCredentials");
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [query, setQuery] = useState("");
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [diagSheetOpen, setDiagSheetOpen] = useState(false);
+  const [connectionSheetOpen, setConnectionSheetOpen] = useState(false);
   const [deletingModelId, setDeletingModelId] = useState<string | null>(null);
 
   const providerLabel = resolveProviderLabel(provider, snapshotEntries);
@@ -593,6 +660,14 @@ export function ProviderDiagnosticSheet({
     [config?.providers, provider],
   );
   const providerSnapshotRefreshing = providerEntry?.status === "loading";
+  const mutableProvider = config?.providers?.[provider];
+  const canConfigureConnection = canConfigureProviderConnection(
+    supportsFoundationCredentials,
+    providerEntry?.source,
+    mutableProvider?.extends,
+  );
+  const providerBaseUrl =
+    mutableProvider?.env?.OPENAI_BASE_URL ?? mutableProvider?.env?.PASEO_CLIPROXY_BASE_URL ?? "";
   const providerErrorMessage =
     providerEntry?.status === "error"
       ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
@@ -627,6 +702,7 @@ export function ProviderDiagnosticSheet({
       setQuery("");
       setAddSheetOpen(false);
       setDiagSheetOpen(false);
+      setConnectionSheetOpen(false);
     }
   }, [visible]);
 
@@ -648,6 +724,9 @@ export function ProviderDiagnosticSheet({
   const handleCloseAddSheet = useCallback(() => setAddSheetOpen(false), []);
   const handleOpenDiagSheet = useCallback(() => setDiagSheetOpen(true), []);
   const handleCloseDiagSheet = useCallback(() => setDiagSheetOpen(false), []);
+  const handleOpenConnectionSheet = useCallback(() => setConnectionSheetOpen(true), []);
+  const handleCloseConnectionSheet = useCallback(() => setConnectionSheetOpen(false), []);
+  const handleConnectionSaved = useCallback(() => refresh([provider]), [provider, refresh]);
 
   const handleDeleteCustom = useCallback(
     (modelId: string) => {
@@ -690,10 +769,12 @@ export function ProviderDiagnosticSheet({
           fetchedAtLabel,
           isCompact,
           modelsRefreshing,
+          showConnection: canConfigureConnection,
           t,
           onOpenAddSheet: handleOpenAddSheet,
           onOpenDiagSheet: handleOpenDiagSheet,
           onRefreshModels: handleRefreshModels,
+          onOpenConnectionSheet: handleOpenConnectionSheet,
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
@@ -724,6 +805,15 @@ export function ProviderDiagnosticSheet({
         serverId={serverId}
         visible={diagSheetOpen}
         onClose={handleCloseDiagSheet}
+      />
+      <ProviderConnectionEditor
+        visible={connectionSheetOpen}
+        provider={provider}
+        providerLabel={providerLabel}
+        serverId={serverId}
+        baseUrl={providerBaseUrl}
+        onClose={handleCloseConnectionSheet}
+        onSaved={handleConnectionSaved}
       />
     </>
   );

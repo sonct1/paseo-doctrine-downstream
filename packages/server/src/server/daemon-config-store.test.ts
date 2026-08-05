@@ -87,6 +87,49 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
   });
 
+  test("materializes only a credential file path in provider runtime env", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    const config = store.patch({
+      providers: {
+        "codex-proxy": {
+          extends: "codex",
+          label: "Codex proxy",
+          credentialRef: "codex-proxy",
+          env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+        },
+      },
+    });
+
+    expect(config.providers["codex-proxy"]?.env).toEqual({
+      OPENAI_BASE_URL: "https://proxy.example/v1",
+      PASEO_CLIPROXY_AUTH_FILE: path.join(
+        paseoHome,
+        "credentials",
+        "providers",
+        "codex-proxy.json",
+      ),
+      PASEO_PROVIDER_CREDENTIAL_FILE: path.join(
+        paseoHome,
+        "credentials",
+        "providers",
+        "codex-proxy.json",
+      ),
+    });
+    expect(JSON.stringify(config)).not.toContain("OPENAI_API_KEY");
+  });
+
   test("rolls back config when a field transition fails", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

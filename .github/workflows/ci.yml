@@ -35,6 +35,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       browser: ${{ steps.filter.outputs.browser }}
       relay: ${{ steps.filter.outputs.relay }}
+      foundation_cli: ${{ steps.filter.outputs.foundation_cli }}
       cli: ${{ steps.filter.outputs.cli }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -428,6 +429,30 @@ jobs:
 
       - name: Run relay tests
         run: npm run test --workspace=@getpaseo/relay
+
+  foundation-cli-macos:
+    name: foundation-cli-macos
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.foundation_cli != 'false') }}
+    runs-on: macos-14
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Qualify Foundation installer lifecycle
+        run: npm run typecheck --workspace=@getpaseo/foundation-cli && npm run test --workspace=@getpaseo/foundation-cli
+
+      - name: Verify Foundation package contents
+        run: npm pack --dry-run --workspace=@getpaseo/foundation-cli
 
   cli-tests-1:
     name: cli-tests (shard 1/3)

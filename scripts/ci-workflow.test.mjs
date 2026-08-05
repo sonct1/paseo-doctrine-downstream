@@ -26,6 +26,7 @@ const gatedCiJobs = new Map([
   ["playwright-3", { name: "playwright (shard 3/4)", contract: "browser" }],
   ["playwright-4", { name: "playwright (shard 4/4)", contract: "browser" }],
   ["relay-tests", { name: "relay-tests", contract: "relay" }],
+  ["foundation-cli-macos", { name: "foundation-cli-macos", contract: "foundation_cli" }],
   ["cli-tests-1", { name: "cli-tests (shard 1/3)", contract: "cli" }],
   ["cli-tests-2", { name: "cli-tests (shard 2/3)", contract: "cli" }],
   ["cli-tests-3", { name: "cli-tests (shard 3/3)", contract: "cli" }],
@@ -114,6 +115,7 @@ test("focused contracts stay inside existing required checks", () => {
   const changes = jobs.get("changes")?.join("\n") ?? "";
   const server = jobs.get("server-tests-ubuntu")?.join("\n") ?? "";
   const desktop = jobs.get("desktop-tests-ubuntu")?.join("\n") ?? "";
+  const foundationCli = jobs.get("foundation-cli-macos")?.join("\n") ?? "";
 
   assert.match(changes, /scripts\/daemon-launch-contract\.test\.mjs/);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
@@ -127,6 +129,10 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(desktop, /npm run test --workspace=@getpaseo\/desktop/);
   assert.ok(!jobs.has("desktop-browser-bridge"));
   assert.ok(!jobs.has("playwright-desktop"));
+
+  assert.match(foundationCli, /runs-on: macos-14/);
+  assert.match(foundationCli, /test --workspace=@getpaseo\/foundation-cli/);
+  assert.match(foundationCli, /npm pack --dry-run --workspace=@getpaseo\/foundation-cli/);
 });
 
 test("server builds exclude test utilities at every domain depth", () => {
@@ -181,6 +187,13 @@ test("PR routing declares stable behavior ownership", () => {
       "packages/app/package.json",
     ],
     relay: ["packages/relay/**"],
+    foundation_cli: [
+      "packages/foundation-cli/**",
+      "foundation/**",
+      "control-workspace/**",
+      "docs/foundation-product.md",
+      "scripts/import-foundation.mjs",
+    ],
     cli: ["packages/cli/**"],
   });
 });

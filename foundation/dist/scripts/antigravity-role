@@ -1,0 +1,36 @@
+#!/bin/sh
+set -eu
+
+role=${PASEO_AGY_ROLE-}
+case "$role" in
+    lead|peer|supervisor) ;;
+    *)
+        echo "antigravity-role: PASEO_AGY_ROLE must be exactly lead, peer, or supervisor" >&2
+        exit 64
+        ;;
+esac
+
+binary=${PASEO_AGY_BINARY-}
+case "$binary" in
+    /*) ;;
+    *)
+        echo "antigravity-role: PASEO_AGY_BINARY must be an absolute executable path" >&2
+        exit 64
+        ;;
+esac
+
+if [ ! -f "$binary" ] || [ ! -x "$binary" ]; then
+    echo "antigravity-role: PASEO_AGY_BINARY must be an absolute executable path" >&2
+    exit 64
+fi
+
+for argument do
+    case "$argument" in
+        --agent|--agent=*)
+            echo "antigravity-role: caller must not override --agent" >&2
+            exit 64
+            ;;
+    esac
+done
+
+exec "$binary" --agent "paseo-$role" "$@"

@@ -174,6 +174,7 @@ type CapturedFakeCodexRecord = Record<string, unknown>;
 async function runCustomCodexProviderTurn(
   providerId: string,
   baseUrl: string,
+  credentialFile?: string,
 ): Promise<CapturedFakeCodexRecord[]> {
   const tempDir = await mkdtemp(path.join(tmpdir(), "codex-custom-provider-"));
   const fakeAppServerPath = path.join(tempDir, "fake-codex-app-server.cjs");
@@ -190,6 +191,7 @@ fs.appendFileSync(capturePath, JSON.stringify({
   kind: "env",
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  PASEO_PROVIDER_CREDENTIAL_FILE: process.env.PASEO_PROVIDER_CREDENTIAL_FILE,
 }) + "\\n");
 
 function record(method, params) {
@@ -231,7 +233,9 @@ process.stdin.on("data", (chunk) => {
         label: "Custom Codex",
         command: [process.execPath, fakeAppServerPath],
         env: {
-          OPENAI_API_KEY: "sk-custom",
+          ...(credentialFile
+            ? { PASEO_PROVIDER_CREDENTIAL_FILE: credentialFile }
+            : { OPENAI_API_KEY: "sk-custom" }),
           OPENAI_BASE_URL: baseUrl,
           PASEO_FAKE_CODEX_CAPTURE: capturedRequestsPath,
         },
@@ -1178,6 +1182,39 @@ describe("Codex app-server provider", () => {
         "codex-custom": expect.objectContaining({
           base_url: "https://custom-relay.example.com/v1",
         }),
+      },
+    });
+  });
+
+  test("uses command-backed auth when a private credential file is configured", async () => {
+    const capturedRequests = await runCustomCodexProviderTurn(
+      "codex-command-auth",
+      "https://custom-relay.example.com/v1",
+      "/private/credentials/codex-command-auth.json",
+    );
+
+    expect(capturedRequests[0]).toEqual({
+      kind: "env",
+      OPENAI_BASE_URL: "https://custom-relay.example.com/v1",
+      PASEO_PROVIDER_CREDENTIAL_FILE: "/private/credentials/codex-command-auth.json",
+    });
+    expect(capturedThreadStartConfig(capturedRequests)).toEqual({
+      model_provider: "codex-command-auth",
+      model_providers: {
+        "codex-command-auth": {
+          name: "Custom Codex",
+          base_url: "https://custom-relay.example.com/v1",
+          auth: {
+            command: process.execPath,
+            args: [
+              "-e",
+              expect.stringContaining("OPENAI_API_KEY"),
+              "/private/credentials/codex-command-auth.json",
+            ],
+          },
+          requires_openai_auth: false,
+          wire_api: "responses",
+        },
       },
     });
   });

@@ -1,0 +1,47 @@
+## Test Discipline
+
+- Tests protect a settled production contract; they do not choose architecture,
+  invent owners, or justify a production seam. Use test-first RED/GREEN only
+  for deterministic behavior whose contract and owner are already decided.
+- Do not add or retain production APIs, state, lifecycle branches, dependency
+  features, or instrumentation whose only consumer is a test or proof harness.
+- Delete tests whose only claim is a retired or forbidden name, source
+  substring, help text, file inventory, private call order, phase label,
+  proof-registry membership, or generated report shape unless that exact
+  representation is a public machine contract.
+- After every schema or protocol hard cut, audit every added or modified test
+  and fixture. Negative cases must protect current-contract invariants without
+  naming or hardcoding deleted fields, tags, widths, values, or other contracts;
+  derive invalid inputs from current constants and boundaries such as
+  `WIDTH - 1` and `WIDTH + 1`.
+- Use the diff to discover removed identifiers and values, then search current
+  code, tests, and fixtures for them. Never commit a legacy blacklist,
+  tombstone registry, or source-substring gate. A hard cut cannot close while
+  historical names or literals remain in current tests or fixtures.
+- Ask whether each test remains meaningful without Git history; delete or
+  rewrite one that only proves a dead contract is rejected. Also remove any
+  production API or state that exists only to make such behavior observable.
+- Prefer outcome-level tests at the owning boundary. A fixture that constructs
+  a parallel game/runtime model proves only the fixture and must not gate the
+  production implementation.
+
+## Hard Cut Rules
+
+- NOVA is in active pre-production development. Breaking changes are mandatory;
+  legacy versions are not supported.
+- Backward compatibility is strictly forbidden. Do not support older schemas,
+  contracts, or data formats.
+- Protocol/schema `version` stays `1` until first public shipment. Replace the
+  content of Version 1 instead of introducing v2/v3.
+- Expose exactly one current schema, metadata, or architecture contract. Do not
+  add legacy/current branches, v1/v2 naming, dual read/write paths,
+  compatibility facades, or migration-warning behavior.
+- Fail fast when data does not match the current contract.
+- **Sync or Die:** update every current shipping producer, consumer, and
+  generated artifact that is compiled, loaded, or otherwise consumed by the
+  product/toolchain in the same contract change. Audit tests, fixtures, and
+  validators instead of synchronizing them mechanically: keep or update only
+  those that independently exercise the current contract, and rewrite or
+  delete self-generated mirrors, retired representations, proof-only source,
+  and unconsumed evidence. Reports, snapshots, mocks, and proof output are not
+  synchronization peers merely because the repository owns them.

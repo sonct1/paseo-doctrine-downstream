@@ -26,6 +26,7 @@ import { getProviderIcon } from "@/components/provider-icons";
 import { PaseoToolsPolicySheet } from "@/screens/settings/paseo-tools-policy-sheet";
 import { Alert as InlineAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
@@ -36,6 +37,7 @@ import {
 import { SettingsSection } from "@/screens/settings/settings-section";
 import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
+import { ProviderConnectionSheet } from "@/components/provider-connection-sheet";
 import { ChevronRight, MoreHorizontal, Settings2, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -353,11 +355,38 @@ export interface ProvidersSectionProps {
   serverId: string;
 }
 
+function OpenAICompatibleProviderCard({
+  visible,
+  onOpen,
+}: {
+  visible: boolean;
+  onOpen: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <View style={[settingsStyles.card, styles.compatibleProviderCard]}>
+      <View style={styles.compatibleProviderCopy}>
+        <Text style={settingsStyles.rowTitle}>
+          {t("settings.providers.connection.openAICompatible")}
+        </Text>
+        <Text style={styles.compatibleProviderHint}>
+          {t("settings.providers.connection.openAICompatibleHint")}
+        </Text>
+      </View>
+      <Button variant="outline" size="sm" onPress={onOpen} testID="add-openai-compatible-provider">
+        {t("settings.providers.connection.add")}
+      </Button>
+    </View>
+  );
+}
+
 export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const { t } = useTranslation();
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const supportsPaseoToolPolicies = useHostFeature(serverId, "paseoToolPolicies");
+  const supportsFoundationCredentials = useHostFeature(serverId, "foundationCredentials");
   const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const openProviderSettings = useProviderSettingsStore((state) => state.open);
@@ -367,6 +396,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const [installingProviderId, setInstallingProviderId] = useState<string | null>(null);
   const [toolPolicyProviderId, setToolPolicyProviderId] = useState<string | null>(null);
   const [toolPolicyVisible, setToolPolicyVisible] = useState(false);
+  const [foundationProviderSheetOpen, setFoundationProviderSheetOpen] = useState(false);
 
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
   const hasServer = serverId.length > 0;
@@ -401,6 +431,15 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   }, []);
   const handleCloseToolPolicy = useCallback(() => setToolPolicyVisible(false), []);
   const handleDismissToolPolicy = useCallback(() => setToolPolicyProviderId(null), []);
+  const handleOpenFoundationProvider = useCallback(() => setFoundationProviderSheetOpen(true), []);
+  const handleCloseFoundationProvider = useCallback(
+    () => setFoundationProviderSheetOpen(false),
+    [],
+  );
+  const handleFoundationProviderSaved = useCallback(
+    async (providerId: string) => refresh([providerId]),
+    [refresh],
+  );
 
   const handleRemoveProvider = useCallback(
     async (providerId: string, providerLabel: string) => {
@@ -511,6 +550,10 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           testID="host-page-add-provider-card"
           style={styles.addProviderSection}
         >
+          <OpenAICompatibleProviderCard
+            visible={supportsFoundationCredentials}
+            onOpen={handleOpenFoundationProvider}
+          />
           <ProviderCatalogList
             serverId={serverId}
             installingProviderId={installingProviderId}
@@ -532,6 +575,18 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           patchConfig={patchConfig}
         />
       ) : null}
+      {foundationProviderSheetOpen ? (
+        <ProviderConnectionSheet
+          key={`${serverId}:new-openai-compatible-provider`}
+          mode="create"
+          provider=""
+          providerLabel=""
+          serverId={serverId}
+          baseUrl=""
+          onClose={handleCloseFoundationProvider}
+          onSaved={handleFoundationProviderSaved}
+        />
+      ) : null}
     </>
   );
 }
@@ -550,6 +605,21 @@ const styles = StyleSheet.create((theme) => ({
   emptyText: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
+  },
+  compatibleProviderCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[4],
+    padding: theme.spacing[4],
+    marginBottom: theme.spacing[3],
+  },
+  compatibleProviderCopy: {
+    flex: 1,
+    gap: theme.spacing[1],
+  },
+  compatibleProviderHint: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
   },
   row: {
     gap: theme.spacing[3],

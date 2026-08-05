@@ -102,9 +102,36 @@ const MutableDaemonProviderModelSchema = z
   })
   .passthrough();
 
+const PROVIDER_CREDENTIAL_ENV_KEY_PATTERN =
+  /(?:^|_)(?:API_?KEY|KEY|TOKEN|SECRET|PASSWORD)(?:_|$)/iu;
+
+export function isProviderCredentialEnvironmentKey(key: string): boolean {
+  return PROVIDER_CREDENTIAL_ENV_KEY_PATTERN.test(key);
+}
+
 const MutableDaemonProviderConfigSchema = z
   .object({
+    extends: z.string().optional(),
+    label: z.string().optional(),
     enabled: z.boolean().optional(),
+    env: z
+      .record(z.string(), z.string())
+      .superRefine((environment, ctx) => {
+        for (const key of Object.keys(environment)) {
+          if (isProviderCredentialEnvironmentKey(key)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [key],
+              message: `${key} is credential material; use foundation.credentials.set.request`,
+            });
+          }
+        }
+      })
+      .optional(),
+    credentialRef: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,63}$/u)
+      .optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
     paseoTools: ProviderPaseoToolsPolicySchema.optional(),
   })
@@ -1229,6 +1256,27 @@ export const SetDaemonConfigRequestMessageSchema = z.object({
   type: z.literal("set_daemon_config_request"),
   requestId: z.string(),
   config: MutableDaemonConfigPatchSchema,
+});
+
+export const FoundationCredentialRefSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
+
+export const FoundationCredentialsGetStatusRequestSchema = z.object({
+  type: z.literal("foundation.credentials.get_status.request"),
+  requestId: z.string(),
+  credentialRef: FoundationCredentialRefSchema,
+});
+
+export const FoundationCredentialsSetRequestSchema = z.object({
+  type: z.literal("foundation.credentials.set.request"),
+  requestId: z.string(),
+  credentialRef: FoundationCredentialRefSchema,
+  apiKey: z.string().trim().min(1).max(16_384),
+});
+
+export const FoundationCredentialsDeleteRequestSchema = z.object({
+  type: z.literal("foundation.credentials.delete.request"),
+  requestId: z.string(),
+  credentialRef: FoundationCredentialRefSchema,
 });
 
 export const ReadProjectConfigRequestMessageSchema = z.object({
@@ -2563,6 +2611,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DiagnosticsRequestSchema,
   GetDaemonConfigRequestMessageSchema,
   SetDaemonConfigRequestMessageSchema,
+  FoundationCredentialsGetStatusRequestSchema,
+  FoundationCredentialsSetRequestSchema,
+  FoundationCredentialsDeleteRequestSchema,
   ReadProjectConfigRequestMessageSchema,
   WriteProjectConfigRequestMessageSchema,
   DictationStreamStartMessageSchema,
@@ -2930,6 +2981,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerRemoval: z.boolean().optional(),
         // COMPAT(paseoToolPolicies): added in v0.2.6, remove gate after 2027-01-31.
         paseoToolPolicies: z.boolean().optional(),
+        // COMPAT(foundationCredentials): added in v0.3.0, remove after 2027-08-05.
+        foundationCredentials: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.1.106, drop the gate when daemon floor >= v0.1.106.
@@ -3985,6 +4038,27 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
       config: MutableDaemonConfigSchema,
     })
     .passthrough(),
+});
+
+const FoundationCredentialStatusPayloadSchema = z.object({
+  requestId: z.string(),
+  credentialRef: FoundationCredentialRefSchema,
+  configured: z.boolean(),
+});
+
+export const FoundationCredentialsGetStatusResponseSchema = z.object({
+  type: z.literal("foundation.credentials.get_status.response"),
+  payload: FoundationCredentialStatusPayloadSchema,
+});
+
+export const FoundationCredentialsSetResponseSchema = z.object({
+  type: z.literal("foundation.credentials.set.response"),
+  payload: FoundationCredentialStatusPayloadSchema,
+});
+
+export const FoundationCredentialsDeleteResponseSchema = z.object({
+  type: z.literal("foundation.credentials.delete.response"),
+  payload: FoundationCredentialStatusPayloadSchema,
 });
 
 export const ReadProjectConfigResponseMessageSchema = z.object({
@@ -5411,6 +5485,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DiagnosticsResponseSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,
+  FoundationCredentialsGetStatusResponseSchema,
+  FoundationCredentialsSetResponseSchema,
+  FoundationCredentialsDeleteResponseSchema,
   ReadProjectConfigResponseMessageSchema,
   WriteProjectConfigResponseMessageSchema,
   SetAgentModeResponseMessageSchema,

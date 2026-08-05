@@ -172,7 +172,11 @@ import type { PushNotificationSender } from "./push/notifications.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
-import type { FirstAgentContext, TerminalProfile } from "@getpaseo/protocol/messages";
+import {
+  isProviderCredentialEnvironmentKey,
+  type FirstAgentContext,
+  type TerminalProfile,
+} from "@getpaseo/protocol/messages";
 import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
@@ -515,6 +519,23 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
       const providerConfig: MutableDaemonConfig["providers"][string] = {};
       if (override.enabled !== undefined) {
         providerConfig.enabled = override.enabled;
+      }
+      if (override.extends !== undefined) {
+        providerConfig.extends = override.extends;
+      }
+      if (override.label !== undefined) {
+        providerConfig.label = override.label;
+      }
+      const publicEnvironment = Object.fromEntries(
+        Object.entries(override.env ?? {}).filter(
+          ([key]) => !isProviderCredentialEnvironmentKey(key),
+        ),
+      );
+      if (Object.keys(publicEnvironment).length > 0) {
+        providerConfig.env = publicEnvironment;
+      }
+      if (override.credentialRef !== undefined) {
+        providerConfig.credentialRef = override.credentialRef;
       }
       if (override.additionalModels) {
         providerConfig.additionalModels = override.additionalModels;

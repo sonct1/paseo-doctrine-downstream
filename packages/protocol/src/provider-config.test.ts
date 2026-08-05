@@ -75,4 +75,32 @@ describe("provider Paseo-tool policy", () => {
       }).providers?.codex?.paseoTools,
     ).toEqual({ disabledTools: ["browser_future_tool"] });
   });
+
+  test("keeps credential references and rejects credential material in mutable provider env", () => {
+    expect(
+      MutableDaemonConfigPatchSchema.parse({
+        providers: {
+          "codex-proxy": {
+            credentialRef: "codex-proxy",
+            env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+          },
+        },
+      }).providers?.["codex-proxy"],
+    ).toEqual({
+      credentialRef: "codex-proxy",
+      env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+    });
+
+    expect(() =>
+      MutableDaemonConfigPatchSchema.parse({
+        providers: { "codex-proxy": { env: { OPENAI_API_KEY: "must-not-persist" } } },
+      }),
+    ).toThrow("use foundation.credentials.set.request");
+
+    expect(
+      MutableDaemonConfigPatchSchema.parse({
+        providers: { "codex-proxy": { env: { KEYBOARD_LAYOUT: "us" } } },
+      }).providers?.["codex-proxy"]?.env,
+    ).toEqual({ KEYBOARD_LAYOUT: "us" });
+  });
 });

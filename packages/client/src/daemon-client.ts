@@ -4596,6 +4596,39 @@ export class DaemonClient {
     });
   }
 
+  async getFoundationCredentialStatus(credentialRef: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.credentials.get_status.response">(
+      {
+        requestId,
+        message: {
+          type: "foundation.credentials.get_status.request",
+          credentialRef,
+        },
+      },
+    );
+  }
+
+  async setFoundationCredential(credentialRef: string, apiKey: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.credentials.set.response">({
+      requestId,
+      message: {
+        type: "foundation.credentials.set.request",
+        credentialRef,
+        apiKey,
+      },
+    });
+  }
+
+  async deleteFoundationCredential(credentialRef: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.credentials.delete.response">({
+      requestId,
+      message: {
+        type: "foundation.credentials.delete.request",
+        credentialRef,
+      },
+    });
+  }
+
   sendBrowserAutomationExecuteResponse(response: BrowserAutomationExecuteResponse): void {
     this.sendSessionMessageStrict(response);
   }

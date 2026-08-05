@@ -70,6 +70,10 @@ export const ProviderOverrideSchema = z.object({
   additionalModels: z.array(ProviderProfileModelSchema).optional(),
   disallowedTools: z.array(z.string()).optional(),
   paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+  credentialRef: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{0,63}$/u)
+    .optional(),
   enabled: z.boolean().optional(),
   order: z.number().optional(),
 });

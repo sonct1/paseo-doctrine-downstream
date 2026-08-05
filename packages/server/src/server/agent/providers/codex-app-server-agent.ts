@@ -3049,6 +3049,10 @@ function normalizeOpenAICompatibleBaseUrl(value: string): string | null {
   return `${withoutTrailingSlashes}/v1`;
 }
 
+const READ_FOUNDATION_CREDENTIAL_SCRIPT =
+  'const value=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).OPENAI_API_KEY;' +
+  'if(typeof value!=="string"||!value.trim())process.exit(1);process.stdout.write(value.trim());';
+
 function buildCodexCustomProviderConfig(
   runtimeSettings: ProviderRuntimeSettings | undefined,
   customProvider: CodexAppServerAgentDeps["customProvider"],
@@ -3069,7 +3073,14 @@ function buildCodexCustomProviderConfig(
     base_url: normalizedBaseUrl,
     wire_api: "responses",
   };
-  if (runtimeSettings?.env?.OPENAI_API_KEY?.trim()) {
+  const credentialFile = runtimeSettings?.env?.PASEO_PROVIDER_CREDENTIAL_FILE?.trim();
+  if (credentialFile) {
+    providerConfig.auth = {
+      command: process.execPath,
+      args: ["-e", READ_FOUNDATION_CREDENTIAL_SCRIPT, credentialFile],
+    };
+    providerConfig.requires_openai_auth = false;
+  } else if (runtimeSettings?.env?.OPENAI_API_KEY?.trim()) {
     providerConfig.env_key = "OPENAI_API_KEY";
     providerConfig.requires_openai_auth = false;
   }
