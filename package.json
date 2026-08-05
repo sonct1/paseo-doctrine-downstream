@@ -91,7 +91,8 @@
     "cli": "./scripts/dev-home.sh npx tsx packages/cli/src/index.js",
     "version": "npm run version:sync-internal && npm run release:prepare && git add -A",
     "version:sync-internal": "node scripts/sync-workspace-versions.mjs",
-    "release:prepare": "npm install --workspaces --include-workspace-root",
+    "release:toolchain:check": "node scripts/check-release-toolchain.mjs",
+    "release:prepare": "npm run release:toolchain:check && npm install --workspaces --include-workspace-root",
     "version:all:patch": "node scripts/set-release-version.mjs --mode patch",
     "version:all:minor": "node scripts/set-release-version.mjs --mode minor",
     "version:all:major": "node scripts/set-release-version.mjs --mode major",
@@ -100,7 +101,7 @@
     "version:all:beta:major": "node scripts/set-release-version.mjs --mode beta-major",
     "version:all:beta:next": "node scripts/set-release-version.mjs --mode beta-next",
     "version:all:promote": "node scripts/set-release-version.mjs --mode promote",
-    "release:check": "npm run release:prepare && npm run typecheck --workspace=@getpaseo/highlight && npm run typecheck --workspace=@getpaseo/relay && npm run typecheck --workspace=@getpaseo/protocol && npm run build:client:clean && npm run typecheck --workspace=@getpaseo/client && npm run build:server:clean && npm run typecheck --workspace=@getpaseo/server && npm run typecheck --workspace=@getpaseo/cli && npm run typecheck --workspace=@getpaseo/foundation-cli && npm pack --dry-run --workspace=@getpaseo/highlight && npm pack --dry-run --workspace=@getpaseo/relay && npm pack --dry-run --workspace=@getpaseo/protocol && npm pack --dry-run --workspace=@getpaseo/client && npm pack --dry-run --workspace=@getpaseo/server && npm pack --dry-run --workspace=@getpaseo/cli && npm pack --dry-run --workspace=@getpaseo/foundation-cli",
+    "release:check": "npm run release:toolchain:check && npm ci && npm run acp:version-drift:check && npm run typecheck --workspace=@getpaseo/highlight && npm run typecheck --workspace=@getpaseo/relay && npm run typecheck --workspace=@getpaseo/protocol && npm run build:client:clean && npm run typecheck --workspace=@getpaseo/client && npm run build:server:clean && npm run typecheck --workspace=@getpaseo/server && npm run typecheck --workspace=@getpaseo/cli && npm run typecheck --workspace=@getpaseo/foundation-cli && npm pack --dry-run --workspace=@getpaseo/highlight && npm pack --dry-run --workspace=@getpaseo/relay && npm pack --dry-run --workspace=@getpaseo/protocol && npm pack --dry-run --workspace=@getpaseo/client && npm pack --dry-run --workspace=@getpaseo/server && npm pack --dry-run --workspace=@getpaseo/cli && npm pack --dry-run --workspace=@getpaseo/foundation-cli && git diff --exit-code",
     "release:publish:dry-run": "npm publish --dry-run --workspace=@getpaseo/highlight --access public && npm publish --dry-run --workspace=@getpaseo/relay --access public && npm publish --dry-run --workspace=@getpaseo/protocol --access public && npm publish --dry-run --workspace=@getpaseo/client --access public && npm publish --dry-run --workspace=@getpaseo/server --access public && npm publish --dry-run --workspace=@getpaseo/cli --access public && npm publish --dry-run --workspace=@getpaseo/foundation-cli --access public",
     "release:publish:beta:dry-run": "npm publish --dry-run --workspace=@getpaseo/highlight --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/relay --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/protocol --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/client --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/server --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/cli --access public --tag beta && npm publish --dry-run --workspace=@getpaseo/foundation-cli --access public --tag beta",
     "release:publish": "npm publish --workspace=@getpaseo/highlight --access public && npm publish --workspace=@getpaseo/relay --access public && npm publish --workspace=@getpaseo/protocol --access public && npm publish --workspace=@getpaseo/client --access public && npm publish --workspace=@getpaseo/server --access public && npm publish --workspace=@getpaseo/cli --access public && npm publish --workspace=@getpaseo/foundation-cli --access public",
@@ -141,5 +142,6 @@
     "react-dom": "19.1.0",
     "react-native-reanimated": "4.3.1",
     "react-native-worklets": "0.8.3"
-  }
+  },
+  "packageManager": "npm@11.17.0"
 }

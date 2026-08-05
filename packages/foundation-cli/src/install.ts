@@ -12,6 +12,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -105,6 +106,15 @@ function assertReplaceableLinkTarget(target: string): void {
   }
 }
 
+function unlinkIfPresent(target: string): void {
+  try {
+    unlinkSync(target);
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") return;
+    throw error;
+  }
+}
+
 function linkMatchesAllowedState(target: string, allowedTargets: Array<string | null>): boolean {
   try {
     if (!lstatSync(target).isSymbolicLink()) return false;
@@ -119,14 +129,14 @@ function atomicSymlink(source: string, target: string): void {
   assertReplaceableLinkTarget(target);
   mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.tmp`);
-  rmSync(temporary, { force: true });
+  unlinkIfPresent(temporary);
   symlinkSync(source, temporary);
   renameSync(temporary, target);
 }
 
 function restoreLink(target: string, previousTarget: string | null): void {
   if (previousTarget === null) {
-    rmSync(target, { force: true });
+    unlinkIfPresent(target);
     return;
   }
   atomicSymlink(previousTarget, target);
@@ -663,6 +673,14 @@ export function rollbackInstall(home: string): InstallRecord {
 
 export function uninstallFoundation(home: string): InstallRecord {
   const { record, recordPath } = readActiveRecord(home);
+  if (
+    record.mode === "migration" &&
+    (record.previousLinks === undefined || record.previousCurrentTarget === undefined)
+  ) {
+    throw new Error(
+      "refusing uninstall because the migration install record lacks an exact previous-link snapshot",
+    );
+  }
   const priorCurrentTarget = linkTarget(record.currentLink);
   const priorLinkTargets = record.installedLinks.map((link) => ({
     target: link.target,

@@ -1,6 +1,6 @@
 # Controlled dev pilot
 
-Runbook này chỉ áp dụng cho `paseo-v0.3.0-beta.1.paseo.1-dev.1`. Đây là source-linked pilot nội bộ,
+Runbook này chỉ áp dụng cho `paseo-v0.3.0-beta.1.paseo.1-dev.2`. Đây là source-linked pilot nội bộ,
 không phải package release hoặc native app release.
 
 ## Phạm vi
@@ -23,7 +23,7 @@ qualify trước khi tag: macOS 26.5.1 arm64, Node.js 26.5.0, npm 11.17.0. Found
 git clone https://github.com/webplode/paseo-doctrine-downstream.git paseo-dev-pilot
 cd paseo-dev-pilot
 git fetch --tags origin
-git checkout --detach paseo-v0.3.0-beta.1.paseo.1-dev.1
+git checkout --detach paseo-v0.3.0-beta.1.paseo.1-dev.2
 git describe --tags --exact-match
 git status --short
 ```
@@ -45,7 +45,7 @@ Không overwrite global CLI. Link hai package vào prefix riêng và giữ check
 pilot:
 
 ```bash
-export PASEO_PILOT_PREFIX="$HOME/.local/share/paseo-dev-pilot/paseo-v0.3.0-beta.1.paseo.1-dev.1"
+export PASEO_PILOT_PREFIX="$HOME/.local/share/paseo-dev-pilot/paseo-v0.3.0-beta.1.paseo.1-dev.2"
 mkdir -p "$PASEO_PILOT_PREFIX"
 npm_config_prefix="$PASEO_PILOT_PREFIX" npm link --workspace=@getpaseo/cli
 npm_config_prefix="$PASEO_PILOT_PREFIX" npm link --workspace=@getpaseo/foundation-cli
@@ -137,14 +137,33 @@ cáo.
 Chạy từng canary read-only trong disposable repository có current `WORKSPACE_PROTOCOL.md`, lưu agent ID và
 archive sau readback:
 
-| Provider           | Exact canary lease                                                                                         | Pass condition                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `codex-lead`       | Đọc full protocol, trả role marker và provider/model; không edit, không delegate                           | Đọc được full protocol, route đúng `codex-lead`, không mutation                                   |
-| `codex-peer`       | Không đọc full protocol; trả role marker và tool visibility; không edit                                    | Không có full-protocol access và không có Paseo coordination tools                                |
-| `codex-supervisor` | Governance canary read-only; trả role marker, provider/model và tool visibility; không create/update agent | Chỉ thấy inspection/supervision surface đã cấp, không nhận engineering write/acceptance authority |
+| Provider           | Exact canary lease                                                                         | Pass condition                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `codex-lead`       | Đọc full protocol, trả role marker và tool visibility; không edit, không delegate          | Đọc được full protocol, đúng Lead authority, không mutation                                       |
+| `codex-peer`       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có full-protocol access và không có Paseo coordination tools                                |
+| `codex-supervisor` | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ thấy inspection/supervision surface đã cấp, không nhận engineering write/acceptance authority |
 
-Một provider visible hoặc selectable không đủ làm canary xanh. Provider/model phải đúng exact route;
-generic fallback là failure.
+Sau mỗi canary, đọc route từ daemon thay vì hỏi agent tự mô tả:
+
+```bash
+paseo agent inspect <agent-id> --json
+```
+
+`Provider`, `Model`, `Thinking` và `Mode` trong inspect output phải khớp exact assignment. Agent tự mô tả
+provider/model không phải route evidence; câu trả lời đó có thể phản ánh model family thay vì logical
+provider alias của Paseo. Một provider visible hoặc selectable cũng không đủ làm canary xanh. Inspect
+readback lệch route hoặc generic fallback là failure.
+
+### Evidence-source boundary
+
+Canary mặc định cho phép global operational context, nhưng Memory, skill, preference hoặc historical plan
+không được dùng để cấp authority, suy ra project truth hoặc thay current-byte verification. Handback phải
+nêu evidence nào đến từ repository và evidence nào chỉ là operational context.
+
+Nếu một qualification claim yêu cầu `current-bytes-only`, exact lease phải cấm rõ Memory, user-home và
+history. Bất kỳ access nào vào nguồn bị cấm làm episode evidence không hợp lệ; chạy lại bằng fresh agent
+với source boundary phù hợp. `codex-profile` mặc định dùng `CODEX_HOME` hiện có, nên không được gọi đó là
+sealed/no-Memory execution nếu chưa launch bằng một isolated Codex home đã review.
 
 ### WebUI và custom route
 
@@ -156,7 +175,8 @@ Các alias `codex-*-cliproxy` trong Foundation template mặc định disabled. 
 1. điền Base URL và credential bằng **Connection**;
 2. chạy fresh exact role/tool canary;
 3. chỉ enable alias sau khi canary xanh;
-4. dừng nếu alias fallback sang provider/model khác.
+4. dùng `paseo agent inspect <agent-id> --json` để xác nhận exact alias/model/mode;
+5. dừng nếu inspect readback cho thấy fallback sang provider/model khác.
 
 `Configured · qualification pending` là trạng thái đúng trước canary. Model catalog inherited không chứng
 minh endpoint hoặc role binding.
@@ -177,7 +197,8 @@ Dừng pilot, không tự repair ngoài lease, khi có một trong các dấu hi
 - status/config/evidence trả credential value;
 - Peer đọc full protocol hoặc thấy Paseo coordination tools;
 - Supervisor bypass Lead hoặc nhận engineering acceptance authority;
-- exact provider/model route fallback;
+- daemon inspect readback lệch exact provider/model/mode assignment;
+- canary khai báo `current-bytes-only` nhưng agent truy cập Memory, user-home hoặc history;
 - read-only canary làm thay đổi repository;
 - daemon crash, transaction journal không recovery được hoặc rollback không giữ user-owned state.
 
@@ -209,6 +230,13 @@ mv "$PASEO_PILOT_PREFIX" \
 
 Không xóa checkout trước khi prefix đã được thu hồi vì npm links trỏ vào checkout đó.
 
+Installer mới giữ exact previous-link snapshot cho migration. Một install record tạo bởi build cũ có thể
+thiếu snapshot này; `rollback` hoặc `uninstall` phải dừng với error chứa
+`migration install record lacks an exact previous-link snapshot`. Không suy ra legacy target từ các link
+Foundation đang active và không sửa record bằng state hiện tại. Giữ record, exact original install plan và
+error để handback; nếu original plan không còn hoặc không chứng minh đủ previous target thì giữ Foundation
+active cho tới khi owner cấp một recovery lease riêng.
+
 ## Known limits của tag
 
 - Đây là source-linked pilot; npm packages, Docker image và native desktop/mobile artifacts chưa publish.
@@ -229,7 +257,7 @@ Mỗi tester gửi:
 - exact tag và commit;
 - redacted `paseo daemon status --json`;
 - bốn doctor gate giữ nguyên `PASS/FAIL/UNKNOWN`;
-- provider/model, agent ID và pass/fail của từng canary;
+- authoritative `paseo agent inspect <agent-id> --json` đã redact cùng pass/fail của từng canary;
 - command, exact error và smallest reproducer cho failure;
 - `git status --short` và `git diff --check` của disposable project;
 - rollback/uninstall result.

@@ -73,7 +73,9 @@ as described in **Fixing a failed release build**.
 Before running any stable release command:
 
 - Make sure the intended release commit is already committed to `main` and the working tree is clean.
-- **Run `npm run format`, `npm run lint`, and `npm run typecheck` and commit any resulting changes BEFORE you start any `release:*` command.** `release:check` runs `npm install --workspaces --include-workspace-root` as part of `release:prepare`, which can mutate `package-lock.json` (e.g. churning `"dev": true` markers on optional deps). The next step, `version:all:*`, runs `npm version` which aborts when the working tree is dirty. If this happens mid-flight you have to commit the lockfile churn before retrying — and the pre-commit format hook will reject a lockfile-only commit because oxfmt internally skips `package-lock.json` while lefthook's glob still matches it. Avoid the whole mess by running format/lint/typecheck first, then `release:prepare` once on its own to absorb any lockfile churn into a normal commit, then start the release.
+- Run `npm run format`, `npm run lint`, and `npm run typecheck`, then commit any resulting changes before starting a `release:*` command.
+- Use the exact npm version pinned by `packageManager`. `release:check` rejects a different npm version, installs from the committed lockfile with `npm ci`, and fails if any check changes tracked bytes.
+- `release:prepare` is reserved for the `npm version` lifecycle. It may update workspace links and the lockfile after package versions change; review those changes as part of the version commit.
 - Do not use a release command as a substitute for checking whether the current commit is actually ready.
 
 ```bash
@@ -382,7 +384,8 @@ This ensures the checkout ref matches the actual code on `main` with the fix inc
 ## Notes
 
 - `version:all:*` bumps root + syncs workspace versions and `@getpaseo/*` dependency versions
-- `release:prepare` refreshes workspace `node_modules` links to prevent stale types
+- `release:check` uses a frozen `npm ci` install and ends with a clean-tree assertion
+- `release:prepare` runs only during versioning to refresh workspace links and the lockfile
 - `npm run dev:desktop` and `npm run build:desktop` target the Electron desktop package in `packages/desktop`
 - If `release:publish` partially fails, re-run it — npm skips already-published versions
 - If `release:publish:beta` partially fails, re-run it — npm skips already-published versions and keeps prereleases off `latest` because every publish uses `--tag beta`

@@ -19,7 +19,8 @@
     "build": "tsc -p tsconfig.json --incremental false",
     "prepack": "node prepare-assets.mjs && npm run build",
     "typecheck": "tsgo --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src",
+    "test:package-lifecycle": "node scripts/package-lifecycle-smoke.mjs"
   },
   "dependencies": {
     "commander": "^12.0.0",

@@ -94,6 +94,10 @@ paseo-foundation uninstall
 `uninstall` chỉ gỡ owned runtime link; với migration record mới, nó restore exact legacy symlink snapshot.
 Release cũ và `~/.paseo-control` được giữ để recovery và audit.
 
+Migration record cũ thiếu `previousLinks` hoặc `previousCurrentTarget` không đủ evidence để restore. CLI
+fail closed thay vì đoán target từ state đang active; dùng exact original install plan trong một bounded
+recovery, hoặc giữ installation active và handback nếu snapshot không thể chứng minh.
+
 ## Thêm provider trên Paseo WebUI
 
 Host và app phải cùng hỗ trợ feature `foundationCredentials`.
@@ -118,8 +122,9 @@ Provider OpenAI-compatible mới chỉ là transport/cost route, không tự ch�
 list hiển thị **Configured · qualification pending** và không đếm inherited model catalog như endpoint
 evidence. Muốn dùng Lead, Peer hoặc Supervisor của Foundation, giữ exact role-specific provider command từ
 `foundation/dist/templates/paseo-provider-overrides.example.json`, rồi dùng **Connection** để điền endpoint
-và credential cho provider đó. Chỉ enable sau fresh role/tool canary. Wrapper role-specific cần `jq`;
-`paseo-foundation inspect` báo path/version của tool này.
+và credential cho provider đó. Chỉ enable sau fresh role/tool canary và authoritative
+`paseo agent inspect <agent-id> --json` readback. Agent tự mô tả provider/model không phải route evidence.
+Wrapper role-specific cần `jq`; `paseo-foundation inspect` báo path/version của tool này.
 
 API key đi qua `foundation.credentials.set.request`, được daemon ghi vào:
 
@@ -150,6 +155,7 @@ Mỗi project repository vẫn sở hữu `WORKSPACE_PROTOCOL.md`, task evidence
 3. Import Foundation bằng `scripts/import-foundation.mjs` và review manifest/lock.
 4. Chạy focused tests, typecheck, lint, format check và `npm publish --dry-run` cho
    `@getpaseo/foundation-cli`.
-5. Qualify daemon activation và role/tool boundary bằng fresh canary trước khi gọi release-ready.
+5. Qualify daemon activation và role/tool boundary bằng fresh canary; lấy exact provider/model/mode từ
+   daemon inspect readback, không từ agent self-report.
 
 Git commit, static validator hoặc package dry-run không chứng minh runtime activation hay role boundary.

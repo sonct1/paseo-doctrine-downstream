@@ -10,6 +10,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -239,8 +240,48 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const uninstalled = uninstallFoundation(home);
     expect(uninstalled.status).toBe("uninstalled");
     expect(existsSync(layout.currentLink)).toBe(false);
+    for (const link of plan.links) expect(existsSync(link.target)).toBe(false);
     expect(existsSync(layout.releasePath)).toBe(true);
     expect(existsSync(layout.controlHome)).toBe(true);
+  });
+
+  it("refuses to uninstall a legacy migration record without its exact link snapshot", () => {
+    const home = temporaryHome();
+    const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
+    const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
+    const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
+    mkdirSync(path.dirname(layout.currentLink), { recursive: true });
+    symlinkSync(legacyRelease, layout.currentLink);
+    for (const link of legacyLinks) {
+      mkdirSync(path.dirname(link.target), { recursive: true });
+      symlinkSync(link.source, link.target);
+    }
+    const plan = createInstallPlan({
+      mode: "migration",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    const applied = applyInstallPlan(plan);
+    const {
+      previousCurrentTarget: _previousCurrentTarget,
+      previousLinks: _previousLinks,
+      ...legacy
+    } = applied.record;
+    writeFileSync(layout.installRecordPath, `${JSON.stringify(legacy, null, 2)}\n`, {
+      mode: 0o600,
+    });
+
+    expect(() => uninstallFoundation(home)).toThrow(
+      "migration install record lacks an exact previous-link snapshot",
+    );
+    expect(path.resolve(path.dirname(layout.currentLink), readlinkSync(layout.currentLink))).toBe(
+      applied.record.releasePath,
+    );
+    for (const link of applied.record.installedLinks) {
+      expect(path.resolve(path.dirname(link.target), readlinkSync(link.target))).toBe(link.source);
+    }
   });
 
   it("refuses a foreign target without partial mutation", () => {
@@ -400,7 +441,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       { mode: 0o600 },
     );
     const foreignTarget = plan.links[0]!.target;
-    rmSync(foreignTarget);
+    unlinkSync(foreignTarget);
     writeFileSync(foreignTarget, "user-owned\n");
 
     expect(() => recoverInterruptedInstall(home)).toThrow("runtime target changed");

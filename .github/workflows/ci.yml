@@ -53,7 +53,7 @@ jobs:
           filters: .github/ci-paths.yml
 
       - name: Validate CI contracts
-        run: node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs
+        run: node --test scripts/ci-workflow.test.mjs scripts/daemon-launch-contract.test.mjs scripts/foundation-qualification-contract.test.mjs
 
   format:
     name: format
@@ -448,11 +448,66 @@ jobs:
       - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
 
-      - name: Qualify Foundation installer lifecycle
-        run: npm run typecheck --workspace=@getpaseo/foundation-cli && npm run test --workspace=@getpaseo/foundation-cli
+      - name: Typecheck Foundation CLI
+        run: npm run typecheck --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify Foundation installer lifecycle on Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm run test --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify Foundation installer lifecycle on Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm run test --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify Foundation installer lifecycle on Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - run: npm run test --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify packaged Foundation lifecycle on Node 24
+        run: npm run test:package-lifecycle --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify Foundation installer lifecycle on Node 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+
+      - run: npm run test --workspace=@getpaseo/foundation-cli
 
       - name: Verify Foundation package contents
         run: npm pack --dry-run --workspace=@getpaseo/foundation-cli
+
+  release-qualification:
+    name: release-qualification
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.workspace != 'false' || needs.changes.outputs.app != 'false' || needs.changes.outputs.ci != 'false') }}
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.20.0"
+          cache: "npm"
+
+      - name: Install pinned npm release toolchain
+        run: npm install --global npm@11.17.0
+
+      - name: Verify frozen dependency install
+        run: npm ci
+
+      - name: Verify release contracts
+        run: npm run release:toolchain:check && npm run acp:version-drift:check && git diff --exit-code
 
   cli-tests-1:
     name: cli-tests (shard 1/3)

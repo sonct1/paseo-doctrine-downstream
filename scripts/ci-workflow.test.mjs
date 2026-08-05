@@ -27,6 +27,10 @@ const gatedCiJobs = new Map([
   ["playwright-4", { name: "playwright (shard 4/4)", contract: "browser" }],
   ["relay-tests", { name: "relay-tests", contract: "relay" }],
   ["foundation-cli-macos", { name: "foundation-cli-macos", contract: "foundation_cli" }],
+  [
+    "release-qualification",
+    { name: "release-qualification", contracts: ["workspace", "app", "ci"] },
+  ],
   ["cli-tests-1", { name: "cli-tests (shard 1/3)", contract: "cli" }],
   ["cli-tests-2", { name: "cli-tests (shard 2/3)", contract: "cli" }],
   ["cli-tests-3", { name: "cli-tests (shard 3/3)", contract: "cli" }],
@@ -116,8 +120,10 @@ test("focused contracts stay inside existing required checks", () => {
   const server = jobs.get("server-tests-ubuntu")?.join("\n") ?? "";
   const desktop = jobs.get("desktop-tests-ubuntu")?.join("\n") ?? "";
   const foundationCli = jobs.get("foundation-cli-macos")?.join("\n") ?? "";
+  const releaseQualification = jobs.get("release-qualification")?.join("\n") ?? "";
 
   assert.match(changes, /scripts\/daemon-launch-contract\.test\.mjs/);
+  assert.match(changes, /scripts\/foundation-qualification-contract\.test\.mjs/);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
 
   assert.match(server, /test:hub-cli-contract/);
@@ -132,7 +138,17 @@ test("focused contracts stay inside existing required checks", () => {
 
   assert.match(foundationCli, /runs-on: macos-14/);
   assert.match(foundationCli, /test --workspace=@getpaseo\/foundation-cli/);
+  for (const nodeVersion of ["20", "22", "24", "26"]) {
+    assert.match(foundationCli, new RegExp(`node-version: "${nodeVersion}"`));
+  }
+  assert.match(foundationCli, /test:package-lifecycle --workspace=@getpaseo\/foundation-cli/);
   assert.match(foundationCli, /npm pack --dry-run --workspace=@getpaseo\/foundation-cli/);
+
+  assert.match(releaseQualification, /npm install --global npm@11\.17\.0/);
+  assert.match(releaseQualification, /npm ci/);
+  assert.match(releaseQualification, /npm run release:toolchain:check/);
+  assert.match(releaseQualification, /npm run acp:version-drift:check/);
+  assert.match(releaseQualification, /git diff --exit-code/);
 });
 
 test("server builds exclude test utilities at every domain depth", () => {

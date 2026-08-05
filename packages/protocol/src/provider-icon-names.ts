@@ -25,7 +25,6 @@ export const ACP_PROVIDER_ICON_NAMES = [
   "dimcode",
   "dirac",
   "factory-droid",
-  "fast-agent",
   "gemini",
   "glm-acp-agent",
   "goose",
