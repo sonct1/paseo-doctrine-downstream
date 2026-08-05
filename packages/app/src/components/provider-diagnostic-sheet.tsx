@@ -600,12 +600,21 @@ function canConfigureProviderConnection(
   return featureAvailable && source === "custom" && baseProvider === "codex";
 }
 
+function resolveProviderBaseUrl(primary: string | undefined, fallback: string | undefined): string {
+  return primary ?? fallback ?? "";
+}
+
+function resolveCredentialRef(credentialRef: string | undefined): string | null {
+  return credentialRef ?? null;
+}
+
 function ProviderConnectionEditor({
   visible,
   provider,
   providerLabel,
   serverId,
   baseUrl,
+  credentialRef,
   onClose,
   onSaved,
 }: {
@@ -614,6 +623,7 @@ function ProviderConnectionEditor({
   providerLabel: string;
   serverId: string;
   baseUrl: string;
+  credentialRef: string | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -626,6 +636,7 @@ function ProviderConnectionEditor({
       providerLabel={providerLabel}
       serverId={serverId}
       baseUrl={baseUrl}
+      credentialRef={credentialRef}
       onClose={onClose}
       onSaved={onSaved}
     />
@@ -666,8 +677,11 @@ export function ProviderDiagnosticSheet({
     providerEntry?.source,
     mutableProvider?.extends,
   );
-  const providerBaseUrl =
-    mutableProvider?.env?.OPENAI_BASE_URL ?? mutableProvider?.env?.PASEO_CLIPROXY_BASE_URL ?? "";
+  const providerBaseUrl = resolveProviderBaseUrl(
+    mutableProvider?.env?.OPENAI_BASE_URL,
+    mutableProvider?.env?.PASEO_CLIPROXY_BASE_URL,
+  );
+  const providerCredentialRef = resolveCredentialRef(mutableProvider?.credentialRef);
   const providerErrorMessage =
     providerEntry?.status === "error"
       ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
@@ -812,6 +826,7 @@ export function ProviderDiagnosticSheet({
         providerLabel={providerLabel}
         serverId={serverId}
         baseUrl={providerBaseUrl}
+        credentialRef={providerCredentialRef}
         onClose={handleCloseConnectionSheet}
         onSaved={handleConnectionSaved}
       />

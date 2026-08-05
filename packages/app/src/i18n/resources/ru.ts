@@ -2238,7 +2238,8 @@ export const ru: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2248,6 +2249,7 @@ export const ru: TranslationResources = {
         error: "Ошибка",
         available: "Доступный",
         notInstalled: "Не установлено",
+        configuredUnqualified: "Настроено · проверка ожидается",
       },
       models: {
         one: "1 модель",
@@ -2291,6 +2293,13 @@ export const ru: TranslationResources = {
         saveFailed: "Не удалось сохранить подключение провайдера",
         save: "Сохранить",
         saving: "Сохранение...",
+        deleteCredential: "Удалить ключ API",
+        deletingCredential: "Удаление ключа...",
+        deleteCredentialConfirmTitle: "Удалить ключ API?",
+        deleteCredentialConfirmMessage:
+          "Это удалит закрытые учетные данные {{credentialRef}} с этого хоста. Все провайдеры с этой ссылкой перестанут работать до сохранения нового ключа.",
+        deleteCredentialConfirm: "Удалить ключ",
+        deleteCredentialFailed: "Не удалось удалить ключ API",
       },
       diagnostic: {
         title: "Диагностика",

@@ -2197,7 +2197,8 @@ export const ar: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2207,6 +2208,7 @@ export const ar: TranslationResources = {
         error: "خطأ",
         available: "متاح",
         notInstalled: "غير مثبت",
+        configuredUnqualified: "تم الإعداد · التأهيل قيد الانتظار",
       },
       models: {
         one: "1 نموذج",
@@ -2250,6 +2252,13 @@ export const ar: TranslationResources = {
         saveFailed: "تعذر حفظ اتصال المزود",
         save: "حفظ",
         saving: "جار الحفظ...",
+        deleteCredential: "حذف مفتاح API",
+        deletingCredential: "جارٍ حذف المفتاح...",
+        deleteCredentialConfirmTitle: "حذف مفتاح API؟",
+        deleteCredentialConfirmMessage:
+          "سيؤدي هذا إلى حذف بيانات الاعتماد الخاصة {{credentialRef}} من هذا المضيف. ستتوقف جميع المزوّدات التي تشارك هذا المرجع حتى يتم حفظ مفتاح جديد.",
+        deleteCredentialConfirm: "حذف المفتاح",
+        deleteCredentialFailed: "تعذر حذف مفتاح API",
       },
       diagnostic: {
         title: "التشخيص",

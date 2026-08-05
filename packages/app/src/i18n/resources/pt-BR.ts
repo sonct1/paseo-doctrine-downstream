@@ -2236,7 +2236,8 @@ export const ptBR: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2246,6 +2247,7 @@ export const ptBR: TranslationResources = {
         error: "Erro",
         available: "Disponível",
         notInstalled: "Não instalado",
+        configuredUnqualified: "Configurado · qualificação pendente",
       },
       models: {
         one: "1 modelo",
@@ -2289,6 +2291,13 @@ export const ptBR: TranslationResources = {
         saveFailed: "Não foi possível salvar a conexão do provedor",
         save: "Salvar",
         saving: "Salvando...",
+        deleteCredential: "Excluir chave de API",
+        deletingCredential: "Excluindo chave...",
+        deleteCredentialConfirmTitle: "Excluir a chave de API?",
+        deleteCredentialConfirmMessage:
+          "Isso exclui a credencial privada {{credentialRef}} deste host. Todos os provedores que compartilham essa referência deixarão de funcionar até que uma nova chave seja salva.",
+        deleteCredentialConfirm: "Excluir chave",
+        deleteCredentialFailed: "Não foi possível excluir a chave de API",
       },
       diagnostic: {
         title: "Diagnóstico",

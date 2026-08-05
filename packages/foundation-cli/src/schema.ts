@@ -31,6 +31,11 @@ export const InstalledLinkSchema = z.object({
   target: z.string().min(1),
 });
 
+export const PreviousLinkSchema = z.object({
+  target: z.string().min(1),
+  previousTarget: z.string().nullable(),
+});
+
 export const InstallRecordSchema = z.object({
   schemaVersion: z.literal(1),
   status: z.enum(["active", "uninstalled"]),
@@ -43,8 +48,33 @@ export const InstallRecordSchema = z.object({
   controlHome: z.string().min(1),
   installedLinks: z.array(InstalledLinkSchema),
   previousReleasePath: z.string().nullable(),
+  previousCurrentTarget: z.string().nullable().optional(),
+  previousLinks: z.array(PreviousLinkSchema).optional(),
   legacyRecordPath: z.string().nullable(),
   uninstalledAt: z.string().datetime().optional(),
+  rolledBackAt: z.string().datetime().optional(),
+});
+
+export const InstallTransactionSchema = z.object({
+  schemaVersion: z.literal(1),
+  operation: z.literal("install"),
+  ownerPid: z.number().int().positive(),
+  planId: z.string().regex(/^[a-f0-9]{64}$/u),
+  home: z.string().min(1),
+  releasePath: z.string().min(1),
+  releaseStagingPath: z.string().nullable(),
+  controlHome: z.string().min(1),
+  controlStagingPath: z.string().nullable(),
+  controlTemplateFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .nullable(),
+  currentLink: z.string().min(1),
+  previousCurrentTarget: z.string().nullable(),
+  previousLinks: z.array(PreviousLinkSchema),
+  installRecordPath: z.string().min(1),
+  previousInstallRecordBase64: z.string().nullable(),
+  createdAt: z.string().datetime(),
 });
 
 export const PlannedLinkSchema = InstalledLinkSchema.extend({
@@ -72,4 +102,5 @@ export type FoundationManifest = z.infer<typeof FoundationManifestSchema>;
 export type InstallMode = z.infer<typeof InstallModeSchema>;
 export type InstallPlan = z.infer<typeof InstallPlanSchema>;
 export type InstallRecord = z.infer<typeof InstallRecordSchema>;
+export type InstallTransaction = z.infer<typeof InstallTransactionSchema>;
 export type PathState = z.infer<typeof PathStateSchema>;

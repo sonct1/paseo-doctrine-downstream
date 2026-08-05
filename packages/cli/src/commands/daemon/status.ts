@@ -19,6 +19,9 @@ interface DaemonStatus {
   serverId: string | null;
   localDaemon: "running" | "stopped" | "stale_pid" | "unresponsive";
   connectedDaemon: "reachable" | "unreachable" | "auth_required" | "auth_failed" | "not_probed";
+  connectedServerId: string | null;
+  connectedPid: number | null;
+  connectedListen: string | null;
   home: string;
   listen: string;
   relay: string;
@@ -117,6 +120,12 @@ function toStatusRows(status: DaemonStatus): StatusRow[] {
     { key: "Server ID", value: status.serverId ?? "-" },
     { key: "Local Daemon", value: status.localDaemon },
     { key: "Connected Daemon", value: status.connectedDaemon },
+    { key: "Connected Server ID", value: status.connectedServerId ?? "-" },
+    {
+      key: "Connected PID",
+      value: status.connectedPid === null ? "-" : String(status.connectedPid),
+    },
+    { key: "Connected Listen", value: status.connectedListen ?? "-" },
     { key: "Home", value: status.home },
     { key: "Listen", value: status.listen },
     { key: "Relay", value: status.relay },
@@ -200,6 +209,9 @@ function resolveOwnerLabel(uid: number | undefined, hostname: string | undefined
 
 interface DaemonProbeResult {
   connectedDaemon: DaemonStatus["connectedDaemon"];
+  connectedServerId?: string;
+  connectedPid?: number;
+  connectedListen?: string | null;
   localDaemonOverride?: DaemonStatus["localDaemon"];
   daemonVersion?: string | null;
   daemonNodeOverride?: string;
@@ -274,6 +286,9 @@ async function probeDaemonOverWebsocket(args: {
     if (!state.running) {
       return {
         connectedDaemon: "reachable",
+        connectedServerId: statusPayload.serverId,
+        connectedPid: statusPayload.pid,
+        connectedListen: statusPayload.listen,
         daemonVersion: statusPayload.version ?? daemonVersion,
         daemonNodeOverride: statusPayload.nodePath,
         daemonProviders,
@@ -286,6 +301,9 @@ async function probeDaemonOverWebsocket(args: {
 
     return {
       connectedDaemon: "reachable",
+      connectedServerId: statusPayload.serverId,
+      connectedPid: statusPayload.pid,
+      connectedListen: statusPayload.listen,
       daemonVersion: statusPayload.version ?? daemonVersion,
       daemonNodeOverride: statusPayload.nodePath,
       daemonProviders,
@@ -307,6 +325,9 @@ async function probeDaemonOverWebsocket(args: {
 interface ProbeMergeState {
   probe: DaemonProbeResult;
   connectedDaemon: DaemonStatus["connectedDaemon"];
+  connectedServerId: string | null;
+  connectedPid: number | null;
+  connectedListen: string | null;
   localDaemon: DaemonStatus["localDaemon"];
   daemonNode: string;
   daemonVersion: string | null;
@@ -319,6 +340,10 @@ function applyProbeToStatus(input: ProbeMergeState): Omit<ProbeMergeState, "prob
   const { probe } = input;
   return {
     connectedDaemon: probe.connectedDaemon,
+    connectedServerId: probe.connectedServerId ?? input.connectedServerId,
+    connectedPid: probe.connectedPid ?? input.connectedPid,
+    connectedListen:
+      probe.connectedListen !== undefined ? probe.connectedListen : input.connectedListen,
     localDaemon: probe.localDaemonOverride ?? input.localDaemon,
     daemonNode: probe.daemonNodeOverride ?? input.daemonNode,
     daemonVersion: probe.daemonVersion !== undefined ? probe.daemonVersion : input.daemonVersion,
@@ -393,6 +418,9 @@ export async function runStatusCommand(
   const cliNode = process.execPath;
   let localDaemon: DaemonStatus["localDaemon"] = state.running ? "running" : "stopped";
   let connectedDaemon: DaemonStatus["connectedDaemon"] = "not_probed";
+  let connectedServerId: string | null = null;
+  let connectedPid: number | null = null;
+  let connectedListen: string | null = null;
   let daemonVersion: string | null = null;
   let daemonProviders: ProviderBinaryStatus[] | undefined;
   let relayStatus = selectRelayStatus({ persisted: relayConfigFromLocalState(state) });
@@ -407,6 +435,9 @@ export async function runStatusCommand(
     const probe = await probeDaemonOverWebsocket({ host: daemonTarget, state });
     ({
       connectedDaemon,
+      connectedServerId,
+      connectedPid,
+      connectedListen,
       localDaemon,
       daemonNode,
       daemonVersion,
@@ -416,6 +447,9 @@ export async function runStatusCommand(
     } = applyProbeToStatus({
       probe,
       connectedDaemon,
+      connectedServerId,
+      connectedPid,
+      connectedListen,
       localDaemon,
       daemonNode,
       daemonVersion,
@@ -439,6 +473,9 @@ export async function runStatusCommand(
     serverId,
     localDaemon,
     connectedDaemon,
+    connectedServerId,
+    connectedPid,
+    connectedListen,
     home: state.home,
     listen: state.listen,
     relay: relayStatus,

@@ -55,6 +55,7 @@ function getProviderStatus(
   status: string,
   enabled: boolean,
   modelCount: number,
+  requiresConnectionQualification: boolean,
   t: TFunction,
 ): ProviderStatus {
   if (!enabled)
@@ -64,6 +65,13 @@ function getProviderStatus(
   }
   if (status === "error") {
     return { tone: "danger", label: t("settings.providers.statuses.error"), modelCount: null };
+  }
+  if (requiresConnectionQualification) {
+    return {
+      tone: "warning",
+      label: t("settings.providers.statuses.configuredUnqualified"),
+      modelCount: null,
+    };
   }
   if (status === "ready") {
     return {
@@ -88,6 +96,7 @@ interface ProviderRowProps {
   canRemove: boolean;
   isFirst: boolean;
   canConfigureTools: boolean;
+  requiresConnectionQualification: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
   onConfigureTools: (providerId: string) => void;
@@ -204,6 +213,7 @@ function ProviderRow({
   canRemove,
   isFirst,
   canConfigureTools,
+  requiresConnectionQualification,
   onPress,
   onToggleEnabled,
   onConfigureTools,
@@ -221,7 +231,13 @@ function ProviderRow({
       ? entry.error.trim()
       : null;
   const modelCount = entry.models?.length ?? 0;
-  const providerStatus = getProviderStatus(entry.status, enabled, modelCount, t);
+  const providerStatus = getProviderStatus(
+    entry.status,
+    enabled,
+    modelCount,
+    requiresConnectionQualification,
+    t,
+  );
 
   const handlePress = useCallback(() => {
     onPress(def.id);
@@ -533,6 +549,9 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   canRemove={supportsProviderRemoval && entry.source === "custom"}
                   isFirst={index === 0}
                   canConfigureTools={supportsPaseoToolPolicies}
+                  requiresConnectionQualification={
+                    entry.source === "custom" && config?.providers?.[def.id]?.extends === "codex"
+                  }
                   onPress={handleOpenProviderSettings}
                   onToggleEnabled={handleToggleEnabled}
                   onConfigureTools={handleOpenToolPolicy}
@@ -583,6 +602,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           providerLabel=""
           serverId={serverId}
           baseUrl=""
+          credentialRef={null}
           onClose={handleCloseFoundationProvider}
           onSaved={handleFoundationProviderSaved}
         />

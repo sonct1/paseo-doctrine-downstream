@@ -68,6 +68,8 @@ function runtimeGate(input: {
   releasePath: string;
   links: Array<{ source: string; target: string }>;
   daemonReachable: boolean;
+  daemonEvidence: string[];
+  interruptedTransactionPresent: boolean;
 }): DoctorGate {
   const failures: string[] = [];
   if (resolvedLinkTarget(input.currentLink) !== input.releasePath) {
@@ -77,12 +79,15 @@ function runtimeGate(input: {
     if (resolvedLinkTarget(link.target) !== link.source)
       failures.push(`${link.target}: wrong target`);
   }
-  if (!input.daemonReachable) failures.push("Paseo daemon is not reachable");
+  if (input.interruptedTransactionPresent) {
+    failures.push("an interrupted Foundation install transaction requires recovery");
+  }
+  if (!input.daemonReachable) failures.push(...input.daemonEvidence);
   return failures.length === 0
     ? {
         name: "RUNTIME_EFFECTIVE",
         status: "PASS",
-        evidence: ["owned links and daemon readback pass"],
+        evidence: ["owned links and exact local daemon identity readback pass"],
       }
     : { name: "RUNTIME_EFFECTIVE", status: "FAIL", evidence: failures };
 }
@@ -102,7 +107,7 @@ function roleBoundaryGate(releasePath: string): DoctorGate {
   return {
     name: "ROLE_BOUNDARY_QUALIFIED",
     status: "UNKNOWN",
-    evidence: ["static role guards pass; a fresh role/tool canary has not run"],
+    evidence: ["static role guards pass; no fresh role/tool canary evidence was supplied"],
   };
 }
 
@@ -172,6 +177,8 @@ export function doctorFoundation(input: {
         releasePath: record.releasePath,
         links: record.installedLinks,
         daemonReachable: inspection.paseoDaemonReachable,
+        daemonEvidence: inspection.paseoDaemonEvidence,
+        interruptedTransactionPresent: inspection.interruptedTransactionPresent,
       }),
       roleBoundaryGate(record.releasePath),
       projectGate(input.projectRoot),

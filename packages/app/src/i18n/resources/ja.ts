@@ -2220,7 +2220,8 @@ export const ja: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2230,6 +2231,7 @@ export const ja: TranslationResources = {
         error: "エラー",
         available: "利用可能",
         notInstalled: "未インストール",
+        configuredUnqualified: "設定済み · 検証待ち",
       },
       models: {
         one: "1つのモデル",
@@ -2273,6 +2275,13 @@ export const ja: TranslationResources = {
         saveFailed: "プロバイダー接続を保存できません",
         save: "保存",
         saving: "保存中...",
+        deleteCredential: "API キーを削除",
+        deletingCredential: "キーを削除中...",
+        deleteCredentialConfirmTitle: "API キーを削除しますか？",
+        deleteCredentialConfirmMessage:
+          "このホストから非公開の認証情報 {{credentialRef}} を削除します。この参照を共有するすべてのプロバイダーは、新しいキーを保存するまで動作しません。",
+        deleteCredentialConfirm: "キーを削除",
+        deleteCredentialFailed: "API キーを削除できません",
       },
       diagnostic: {
         title: "診断",

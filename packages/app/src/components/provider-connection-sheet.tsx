@@ -11,9 +11,11 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import {
   openProviderConnectionForm,
+  resolveProviderCredentialRef,
   type ProviderConnectionFormModel,
 } from "@/providers/provider-connection-form-model";
 import { useProviderConnectionCredentialStatus } from "@/providers/use-provider-connection-credential-status";
+import { confirmDialog } from "@/utils/confirm-dialog";
 
 interface ProviderConnectionSheetProps {
   mode: "create" | "edit";
@@ -21,6 +23,7 @@ interface ProviderConnectionSheetProps {
   providerLabel: string;
   serverId: string;
   baseUrl: string;
+  credentialRef: string | null;
   onClose: () => void;
   onSaved: (providerId: string) => Promise<void>;
 }
@@ -49,6 +52,7 @@ export function ProviderConnectionSheet({
   providerLabel,
   serverId,
   baseUrl,
+  credentialRef,
   onClose,
   onSaved,
 }: ProviderConnectionSheetProps) {
@@ -60,7 +64,7 @@ export function ProviderConnectionSheet({
   const { patchConfig } = useDaemonConfig(serverId);
   useProviderConnectionCredentialStatus({
     serverId,
-    credentialRef: mode === "edit" ? provider : null,
+    credentialRef: mode === "edit" ? credentialRef : null,
     model,
   });
 
@@ -78,8 +82,13 @@ export function ProviderConnectionSheet({
     model.startSaving();
     try {
       const targetProvider = state.providerId;
+      const targetCredentialRef = resolveProviderCredentialRef({
+        mode,
+        providerId: targetProvider,
+        configuredCredentialRef: credentialRef,
+      });
       if (state.apiKey.trim()) {
-        await client.setFoundationCredential(targetProvider, state.apiKey);
+        await client.setFoundationCredential(targetCredentialRef, state.apiKey);
       }
       const updated = await patchConfig({
         providers: {
@@ -87,7 +96,7 @@ export function ProviderConnectionSheet({
             ...(mode === "create"
               ? { extends: "codex", label: state.providerLabel.trim(), enabled: true }
               : {}),
-            credentialRef: targetProvider,
+            credentialRef: targetCredentialRef,
             env: {
               OPENAI_BASE_URL: state.normalizedBaseUrl,
               PASEO_CLIPROXY_BASE_URL: state.normalizedBaseUrl,
@@ -104,8 +113,35 @@ export function ProviderConnectionSheet({
         error instanceof Error ? error.message : t("settings.providers.connection.saveFailed"),
       );
     }
-  }, [client, mode, model, onClose, onSaved, patchConfig, state, t]);
+  }, [client, credentialRef, mode, model, onClose, onSaved, patchConfig, state, t]);
   const handleSavePress = useCallback(() => void handleSave(), [handleSave]);
+  const handleDeleteCredential = useCallback(async () => {
+    if (!client || mode !== "edit" || !credentialRef || state.credentialConfigured !== true) return;
+    const confirmed = await confirmDialog({
+      title: t("settings.providers.connection.deleteCredentialConfirmTitle"),
+      message: t("settings.providers.connection.deleteCredentialConfirmMessage", {
+        credentialRef,
+      }),
+      confirmLabel: t("settings.providers.connection.deleteCredentialConfirm"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    model.startDeleting();
+    try {
+      await client.deleteFoundationCredential(credentialRef);
+      model.finishDeleting();
+    } catch (error) {
+      model.failDeleting(
+        error instanceof Error
+          ? error.message
+          : t("settings.providers.connection.deleteCredentialFailed"),
+      );
+    }
+  }, [client, credentialRef, mode, model, state.credentialConfigured, t]);
+  const handleDeleteCredentialPress = useCallback(
+    () => void handleDeleteCredential(),
+    [handleDeleteCredential],
+  );
   const credentialHint =
     state.credentialConfigured === true
       ? t("settings.providers.connection.credentialConfigured")
@@ -196,10 +232,23 @@ export function ProviderConnectionSheet({
             variant="secondary"
             size="sm"
             onPress={onClose}
-            disabled={state.status === "saving"}
+            disabled={state.status !== "idle"}
           >
             {t("common.actions.cancel")}
           </Button>
+          {mode === "edit" && credentialRef && state.credentialConfigured === true ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onPress={handleDeleteCredentialPress}
+              disabled={state.status !== "idle"}
+              testID="provider-connection-delete-credential"
+            >
+              {state.status === "deleting"
+                ? t("settings.providers.connection.deletingCredential")
+                : t("settings.providers.connection.deleteCredential")}
+            </Button>
+          ) : null}
           <Button variant="default" size="sm" onPress={handleSavePress} disabled={!state.canSave}>
             {state.status === "saving"
               ? t("settings.providers.connection.saving")

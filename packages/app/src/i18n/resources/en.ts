@@ -2210,7 +2210,8 @@ export const en = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2220,6 +2221,7 @@ export const en = {
         error: "Error",
         available: "Available",
         notInstalled: "Not installed",
+        configuredUnqualified: "Configured · qualification pending",
       },
       models: {
         one: "1 model",
@@ -2263,6 +2265,13 @@ export const en = {
         saveFailed: "Unable to save provider connection",
         save: "Save",
         saving: "Saving...",
+        deleteCredential: "Delete API key",
+        deletingCredential: "Deleting key...",
+        deleteCredentialConfirmTitle: "Delete API key?",
+        deleteCredentialConfirmMessage:
+          "This deletes private credential {{credentialRef}} from this host. Every provider sharing this credential reference will stop working until a new key is saved.",
+        deleteCredentialConfirm: "Delete key",
+        deleteCredentialFailed: "Unable to delete API key",
       },
       diagnostic: {
         title: "Diagnostic",

@@ -141,6 +141,8 @@ try {
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
     const pidPath = join(paseoHome, "paseo.pid");
     const pidContents = await readFile(pidPath, "utf-8");
+    const pidInfo = JSON.parse(pidContents) as { pid: number };
+    const expectedServerId = (await readFile(join(paseoHome, "server-id"), "utf-8")).trim();
     await unlink(pidPath);
     const status = await daemonCommand(["status", "--json"]);
     const pairing = await daemonCommand(["pair", "--json"]);
@@ -148,6 +150,25 @@ try {
     assert.strictEqual(status.exitCode, 0, `IPC daemon status should succeed: ${status.stderr}`);
     const payload = JSON.parse(status.stdout);
     assert.strictEqual(payload.connectedDaemon, "reachable", "IPC daemon should be reachable");
+    assert.strictEqual(
+      payload.connectedServerId,
+      expectedServerId,
+      "status should expose the connected daemon server ID",
+    );
+    assert.strictEqual(typeof payload.connectedPid, "number", "status should expose a daemon PID");
+    assert.doesNotThrow(
+      () => process.kill(payload.connectedPid, 0),
+      "the connected daemon PID should be live",
+    );
+    assert.doesNotThrow(
+      () => process.kill(pidInfo.pid, 0),
+      "the local supervisor PID should remain live",
+    );
+    assert.strictEqual(
+      payload.connectedListen,
+      listen,
+      "status should expose the connected daemon listen target",
+    );
     assert.strictEqual(payload.localDaemon, "stopped", "missing PID should report stopped locally");
     assert.notStrictEqual(payload.relay, "disabled", "status should use live relay state");
     assert.strictEqual(pairing.exitCode, 0, `IPC daemon pairing should succeed: ${pairing.stderr}`);

@@ -3,9 +3,15 @@ import path from "node:path";
 import { Command, Option } from "commander";
 import { doctorFoundation, type DoctorReport } from "./doctor.js";
 import { inspectMachine, type MachineInspection } from "./inspection.js";
-import { applyInstallPlan, rollbackInstall, uninstallFoundation } from "./install.js";
+import {
+  applyInstallPlan,
+  recoverInterruptedInstall,
+  rollbackInstall,
+  uninstallFoundation,
+} from "./install.js";
 import { createInstallPlan, readInstallPlan, writeInstallPlan } from "./plan.js";
 import type { InstallMode, InstallPlan, InstallRecord } from "./schema.js";
+import { resolveFoundationCliVersion } from "./version.js";
 
 interface CommonOptions {
   home?: string;
@@ -41,6 +47,11 @@ function printInspection(inspection: MachineInspection): void {
   process.stdout.write(
     `Paseo daemon ${inspection.paseoDaemonReachable ? "reachable" : "unreachable"}\n`,
   );
+  if (!inspection.paseoDaemonReachable) {
+    for (const evidence of inspection.paseoDaemonEvidence) {
+      process.stdout.write(`  ${evidence}\n`);
+    }
+  }
   for (const tool of inspection.tools) {
     process.stdout.write(
       `${tool.id}: ${tool.command ?? "not found"}${tool.version ? ` (${tool.version})` : ""}\n`,
@@ -49,6 +60,8 @@ function printInspection(inspection: MachineInspection): void {
   for (const link of inspection.links) process.stdout.write(`${link.state}: ${link.target}\n`);
   if (inspection.legacyInstallRecordPresent)
     process.stdout.write("legacy install record: present\n");
+  if (inspection.interruptedTransactionPresent)
+    process.stdout.write("interrupted install transaction: recovery required\n");
 }
 
 function printPlan(plan: InstallPlan): void {
@@ -80,7 +93,7 @@ function printDoctor(report: DoctorReport): void {
 const program = new Command()
   .name("paseo-foundation")
   .description("Install and diagnose the Paseo Foundation distribution")
-  .version("0.3.0-beta.1");
+  .version(resolveFoundationCliVersion());
 
 program
   .command("inspect")
@@ -148,6 +161,18 @@ program
     });
     if (options.json) writeJson(report);
     else printDoctor(report);
+  });
+
+program
+  .command("recover")
+  .description("Recover an interrupted Foundation install transaction")
+  .option("--home <path>", "User home to recover")
+  .option("--json", "Print JSON")
+  .action((options: CommonOptions) => {
+    const recovered = recoverInterruptedInstall(resolvedHome(options.home));
+    const result = { recovered };
+    if (options.json) writeJson(result);
+    else process.stdout.write(recovered ? "Recovery completed\n" : "No recovery required\n");
   });
 
 program

@@ -6,6 +6,10 @@ Paseo Foundation được ship cùng repository này nhưng giữ ba lifecycle r
 - Paseo daemon, app và protocol là runtime downstream bám upstream Paseo.
 - `control-workspace/template` là seed cho Control Workspace Home mutable, user-owned.
 
+Dev pilot phải theo exact tag, acceptance gate và rollback trong
+[controlled dev-pilot runbook](dev-pilot.md). Không dùng hướng dẫn cài package published bên dưới cho tag
+source-only.
+
 Không sửa `foundation/dist` trực tiếp. Thay đổi doctrine ở repository Foundation, tag một commit sạch,
 rồi chạy `scripts/import-foundation.mjs`. `foundation/manifest.json` khóa SHA-256 từng file;
 `foundation/sources.lock.json` khóa Foundation commit và Paseo upstream commit.
@@ -43,8 +47,16 @@ Chọn mode theo state đã inspect:
 - `update`: active installation đã có install record.
 
 Plan chứa fingerprint của mutation-relevant state. Nếu file hoặc symlink đổi giữa `plan` và `install`,
-installer dừng và yêu cầu plan mới. Distribution được stage rồi verify checksum trước khi đổi symlink.
-Failure giữa chừng rollback link, release mới, Control Workspace mới và install record.
+installer dừng và yêu cầu plan mới. Distribution và Control Workspace được stage, verify rồi mới đổi
+symlink. Trước mutation, installer ghi private transaction journal; failure trong process sẽ tự rollback,
+còn process bị kill có thể recovery deterministically ở lần install sau hoặc bằng lệnh explicit:
+
+```bash
+paseo-foundation recover
+```
+
+Recovery chỉ xóa release/Control Workspace mới khi checksum/fingerprint vẫn khớp exact staged bytes.
+Nếu user đã sửa Control Workspace sau crash, recovery fail closed và giữ journal để inspect thủ công.
 
 Installer tạo:
 
@@ -52,6 +64,7 @@ Installer tạo:
 ~/.local/share/paseo-foundation/releases/<version>/
 ~/.local/share/paseo-foundation/current -> releases/<version>
 ~/.paseo-foundation/install.json
+~/.paseo-foundation/install-transaction.json  # chỉ tồn tại khi transaction chưa commit
 ~/.paseo-control/
 ```
 
@@ -69,11 +82,17 @@ paseo-foundation uninstall
 `doctor` báo bốn gate độc lập:
 
 - `DISTRIBUTION_VALID`: manifest và checksum.
-- `RUNTIME_EFFECTIVE`: symlink readback và daemon reachability.
+- `RUNTIME_EFFECTIVE`: symlink readback và exact local daemon identity. Gate này yêu cầu local
+  `config.json`, `server-id`, `paseo.pid`, live supervisor PID và status JSON. Live RPC phải trả đúng
+  `serverId`, `listen`, một daemon-worker PID đang chạy và `daemonVersion`; một daemon khác reachable trên
+  default port không thể làm gate xanh. Worker PID có thể khác supervisor PID trong `paseo.pid`.
 - `ROLE_BOUNDARY_QUALIFIED`: static guards; giữ `UNKNOWN` cho tới khi có fresh role/tool canary.
+  `doctor` hiện không ingest canary evidence, nên `UNKNOWN` nghĩa là command chưa được cấp evidence,
+  không khẳng định canary chưa từng chạy.
 - `PROJECT_READY`: protocol bytes; activation và engineering evidence vẫn có thể `UNKNOWN`.
 
-`uninstall` chỉ gỡ owned runtime link. Release cũ và `~/.paseo-control` được giữ để recovery và audit.
+`uninstall` chỉ gỡ owned runtime link; với migration record mới, nó restore exact legacy symlink snapshot.
+Release cũ và `~/.paseo-control` được giữ để recovery và audit.
 
 ## Thêm provider trên Paseo WebUI
 
@@ -88,10 +107,16 @@ Base URL phải là absolute HTTPS URL, không chứa embedded credential, query
 suffix `/v1`. Provider ID chỉ dùng lowercase letter, number và hyphen, bắt đầu bằng letter.
 
 Để đổi endpoint hoặc rotate key, mở provider rồi chọn **Connection**. Để trống API key sẽ giữ credential
-đang có.
+đang có. **Delete API key** là action destructive riêng và có confirmation; xóa provider config không tự
+xóa secret để tránh phá provider alias khác đang dùng chung `credentialRef`.
 
-Provider OpenAI-compatible mới chỉ là transport/cost route, không tự chứng minh role binding. Muốn dùng
-Lead, Peer hoặc Supervisor của Foundation, giữ exact role-specific provider command từ
+Nhiều role-specific provider có thể dùng chung một `credentialRef`; WebUI phải giữ ref hiện có khi sửa
+endpoint hoặc rotate key, thay vì đổi ref sang provider ID của alias. Xóa shared credential sẽ làm mọi
+provider dùng ref đó fail closed cho tới khi lưu key mới.
+
+Provider OpenAI-compatible mới chỉ là transport/cost route, không tự chứng minh role binding. Provider
+list hiển thị **Configured · qualification pending** và không đếm inherited model catalog như endpoint
+evidence. Muốn dùng Lead, Peer hoặc Supervisor của Foundation, giữ exact role-specific provider command từ
 `foundation/dist/templates/paseo-provider-overrides.example.json`, rồi dùng **Connection** để điền endpoint
 và credential cho provider đó. Chỉ enable sau fresh role/tool canary. Wrapper role-specific cần `jq`;
 `paseo-foundation inspect` báo path/version của tool này.

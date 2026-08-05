@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -16,8 +17,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { doctorFoundation } from "./doctor.js";
 import { inspectMachine } from "./inspection.js";
-import { applyInstallPlan, uninstallFoundation } from "./install.js";
-import { resolveInstallLayout, resolveProductLayout } from "./layout.js";
+import {
+  applyInstallPlan,
+  recoverInterruptedInstall,
+  rollbackInstall,
+  uninstallFoundation,
+} from "./install.js";
+import { resolveInstallLayout, resolveProductLayout, roleLinks } from "./layout.js";
 import { createInstallPlan } from "./plan.js";
 import type { InstallPlan } from "./schema.js";
 
@@ -45,6 +51,101 @@ afterEach(() => {
 });
 
 describe("Foundation host inspection", () => {
+  it("does not invoke daemon status or create Paseo state in a clean home", () => {
+    const home = temporaryHome();
+    const fakeBin = path.join(home, "fake-bin");
+    const marker = path.join(home, "status-was-called");
+    const paseo = path.join(fakeBin, "paseo");
+    mkdirSync(fakeBin, { recursive: true });
+    writeFileSync(
+      paseo,
+      `#!/bin/sh\nif [ "$1" = "daemon" ]; then touch '${marker}'; fi\necho 'paseo fake'\n`,
+      { mode: 0o755 },
+    );
+
+    const inspection = inspectMachine({
+      home,
+      productRoot: productRoot(),
+      environmentPath: fakeBin,
+      platform: "darwin",
+    });
+
+    expect(inspection.paseoDaemonReachable).toBe(false);
+    expect(inspection.paseoDaemonEvidence).toContain(
+      `${path.join(home, ".paseo/config.json")}: missing`,
+    );
+    expect(existsSync(marker)).toBe(false);
+    expect(existsSync(path.join(home, ".paseo"))).toBe(false);
+  });
+
+  it("requires an exact local daemon identity readback", () => {
+    const home = temporaryHome();
+    const paseoHome = path.join(home, ".paseo");
+    const fakeBin = path.join(home, "fake-bin");
+    const paseo = path.join(fakeBin, "paseo");
+    const listen = "127.0.0.1:19767";
+    const serverId = "server-test-exact";
+    const status = JSON.stringify({
+      localDaemon: "running",
+      connectedDaemon: "reachable",
+      connectedServerId: serverId,
+      connectedPid: process.pid,
+      connectedListen: listen,
+      serverId,
+      pid: process.pid,
+      home: paseoHome,
+      listen,
+      daemonVersion: "0.3.0-test",
+    });
+    mkdirSync(paseoHome, { recursive: true });
+    mkdirSync(fakeBin, { recursive: true });
+    writeFileSync(path.join(paseoHome, "config.json"), "{}\n");
+    writeFileSync(path.join(paseoHome, "server-id"), `${serverId}\n`);
+    writeFileSync(
+      path.join(paseoHome, "paseo.pid"),
+      `${JSON.stringify({ pid: process.pid, listen })}\n`,
+    );
+    writeFileSync(
+      paseo,
+      `#!/bin/sh\nif [ "$1" = "daemon" ]; then printf '%s\\n' '${status}'; else echo 'paseo fake'; fi\n`,
+      { mode: 0o755 },
+    );
+
+    const inspection = inspectMachine({
+      home,
+      productRoot: productRoot(),
+      environmentPath: fakeBin,
+      platform: "darwin",
+    });
+
+    expect(inspection.paseoDaemonReachable).toBe(true);
+    expect(inspection.paseoDaemonEvidence).toEqual([
+      `serverId=${serverId}`,
+      `pid=${process.pid}`,
+      "version=0.3.0-test",
+    ]);
+
+    const mismatchedStatus = JSON.stringify({
+      ...(JSON.parse(status) as Record<string, unknown>),
+      connectedServerId: "different-live-daemon",
+    });
+    writeFileSync(
+      paseo,
+      `#!/bin/sh\nif [ "$1" = "daemon" ]; then printf '%s\\n' '${mismatchedStatus}'; else echo 'paseo fake'; fi\n`,
+      { mode: 0o755 },
+    );
+    const mismatch = inspectMachine({
+      home,
+      productRoot: productRoot(),
+      environmentPath: fakeBin,
+      platform: "darwin",
+    });
+    expect(mismatch.paseoDaemonReachable).toBe(false);
+    expect(mismatch.paseoDaemonEvidence).toContain(
+      "connected daemon server ID does not match the local server ID",
+    );
+  });
+
   it("reports provider metadata without returning credential values", () => {
     const home = temporaryHome();
     const paseoHome = path.join(home, ".paseo");
@@ -211,5 +312,161 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
 
     expect(() => uninstallFoundation(home)).toThrow("outside the canonical Foundation layout");
     expect(lstatSync(foreignTarget).isSymbolicLink()).toBe(true);
+  });
+
+  it("recovers a recorded interrupted link activation", () => {
+    const home = temporaryHome();
+    const plan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
+    mkdirSync(path.dirname(layout.transactionPath), { recursive: true });
+    mkdirSync(path.dirname(plan.currentLink), { recursive: true });
+    symlinkSync(plan.releasePath, plan.currentLink);
+    for (const link of plan.links) {
+      mkdirSync(path.dirname(link.target), { recursive: true });
+      symlinkSync(link.source, link.target);
+    }
+    writeFileSync(
+      layout.transactionPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        operation: "install",
+        ownerPid: process.pid,
+        planId: plan.planId,
+        home,
+        releasePath: plan.releasePath,
+        releaseStagingPath: null,
+        controlHome: plan.controlHome,
+        controlStagingPath: null,
+        controlTemplateFingerprint: null,
+        currentLink: plan.currentLink,
+        previousCurrentTarget: null,
+        previousLinks: plan.links.map(({ target }) => ({ target, previousTarget: null })),
+        installRecordPath: layout.installRecordPath,
+        previousInstallRecordBase64: null,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+      { mode: 0o600 },
+    );
+
+    expect(recoverInterruptedInstall(home)).toBe(true);
+    expect(existsSync(layout.transactionPath)).toBe(false);
+    expect(existsSync(plan.currentLink)).toBe(false);
+    for (const link of plan.links) expect(existsSync(link.target)).toBe(false);
+  });
+
+  it("fails recovery without mutation when a runtime target became foreign", () => {
+    const home = temporaryHome();
+    const plan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
+    mkdirSync(path.dirname(layout.transactionPath), { recursive: true });
+    mkdirSync(path.dirname(plan.currentLink), { recursive: true });
+    symlinkSync(plan.releasePath, plan.currentLink);
+    for (const link of plan.links) {
+      mkdirSync(path.dirname(link.target), { recursive: true });
+      symlinkSync(link.source, link.target);
+    }
+    writeFileSync(
+      layout.transactionPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        operation: "install",
+        ownerPid: process.pid,
+        planId: plan.planId,
+        home,
+        releasePath: plan.releasePath,
+        releaseStagingPath: null,
+        controlHome: plan.controlHome,
+        controlStagingPath: null,
+        controlTemplateFingerprint: null,
+        currentLink: plan.currentLink,
+        previousCurrentTarget: null,
+        previousLinks: plan.links.map(({ target }) => ({ target, previousTarget: null })),
+        installRecordPath: layout.installRecordPath,
+        previousInstallRecordBase64: null,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+      { mode: 0o600 },
+    );
+    const foreignTarget = plan.links[0]!.target;
+    rmSync(foreignTarget);
+    writeFileSync(foreignTarget, "user-owned\n");
+
+    expect(() => recoverInterruptedInstall(home)).toThrow("runtime target changed");
+    expect(readFileSync(foreignTarget, "utf8")).toBe("user-owned\n");
+    expect(existsSync(layout.transactionPath)).toBe(true);
+    expect(lstatSync(plan.currentLink).isSymbolicLink()).toBe(true);
+  });
+
+  it("cleans final paths and links after a late install failure", () => {
+    const home = temporaryHome();
+    const plan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
+    const codexRoot = path.join(home, ".codex");
+    mkdirSync(codexRoot, { recursive: true, mode: 0o700 });
+    chmodSync(codexRoot, 0o500);
+    try {
+      expect(() => applyInstallPlan(plan)).toThrow();
+    } finally {
+      chmodSync(codexRoot, 0o700);
+    }
+
+    expect(existsSync(layout.transactionPath)).toBe(false);
+    expect(existsSync(layout.releasePath)).toBe(false);
+    expect(existsSync(layout.controlHome)).toBe(false);
+    expect(existsSync(layout.currentLink)).toBe(false);
+    for (const link of plan.links) expect(existsSync(link.target)).toBe(false);
+  });
+
+  it("restores every legacy target when a migration is rolled back", () => {
+    const home = temporaryHome();
+    const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
+    const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
+    const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
+    mkdirSync(path.dirname(layout.currentLink), { recursive: true });
+    symlinkSync(legacyRelease, layout.currentLink);
+    for (const link of legacyLinks) {
+      mkdirSync(path.dirname(link.target), { recursive: true });
+      symlinkSync(link.source, link.target);
+    }
+    const plan = createInstallPlan({
+      mode: "migration",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+
+    const applied = applyInstallPlan(plan);
+    expect(applied.record.previousLinks?.map(({ previousTarget }) => previousTarget)).toEqual(
+      legacyLinks.map(({ source }) => source),
+    );
+    const rolledBack = rollbackInstall(home);
+
+    expect(rolledBack.status).toBe("uninstalled");
+    expect(rolledBack.rolledBackAt).toBeTruthy();
+    expect(path.resolve(path.dirname(layout.currentLink), readlinkSync(layout.currentLink))).toBe(
+      legacyRelease,
+    );
+    for (const link of legacyLinks) {
+      expect(path.resolve(path.dirname(link.target), readlinkSync(link.target))).toBe(link.source);
+    }
   });
 });

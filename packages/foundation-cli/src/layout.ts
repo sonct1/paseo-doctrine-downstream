@@ -18,6 +18,7 @@ export interface InstallLayout {
   currentLink: string;
   stateRoot: string;
   installRecordPath: string;
+  transactionPath: string;
   controlHome: string;
   legacyRecordPath: string;
 }
@@ -62,6 +63,7 @@ export function resolveInstallLayout(input: {
     currentLink: path.join(shareRoot, "current"),
     stateRoot: path.join(home, ".paseo-foundation"),
     installRecordPath: path.join(home, ".paseo-foundation", "install.json"),
+    transactionPath: path.join(home, ".paseo-foundation", "install-transaction.json"),
     controlHome: path.join(home, ".paseo-control"),
     legacyRecordPath: path.join(home, ".paseo", "paseo-workflow-pilot.json"),
   };

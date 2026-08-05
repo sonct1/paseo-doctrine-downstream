@@ -46,6 +46,7 @@ export interface MachineInspection {
   distributionVersion: string;
   foundationCommit: string;
   paseoDaemonReachable: boolean;
+  paseoDaemonEvidence: string[];
   tools: ToolInspection[];
   providers: ProviderInspection[];
   links: LinkInspection[];
@@ -54,6 +55,7 @@ export interface MachineInspection {
   legacyInstallRecordPresent: boolean;
   controlHomePresent: boolean;
   releasePresent: boolean;
+  interruptedTransactionPresent: boolean;
   mutationFingerprint: string;
 }
 
@@ -193,18 +195,152 @@ function inspectInstallRecord(recordPath: string): InstallRecord | null {
   return record.success ? record.data : null;
 }
 
-function daemonReachable(paseoCommand: string | null, home: string): boolean {
-  if (!paseoCommand) return false;
+interface DaemonReadback {
+  reachable: boolean;
+  evidence: string[];
+}
+
+interface DaemonDiskIdentity {
+  paseoHome: string;
+  serverId: string;
+  pid: number;
+  pidInfo: Record<string, unknown>;
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM";
+  }
+}
+
+function readDaemonDiskIdentity(home: string): DaemonDiskIdentity | DaemonReadback {
+  const paseoHome = path.join(home, ".paseo");
+  const configPath = path.join(paseoHome, "config.json");
+  const serverIdPath = path.join(paseoHome, "server-id");
+  const pidPath = path.join(paseoHome, "paseo.pid");
+  const missing = [configPath, serverIdPath, pidPath].filter((filePath) => !existsSync(filePath));
+  if (missing.length > 0) {
+    return {
+      reachable: false,
+      evidence: missing.map((filePath) => `${filePath}: missing`),
+    };
+  }
+
+  let serverId: string;
+  let pidInfo: Record<string, unknown>;
+  try {
+    serverId = readFileSync(serverIdPath, "utf8").trim();
+    const parsedPid: unknown = readJson(pidPath);
+    if (!isRecord(parsedPid)) throw new Error("PID lock is not an object");
+    pidInfo = parsedPid;
+  } catch (error) {
+    return {
+      reachable: false,
+      evidence: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+  const pid = pidInfo.pid;
+  if (!serverId) return { reachable: false, evidence: ["Paseo server ID is blank"] };
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+    return { reachable: false, evidence: ["Paseo PID lock is invalid"] };
+  }
+  if (!isProcessRunning(pid)) {
+    return { reachable: false, evidence: [`Paseo PID ${pid} is not running`] };
+  }
+  return { paseoHome, serverId, pid, pidInfo };
+}
+
+function parseDaemonStatus(stdout: string): { status: Record<string, unknown> } | DaemonReadback {
+  try {
+    const parsedStatus: unknown = JSON.parse(stdout);
+    if (!isRecord(parsedStatus)) throw new Error("Paseo daemon status is not an object");
+    return { status: parsedStatus };
+  } catch (error) {
+    return {
+      reachable: false,
+      evidence: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+function daemonStatusFailures(
+  status: Record<string, unknown>,
+  identity: DaemonDiskIdentity,
+): string[] {
+  const failures: string[] = [];
+  if (status.localDaemon !== "running") failures.push("local daemon is not running");
+  if (status.connectedDaemon !== "reachable") failures.push("daemon websocket is not reachable");
+  if (status.serverId !== identity.serverId)
+    failures.push("daemon server ID does not match disk state");
+  if (status.pid !== identity.pid) failures.push("daemon PID does not match the local PID lock");
+  if (status.connectedServerId !== identity.serverId) {
+    failures.push("connected daemon server ID does not match the local server ID");
+  }
+  if (
+    typeof status.connectedPid !== "number" ||
+    !Number.isInteger(status.connectedPid) ||
+    status.connectedPid <= 0 ||
+    !isProcessRunning(status.connectedPid)
+  ) {
+    failures.push("connected daemon PID is unavailable or not running");
+  }
+  if (
+    typeof status.home !== "string" ||
+    path.resolve(status.home) !== path.resolve(identity.paseoHome)
+  ) {
+    failures.push("daemon home does not match the inspected Paseo home");
+  }
+  const lockedListen = typeof identity.pidInfo.listen === "string" ? identity.pidInfo.listen : null;
+  if (lockedListen && status.listen !== lockedListen) {
+    failures.push("daemon listen target does not match the local PID lock");
+  }
+  if (lockedListen && status.connectedListen !== lockedListen) {
+    failures.push("connected daemon listen target does not match the local PID lock");
+  }
+  if (typeof status.daemonVersion !== "string" || !status.daemonVersion.trim()) {
+    failures.push("daemon version readback is unavailable");
+  }
+  return failures;
+}
+
+function daemonReadback(paseoCommand: string | null, home: string): DaemonReadback {
+  if (!paseoCommand) return { reachable: false, evidence: ["Paseo CLI is unavailable"] };
+  const identity = readDaemonDiskIdentity(home);
+  if ("reachable" in identity) return identity;
+
   const processResult = spawnSync(
     paseoCommand,
-    ["daemon", "status", "--home", path.join(home, ".paseo")],
+    ["daemon", "status", "--home", identity.paseoHome, "--json"],
     {
       encoding: "utf8",
       timeout: 4_000,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  return processResult.status === 0;
+  if (processResult.status !== 0) {
+    return {
+      reachable: false,
+      evidence: [`Paseo daemon status exited ${processResult.status ?? "without a status"}`],
+    };
+  }
+
+  const parsedStatus = parseDaemonStatus(processResult.stdout ?? "");
+  if ("reachable" in parsedStatus) return parsedStatus;
+  const { status } = parsedStatus;
+  const failures = daemonStatusFailures(status, identity);
+  return failures.length > 0
+    ? { reachable: false, evidence: failures }
+    : {
+        reachable: true,
+        evidence: [
+          `serverId=${identity.serverId}`,
+          `pid=${identity.pid}`,
+          `version=${status.daemonVersion}`,
+        ],
+      };
 }
 
 function fingerprint(value: unknown): string {
@@ -248,7 +384,9 @@ export function inspectMachine(
       : null,
     controlHomePresent: nodeExists(install.controlHome),
     releasePresent: nodeExists(install.releasePath),
+    interruptedTransactionPresent: nodeExists(install.transactionPath),
   };
+  const daemon = daemonReadback(paseoTool?.command ?? null, home);
   return {
     platform: input.platform ?? process.platform,
     architecture: input.architecture ?? process.arch,
@@ -256,7 +394,8 @@ export function inspectMachine(
     productRoot: product.productRoot,
     distributionVersion: manifest.distributionVersion,
     foundationCommit: manifest.foundationSource.commit,
-    paseoDaemonReachable: daemonReachable(paseoTool?.command ?? null, home),
+    paseoDaemonReachable: daemon.reachable,
+    paseoDaemonEvidence: daemon.evidence,
     tools,
     providers: inspectProviders(path.join(home, ".paseo", "config.json")),
     links,
@@ -265,6 +404,7 @@ export function inspectMachine(
     legacyInstallRecordPresent: nodeExists(install.legacyRecordPath),
     controlHomePresent: nodeExists(install.controlHome),
     releasePresent: nodeExists(install.releasePath),
+    interruptedTransactionPresent: nodeExists(install.transactionPath),
     mutationFingerprint: fingerprint(mutationState),
   };
 }

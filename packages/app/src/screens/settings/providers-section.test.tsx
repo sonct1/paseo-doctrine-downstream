@@ -139,6 +139,7 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.loading": "Loading",
           "settings.providers.statuses.error": "Error",
           "settings.providers.statuses.notInstalled": "Not installed",
+          "settings.providers.statuses.configuredUnqualified": "Configured · qualification pending",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
           "settings.providers.addErrorTitle": "Unable to add provider",
@@ -484,6 +485,31 @@ describe("ProvidersSection", () => {
     expect(status).toBeGreaterThan(label);
     expect(modelCount).toBeGreaterThan(status);
     expect(switchEl).toBeGreaterThan(modelCount);
+  });
+
+  it("does not present an inherited catalog as a qualified custom endpoint", () => {
+    const customEntry: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: "codex-proxy",
+      label: "Codex proxy",
+      source: "custom",
+      models: claudeEntry.models?.map((model) => ({ ...model, provider: "codex-proxy" })),
+    };
+    snapshotState.entries = [customEntry];
+    configState.config = makeConfig({
+      "codex-proxy": {
+        extends: "codex",
+        credentialRef: "shared-proxy-key",
+        env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+      },
+    });
+
+    render();
+
+    const row = findRow("Codex proxy provider details");
+    expect(row.textContent).toContain("Configured · qualification pending");
+    expect(row.textContent).not.toContain("Available");
+    expect(row.textContent).not.toContain("3 models");
   });
 
   it("opens the diagnostic sheet when the outer row is pressed for a disabled provider", () => {

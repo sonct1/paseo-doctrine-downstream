@@ -1,4 +1,4 @@
-export type ProviderConnectionStatus = "loading" | "idle" | "saving";
+export type ProviderConnectionStatus = "loading" | "idle" | "saving" | "deleting";
 
 export interface ProviderConnectionFormState {
   mode: "create" | "edit";
@@ -25,6 +25,9 @@ export interface ProviderConnectionFormModel {
   startSaving: () => void;
   finishSaving: () => void;
   failSaving: (message: string) => void;
+  startDeleting: () => void;
+  finishDeleting: () => void;
+  failDeleting: (message: string) => void;
   close: () => void;
 }
 
@@ -49,6 +52,16 @@ export function normalizeProviderBaseUrl(rawValue: string): string | null {
   }
 }
 
+export function resolveProviderCredentialRef(input: {
+  mode: "create" | "edit";
+  providerId: string;
+  configuredCredentialRef: string | null;
+}): string {
+  return input.mode === "edit" && input.configuredCredentialRef
+    ? input.configuredCredentialRef
+    : input.providerId;
+}
+
 function deriveState(
   current: Omit<ProviderConnectionFormState, "normalizedBaseUrl" | "canSave">,
 ): ProviderConnectionFormState {
@@ -60,10 +73,7 @@ function deriveState(
     ...current,
     normalizedBaseUrl,
     canSave:
-      current.status !== "saving" &&
-      normalizedBaseUrl !== null &&
-      hasCredential &&
-      hasValidIdentity,
+      current.status === "idle" && normalizedBaseUrl !== null && hasCredential && hasValidIdentity,
   };
 }
 
@@ -111,6 +121,10 @@ export function openProviderConnectionForm(input: {
     finishSaving: () =>
       publish({ status: "idle", credentialConfigured: true, apiKey: "", error: null }),
     failSaving: (error) => publish({ status: "idle", error }),
+    startDeleting: () => publish({ status: "deleting", error: null }),
+    finishDeleting: () =>
+      publish({ status: "idle", credentialConfigured: false, apiKey: "", error: null }),
+    failDeleting: (error) => publish({ status: "idle", error }),
     close: () => {
       closed = true;
       state = deriveState({

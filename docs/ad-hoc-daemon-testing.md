@@ -163,3 +163,19 @@ try {
 ### 7. ACP providers spawn real processes
 
 When testing ACP providers (e.g., Gemini with `extends: "acp"`), the daemon will spawn real processes to probe for models and modes. The binary must be installed and on PATH. Probing can take 5-15 seconds depending on the provider.
+
+### 8. Tắt speech download trong executable smoke không kiểm tra voice
+
+Executable daemon dùng product defaults có thể tự tải local speech models khi dictation hoặc voice mode
+đang bật. Với smoke test không kiểm tra speech, luôn truyền đủ ba biến để không tạo network/disk side
+effect ngoài objective:
+
+```bash
+PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=0 \
+PASEO_DICTATION_ENABLED=0 \
+PASEO_VOICE_MODE_ENABLED=0 \
+paseo daemon start --foreground --home "$PASEO_TEST_HOME"
+```
+
+Nếu speech chính là subject của test thì phải opt in rõ ràng, dùng cache cô lập và ghi nhận download size
+trong acceptance evidence.

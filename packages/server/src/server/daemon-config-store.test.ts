@@ -130,6 +130,30 @@ describe("DaemonConfigStore", () => {
     expect(JSON.stringify(config)).not.toContain("OPENAI_API_KEY");
   });
 
+  test("materializes one shared credential file for role-specific provider aliases", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {
+        "paseo-lead": { extends: "codex", credentialRef: "codex-proxy" },
+        "paseo-peer": { extends: "codex", credentialRef: "codex-proxy" },
+      },
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+    const credentialFile = path.join(paseoHome, "credentials", "providers", "codex-proxy.json");
+
+    expect(store.get().providers["paseo-lead"]?.env?.PASEO_CLIPROXY_AUTH_FILE).toBe(credentialFile);
+    expect(store.get().providers["paseo-peer"]?.env?.PASEO_PROVIDER_CREDENTIAL_FILE).toBe(
+      credentialFile,
+    );
+  });
+
   test("rolls back config when a field transition fails", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

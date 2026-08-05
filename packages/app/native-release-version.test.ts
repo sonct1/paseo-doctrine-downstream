@@ -19,6 +19,20 @@ describe("native release version", () => {
     });
   });
 
+  it("accepts downstream provenance without changing the upstream native beta slot", () => {
+    expect(getNativeReleaseVersion("0.3.0-beta.1.paseo.1")).toEqual({
+      appVersion: "0.3.0",
+      androidVersionCode: 3000,
+      iosBuildNumber: "3000001",
+    });
+  });
+
+  it("rejects a zero downstream revision", () => {
+    expect(() => getNativeReleaseVersion("0.3.0-beta.1.paseo.0")).toThrow(
+      "Paseo downstream revision must be at least 1",
+    );
+  });
+
   it("rejects beta numbers that consume the stable iOS build slot", () => {
     expect(() => getNativeReleaseVersion("0.2.6-beta.999")).toThrow(
       "iOS beta number must be between 1 and 998",

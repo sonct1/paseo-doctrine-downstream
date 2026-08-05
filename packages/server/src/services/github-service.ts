@@ -927,9 +927,9 @@ export function createGitHubService(options: CreateGitHubServiceOptions = {}): G
       clearTimeout(target.timer);
     }
 
-    target.timer = setTimeout(() => {
+    target.timer = setTimeout(async () => {
       target.timer = null;
-      void runGitHubPoll(target);
+      await runGitHubPoll(target);
     }, delayMs);
   }
 

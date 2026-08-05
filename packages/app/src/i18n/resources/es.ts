@@ -2251,7 +2251,8 @@ export const es: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2261,6 +2262,7 @@ export const es: TranslationResources = {
         error: "Error",
         available: "Disponible",
         notInstalled: "No instalado",
+        configuredUnqualified: "Configurado · calificación pendiente",
       },
       models: {
         one: "1 modelo",
@@ -2304,6 +2306,13 @@ export const es: TranslationResources = {
         saveFailed: "No se pudo guardar la conexión del proveedor",
         save: "Guardar",
         saving: "Guardando...",
+        deleteCredential: "Eliminar clave de API",
+        deletingCredential: "Eliminando clave...",
+        deleteCredentialConfirmTitle: "¿Eliminar la clave de API?",
+        deleteCredentialConfirmMessage:
+          "Esto elimina la credencial privada {{credentialRef}} de este host. Todos los proveedores que compartan esta referencia dejarán de funcionar hasta que se guarde una nueva clave.",
+        deleteCredentialConfirm: "Eliminar clave",
+        deleteCredentialFailed: "No se pudo eliminar la clave de API",
       },
       diagnostic: {
         title: "Diagnóstico",

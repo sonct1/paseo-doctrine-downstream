@@ -2169,7 +2169,8 @@ export const zhCN: TranslationResources = {
       },
       remove: {
         confirmTitle: "Remove {{name}}?",
-        confirmMessage: "This deletes the provider entry from config.json. It cannot be undone.",
+        confirmMessage:
+          "This deletes the provider entry from config.json. Its private credential is retained until you explicitly delete the API key from Connection.",
         confirm: "Remove",
         errorTitle: "Unable to remove provider",
       },
@@ -2179,6 +2180,7 @@ export const zhCN: TranslationResources = {
         error: "错误",
         available: "可用",
         notInstalled: "未安装",
+        configuredUnqualified: "已配置 · 等待验证",
       },
       models: {
         one: "1 个 Model",
@@ -2222,6 +2224,13 @@ export const zhCN: TranslationResources = {
         saveFailed: "无法保存提供商连接",
         save: "保存",
         saving: "保存中...",
+        deleteCredential: "删除 API 密钥",
+        deletingCredential: "正在删除密钥...",
+        deleteCredentialConfirmTitle: "删除 API 密钥？",
+        deleteCredentialConfirmMessage:
+          "这会从此主机删除私密凭据 {{credentialRef}}。共享此凭据引用的所有提供商都将停止工作，直到保存新密钥。",
+        deleteCredentialConfirm: "删除密钥",
+        deleteCredentialFailed: "无法删除 API 密钥",
       },
       diagnostic: {
         title: "诊断",
