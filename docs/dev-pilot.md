@@ -243,9 +243,9 @@ active cho tới khi owner cấp một recovery lease riêng.
 - Native release slot vẫn theo upstream beta slot; suffix `.paseo.1` chưa có independent native channel.
 - `doctor` chưa ingest signed/fresh role canary evidence.
 - Custom cost route chưa qualified nếu tester chưa cung cấp endpoint/credential và chạy exact canary.
-- Dependency graph hiện có 51 npm advisories: 5 low, 26 moderate, 18 high, 2 critical. Critical findings nằm
-  trong app/build/mobile dependency tree; direct runtime `ws` vẫn có high advisory ở `8.20.0`. Pilot vì
-  thế chỉ được chạy localhost, không relay/LAN/public exposure.
+- Frozen `npm ci` qualification ngày 2026-08-05 báo 83 npm advisories: 7 low, 38 moderate, 31 high và 7
+  critical. Dependency remediation nằm ngoài scope của tag này; giữ exact `npm ci`/`npm audit` output trong
+  handback và chỉ chạy pilot trên localhost, không relay/LAN/public exposure.
 - Qualification hiện tại chỉ bao phủ macOS arm64 và WebUI browser smoke. Windows, Linux, Intel macOS,
   native desktop/mobile packaging và remote relay vẫn `UNKNOWN`.
 
