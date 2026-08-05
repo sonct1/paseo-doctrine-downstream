@@ -1,6 +1,6 @@
 # Controlled dev pilot
 
-Runbook này chỉ áp dụng cho `paseo-v0.3.0-beta.1.paseo.1-dev.2`. Đây là source-linked pilot nội bộ,
+Runbook này chỉ áp dụng cho `paseo-v0.3.0-beta.1.paseo.1-dev.3`. Đây là source-linked pilot nội bộ,
 không phải package release hoặc native app release.
 
 ## Phạm vi
@@ -23,7 +23,7 @@ qualify trước khi tag: macOS 26.5.1 arm64, Node.js 26.5.0, npm 11.17.0. Found
 git clone https://github.com/webplode/paseo-doctrine-downstream.git paseo-dev-pilot
 cd paseo-dev-pilot
 git fetch --tags origin
-git checkout --detach paseo-v0.3.0-beta.1.paseo.1-dev.2
+git checkout --detach paseo-v0.3.0-beta.1.paseo.1-dev.3
 git describe --tags --exact-match
 git status --short
 ```
@@ -45,7 +45,7 @@ Không overwrite global CLI. Link hai package vào prefix riêng và giữ check
 pilot:
 
 ```bash
-export PASEO_PILOT_PREFIX="$HOME/.local/share/paseo-dev-pilot/paseo-v0.3.0-beta.1.paseo.1-dev.2"
+export PASEO_PILOT_PREFIX="$HOME/.local/share/paseo-dev-pilot/paseo-v0.3.0-beta.1.paseo.1-dev.3"
 mkdir -p "$PASEO_PILOT_PREFIX"
 npm_config_prefix="$PASEO_PILOT_PREFIX" npm link --workspace=@getpaseo/cli
 npm_config_prefix="$PASEO_PILOT_PREFIX" npm link --workspace=@getpaseo/foundation-cli
