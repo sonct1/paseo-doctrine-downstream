@@ -194,7 +194,8 @@ Dừng pilot, không tự repair ngoài lease, khi có một trong các dấu hi
 - source tag, CLI version và daemon version không đồng nhất;
 - Foundation plan đụng foreign file, unknown owner hoặc stale fingerprint;
 - daemon identity readback không khớp hoặc bind ra ngoài localhost;
-- status/config/evidence trả credential value;
+- status RPC, mutable config RPC, inspect hoặc evidence trả credential value; raw `config.json` trên host
+  có credential theo explicit product policy và không được đưa vào handback;
 - Peer đọc full protocol hoặc thấy Paseo coordination tools;
 - Supervisor bypass Lead hoặc nhận engineering acceptance authority;
 - daemon inspect readback lệch exact provider/model/mode assignment;
@@ -262,5 +263,5 @@ Mỗi tester gửi:
 - `git status --short` và `git diff --check` của disposable project;
 - rollback/uninstall result.
 
-Không gửi API key, credential file, raw provider config có secret hoặc nội dung user repository ngoài
-pilot scope.
+Không gửi API key, credential file, raw `config.json`, provider config có secret hoặc nội dung user
+repository ngoài pilot scope.

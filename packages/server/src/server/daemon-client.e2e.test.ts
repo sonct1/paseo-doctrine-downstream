@@ -85,6 +85,42 @@ test("DaemonClient connects to a password-protected daemon", async () => {
   }
 });
 
+test("DaemonClient persists provider credentials in config without returning credential bytes", async () => {
+  const daemon = await createTestPaseoDaemon();
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  const credentialRef = "codex-config-e2e";
+  const apiKey = "sk-config-e2e-private";
+
+  try {
+    await client.connect();
+    await expect(client.setFoundationCredential(credentialRef, apiKey)).resolves.toMatchObject({
+      credentialRef,
+      configured: true,
+    });
+
+    const persisted = JSON.parse(
+      await readFile(path.join(daemon.paseoHome, "config.json"), "utf8"),
+    );
+    expect(persisted.agents?.credentials?.[credentialRef]).toEqual({
+      OPENAI_API_KEY: apiKey,
+    });
+    expect(JSON.stringify(await client.getDaemonConfig())).not.toContain(apiKey);
+    expect(JSON.stringify(await client.getFoundationCredentialStatus(credentialRef))).not.toContain(
+      apiKey,
+    );
+
+    await expect(client.deleteFoundationCredential(credentialRef)).resolves.toMatchObject({
+      credentialRef,
+      configured: false,
+    });
+    const deleted = JSON.parse(await readFile(path.join(daemon.paseoHome, "config.json"), "utf8"));
+    expect(deleted.agents?.credentials?.[credentialRef]).toBeUndefined();
+  } finally {
+    await client.close();
+    await daemon.close();
+  }
+});
+
 test("DaemonClient surfaces password auth failures from WebSocket close reasons", async () => {
   const daemon = await createTestPaseoDaemon({
     auth: { password: "$2b$12$GMhF7pN4QnMlHOQXOqjd1OitKWPSmAO3FwB0PHzKtcZR/sAMryz76" },

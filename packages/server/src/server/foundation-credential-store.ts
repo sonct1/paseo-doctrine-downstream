@@ -12,6 +12,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { FoundationCredentialRefSchema } from "@getpaseo/protocol/messages";
+import {
+  loadPersistedConfig,
+  savePersistedConfig,
+  type PersistedConfig,
+} from "./persisted-config.js";
 
 export interface FoundationCredentialStatus {
   credentialRef: string;
@@ -72,28 +77,105 @@ function pathNodeExists(filePath: string): boolean {
   }
 }
 
+function readConfiguredApiKey(config: PersistedConfig, credentialRef: string): string | null {
+  const apiKey = config.agents?.credentials?.[credentialRef]?.OPENAI_API_KEY;
+  return typeof apiKey === "string" && apiKey.trim() ? apiKey.trim() : null;
+}
+
+function withConfiguredApiKey(
+  config: PersistedConfig,
+  credentialRef: string,
+  apiKey: string | null,
+): PersistedConfig {
+  const credentials = { ...config.agents?.credentials };
+  if (apiKey === null) {
+    delete credentials[credentialRef];
+  } else {
+    credentials[credentialRef] = { OPENAI_API_KEY: apiKey };
+  }
+  const agents = {
+    ...config.agents,
+    ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
+  };
+  if (Object.keys(credentials).length === 0) {
+    delete agents.credentials;
+  }
+  return { ...config, agents };
+}
+
 export class FoundationCredentialStore {
   private readonly paseoHome: string;
 
   constructor(paseoHome: string) {
     this.paseoHome = path.resolve(paseoHome);
+    this.syncConfiguredCredentialFiles();
   }
 
   public getStatus(credentialRef: string): FoundationCredentialStatus {
+    const validRef = FoundationCredentialRefSchema.parse(credentialRef);
     validateCredentialDirectories(this.paseoHome);
-    const filePath = resolveFoundationCredentialFile(this.paseoHome, credentialRef);
-    return { credentialRef, configured: validateCredentialFile(filePath) };
+    const configuredApiKey = readConfiguredApiKey(loadPersistedConfig(this.paseoHome), validRef);
+    if (configuredApiKey) {
+      this.writeCredentialFile(validRef, configuredApiKey);
+    }
+    const filePath = resolveFoundationCredentialFile(this.paseoHome, validRef);
+    return { credentialRef: validRef, configured: validateCredentialFile(filePath) };
   }
 
   public set(credentialRef: string, rawApiKey: string): FoundationCredentialStatus {
+    const validRef = FoundationCredentialRefSchema.parse(credentialRef);
     const apiKey = rawApiKey.trim();
     if (!apiKey) throw new Error("API key must not be empty");
+    const filePath = resolveFoundationCredentialFile(this.paseoHome, validRef);
+    ensureCredentialDirectories(this.paseoHome);
+    if (pathNodeExists(filePath) && !lstatSync(filePath).isFile()) {
+      throw new Error(`credential target is not a regular file: ${validRef}`);
+    }
+
+    const previousConfig = loadPersistedConfig(this.paseoHome);
+    savePersistedConfig(this.paseoHome, withConfiguredApiKey(previousConfig, validRef, apiKey));
+    try {
+      this.writeCredentialFile(validRef, apiKey);
+    } catch (error) {
+      savePersistedConfig(this.paseoHome, previousConfig);
+      throw error;
+    }
+    return { credentialRef: validRef, configured: true };
+  }
+
+  public delete(credentialRef: string): FoundationCredentialStatus {
+    const validRef = FoundationCredentialRefSchema.parse(credentialRef);
+    validateCredentialDirectories(this.paseoHome);
+    const filePath = resolveFoundationCredentialFile(this.paseoHome, validRef);
+    if (pathNodeExists(filePath)) {
+      if (!lstatSync(filePath).isFile()) {
+        throw new Error(`credential target is not a regular file: ${validRef}`);
+      }
+    }
+    const previousConfig = loadPersistedConfig(this.paseoHome);
+    savePersistedConfig(this.paseoHome, withConfiguredApiKey(previousConfig, validRef, null));
+    try {
+      rmSync(filePath, { force: true });
+    } catch (error) {
+      savePersistedConfig(this.paseoHome, previousConfig);
+      throw error;
+    }
+    return { credentialRef: validRef, configured: false };
+  }
+
+  private syncConfiguredCredentialFiles(): void {
+    const credentials = loadPersistedConfig(this.paseoHome).agents?.credentials ?? {};
+    for (const [credentialRef, credential] of Object.entries(credentials)) {
+      this.writeCredentialFile(credentialRef, credential.OPENAI_API_KEY);
+    }
+  }
+
+  private writeCredentialFile(credentialRef: string, apiKey: string): void {
     const root = ensureCredentialDirectories(this.paseoHome);
     const filePath = resolveFoundationCredentialFile(this.paseoHome, credentialRef);
     if (pathNodeExists(filePath) && !lstatSync(filePath).isFile()) {
       throw new Error(`credential target is not a regular file: ${credentialRef}`);
     }
-
     const temporary = path.join(root, `.${credentialRef}.${randomUUID()}.tmp`);
     const descriptor = openSync(temporary, "wx", 0o600);
     try {
@@ -111,18 +193,5 @@ export class FoundationCredentialStore {
       rmSync(temporary, { force: true });
       throw error;
     }
-    return { credentialRef, configured: true };
-  }
-
-  public delete(credentialRef: string): FoundationCredentialStatus {
-    validateCredentialDirectories(this.paseoHome);
-    const filePath = resolveFoundationCredentialFile(this.paseoHome, credentialRef);
-    if (pathNodeExists(filePath)) {
-      if (!lstatSync(filePath).isFile()) {
-        throw new Error(`credential target is not a regular file: ${credentialRef}`);
-      }
-      rmSync(filePath);
-    }
-    return { credentialRef, configured: false };
   }
 }

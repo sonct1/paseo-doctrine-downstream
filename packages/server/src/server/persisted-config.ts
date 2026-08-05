@@ -9,7 +9,7 @@ import {
 } from "./agent/provider-launch-config.js";
 import type { AgentProviderRuntimeSettingsMap } from "./agent/provider-launch-config.js";
 import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.js";
-import { TerminalProfileSchema } from "@getpaseo/protocol/messages";
+import { FoundationCredentialRefSchema, TerminalProfileSchema } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -81,6 +81,14 @@ const WorktreesConfigSchema = z
     servicePorts: PaseoServicePortAllocationSchema.optional(),
   })
   .strict();
+
+const AgentCredentialSchema = z
+  .object({
+    OPENAI_API_KEY: z.string().trim().min(1),
+  })
+  .strict();
+
+const AgentCredentialsSchema = z.record(FoundationCredentialRefSchema, AgentCredentialSchema);
 
 const BcryptHashSchema = z.string().regex(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/, {
   message: "Expected a bcrypt hash",
@@ -307,6 +315,7 @@ export const PersistedConfigSchema = z
     agents: z
       .object({
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
+        credentials: AgentCredentialsSchema.optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
       })
       .strict()

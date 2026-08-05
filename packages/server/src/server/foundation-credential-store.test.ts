@@ -6,6 +6,7 @@ import {
   FoundationCredentialStore,
   resolveFoundationCredentialFile,
 } from "./foundation-credential-store.js";
+import { loadPersistedConfig, savePersistedConfig } from "./persisted-config.js";
 
 describe("FoundationCredentialStore", () => {
   const temporaryHomes: string[] = [];
@@ -20,7 +21,7 @@ describe("FoundationCredentialStore", () => {
     return { home, store: new FoundationCredentialStore(home) };
   }
 
-  test("writes a private file and returns status without credential bytes", () => {
+  test("writes config-backed credentials and returns status without credential bytes", () => {
     const { home, store } = createStore();
     const status = store.set("codex-proxy", "  sk-private-value  ");
     const filePath = resolveFoundationCredentialFile(home, "codex-proxy");
@@ -32,9 +33,40 @@ describe("FoundationCredentialStore", () => {
       schemaVersion: 1,
       OPENAI_API_KEY: "sk-private-value",
     });
+    expect(loadPersistedConfig(home).agents?.credentials).toEqual({
+      "codex-proxy": { OPENAI_API_KEY: "sk-private-value" },
+    });
     expect(store.delete("codex-proxy")).toEqual({
       credentialRef: "codex-proxy",
       configured: false,
+    });
+    expect(loadPersistedConfig(home).agents?.credentials).toBeUndefined();
+  });
+
+  test("restores runtime credential files from config on startup", () => {
+    const { home } = createStore();
+    const config = loadPersistedConfig(home);
+    savePersistedConfig(home, {
+      ...config,
+      agents: {
+        ...config.agents,
+        credentials: {
+          "codex-proxy": { OPENAI_API_KEY: "sk-config-value" },
+        },
+      },
+    });
+
+    const filePath = resolveFoundationCredentialFile(home, "codex-proxy");
+    rmSync(filePath, { force: true });
+    const store = new FoundationCredentialStore(home);
+
+    expect(store.getStatus("codex-proxy")).toEqual({
+      credentialRef: "codex-proxy",
+      configured: true,
+    });
+    expect(JSON.parse(readFileSync(filePath, "utf8"))).toEqual({
+      schemaVersion: 1,
+      OPENAI_API_KEY: "sk-config-value",
     });
   });
 
@@ -47,6 +79,9 @@ describe("FoundationCredentialStore", () => {
     rmSync(filePath);
     symlinkSync(path.join(home, "outside.json"), filePath);
     expect(() => store.set("codex-proxy", "second")).toThrow("not a regular file");
+    expect(loadPersistedConfig(home).agents?.credentials?.["codex-proxy"]).toEqual({
+      OPENAI_API_KEY: "first",
+    });
   });
 
   test("rejects symlinked credential directories", () => {
@@ -61,5 +96,6 @@ describe("FoundationCredentialStore", () => {
     expect(() => store.getStatus("codex-proxy")).toThrow(
       "credential directory is not a regular directory",
     );
+    expect(loadPersistedConfig(home).agents?.credentials).toBeUndefined();
   });
 });

@@ -126,18 +126,21 @@ và credential cho provider đó. Chỉ enable sau fresh role/tool canary và au
 `paseo agent inspect <agent-id> --json` readback. Agent tự mô tả provider/model không phải route evidence.
 Wrapper role-specific cần `jq`; `paseo-foundation inspect` báo path/version của tool này.
 
-API key đi qua `foundation.credentials.set.request`, được daemon ghi vào:
+API key đi qua `foundation.credentials.set.request`, được daemon ghi trực tiếp vào private
+`PASEO_HOME/config.json` tại:
 
 ```text
-PASEO_HOME/credentials/providers/<credentialRef>.json
+agents.credentials.<credentialRef>.OPENAI_API_KEY
 ```
 
-File và parent directory dùng private permissions. Provider config chỉ giữ `credentialRef`, base URL và
-credential-file path; config RPC, status RPC, inspect output và WebUI không trả key. Codex đọc key bằng
-command-backed auth lúc launch, nên key không nằm trong process arguments hoặc provider config.
+`config.json` dùng private permission `0600`. Daemon đồng thời materialize một private runtime projection
+tại `PASEO_HOME/credentials/providers/<credentialRef>.json` để tương thích với command-backed auth hiện
+tại; file projection được regenerate từ config sau restart. Mutable provider config chỉ giữ
+`credentialRef`, base URL và credential-file path; config RPC, status RPC, inspect output và WebUI không
+trả key. Key không nằm trong process arguments hoặc mutable provider environment.
 
-Không đặt `OPENAI_API_KEY`, token, password hoặc secret vào mutable provider `env`; protocol reject các
-field đó. Provider config có thể giữ non-secret metadata như `OPENAI_BASE_URL`.
+Không đặt `OPENAI_API_KEY`, token, password hoặc secret vào mutable provider `env`; protocol tiếp tục
+reject các field đó. Provider config có thể giữ non-secret metadata như `OPENAI_BASE_URL`.
 
 ## Control Workspace Home
 
