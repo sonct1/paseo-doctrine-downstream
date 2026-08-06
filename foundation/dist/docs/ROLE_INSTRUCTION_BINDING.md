@@ -1,31 +1,36 @@
 # Bind role instruction vào Paseo
 
 Version: `3.2.0-topology-recovery`
-Trạng thái: current source contract; original migration không activation, current local activation được ghi tại `CURRENT_DECISIONS.md`
+Trạng thái: current source contract; runtime activation/qualification được ghi ở exact operational record
 
 ## Layer boundary
 
 | Layer | Chứa | Không chứa |
 |---|---|---|
 | Standing role profile | identity, universal authority boundary, anti-pattern guards | project routing/risk matrix, task file list |
-| `WORKSPACE_PROTOCOL.md` | repo-specific delta về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
+| optional `WORKSPACE_PROTOCOL.md` | material repo-specific delta về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
 | Assignment | objective, disposition, mutation boundary, bounded routing/effort override, evidence, handback, stop | toàn bộ organization manual |
 
-Full `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ inspect/create/audit/update khi governance assignment yêu cầu; Peer nhận extracted constraints và không load full protocol.
+Khi file hiện diện, full `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ
+inspect/create/audit/update khi governance assignment yêu cầu; Peer nhận extracted constraints và
+không load full protocol.
 
-Standing profile giữ cross-repo identity cùng provider/model/effort default. Khi task cần route khác,
-assignment phải ghi exact override, reason, `applies_to` và expiry; Lead enact nó khi tạo Peer. Override
-hết hiệu lực ở handback/stop, không sửa standing profile và không tự áp cho assignment kế tiếp.
+Standing profile giữ cross-repo identity nhưng không pin model. Human chọn Lead route; Lead discover
+và pin từng Peer provider/model/effort trong assignment với reason, `applies_to` và expiry. Route hết
+hiệu lực ở handback/stop, không sửa standing profile và không tự áp cho assignment kế tiếp.
 
-Khi repository chưa có valid root protocol, ordinary Lead → Peer engineering orchestration fail
-closed. Exception không tạo layer mới: Supervisor có exact Human governance/bootstrap mandate có
-thể interview Human và create/audit protocol candidate; Human hoặc explicitly authorized
-repository owner apply/activate. Xem [Portable bootstrap và routing](PORTABLE_BOOTSTRAP_AND_ROUTING.md).
+Repository không có material tactics delta không cần root protocol: standing role, existing
+repository/Harness instructions và bounded assignment vẫn đủ để Human/Lead cấp authority. Khi repo có
+delta cần sống qua task, đúng owner có thể tạo/audit file bằng
+[optional bootstrap](PORTABLE_BOOTSTRAP_AND_ROUTING.md); validator chỉ kiểm artifact hiện diện, không
+quyết định semantic adequacy hoặc authority.
 
-Standing role profile phải được bind qua một role-bound transport. Khi canonical transport đã tồn tại,
-không thay bằng generic provider chỉ vì cùng model. Generic provider với một assignment tốt vẫn
-không chứng minh canonical role profile đã được load. Nếu required role transport unavailable, giữ
-route là `UNKNOWN`/blocked và xin ruling thay vì bypass profile layer.
+Standing role profile phải được bind bằng native role selection cùng transport-only provider tương
+thích. Native role cấp canonical profile và role-scoped tool enablement; provider `paseoTools.enabled`
+chỉ là default cho session không bind role, còn `allowedTools`/`disabledTools` chỉ được thu hẹp catalog.
+Global `daemon.mcp.injectIntoAgents=false` vẫn là hard-off. Provider command đã pin role là legacy
+migration input, không được ghép thêm native role. Nếu exact binding unavailable, giữ route là
+`UNKNOWN`/blocked thay vì dùng assignment hoặc model identity để giả lập profile layer.
 
 Catalog/model discovery cũng không chứng minh standing profile đã bind. OpenCode candidate phải pin
 custom primary agent khớp `paseo-lead|paseo-peer|paseo-supervisor` qua process-local
@@ -111,12 +116,14 @@ Room/Council boundary đã được Human accept tại [ADR-001](ROOM_COUNCIL_DE
 
 ## Migration/activation boundary
 
-Files dưới `profiles/` là canonical source. Original migration không đổi user symlinks, provider config hoặc daemon; Human-authorized activation sau đó được ghi tại `CURRENT_DECISIONS.md`. Mỗi activation vẫn phải preview exact owned paths, preserve foreign paths, validate kill switches và có rollback. Không ngầm coi repository source validation là runtime qualification.
+Files dưới `profiles/` là canonical source. Mỗi activation phải preview exact owned paths, preserve
+foreign paths, validate kill switches, có rollback và ghi exact operational evidence. Không ngầm coi
+repository source validation là runtime qualification.
 
 Generated runtime home/effective config là disposable projection, không phải role source mới. Mọi
 materializer phải derive từ exact versioned canonical profile, record distribution/profile identity và
 fresh-read effective config, role marker, native-delegation guard cùng tool inventory. Shared auth,
 `AGENTS.md`, hooks, skills, plugins hoặc MCP chỉ được inherit khi install binding nêu source/owner và
-`doctor` xác nhận effective boundary. Không embed một bản standing prompt độc lập, silently thêm
-orchestration surface hoặc tự tạo Supervisor Notebook ngoài exact Control Workspace binding; mismatch
-giữ activation/route `UNKNOWN/BLOCKED`.
+effective readback xác nhận boundary. Không embed một bản standing prompt độc lập, silently thêm
+orchestration surface hoặc tự tạo Supervisor Notebook ngoài exact Human binding; mismatch giữ
+activation/route `UNKNOWN/BLOCKED`.

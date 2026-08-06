@@ -1,45 +1,45 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.3",
+  "distributionVersion": "0.1.0-dev.4",
   "foundationSource": {
-    "commit": "6849bc5fd6177fad352a989f3f3b8668e932bb4a",
-    "ref": "foundation-v0.1.0-dev.3"
+    "commit": "7105f5d900fdc6072a1ff38b146c972e7898f60a",
+    "ref": "foundation-v0.1.0-dev.4"
   },
   "files": [
     {
       "path": "AGENTS.md",
       "mode": "0644",
-      "sha256": "f54da9a4602fd6c142bb76262f20844d410da59e9e24fca722ff381a1277a0ec"
+      "sha256": "216a4f6bb6746fced07f2d7effbd9e922c862711ef1833638d8aee0f3c820688"
     },
     {
       "path": "docs/ASSIGNMENT_AND_HANDBACK.md",
       "mode": "0644",
-      "sha256": "7a02f9e52d9a9bea7f6183af17acc7144e755e5f32cffacc1c6403794d52e44f"
+      "sha256": "2d56b6c4b0c20c1ce2c91ab5d15c9806828aacc60e2011bd03ed975f2d683a46"
     },
     {
       "path": "docs/PORTABLE_BOOTSTRAP_AND_ROUTING.md",
       "mode": "0644",
-      "sha256": "ad783d53bfdfbae09ddac532ef15ccbec36979dea73b6e914c72ff4209e0199e"
+      "sha256": "b217007e2d209326801fe736704ac93bd538f294d7897a00ba45b07efe65aeb6"
     },
     {
       "path": "docs/ROLE_CONTRACTS.md",
       "mode": "0644",
-      "sha256": "029455dd15e883c54f547bd7337df05905882adb9fb55d744454fc2a231213e9"
+      "sha256": "4fdb1301ec95e60babe95c4bca8eeda03659ecae384e955a8ea17b7ad675a480"
     },
     {
       "path": "docs/ROLE_INSTRUCTION_BINDING.md",
       "mode": "0644",
-      "sha256": "172a4d4f72735f122fbef9c49b491e6c773cc01db22fd42c6f8a31e6def72e06"
+      "sha256": "bbf3b358c2f9e1bba21a48faa8080c7372eb110b01098d7efaaf8d8f65367278"
     },
     {
       "path": "docs/SUPERVISOR_NOTEBOOK.md",
       "mode": "0644",
-      "sha256": "f5ea03d4ab78f163379b28b3cc89e5c50d46b94848b0d156120131f722219d33"
+      "sha256": "ed79252d96f76c94b6afd51618591cbb8af5953954fa75df20faf2cb1715bc2a"
     },
     {
       "path": "profiles/antigravity/agents/paseo-lead/agent.md",
       "mode": "0644",
-      "sha256": "0ad506368ab7b6300852228506f040ad102e387be6652ae82197c1689244c756"
+      "sha256": "9cfb9339541c15315f26e5b54ed35ba069926438b12dba7245d1fda42527b8fc"
     },
     {
       "path": "profiles/antigravity/agents/paseo-peer/agent.md",
@@ -54,7 +54,7 @@
     {
       "path": "profiles/claude/paseo-lead.md",
       "mode": "0644",
-      "sha256": "14efd567b6f5d3e9b733e2fb2897efc265b46575fef79ef136b95e1adf32c504"
+      "sha256": "ab509c6252285ad5a2d8769c600ddf15d9cf0127cab803a4401d0400721e8219"
     },
     {
       "path": "profiles/claude/paseo-peer.md",
@@ -69,17 +69,17 @@
     {
       "path": "profiles/codex/lead.config.toml",
       "mode": "0644",
-      "sha256": "6c8416d289b9a7ae736e779f2e78a488eff89f2dada261c4291df0f0fec366a1"
+      "sha256": "d83fc24a994ef2895175337996ee648ce3f25506147b8973a8b37a4b961ff6dd"
     },
     {
       "path": "profiles/codex/peer.config.toml",
       "mode": "0644",
-      "sha256": "70021fca6029de6acde3c9137903c538876dfade6a156a6dd05840328eed1463"
+      "sha256": "2a7b2c11765cab8a0e0c9142f3d6c4c6f57a7ca30a63b7d6275aac7ba9529ea8"
     },
     {
       "path": "profiles/codex/supervisor.config.toml",
       "mode": "0644",
-      "sha256": "ba02c46b9f6acc6a891046481626e0cd1841f4b5a7e97d4c5fbdbd9ebec49218"
+      "sha256": "ed27619dd8a22c45ebcf8fe58d607149e2ebfa7b1002107c6da78b711f1d24f5"
     },
     {
       "path": "profiles/cursor/paseo-lead/.cursor-plugin/plugin.json",
@@ -89,7 +89,7 @@
     {
       "path": "profiles/cursor/paseo-lead/rules/paseo-lead.mdc",
       "mode": "0644",
-      "sha256": "c60eaf79b26666d2d8c374b5e44152e643dac9c9549f0810dc77062f7a475512"
+      "sha256": "139e31f18b66171bf430def5bfde8046c626860ea2c1c66435160c117958c18d"
     },
     {
       "path": "profiles/cursor/paseo-peer/.cursor-plugin/plugin.json",
@@ -114,7 +114,7 @@
     {
       "path": "profiles/omp/paseo-lead.md",
       "mode": "0644",
-      "sha256": "bcedbe513f267b1f4849ee9efe8c72ab816235dacb595e935768ddccbcb606cd"
+      "sha256": "638654846c774dea5376312ede62a7b44774b8b3a54a0982bbc247d545e81aa6"
     },
     {
       "path": "profiles/omp/paseo-peer.md",
@@ -134,7 +134,7 @@
     {
       "path": "profiles/opencode/lead.config.json",
       "mode": "0644",
-      "sha256": "a116d4bcbd85b647da9a69a3b7fe4fc23b6240b4fbb2b31656acf9dd72cd4e88"
+      "sha256": "1fc892e6953bbb868e944aa2f7848974ee463f91f60fa78ec884d24c81e2ebbf"
     },
     {
       "path": "profiles/opencode/peer.config.json",
@@ -194,7 +194,7 @@
     {
       "path": "skills/paseo-supervisor/SKILL.md",
       "mode": "0644",
-      "sha256": "34a88f1aeaf43c46df062c342c384b2674178160e8587e95c7351c8292897f1f"
+      "sha256": "19598e36ae06cbd5ade451c245cced61744dfbe982c3f689e82b45ff197fc2fe"
     },
     {
       "path": "templates/paseo-provider-overrides.example.json",
@@ -204,7 +204,7 @@
     {
       "path": "templates/WORKSPACE_PROTOCOL.md",
       "mode": "0644",
-      "sha256": "2ba9d9f1a0120f1ac27c93752ae947229cdfa49e8116ec5ab4c3f0f69bfea0df"
+      "sha256": "8cfba3fddd0cd15978e97d11c6f2a75792ca731af67eee0f0578d33a9540c0b5"
     }
   ]
 }

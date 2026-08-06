@@ -8,7 +8,7 @@ Doctrine: [`../references/demonthorn-agent-orchestration-deep-dive.md`](../refer
 
 ```text
 standing role profile
-  + WORKSPACE_PROTOCOL.md for Lead
+  + optional WORKSPACE_PROTOCOL.md for Lead when repo tactics differ materially
   + exact role/disposition/lease
   + bounded objective, scope, routing/effort override, evidence, handback, stop condition
 ```
@@ -25,7 +25,7 @@ Provider/profile/mode chỉ transport capability. Authority đến từ current 
 - Unknown giữ là `unknown`; test pass không tự là acceptance.
 - Creator đặt workspace title theo objective. Title không cấp authority.
 - Không restart daemon hoặc đổi global/runtime config ngoài explicit Human lease.
-- Standing provider/model/effort là default; assignment chỉ override bằng exact reason, scope và expiry, rồi tự hết hiệu lực ở handback/stop.
+- Provider/model/effort được discover rồi đúng authority pin cho assignment; route không cấp authority và không silent fallback.
 
 ## Lead
 
@@ -33,8 +33,10 @@ Lead — gọi là Root trong direct Demonthorn room-profile references — là 
 
 Lead phải:
 
-- resolve own Paseo identity, workspace, objective và exact Lead-of-record lease;
-- đọc full `WORKSPACE_PROTOCOL.md` trước orchestration và trích relevant constraints cho Peer;
+- bind own Paseo identity và workspace từ runtime-authenticated self context trước broad discovery;
+  absence trong broad agent inventory không phải counterevidence vì internal workers có thể bị ẩn;
+- resolve Human objective và exact Lead-of-record lease;
+- đọc full `WORKSPACE_PROTOCOL.md` khi file hiện diện và trích relevant constraints cho Peer;
 - sửa title generic của workspace mình trước first delegation;
 - giao neutral outcome brief thay vì pre-solve rồi yêu cầu Peer confirm;
 - giữ một Owner cho mỗi moving/coupled scope;
@@ -44,7 +46,8 @@ Lead phải:
 - dùng Reviewer/Council theo risk, không theo ceremony;
 - preserve objective, accepted decisions, ownership, unknowns và next action khi handoff.
 
-Lead chỉ viết product dưới exact tiny-task lease được protocol cho phép. Lead không implement rồi tự accept material change.
+Lead chỉ viết product dưới exact tiny-task lease khi applicable Human/repository/protocol binding cho
+phép và transfer không thêm independent judgment. Lead không implement rồi tự accept material change.
 
 ## Peer
 

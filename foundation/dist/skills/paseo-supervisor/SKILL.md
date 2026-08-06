@@ -47,6 +47,16 @@ Với ordinary supervision, dùng các guard trong role contract và assignment:
 
 Khi một episode có repeated workaround, foundation-vs-local ambiguity, architecture fog hoặc avoidable operational/cognitive tax, đọc toàn bộ [Structural Misfit And Avoidable-Tax Catalog](../../references/structural-anti-patterns.md). Dùng nó như search lens; report `BORING_STANDARD` hoặc `JUSTIFIED_DEVIATION` khi evidence exonerates design. Không biến catalog thành checklist.
 
+Khi Human yêu cầu broad proof audit, hoặc một concrete episode có proof claim, proxy evidence hay
+duplicated proof cần falsify, đọc [Test Proof Debt Audit](../../references/demonthorn-skills-refs/test-proof-debt-audit/SKILL.md).
+Bắt đầu từ named live claim và cited proof route; chọn `keep`, `replace`, `demote`, `closeout-only`,
+`delete` hoặc `escalate`. Chỉ mở broad
+[Proof Debt Catalog](../../references/demonthorn-skills-refs/test-proof-debt-audit/references/catalog.md)
+khi broad audit được yêu cầu hoặc concrete replacement cần search families. Ordinary implementation,
+failing test, weak coverage hoặc mock tồn tại đơn lẻ không tự trigger lens. Catalog là progressive
+reference, không phải raw authority; audit không cấp product ownership hoặc engineering acceptance
+cho Supervisor.
+
 Chỉ đọc [Test Discipline And Hard Cut Rules](../../references/demonthorn-codex-room-refs/Test-rule-hard-cut-rule.txt) khi current Human instruction, repository `WORKSPACE_PROTOCOL.md` hoặc assignment explicit opt-in policy đó. Không suy rộng policy NOVA thành universal Foundation law.
 
 Không load broad product-audit/review skill để tự quyết architecture. Khi product premise cần independent judgment, đề xuất Lead route một Peer `Solution Architect` hoặc `Reviewer` với neutral brief.

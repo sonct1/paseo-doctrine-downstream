@@ -1,4 +1,4 @@
-# Portable bootstrap và routing candidate
+# Optional protocol bootstrap và routing status
 
 Trạng thái: repository candidate; activation/qualification theo từng route
 Runtime snapshots: Paseo `0.2.5`; OpenCode `1.18.12`; OMP `17.2.1`;
@@ -9,43 +9,32 @@ Cursor Agent `2026.07.23-e383d2b`; Antigravity `1.1.10`; observed `2026-08-04`
 Foundation giữ đúng ba layer:
 
 1. standing role profile chứa identity và universal authority boundary;
-2. đúng một active root `WORKSPACE_PROTOCOL.md` chứa repository tactics;
-3. bounded assignment chứa objective, disposition, lease, evidence, handback và stop.
+2. optional root `WORKSPACE_PROTOCOL.md` chỉ chứa material repository tactics cần sống qua task;
+3. bounded assignment chứa objective, disposition, lease, route, evidence, handback và stop.
 
-Bootstrap chỉ tạo candidate cho layer 2. Nó không tạo instruction layer thứ tư, không tự cấp
-Human/Lead authority và không biến validator thành acceptance engine.
+Repository không có material tactics delta bỏ qua layer 2; authority vẫn đến từ Human/Lead assignment.
+Bootstrap chỉ tạo optional artifact cho layer 2, không tạo instruction layer thứ tư, không tự cấp
+authority và không biến validator thành admission hoặc acceptance engine.
 
 Canonical template chỉ giữ chín repo-specific clauses. Universal role invariants ở standing profile,
 engineering convention ở `AGENTS.md`/Project Harness, còn one-task lease và provider/model/effort
-override ở assignment. Không dùng line count cứng cho target repository; byte gate kiểm integrity tối
-thiểu chứ không ép target theo taxonomy của template.
+route ở assignment. Không dùng line count cứng cho target repository; validator chỉ kiểm integrity của
+file hiện diện, không ép target theo taxonomy của template.
 
-## Fail-closed bootstrap
+## Optional bootstrap
 
-Ordinary Lead → Peer engineering orchestration chỉ được bắt đầu khi authorized activation đã được
-bind và root `WORKSPACE_PROTOCOL.md` qua byte gate. Gate chỉ kiểm file tồn tại/nonempty, placeholder,
-conflict marker, marker identity và minimal current identity; nó không áp template taxonomy cho mọi
-repository, không đánh giá semantic adequacy và không phải universal schema/acceptance engine. Dùng:
+Không có root `WORKSPACE_PROTOCOL.md` nghĩa là repository khai báo zero delta; standing role,
+existing Harness và bounded assignment govern work. Khi owner tạo file vì có material recurring
+tactics, command sau kiểm nonempty, placeholder, conflict marker, marker identity và minimal identity:
 
 ```bash
 scripts/validate-foundation --check-protocol /path/to/repository
 ```
 
-State semantics tối thiểu:
-
-| State | Ý nghĩa | Ordinary Lead → Peer |
-|---|---|---|
-| `ABSENT` | root protocol chưa có | `BLOCKED` |
-| `CANDIDATE` | template đang được điền hoặc chưa pass validation | `BLOCKED` |
-| `VALIDATED_CANDIDATE` | candidate pass nhưng chưa được authorized owner apply tại root | `BLOCKED` |
-| `ACTIVE` | đúng root file đã pass và owner có authority đã activate với evidence | allowed theo protocol |
-| `INVALID/UNKNOWN` | placeholder, duplicate/conflict, validation failure hoặc activation không chứng minh được | `BLOCKED` |
-
-`BLOCKED` ở bảng chỉ áp dụng ordinary engineering orchestration, không deny toàn bộ Paseo.
-Supervisor có exact Human governance/bootstrap mandate vẫn có thể interview Human, copy
-[`templates/WORKSPACE_PROTOCOL.md`](../templates/WORKSPACE_PROTOCOL.md) thành candidate và
-create/audit nó. Human hoặc explicitly authorized repository owner apply/activate candidate.
-Supervisor không self-approve/apply nếu mandate không cấp exact authority đó.
+File absent trả pass với kết luận “no repository protocol delta”. File present nhưng invalid làm check
+fail để Lead không dùng corrupted/ambiguous tactics; kết quả pass chỉ là byte validity, không phải
+semantic review, role binding, authority hay project readiness. Supervisor chỉ create/audit file khi có
+exact governance mandate và không self-approve.
 
 ## OpenCode role candidates
 

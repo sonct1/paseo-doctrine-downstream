@@ -1,30 +1,24 @@
 # Assignment và Handback tối thiểu
 
-Template này là guard nhỏ, không phải checklist bắt buộc cho mọi câu trả lời.
+Assignment là one-task delta, không lặp standing role, full Workspace Protocol hoặc context mà
+runtime đã bind. Chỉ giữ dữ kiện làm thay đổi authority, execution hoặc acceptance.
 
 ## Assignment
 
 ```text
-Workspace: <id/path>
-Workspace title: <short objective-shaped title>
-Role: <Lead | Peer | Supervisor>
-Disposition: <Engineer/Owner | Solution Architect | Reviewer | Scout | Shadow | n/a>
 Objective: <observable outcome>
-Known facts: <verified only>
-Unknowns: <material unknowns>
-Mutation boundary: <write-owner exact scope | no-write>
-Excluded scope: <paths/contracts/effects>
-External effects: <none | exact authority>
-Supervisor recovery/replacement authority: <none | exact bounded lease>
-Routing/effort override: <none | exact provider/model/effort + reason + applies_to + expiry>
-Stable candidate / input: <identity when applicable>
-Verification: <proportional commands/evidence>
-Escalate: <REOPEN | DEPENDENCY | BLOCKED | COUNCIL conditions>
-Handback: <artifact, evidence, risks, lease state>
-Stop: <completion or blocker condition>
+Authority: <exact mutation owner/scope and external effects | no-write>
+Evidence: <observable acceptance and proportional verification>
+Handback/stop: <required artifact/state and completion or blocker condition>
 ```
 
-Không nhét preferred implementation vào objective. File list và plan là provisional trừ khi chúng là exact ownership boundary. Override hết hiệu lực khi assignment handback/stop, không sửa standing role profile hoặc tự truyền sang task khác.
+Chỉ thêm khi material: exact workspace/role/disposition nếu runtime chưa bind rõ; excluded scope;
+stable review input; material unknown/escalation condition; Supervisor recovery lease; hoặc bounded
+`Routing/effort override` với exact provider/model/effort, reason, applies_to và expiry.
+
+Không nhét preferred implementation vào objective. File list và plan là provisional trừ khi chúng là
+exact ownership boundary. Override hết hiệu lực khi assignment handback/stop, không sửa standing role
+profile hoặc tự truyền sang task khác.
 
 ## Handback
 
@@ -32,10 +26,8 @@ Không nhét preferred implementation vào objective. File list và plan là pro
 Outcome: <complete | partial | blocked | reopen requested>
 Snapshot/candidate: <Git identity or exact bounded identity>
 Changed/inspected scope: <paths>
-Personally observed verification: <commands/results>
-Failures/skips: <truthful list>
-Counterevidence/unknowns: <material only>
-Residual risks/Human decisions: <if any>
+Verification/skips: <personally observed results and truthful omissions>
+Unknowns/risks/Human decisions: <material only>
 Ownership/lease: <released | retained with reason>
 ```
 
