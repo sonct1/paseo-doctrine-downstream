@@ -743,6 +743,7 @@ export interface RunLoopOptions {
   verifierModeId?: string;
   verifyPrompt?: string | null;
   verifyChecks?: string[];
+  archive?: boolean;
   name?: string | null;
   sleepMs?: number;
   maxIterations?: number;
@@ -5320,6 +5321,7 @@ export class DaemonClient {
         ...(options.verifyChecks && options.verifyChecks.length > 0
           ? { verifyChecks: options.verifyChecks }
           : {}),
+        ...(options.archive !== undefined ? { archive: options.archive } : {}),
         ...(options.name ? { name: options.name } : {}),
         ...(typeof options.sleepMs === "number" ? { sleepMs: options.sleepMs } : {}),
         ...(typeof options.maxIterations === "number"

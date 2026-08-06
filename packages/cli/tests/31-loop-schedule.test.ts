@@ -183,6 +183,7 @@ try {
         "smoke-loop",
         "--verify-check",
         "true",
+        "--archive",
         "--json",
       ],
       { timeout: 30000 },
@@ -212,6 +213,10 @@ try {
     }
     const status = await pollStatus(0);
     assert.strictEqual(status, "succeeded");
+
+    const inspected = await ctx.paseo(["loop", "inspect", runJson.id, "--json"]);
+    assert.strictEqual(inspected.exitCode, 0, inspected.stderr);
+    assert.strictEqual(JSON.parse(inspected.stdout).archive, true, inspected.stdout);
 
     const logs = await ctx.paseo(["loop", "logs", runJson.id], { timeout: 15000 });
     assert.strictEqual(logs.exitCode, 0, logs.stderr);

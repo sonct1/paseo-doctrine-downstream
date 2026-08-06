@@ -86,4 +86,22 @@ describe("buildLoopRunInput", () => {
     expect(result.provider).toBe("opencode");
     expect(result.model).toBe("other-model");
   });
+
+  it("should forward archive when requested", () => {
+    const options = {
+      provider: undefined,
+      model: undefined,
+      verifyProvider: undefined,
+      verifyModel: undefined,
+      verify: undefined,
+      verifyCheck: [],
+      archive: true,
+      name: undefined,
+      sleep: undefined,
+      maxIterations: undefined,
+      maxTime: undefined,
+    } as LoopRunOptions;
+
+    expect(buildLoopRunInput("test prompt", options).archive).toBe(true);
+  });
 });
