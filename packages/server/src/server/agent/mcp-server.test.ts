@@ -5338,6 +5338,35 @@ describe("agent snapshot MCP serialization", () => {
     expect(snapshot.pendingPermissions).toEqual([]);
   });
 
+  it("returns a live internal agent from get_agent_status by exact id", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue(
+      createManagedAgent({
+        id: "internal-loop-worker",
+        internal: true,
+        workspaceId: "workspace-loop",
+      }),
+    );
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      logger,
+      providerSnapshotManager: createClaudeOnlyManager(),
+    });
+    const tool = registeredTool(server, "get_agent_status");
+    const response = await tool.handler({ agentId: "internal-loop-worker" });
+
+    expect(response.structuredContent).toEqual({
+      status: "idle",
+      snapshot: expect.objectContaining({
+        id: "internal-loop-worker",
+        workspaceId: "workspace-loop",
+      }),
+    });
+    expect(spies.agentManager.getAgent).toHaveBeenCalledWith("internal-loop-worker");
+  });
+
   it("does not expose internal stored agents from get_agent_status", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue(null);

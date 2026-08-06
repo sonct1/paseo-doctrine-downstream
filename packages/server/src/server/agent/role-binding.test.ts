@@ -57,6 +57,8 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("Role: Lead");
     expect(binding.instructions).toContain("Demonthorn Agent Orchestration Deep Dive");
     expect(binding.instructions).toContain("Giáo Án Herdr");
+    expect(binding.instructions).toContain("runtime-issued PASEO_AGENT_ID");
+    expect(binding.instructions).toContain("Broad agent lists may omit internal loop workers");
     expect(binding.instructions).toContain(binding.workspaceProtocol.digest);
     expect(toRoleBindingReceipt(binding)).not.toHaveProperty("instructions");
   });
