@@ -138,11 +138,11 @@ cáo.
 Chạy từng canary read-only trong disposable repository có current `WORKSPACE_PROTOCOL.md`, lưu agent ID và
 archive sau readback:
 
-| Role + provider route       | Exact canary lease                                                                         | Pass condition                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `lead` + built-in `codex`   | Đọc full protocol, trả role marker và tool visibility; không edit, không delegate          | Đúng Lead authority; inspect pin `codex`, `openai`, exact model và ChatGPT credential configured |
-| `peer` + custom Codex       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có coordination tools; inspect pin custom provider/model và command-backed credential      |
-| `supervisor` + chosen route | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ có supervision surface; inspect pin exact selected route, không có fallback                  |
+| Role + provider route               | Exact canary lease                                                                         | Pass condition                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `lead` + built-in `codex`           | Đọc full protocol, trả role marker và tool visibility; không edit, không delegate          | Đúng Lead authority; inspect pin `codex`, `openai`, exact model và ChatGPT credential configured |
+| `peer` + transport-only route       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có coordination tools; inspect pin exact selected provider/model/auth route                |
+| `supervisor` + transport-only route | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ có supervision surface; inspect pin exact selected route, không có fallback                  |
 
 Sau mỗi canary, đọc route từ daemon thay vì hỏi agent tự mô tả:
 
