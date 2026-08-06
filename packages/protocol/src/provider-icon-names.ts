@@ -26,6 +26,7 @@ export const ACP_PROVIDER_ICON_NAMES = [
   "dirac",
   "factory-droid",
   "gemini",
+  "gemini-antigravity",
   "glm-acp-agent",
   "goose",
   "grok",
