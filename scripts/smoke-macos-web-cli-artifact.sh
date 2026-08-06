@@ -1,0 +1,69 @@
+#!/bin/sh
+set -eu
+
+REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+VERSION=$(node -p "require('$REPO_ROOT/package.json').version")
+ARCH=$(uname -m)
+BUNDLE_NAME="paseo-web-cli-$VERSION-macos-$ARCH"
+ARTIFACT="$REPO_ROOT/artifacts/$BUNDLE_NAME.tar.gz"
+CHECKSUM="$ARTIFACT.sha256"
+SMOKE_ROOT=$(mktemp -d /private/tmp/paseo-release-smoke.XXXXXX)
+SMOKE_PID=""
+PORT="${PASEO_RELEASE_SMOKE_PORT:-17677}"
+
+stop_smoke() {
+  if [ -n "$SMOKE_PID" ]; then
+    kill "$SMOKE_PID" >/dev/null 2>&1 || true
+    wait "$SMOKE_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap stop_smoke EXIT INT TERM
+
+cd "$(dirname "$ARTIFACT")"
+/usr/bin/shasum -a 256 -c "$(basename "$CHECKSUM")"
+/usr/bin/tar -xzf "$ARTIFACT" -C "$SMOKE_ROOT"
+BUNDLE="$SMOKE_ROOT/$BUNDLE_NAME"
+
+mkdir -p "$SMOKE_ROOT/help-home"
+HOME="$SMOKE_ROOT/help-home" "$BUNDLE/install.sh" --help >/dev/null
+HELP_FILES=$(find "$SMOKE_ROOT/help-home" -mindepth 1 -print | wc -l | tr -d ' ')
+test "$HELP_FILES" = "0"
+
+mkdir -p "$SMOKE_ROOT/home"
+HOME="$SMOKE_ROOT/home" "$BUNDLE/install.sh" \
+  --prefix "$SMOKE_ROOT/install" \
+  --bin-dir "$SMOKE_ROOT/bin" \
+  --listen "127.0.0.1:$PORT" \
+  --label com.paseo.web-cli.smoke \
+  --no-start
+
+HOME="$SMOKE_ROOT/home" "$SMOKE_ROOT/bin/paseo" --version
+HOME="$SMOKE_ROOT/home" "$SMOKE_ROOT/bin/paseo-foundation" doctor --json >/dev/null
+
+HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
+  "$SMOKE_ROOT/bin/paseo" daemon start --foreground \
+  --listen "127.0.0.1:$PORT" --web-ui --no-relay >"$SMOKE_ROOT/daemon.log" 2>&1 &
+SMOKE_PID=$!
+
+HEALTHY=0
+for _attempt in $(seq 1 30); do
+  if /usr/bin/curl -fsS --max-time 1 "http://127.0.0.1:$PORT/api/health" \
+    >"$SMOKE_ROOT/health.json"; then
+    HEALTHY=1
+    break
+  fi
+  sleep 1
+done
+test "$HEALTHY" = "1"
+
+/usr/bin/curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >"$SMOKE_ROOT/index.html"
+rg -q '<title>Paseo</title>' "$SMOKE_ROOT/index.html"
+jq '{status,serverId,version}' "$SMOKE_ROOT/health.json"
+
+HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
+  "$SMOKE_ROOT/bin/paseo" daemon stop >/dev/null 2>&1 || true
+wait "$SMOKE_PID" >/dev/null 2>&1 || true
+SMOKE_PID=""
+
+printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok daemon=ok webui=ok\n' "$HELP_FILES"
+printf 'SMOKE_ROOT=%s\n' "$SMOKE_ROOT"
