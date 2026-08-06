@@ -315,11 +315,14 @@ export function applyRolePaseoToolPolicy(
   roleId: PaseoRoleId | undefined,
   providerPolicy: ProviderPaseoToolsPolicy | undefined,
 ): ProviderPaseoToolsPolicy | undefined {
-  if (!roleId || roleId === "lead") {
+  if (!roleId) {
     return providerPolicy;
   }
-  if (roleId === "peer" || providerPolicy?.enabled === false) {
+  if (roleId === "peer") {
     return { enabled: false };
+  }
+  if (roleId === "lead") {
+    return providerPolicy ? { ...providerPolicy, enabled: true } : undefined;
   }
   return {
     enabled: true,

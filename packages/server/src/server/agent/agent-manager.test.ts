@@ -9253,6 +9253,7 @@ test("role-bound create persists immutable binding and passes only launch instru
 
   class RoleCaptureClient extends TestAgentClient {
     launchContexts: Array<AgentLaunchContext | undefined> = [];
+    launchConfigs: AgentSessionConfig[] = [];
 
     async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
       if (!input.config.model) throw new Error("missing test model");
@@ -9271,6 +9272,7 @@ test("role-bound create persists immutable binding and passes only launch instru
       config: AgentSessionConfig,
       launchContext?: AgentLaunchContext,
     ): Promise<AgentSession> {
+      this.launchConfigs.push(config);
       this.launchContexts.push(launchContext);
       return new TestAgentSession(config);
     }
@@ -9291,6 +9293,8 @@ test("role-bound create persists immutable binding and passes only launch instru
     registry: storage,
     logger,
     idFactory: () => "00000000-0000-4000-8000-000000000116",
+    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    resolvePaseoToolPolicy: () => ({ enabled: false }),
   });
 
   try {
@@ -9303,6 +9307,11 @@ test("role-bound create persists immutable binding and passes only launch instru
       roleId: "lead",
       instructions: expect.stringContaining("Role: Lead"),
     });
+    expect(client.launchConfigs[0]?.mcpServers?.paseo).toEqual({
+      type: "http",
+      url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${created.id}`,
+    });
+    expect(manager.getPaseoToolPolicy(created.id)).toEqual({ enabled: true });
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
     expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({

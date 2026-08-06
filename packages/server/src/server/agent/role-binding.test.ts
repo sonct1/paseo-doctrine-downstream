@@ -136,10 +136,19 @@ describe("native Foundation role materialization", () => {
     ).toMatchObject({ status: "unsupported", reason: expect.stringContaining("retired") });
   });
 
-  test("role tool policy is deny-wins", () => {
+  test("role-bound tool policy owns enablement while provider filters can narrow it", () => {
+    expect(applyRolePaseoToolPolicy(undefined, { enabled: false })).toEqual({ enabled: false });
+    expect(applyRolePaseoToolPolicy("lead", { enabled: false })).toEqual({ enabled: true });
+    expect(
+      applyRolePaseoToolPolicy("lead", {
+        enabled: false,
+        disabledTools: ["list_agents"],
+      }),
+    ).toEqual({ enabled: true, disabledTools: ["list_agents"] });
     expect(applyRolePaseoToolPolicy("peer", { enabled: true })).toEqual({ enabled: false });
     expect(applyRolePaseoToolPolicy("supervisor", { enabled: false })).toEqual({
-      enabled: false,
+      enabled: true,
+      allowedTools: expect.arrayContaining(["get_agent_status", "list_agents"]),
     });
     expect(
       applyRolePaseoToolPolicy("supervisor", {

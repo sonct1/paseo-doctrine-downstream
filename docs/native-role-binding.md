@@ -83,7 +83,10 @@ lập.
 
 ## Tool policy và authority
 
-Role policy được daemon áp sau provider policy theo nguyên tắc deny-wins. Provider config không được mở rộng role authority.
+Role-bound session lấy tool enablement từ role; `paseoTools.enabled` chỉ là default cho session không
+bind role. Provider `allowedTools` hoặc `disabledTools` vẫn có thể thu hẹp catalog của Lead và
+Supervisor nhưng không thể mở rộng role authority. Global `daemon.mcp.injectIntoAgents=false` vẫn tắt
+toàn bộ projection.
 
 - Lead có Paseo delegation/lifecycle tools trong Human lease.
 - Peer không có orchestration tools.
