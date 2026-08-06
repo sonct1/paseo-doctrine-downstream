@@ -160,6 +160,34 @@ describe("OMP agent client and session", () => {
     ]);
   });
 
+  test("appends immutable role instructions on create and resume", async () => {
+    const createHarness = new OmpHarness();
+    await createHarness.start(
+      { systemPrompt: "Agent prompt", daemonAppendSystemPrompt: "Daemon prompt" },
+      undefined,
+      { roleBinding: { roleId: "lead", instructions: "Immutable Lead role" } },
+    );
+    expect(createHarness.launchConfiguration().argv).toEqual(
+      expect.arrayContaining([
+        "--append-system-prompt",
+        "Agent prompt\n\nDaemon prompt\n\nImmutable Lead role",
+      ]),
+    );
+
+    const resumeHarness = new OmpHarness();
+    await resumeHarness.resume(
+      {
+        user: { id: "user-old", text: "old request" },
+        assistant: { id: "assistant-old", text: "old response" },
+      },
+      { daemonAppendSystemPrompt: "Daemon prompt" },
+      { roleBinding: { roleId: "lead", instructions: "Immutable Lead role" } },
+    );
+    expect(resumeHarness.launchConfiguration().argv).toEqual(
+      expect.arrayContaining(["--append-system-prompt", "Daemon prompt\n\nImmutable Lead role"]),
+    );
+  });
+
   test("streams a prompt through completion", async () => {
     const omp = new OmpHarness();
     await omp.start();

@@ -4,6 +4,7 @@ export interface ProviderConnectionFormState {
   mode: "create" | "edit";
   providerId: string;
   providerLabel: string;
+  modelId: string;
   baseUrl: string;
   apiKey: string;
   credentialConfigured: boolean | null;
@@ -18,6 +19,7 @@ export interface ProviderConnectionFormModel {
   subscribe: (listener: () => void) => () => void;
   setProviderId: (value: string) => void;
   setProviderLabel: (value: string) => void;
+  setModelId: (value: string) => void;
   setBaseUrl: (value: string) => void;
   setApiKey: (value: string) => void;
   applyCredentialStatus: (configured: boolean) => void;
@@ -69,11 +71,16 @@ function deriveState(
   const hasCredential = current.credentialConfigured === true || current.apiKey.trim().length > 0;
   const hasValidIdentity =
     /^[a-z][a-z0-9-]{0,63}$/u.test(current.providerId) && current.providerLabel.trim().length > 0;
+  const hasRequiredModel = current.mode === "edit" || current.modelId.trim().length > 0;
   return {
     ...current,
     normalizedBaseUrl,
     canSave:
-      current.status === "idle" && normalizedBaseUrl !== null && hasCredential && hasValidIdentity,
+      current.status === "idle" &&
+      normalizedBaseUrl !== null &&
+      hasCredential &&
+      hasValidIdentity &&
+      hasRequiredModel,
   };
 }
 
@@ -81,6 +88,7 @@ export function openProviderConnectionForm(input: {
   mode: "create" | "edit";
   providerId: string;
   providerLabel: string;
+  modelId?: string;
   baseUrl: string;
 }): ProviderConnectionFormModel {
   const listeners = new Set<() => void>();
@@ -89,6 +97,7 @@ export function openProviderConnectionForm(input: {
     mode: input.mode,
     providerId: input.providerId,
     providerLabel: input.providerLabel,
+    modelId: input.modelId ?? "",
     baseUrl: input.baseUrl,
     apiKey: "",
     credentialConfigured: null,
@@ -112,6 +121,7 @@ export function openProviderConnectionForm(input: {
     },
     setProviderId: (providerId) => publish({ providerId, error: null }),
     setProviderLabel: (providerLabel) => publish({ providerLabel, error: null }),
+    setModelId: (modelId) => publish({ modelId, error: null }),
     setBaseUrl: (baseUrl) => publish({ baseUrl, error: null }),
     setApiKey: (apiKey) => publish({ apiKey, error: null }),
     applyCredentialStatus: (credentialConfigured) =>

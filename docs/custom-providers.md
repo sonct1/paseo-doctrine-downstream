@@ -187,9 +187,9 @@ For pay-as-you-go, use `ANTHROPIC_API_KEY` with a standard Model Studio key (`sk
 
 ## Codex with a custom OpenAI-compatible endpoint
 
-Codex talks to OpenAI's Responses API by default. Custom providers that extend `"codex"` can point Codex at any OpenAI-compatible endpoint (OpenRouter, LiteLLM, vLLM, llama.cpp server, an internal gateway, etc.) by setting `OPENAI_BASE_URL` and `OPENAI_API_KEY` in the provider `env`.
+Codex talks to OpenAI's Responses API by default. A custom provider that extends `"codex"` can point Codex at an OpenAI-compatible Responses endpoint. Keep only the non-secret `OPENAI_BASE_URL` in provider config; store the API key through Paseo's private credential flow and reference it with `credentialRef`.
 
-Paseo passes those variables through to the Codex app-server process **and** maps them into Codex's thread config under `model_provider` / `model_providers`, because Codex reads provider routing from config rather than from `OPENAI_BASE_URL` alone.
+For a role-first launch, Paseo pins the logical provider, model, URL and command-backed credential route in an immutable launch contract. Codex receives the exact `model_provider` / `model_providers` config; ambient OpenAI credentials are scrubbed and a custom failure never falls back to the built-in subscription.
 
 ### Setup
 
@@ -201,16 +201,19 @@ Paseo passes those variables through to the Codex app-server process **and** map
         "extends": "codex",
         "label": "My Codex",
         "description": "Codex via custom OpenAI-compatible endpoint",
+        "credentialRef": "my-codex",
         "env": {
-          "OPENAI_API_KEY": "sk-...",
           "OPENAI_BASE_URL": "https://custom-relay.example.com"
         },
-        "models": [{ "id": "custom-model", "label": "Custom Model", "isDefault": true }]
+        "additionalModels": [{ "id": "custom-model", "label": "Custom Model", "isDefault": true }]
       }
     }
   }
 }
 ```
+
+Tạo provider và lưu key qua **Settings → Host → Providers → Add provider** là flow khuyến nghị. WebUI gửi
+secret bằng credential RPC; secret không đi qua provider config. JSON trên chỉ minh họa phần non-secret.
 
 ### What Paseo wires up
 
@@ -223,21 +226,24 @@ model_provider = "my-codex"
 name = "My Codex"
 base_url = "https://custom-relay.example.com/v1"
 wire_api = "responses"
-env_key = "OPENAI_API_KEY"
-requires_openai_auth = false
+
+[model_providers.my-codex.auth]
+command = "<resolved node executable>"
+args = ["-e", "<Paseo credential reader>", "<private credential projection>"]
 ```
 
 - `base_url` — taken from `OPENAI_BASE_URL`. If it does not already end in `/v1`, Paseo appends `/v1`. Trailing slashes are stripped.
 - `wire_api` — always `"responses"` (OpenAI Responses API protocol).
-- `env_key` — set to `"OPENAI_API_KEY"` when that env var is present and non-empty, so Codex reads the key from the same env var Paseo passes through.
-- `requires_openai_auth` — forced to `false` when `OPENAI_API_KEY` is provided, so Codex skips its built-in OpenAI login flow.
+- `auth` — command-backed auth đọc private `0600` credential projection. Paseo không trả path hoặc key trong public readback.
+- Built-in `codex` là route độc lập và dùng Codex native ChatGPT auth store. Custom endpoint không cần một `CODEX_HOME` riêng chỉ để tách API key.
 
 ### Notes
 
 - The endpoint must speak the OpenAI **Responses API**, not just chat completions. Many gateways (OpenRouter, LiteLLM) support both — pick the Responses-compatible route.
-- Set `models` explicitly. Custom endpoints expose their own model IDs (`anthropic/claude-opus-4-7`, `qwen/qwen3-coder`, `local/llama`, etc.), and Paseo does not discover them automatically for Codex.
+- Set a model explicitly. Custom endpoints expose their own model IDs, and Paseo neither discovers them automatically nor inherits the built-in Codex subscription catalog.
 - To run multiple endpoints side-by-side, define multiple entries that each extend `"codex"` with different IDs, labels, and env. Each appears as its own provider in the app.
 - If you only want to override the binary (e.g. a nightly Codex build) without changing the endpoint, omit `OPENAI_BASE_URL` and use `command` instead — see [Custom binary for a provider](#custom-binary-for-a-provider).
+- Missing model, URL, `credentialRef`, configured key, or a provider launch error is terminal for that create attempt; Paseo does not retry through the subscription route.
 
 ---
 
@@ -437,7 +443,7 @@ The [Agent Client Protocol (ACP)](https://agentclientprotocol.com) is an open st
 
 ACP agents communicate over JSON-RPC 2.0 on stdio. Paseo spawns the agent process and talks to it through stdin/stdout.
 
-Paseo also ships an in-app ACP provider catalog for common agents, including CodeWhale, Cursor, DeepAgents, DimCode, Gemini CLI, Hermes, Qwen Code, and Kimi Code. Catalog entries create the same `extends: "acp"` provider config shown below.
+Paseo also ships an in-app ACP provider catalog for common agents, including Antigravity (through the third-party `agy-acp` bridge), CodeWhale, Cursor, DeepAgents, DimCode, Gemini CLI, Hermes, Qwen Code, and Kimi Code. Catalog entries create the same `extends: "acp"` provider config shown below.
 
 ### Adding a generic ACP provider
 
@@ -515,6 +521,51 @@ enable the corresponding client capabilities:
 Only enable capabilities Paseo should execute. When the agent and Paseo run in
 different environments, configure equivalent absolute workspace paths before
 delegating filesystem or terminal operations to Paseo.
+
+### Native Foundation roles over ACP
+
+ACP does not define a system/developer-instruction field. A generic ACP provider therefore stays
+incompatible with Paseo Foundation roles even when its models and sessions work.
+
+Cursor and Antigravity do not require role-specific providers or a manual role-driver field. Paseo
+recognizes their exact transport command while composing the immutable launch contract:
+
+```json
+{
+  "agents": {
+    "providers": {
+      "cursor": {
+        "extends": "acp",
+        "label": "Cursor",
+        "command": ["cursor-agent", "acp"]
+      },
+      "gemini-antigravity": {
+        "extends": "acp",
+        "label": "Antigravity",
+        "command": ["agy-acp", "--agy-binary", "agy"]
+      }
+    }
+  }
+}
+```
+
+For Cursor, Paseo creates a stable private role capsule, writes exact role bytes to an `alwaysApply`
+project rule inside that capsule, and launches `cursor-agent --workspace <capsule> --add-dir <repo>
+acp`. The target repository is not modified. A caller-supplied `--workspace` is rejected. The old
+`roleBinding.driver: "cursor-plugin"` setting is retired and fails closed because Cursor can silently
+ignore local plugins; remove it from existing config.
+
+For Antigravity, Paseo resolves the `agy` executable, creates a unique exact custom-agent profile,
+and replaces only the bridge's `--agy-binary` value with a wrapper that pins `agy --agent
+<materialized-name>`. Caller-supplied `--agent` is rejected. The current driver supports macOS/Linux
+only. `agy-acp` is a third-party bridge, so the provider detail includes a notice to review Google's
+current [Antigravity authentication terms](https://antigravity.google/terms) before connecting an
+account. Paseo never reads or returns the AGY token.
+
+Both exact command shapes are implementation-supported and appear in the role-first picker. Missing
+or malformed launch arguments fail closed; there is no generic ACP or initial-prompt fallback. The
+optional `roleBinding` field remains an advanced compatibility surface for exact provider-native
+drivers, not a place to store role bytes or self-qualify arbitrary ACP commands.
 
 ### Generic ACP diagnostics
 
@@ -657,19 +708,20 @@ When an `additionalModels` entry has the same `id` as a discovered model, it upd
 
 Every entry under `agents.providers` accepts these fields:
 
-| Field              | Type                      | Required          | Description                                                        |
-| ------------------ | ------------------------- | ----------------- | ------------------------------------------------------------------ |
-| `extends`          | `string`                  | Yes (custom only) | Built-in provider ID to inherit from, or `"acp"`                   |
-| `label`            | `string`                  | Yes (custom only) | Display name in the UI                                             |
-| `description`      | `string`                  | No                | Short description shown in the UI                                  |
-| `command`          | `string[]`                | Yes (ACP only)    | Command to spawn the agent process                                 |
-| `env`              | `Record<string, string>`  | No                | Environment variables to set for the agent process                 |
-| `params`           | `Record<string, unknown>` | No                | Provider-specific options such as `supportsMcpServers: false`      |
-| `models`           | `ProviderProfileModel[]`  | No                | Static model list (overrides runtime discovery)                    |
-| `additionalModels` | `ProviderProfileModel[]`  | No                | Static model additions (merged with runtime discovery or `models`) |
-| `disallowedTools`  | `string[]`                | No                | Tool names to disable for this provider (e.g. `["WebSearch"]`)     |
-| `enabled`          | `boolean`                 | No                | Set to `false` to hide the provider (default: `true`)              |
-| `order`            | `number`                  | No                | Sort order in the provider list                                    |
+| Field              | Type                      | Required          | Description                                                            |
+| ------------------ | ------------------------- | ----------------- | ---------------------------------------------------------------------- |
+| `extends`          | `string`                  | Yes (custom only) | Built-in provider ID to inherit from, or `"acp"`                       |
+| `label`            | `string`                  | Yes (custom only) | Display name in the UI                                                 |
+| `description`      | `string`                  | No                | Short description shown in the UI                                      |
+| `command`          | `string[]`                | Yes (ACP only)    | Command to spawn the agent process                                     |
+| `env`              | `Record<string, string>`  | No                | Environment variables to set for the agent process                     |
+| `params`           | `Record<string, unknown>` | No                | Provider-specific options such as `supportsMcpServers: false`          |
+| `roleBinding`      | `{ driver: string }`      | No (advanced ACP) | Exact compatibility override; normally auto-detected, never role bytes |
+| `models`           | `ProviderProfileModel[]`  | No                | Static model list (overrides runtime discovery)                        |
+| `additionalModels` | `ProviderProfileModel[]`  | No                | Static model additions (merged with runtime discovery or `models`)     |
+| `disallowedTools`  | `string[]`                | No                | Tool names to disable for this provider (e.g. `["WebSearch"]`)         |
+| `enabled`          | `boolean`                 | No                | Set to `false` to hide the provider (default: `true`)                  |
+| `order`            | `number`                  | No                | Sort order in the provider list                                        |
 
 ### Model definition
 

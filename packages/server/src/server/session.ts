@@ -3148,6 +3148,7 @@ export class Session {
       images,
       attachments,
       env,
+      roleId,
     } = msg;
     this.sessionLogger.info(
       { cwd: config.cwd, provider: config.provider, worktreeName },
@@ -3206,6 +3207,7 @@ export class Session {
           kind: "session",
           config: resolvedIntent.config,
           workspaceId: resolvedIntent.intent.workspaceId,
+          roleId,
           worktreeName,
           initialPrompt,
           clientMessageId,

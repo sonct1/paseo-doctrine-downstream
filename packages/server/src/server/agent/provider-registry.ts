@@ -30,6 +30,7 @@ import type {
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
 import { ClaudeAgentClient } from "./providers/claude/agent.js";
+import { AntigravityACPAgentClient } from "./providers/antigravity-acp-agent.js";
 import { CodexAppServerAgentClient } from "./providers/codex-app-server-agent.js";
 import { CopilotACPAgentClient } from "./providers/copilot-acp-agent.js";
 import { CursorACPAgentClient } from "./providers/cursor-acp-agent.js";
@@ -52,6 +53,10 @@ import {
 
 function isNonEmptyStringArray(value: string[]): value is [string, ...string[]] {
   return value.length > 0;
+}
+
+function commandBasename(command: string): string {
+  return command.split(/[\\/]/u).at(-1) ?? command;
 }
 
 export type { AgentProviderDefinition };
@@ -94,6 +99,7 @@ interface ProviderClientFactoryOptions extends Pick<
     id: string;
     label: string;
     extends: string;
+    credentialRef?: string;
   };
 }
 
@@ -109,6 +115,7 @@ interface ResolvedProvider {
   profileModels: ProviderProfileModel[];
   additionalModels: ProviderProfileModel[];
   profileModelsAreAdditive: boolean;
+  forceStaticModels: boolean;
   enabled: boolean;
   derivedFromProviderId: string | null;
   providerParams?: unknown;
@@ -389,10 +396,12 @@ function wrapClientProvider(
   profileModels: ProviderProfileModel[],
   additionalModels: ProviderProfileModel[],
   profileModelsAreAdditive: boolean,
+  forceStaticModels: boolean,
 ): AgentClient {
   const listImportableSessions = inner.listImportableSessions?.bind(inner);
   const importSession = inner.importSession?.bind(inner);
   const listFeatures = inner.listFeatures?.bind(inner);
+  const materializeProviderLaunchBinding = inner.materializeProviderLaunchBinding?.bind(inner);
 
   return {
     provider,
@@ -426,7 +435,22 @@ function wrapClientProvider(
           options,
         ),
       ),
+    materializeProviderLaunchBinding: materializeProviderLaunchBinding
+      ? async (input) =>
+          await materializeProviderLaunchBinding({
+            ...input,
+            config: { ...input.config, provider: inner.provider },
+          })
+      : undefined,
     fetchCatalog: async (options) => {
+      if (forceStaticModels) {
+        return {
+          models: mergeModels(provider, profileModels, additionalModels, [], {
+            profileModelsAreAdditive,
+          }),
+          modes: [],
+        };
+      }
       const catalog = await inner.fetchCatalog(options);
       return {
         ...catalog,
@@ -491,7 +515,8 @@ function createRegistryEntry(
 ): ProviderDefinition {
   const modelClient = resolved.createBaseClient(logger);
   const hasReplacementModels =
-    resolved.profileModels.length > 0 && !resolved.profileModelsAreAdditive;
+    resolved.forceStaticModels ||
+    (resolved.profileModels.length > 0 && !resolved.profileModelsAreAdditive);
   const replacementModels = hasReplacementModels
     ? resolved.profileModels.map((model) => mapModel(provider, model))
     : [];
@@ -577,6 +602,7 @@ function createResolvedProviderClient(
     resolved.profileModels,
     resolved.additionalModels,
     resolved.profileModelsAreAdditive,
+    resolved.forceStaticModels,
   );
 }
 
@@ -609,6 +635,7 @@ function buildResolvedBuiltinProviders(
       profileModels: override?.models ?? [],
       additionalModels: override?.additionalModels ?? [],
       profileModelsAreAdditive: false,
+      forceStaticModels: false,
       enabled: override?.enabled ?? definition.enabledByDefault ?? true,
       derivedFromProviderId: null,
       providerParams: override?.params,
@@ -662,6 +689,7 @@ function addDerivedProviders(
         profileModels: override.models ?? [],
         additionalModels: override.additionalModels ?? [],
         profileModelsAreAdditive: false,
+        forceStaticModels: false,
         enabled: override.enabled !== false,
         derivedFromProviderId: null,
         providerParams: override.params,
@@ -674,8 +702,21 @@ function addDerivedProviders(
             label: override.label ?? providerId,
             providerParams: override.params,
           };
-          if (providerId === "cursor") {
+          const executable = commandBasename(command[0]);
+          if (
+            override.roleBinding?.driver === "cursor-workspace-rule" ||
+            override.roleBinding?.driver === "cursor-plugin" ||
+            executable === "cursor-agent" ||
+            executable === "cursor-agent.exe"
+          ) {
             return new CursorACPAgentClient(acpOptions);
+          }
+          if (
+            override.roleBinding?.driver === "antigravity-custom-agent" ||
+            executable === "agy-acp" ||
+            executable === "agy-acp.exe"
+          ) {
+            return new AntigravityACPAgentClient(acpOptions);
           }
           if (providerId === "kiro") {
             return new KiroACPAgentClient(acpOptions);
@@ -704,6 +745,9 @@ function addDerivedProviders(
     const baseDefinition = baseProvider.definition;
     const baseFactory = getProviderClientFactory(baseProviderId);
     const providerParams = override.params ?? baseProvider.providerParams;
+    const isCustomCodexRoute =
+      baseProviderId === "codex" &&
+      Boolean(override.credentialRef || override.env?.OPENAI_BASE_URL?.trim());
 
     resolvedProviders.set(providerId, {
       definition: createDerivedDefinition(providerId, baseDefinition, override),
@@ -711,6 +755,7 @@ function addDerivedProviders(
       profileModels: override.models ?? [],
       additionalModels: override.additionalModels ?? [],
       profileModelsAreAdditive: false,
+      forceStaticModels: isCustomCodexRoute,
       enabled: override.enabled !== false,
       derivedFromProviderId: baseProviderId,
       providerParams,
@@ -722,6 +767,7 @@ function addDerivedProviders(
             id: providerId,
             label: override.label ?? providerId,
             extends: baseProviderId,
+            credentialRef: override.credentialRef,
           },
         }),
     });

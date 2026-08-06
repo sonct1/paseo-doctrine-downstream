@@ -7,6 +7,13 @@ import { AgentProviderSchema } from "./provider-manifest.js";
 import { TOOL_CALL_ICON_NAMES } from "./agent-types.js";
 import { ProviderPaseoToolsPolicySchema } from "./provider-config.js";
 import {
+  PaseoRoleIdSchema,
+  ProviderNativeRoleBindingConfigSchema,
+  ProviderRoleBindingSupportSchema,
+  RoleBindingReceiptSchema,
+} from "./role-binding.js";
+import { LaunchContractReceiptSchema } from "./launch-contract.js";
+import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
   ChatInspectRequestSchema,
@@ -134,6 +141,7 @@ const MutableDaemonProviderConfigSchema = z
       .optional(),
     additionalModels: z.array(MutableDaemonProviderModelSchema).optional(),
     paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+    roleBinding: ProviderNativeRoleBindingConfigSchema.optional(),
   })
   .passthrough();
 
@@ -309,6 +317,7 @@ export const ProviderSnapshotEntrySchema = z.object({
   label: z.string().optional(),
   description: z.string().optional(),
   defaultModeId: z.string().nullable().optional(),
+  roleBinding: ProviderRoleBindingSupportSchema.optional(),
 });
 
 export const CompactProviderSnapshotModelSchema = AgentModelDefinitionSchema.omit({
@@ -783,6 +792,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   providerUnavailable: z.boolean().optional(),
+  roleBinding: RoleBindingReceiptSchema.optional(),
+  launchContract: LaunchContractReceiptSchema.optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1361,6 +1372,7 @@ export const CreateAgentRequestMessageSchema = z.object({
   config: AgentSessionConfigSchema,
   env: z.record(z.string(), z.string()).optional(),
   workspaceId: z.string().optional(),
+  roleId: PaseoRoleIdSchema.optional(),
   // Optional caller context lets managed CLI invocations use the same daemon-owned
   // workspace and parentage policy as agent-scoped MCP creation.
   callerAgentId: z.string().optional(),

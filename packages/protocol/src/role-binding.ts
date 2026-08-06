@@ -1,0 +1,101 @@
+import { z } from "zod";
+
+export const PASEO_ROLE_IDS = ["lead", "peer", "supervisor"] as const;
+
+export const PaseoRoleIdSchema = z.enum(PASEO_ROLE_IDS);
+export type PaseoRoleId = z.infer<typeof PaseoRoleIdSchema>;
+
+export const PASEO_ROLE_CONTRACT_VERSION = "3.2.0-topology-recovery";
+
+export const PASEO_ROLE_SUMMARIES = [
+  {
+    id: "lead",
+    label: "Lead",
+    description:
+      "Owns routing, integration, engineering decisions, and acceptance. Reads the full Workspace Protocol.",
+    protocolReadership: "full",
+  },
+  {
+    id: "peer",
+    label: "Peer",
+    description:
+      "Owns independent technical judgment inside one bounded assignment. Receives only relevant protocol constraints.",
+    protocolReadership: "assignment-only",
+  },
+  {
+    id: "supervisor",
+    label: "Supervisor",
+    description:
+      "Observes orchestration and advises Human without becoming a super-Lead. Reads protocol only under a governance mandate.",
+    protocolReadership: "governance-only",
+  },
+] as const satisfies ReadonlyArray<{
+  id: PaseoRoleId;
+  label: string;
+  description: string;
+  protocolReadership: "full" | "assignment-only" | "governance-only";
+}>;
+
+export const RoleBindingInjectionMethodSchema = z.enum([
+  "codex-developer-instructions",
+  "claude-system-prompt",
+  "pi-before-agent-start",
+  "omp-append-system-prompt",
+  "cursor-project-rule-capsule",
+  "cursor-always-apply-plugin",
+  "antigravity-custom-agent",
+]);
+export type RoleBindingInjectionMethod = z.infer<typeof RoleBindingInjectionMethodSchema>;
+
+export const ACPNativeRoleBindingDriverSchema = z.enum([
+  "cursor-workspace-rule",
+  "cursor-plugin",
+  "antigravity-custom-agent",
+]);
+export type ACPNativeRoleBindingDriver = z.infer<typeof ACPNativeRoleBindingDriverSchema>;
+
+export const ProviderNativeRoleBindingConfigSchema = z.object({
+  driver: ACPNativeRoleBindingDriverSchema,
+});
+export type ProviderNativeRoleBindingConfig = z.infer<typeof ProviderNativeRoleBindingConfigSchema>;
+
+export const ProviderRoleBindingSupportSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("supported"),
+    injectionMethod: RoleBindingInjectionMethodSchema,
+    notice: z.string().optional(),
+  }),
+  z.object({
+    status: z.literal("candidate"),
+    injectionMethod: RoleBindingInjectionMethodSchema,
+    reason: z.string(),
+  }),
+  z.object({
+    status: z.literal("unsupported"),
+    reason: z.string(),
+  }),
+]);
+export type ProviderRoleBindingSupport = z.infer<typeof ProviderRoleBindingSupportSchema>;
+
+const Sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+
+export const WorkspaceProtocolBindingReceiptSchema = z.object({
+  status: z.enum(["bound", "missing"]),
+  readership: z.enum(["full", "assignment-only", "governance-only"]),
+  path: z.string(),
+  digest: Sha256DigestSchema.optional(),
+});
+export type WorkspaceProtocolBindingReceipt = z.infer<typeof WorkspaceProtocolBindingReceiptSchema>;
+
+export const RoleBindingReceiptSchema = z.object({
+  roleId: PaseoRoleIdSchema,
+  definitionVersion: z.string(),
+  definitionDigest: Sha256DigestSchema,
+  bindingDigest: Sha256DigestSchema,
+  provider: z.string(),
+  injectionMethod: RoleBindingInjectionMethodSchema,
+  qualification: z.literal("implementation-supported"),
+  workspaceProtocol: WorkspaceProtocolBindingReceiptSchema,
+  createdAt: z.string(),
+});
+export type RoleBindingReceipt = z.infer<typeof RoleBindingReceiptSchema>;

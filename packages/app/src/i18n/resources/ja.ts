@@ -156,6 +156,11 @@ export const ja: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "ロール",
+      select: "Paseoロールを選択",
+      title: "Paseoロール",
+    },
     provider: {
       fallback: "プロバイダー",
       select: "エージェントプロバイダーを選択",

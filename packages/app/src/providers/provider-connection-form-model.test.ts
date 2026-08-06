@@ -36,6 +36,7 @@ describe("provider connection form model", () => {
       mode: "create",
       providerId: "codex-proxy",
       providerLabel: "Codex proxy",
+      modelId: "custom-model",
       baseUrl: "https://proxy.example",
     });
     expect(model.getState().canSave).toBe(false);
@@ -45,6 +46,20 @@ describe("provider connection form model", () => {
     expect(model.getState().canSave).toBe(true);
     model.setBaseUrl("http://insecure.example");
     expect(model.getState().canSave).toBe(false);
+  });
+
+  test("requires an explicit model when creating a custom provider", () => {
+    const model = openProviderConnectionForm({
+      mode: "create",
+      providerId: "codex-proxy",
+      providerLabel: "Codex proxy",
+      baseUrl: "https://proxy.example",
+    });
+    model.applyCredentialStatus(false);
+    model.setApiKey("sk-private");
+    expect(model.getState().canSave).toBe(false);
+    model.setModelId("custom-model");
+    expect(model.getState().canSave).toBe(true);
   });
 
   test("clears credential draft bytes after save and close", () => {

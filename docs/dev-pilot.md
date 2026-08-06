@@ -126,7 +126,8 @@ Status phải chứng minh:
 - `serverId` bằng `connectedServerId`;
 - `listen` và `connectedListen` đều là `127.0.0.1:6767`;
 - `cliVersion` và `daemonVersion` đều là `0.3.0-beta.1.paseo.1`;
-- `codex-lead`, `codex-peer` và `codex-supervisor` là available.
+- built-in `codex` và custom Codex provider dự kiến dùng trong pilot đều available và khai báo native role
+  binding support.
 
 Doctor phải trả `DISTRIBUTION_VALID=PASS` và `RUNTIME_EFFECTIVE=PASS`. Doctor không ingest canary evidence,
 nên `ROLE_BOUNDARY_QUALIFIED=UNKNOWN` vẫn cần canary độc lập; không đổi `UNKNOWN` thành `PASS` trong báo
@@ -137,11 +138,11 @@ cáo.
 Chạy từng canary read-only trong disposable repository có current `WORKSPACE_PROTOCOL.md`, lưu agent ID và
 archive sau readback:
 
-| Provider           | Exact canary lease                                                                         | Pass condition                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `codex-lead`       | Đọc full protocol, trả role marker và tool visibility; không edit, không delegate          | Đọc được full protocol, đúng Lead authority, không mutation                                       |
-| `codex-peer`       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có full-protocol access và không có Paseo coordination tools                                |
-| `codex-supervisor` | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ thấy inspection/supervision surface đã cấp, không nhận engineering write/acceptance authority |
+| Role + provider route       | Exact canary lease                                                                         | Pass condition                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `lead` + built-in `codex`   | Đọc full protocol, trả role marker và tool visibility; không edit, không delegate          | Đúng Lead authority; inspect pin `codex`, `openai`, exact model và ChatGPT credential configured |
+| `peer` + custom Codex       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có coordination tools; inspect pin custom provider/model và command-backed credential      |
+| `supervisor` + chosen route | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ có supervision surface; inspect pin exact selected route, không có fallback                  |
 
 Sau mỗi canary, đọc route từ daemon thay vì hỏi agent tự mô tả:
 
@@ -149,10 +150,11 @@ Sau mỗi canary, đọc route từ daemon thay vì hỏi agent tự mô tả:
 paseo agent inspect <agent-id> --json
 ```
 
-`Provider`, `Model`, `Thinking` và `Mode` trong inspect output phải khớp exact assignment. Agent tự mô tả
-provider/model không phải route evidence; câu trả lời đó có thể phản ánh model family thay vì logical
-provider alias của Paseo. Một provider visible hoặc selectable cũng không đủ làm canary xanh. Inspect
-readback lệch route hoặc generic fallback là failure.
+`Role`, `LaunchContract.ProviderId`, `LaunchContract.Model`, `LaunchContract.ModelProviderId` và
+`CredentialConfigured` trong inspect output phải khớp exact assignment. Agent tự mô tả provider/model không
+phải route evidence; câu trả lời đó có thể phản ánh model family thay vì logical provider của Paseo. Một
+provider visible hoặc selectable cũng không đủ làm canary xanh. Inspect readback lệch route hoặc generic
+fallback là failure.
 
 ### Evidence-source boundary
 
@@ -162,24 +164,25 @@ nêu evidence nào đến từ repository và evidence nào chỉ là operationa
 
 Nếu một qualification claim yêu cầu `current-bytes-only`, exact lease phải cấm rõ Memory, user-home và
 history. Bất kỳ access nào vào nguồn bị cấm làm episode evidence không hợp lệ; chạy lại bằng fresh agent
-với source boundary phù hợp. `codex-profile` mặc định dùng `CODEX_HOME` hiện có, nên không được gọi đó là
-sealed/no-Memory execution nếu chưa launch bằng một isolated Codex home đã review.
+với source boundary phù hợp. Built-in Codex dùng native auth store trong `CODEX_HOME`; custom endpoint dùng
+private Paseo credential store và không cần đổi `CODEX_HOME`. Chỉ dùng isolated Codex home khi canary thật
+sự yêu cầu một login/session store độc lập đã review.
 
 ### WebUI và custom route
 
 Mở **Settings → Host → Providers** và xác nhận form **Connection** nhận Base URL cùng API key nhưng không
 render lại secret sau save. Không đưa secret vào screenshot, log, issue hoặc handback.
 
-Các alias `codex-*-cliproxy` trong Foundation template mặc định disabled. Với endpoint riêng:
+Với custom OpenAI-compatible endpoint:
 
-1. điền Base URL và credential bằng **Connection**;
-2. chạy fresh exact role/tool canary;
-3. chỉ enable alias sau khi canary xanh;
-4. dùng `paseo agent inspect <agent-id> --json` để xác nhận exact alias/model/mode;
+1. tạo provider với exact model, Base URL và credential bằng **Connection**;
+2. trong create flow chọn role, custom provider rồi exact model;
+3. chạy fresh exact role/tool canary;
+4. dùng `paseo agent inspect <agent-id> --json` để xác nhận exact role/provider/model/auth route;
 5. dừng nếu inspect readback cho thấy fallback sang provider/model khác.
 
-`Configured · qualification pending` là trạng thái đúng trước canary. Model catalog inherited không chứng
-minh endpoint hoặc role binding.
+Model catalog inherited không được xuất hiện trên custom route và không chứng minh endpoint hoặc role
+binding. Thiếu URL/key/model phải fail trước launch, không thử built-in subscription.
 
 ### Product task
 

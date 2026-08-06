@@ -19,6 +19,7 @@ import {
   type SheetHeader,
 } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
+import { Alert as InlineAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ScrollableCodeSurface, SurfaceCard } from "@/components/ui/scrollable-code-surface";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -35,6 +36,7 @@ import { formatTimeAgo } from "@/utils/time";
 import { compareMatchScores, scoreTextFields } from "@/utils/score-match";
 import type { AgentModelDefinition, AgentProvider } from "@getpaseo/protocol/agent-types";
 import type { ProviderProfileModel } from "@getpaseo/protocol/provider-config";
+import type { ProviderRoleBindingSupport } from "@getpaseo/protocol/role-binding";
 import { ProviderConnectionSheet } from "@/components/provider-connection-sheet";
 import {
   resolveProviderDiscoveredModels,
@@ -643,6 +645,28 @@ function ProviderConnectionEditor({
   );
 }
 
+function ProviderRoleBindingAlert({
+  support,
+}: {
+  support: ProviderRoleBindingSupport | undefined;
+}) {
+  const { t } = useTranslation();
+  if (!support || support.status === "unsupported") return null;
+  const isSupported = support.status === "supported";
+  return (
+    <InlineAlert
+      variant={isSupported ? "success" : "warning"}
+      title={t("agentControls.role.title")}
+      description={
+        isSupported
+          ? `${support.injectionMethod} · implementation-supported${support.notice ? `\n${support.notice}` : ""}`
+          : support.reason
+      }
+      testID="provider-role-binding-status"
+    />
+  );
+}
+
 export function ProviderDiagnosticSheet({
   provider,
   visible,
@@ -792,6 +816,7 @@ export function ProviderDiagnosticSheet({
         })}
         snapPoints={MAIN_SNAP_POINTS}
       >
+        <ProviderRoleBindingAlert support={providerEntry?.roleBinding} />
         <ProviderModalBody
           discoveredCount={discoveredModels.length}
           additionalCount={additionalModels.length}

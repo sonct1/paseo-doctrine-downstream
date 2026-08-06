@@ -156,6 +156,11 @@ export const ru: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "Роль",
+      select: "Выбрать роль Paseo",
+      title: "Роль Paseo",
+    },
     provider: {
       fallback: "Поставщик",
       select: "Выберите поставщика агентов",

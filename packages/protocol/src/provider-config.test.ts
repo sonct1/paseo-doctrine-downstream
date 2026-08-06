@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import { MutableDaemonConfigPatchSchema, MutableDaemonConfigSchema } from "./messages.js";
-import { ProviderOverrideSchema, ProviderPaseoToolsPolicySchema } from "./provider-config.js";
+import {
+  ProviderOverrideSchema,
+  ProviderOverridesSchema,
+  ProviderPaseoToolsPolicySchema,
+} from "./provider-config.js";
 
 describe("provider Paseo-tool policy", () => {
   test("accepts arbitrary tool IDs and leaves an empty policy enabled by default", () => {
@@ -102,5 +106,34 @@ describe("provider Paseo-tool policy", () => {
         providers: { "codex-proxy": { env: { KEYBOARD_LAYOUT: "us" } } },
       }).providers?.["codex-proxy"]?.env,
     ).toEqual({ KEYBOARD_LAYOUT: "us" });
+  });
+
+  test("accepts explicit ACP native role drivers and rejects them on non-ACP providers", () => {
+    expect(
+      ProviderOverridesSchema.parse({
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+          roleBinding: { driver: "cursor-workspace-rule" },
+        },
+      }).cursor?.roleBinding,
+    ).toEqual({ driver: "cursor-workspace-rule" });
+    expect(
+      MutableDaemonConfigPatchSchema.parse({
+        providers: {
+          cursor: { roleBinding: { driver: "cursor-workspace-rule" } },
+        },
+      }).providers?.cursor?.roleBinding,
+    ).toEqual({ driver: "cursor-workspace-rule" });
+    expect(() =>
+      ProviderOverridesSchema.parse({
+        "custom-codex": {
+          extends: "codex",
+          label: "Custom Codex",
+          roleBinding: { driver: "cursor-workspace-rule" },
+        },
+      }),
+    ).toThrow(/may declare roleBinding only when it extends/u);
   });
 });

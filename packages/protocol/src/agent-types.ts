@@ -112,6 +112,7 @@ export interface ProviderSnapshotEntry {
   label?: string;
   description?: string;
   defaultModeId?: string | null;
+  roleBinding?: import("./role-binding.js").ProviderRoleBindingSupport;
 }
 
 export interface AgentFeatureToggle {

@@ -3321,6 +3321,7 @@ describe("ACPAgentSession close() tree-kill", () => {
 describe("ACPAgentSession initialization cleanup", () => {
   test("terminates the ACP process when session/new fails", async () => {
     const terminator = new FakeTerminator();
+    const sessionCleanup = vi.fn();
     const child = createProbeChildStub();
 
     class FailingNewSession extends ACPAgentSession {
@@ -3347,12 +3348,14 @@ describe("ACPAgentSession initialization cleanup", () => {
           supportsSessionPersistence: true,
         },
         terminateProcess: terminator.terminate,
+        sessionCleanup,
       },
     );
 
     await expect(session.initializeNewSession()).rejects.toThrow("session/new failed");
 
     expect(terminator.terminated).toContain(child);
+    expect(sessionCleanup).toHaveBeenCalledOnce();
   });
 
   test("terminates the ACP process when session/load fails", async () => {

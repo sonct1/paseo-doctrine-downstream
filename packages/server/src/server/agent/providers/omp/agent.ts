@@ -445,6 +445,7 @@ function buildResumeStartInput(input: {
     systemPrompt: composeSystemPromptParts(
       input.resumeConfig.config.systemPrompt,
       input.resumeConfig.config.daemonAppendSystemPrompt,
+      input.launchContext?.roleBinding?.instructions,
     ),
   };
 }
@@ -2238,7 +2239,11 @@ export class OmpAgentClient implements AgentClient {
       noSession: config.internal === true,
       modeId: launchMode.modeId,
       extraArgs: launchMode.extraArgs,
-      systemPrompt: composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
+      systemPrompt: composeSystemPromptParts(
+        config.systemPrompt,
+        config.daemonAppendSystemPrompt,
+        launchContext?.roleBinding?.instructions,
+      ),
       env: launchContext?.env,
     });
     try {

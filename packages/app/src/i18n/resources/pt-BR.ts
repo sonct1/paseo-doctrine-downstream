@@ -156,6 +156,11 @@ export const ptBR: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "Função",
+      select: "Selecionar função do Paseo",
+      title: "Função do Paseo",
+    },
     provider: {
       fallback: "Provedor",
       select: "Selecionar provedor do agente",

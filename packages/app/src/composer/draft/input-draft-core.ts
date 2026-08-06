@@ -1,6 +1,7 @@
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { DraftAgentControlsProps } from "@/composer/agent-controls";
 import type { UseAgentFormStateResult } from "@/hooks/use-agent-form-state";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
 export interface DraftKeyContext {
   selectedServerId: string | null;
@@ -23,8 +24,19 @@ export function buildDraftAgentControls(input: {
   features?: DraftAgentControlsProps["features"];
   onSetFeature?: DraftAgentControlsProps["onSetFeature"];
   onDropdownClose?: DraftAgentControlsProps["onDropdownClose"];
+  roleOptions?: DraftAgentControlsProps["roleOptions"];
+  selectedRole?: PaseoRoleId | null;
+  onSelectRole?: (roleId: PaseoRoleId) => void;
 }): DraftAgentControlsProps {
-  const { formState, features, onSetFeature, onDropdownClose } = input;
+  const {
+    formState,
+    features,
+    onSetFeature,
+    onDropdownClose,
+    roleOptions,
+    selectedRole,
+    onSelectRole,
+  } = input;
   return {
     providerDefinitions: formState.providerDefinitions,
     selectedProvider: formState.selectedProvider,
@@ -49,6 +61,9 @@ export function buildDraftAgentControls(input: {
     onRetryModelProvider: formState.refreshProviderModels,
     isRetryingModelProvider: formState.isProviderModelsRefreshing,
     modelSelectorServerId: formState.selectedServerId,
+    roleOptions,
+    selectedRole: selectedRole ?? null,
+    onSelectRole,
   };
 }
 

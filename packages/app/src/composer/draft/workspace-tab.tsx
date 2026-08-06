@@ -143,6 +143,7 @@ async function submitDraftCreateRequest(input: {
   workspaceId: string | null;
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
+    selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
     selectedProvider: string | null;
     selectedMode: string;
     modeOptions: readonly { id: string }[];
@@ -196,6 +197,7 @@ async function submitDraftCreateRequest(input: {
   const result = await client.createAgent({
     config,
     workspaceId,
+    ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),

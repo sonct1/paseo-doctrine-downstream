@@ -122,6 +122,7 @@ function buildCreateAgentOptions({
   provider,
 }: {
   composerState: {
+    selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
     modeOptions: { id: string }[];
     selectedMode: string;
     effectiveModelId: string | null;
@@ -147,6 +148,7 @@ function buildCreateAgentOptions({
     provider,
     cwd: workspaceDirectory,
     workspaceId,
+    ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
     ...(reconciledMode !== "" ? { modeId: reconciledMode } : {}),
     ...(composerState.effectiveModelId ? { model: composerState.effectiveModelId } : {}),
     ...(composerState.effectiveThinkingOptionId

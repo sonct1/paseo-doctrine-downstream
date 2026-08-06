@@ -1,7 +1,14 @@
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 
 import type { SpawnedACPProcess, SessionStateResponse } from "./acp-agent.js";
-import { CURSOR_FAST_FEATURE_OPTION, CursorACPAgentClient } from "./cursor-acp-agent.js";
+import {
+  CURSOR_FAST_FEATURE_OPTION,
+  CursorACPAgentClient,
+  materializeCursorRoleCapsule,
+} from "./cursor-acp-agent.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 
 describe("CursorACPAgentClient model discovery", () => {
@@ -172,5 +179,70 @@ describe("CursorACPAgentClient model discovery", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("Cursor native role binding", () => {
+  test("projects exact role bytes into a stable isolated workspace-rule capsule", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "paseo-cursor-role-test-"));
+    try {
+      const prepared = await materializeCursorRoleCapsule({
+        command: ["cursor-agent", "acp"],
+        cwd: "/workspace/repo",
+        capsuleRoot: temporaryRoot,
+        launchContext: {
+          agentId: "agent-1",
+          roleBinding: {
+            roleId: "peer",
+            instructions: "Immutable Peer instructions",
+          },
+        },
+      });
+      const capsuleDirectory = prepared.command?.[2];
+      expect(prepared.command).toEqual([
+        "cursor-agent",
+        "--workspace",
+        capsuleDirectory,
+        "--add-dir",
+        "/workspace/repo",
+        "acp",
+      ]);
+      expect(capsuleDirectory).toMatch(/paseo-peer-[a-f0-9]{12}-[a-f0-9]{12}$/u);
+      await expect(
+        readFile(join(capsuleDirectory!, ".cursor", "rules", "paseo-role.mdc"), "utf8"),
+      ).resolves.toContain("alwaysApply: true\n---\n\nImmutable Peer instructions");
+
+      expect(prepared.cleanup).toBeUndefined();
+      await expect(stat(capsuleDirectory!)).resolves.toBeDefined();
+
+      const rematerialized = await materializeCursorRoleCapsule({
+        command: ["cursor-agent", "acp"],
+        cwd: "/workspace/repo",
+        capsuleRoot: temporaryRoot,
+        launchContext: {
+          agentId: "agent-1",
+          roleBinding: {
+            roleId: "peer",
+            instructions: "Immutable Peer instructions",
+          },
+        },
+      });
+      expect(rematerialized.command).toEqual(prepared.command);
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects a caller-supplied Cursor workspace", async () => {
+    await expect(
+      materializeCursorRoleCapsule({
+        command: ["cursor-agent", "--workspace", "/tmp/caller", "acp"],
+        cwd: "/workspace/repo",
+        launchContext: {
+          agentId: "agent-1",
+          roleBinding: { roleId: "lead", instructions: "Lead instructions" },
+        },
+      }),
+    ).rejects.toThrow("caller-supplied --workspace");
   });
 });

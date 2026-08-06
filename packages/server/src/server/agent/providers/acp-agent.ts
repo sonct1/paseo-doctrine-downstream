@@ -433,9 +433,16 @@ interface ACPAgentSessionOptions {
   handle?: AgentPersistenceHandle;
   agentId?: string;
   launchEnv?: Record<string, string>;
+  sessionCleanup?: () => Promise<void> | void;
   waitForInitialCommands?: boolean;
   initialCommandsWaitTimeoutMs?: number;
   terminateProcess?: ProcessTerminator;
+}
+
+export interface ACPSessionLaunchPreparation {
+  command?: [string, ...string[]];
+  env?: Record<string, string>;
+  cleanup?: () => Promise<void> | void;
 }
 
 export interface SpawnedACPProcess {
@@ -818,18 +825,31 @@ export class ACPAgentClient implements AgentClient {
     this.extensionCommandsParser = options.extensionCommandsParser;
   }
 
+  protected async prepareSessionLaunch(
+    _config: AgentSessionConfig,
+    launchContext?: AgentLaunchContext,
+  ): Promise<ACPSessionLaunchPreparation | undefined> {
+    if (launchContext?.roleBinding) {
+      throw new Error(
+        `${this.provider} does not implement a provider-native durable role-binding driver`,
+      );
+    }
+    return undefined;
+  }
+
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
     this.assertProvider(config);
+    const sessionLaunch = await this.prepareSessionLaunch(config, launchContext);
     const session = new ACPAgentSession(
       { ...config, provider: this.provider },
       {
         provider: this.provider,
         logger: this.logger,
         runtimeSettings: this.runtimeSettings,
-        defaultCommand: this.defaultCommand,
+        defaultCommand: sessionLaunch?.command ?? this.defaultCommand,
         defaultModes: this.defaultModes,
         modelTransformer: this.modelTransformer,
         sessionResponseTransformer: this.sessionResponseTransformer,
@@ -844,7 +864,11 @@ export class ACPAgentClient implements AgentClient {
         thinkingOptionWriter: this.thinkingOptionWriter,
         capabilities: this.capabilities,
         agentId: launchContext?.agentId,
-        launchEnv: launchContext?.env,
+        launchEnv:
+          launchContext?.env || sessionLaunch?.env
+            ? { ...launchContext?.env, ...sessionLaunch?.env }
+            : undefined,
+        sessionCleanup: sessionLaunch?.cleanup,
         extensionCommandsParser: this.extensionCommandsParser,
         waitForInitialCommands: this.waitForInitialCommands,
         initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
@@ -875,11 +899,12 @@ export class ACPAgentClient implements AgentClient {
       provider: this.provider,
       cwd,
     };
+    const sessionLaunch = await this.prepareSessionLaunch(mergedConfig, launchContext);
     const session = new ACPAgentSession(mergedConfig, {
       provider: this.provider,
       logger: this.logger,
       runtimeSettings: this.runtimeSettings,
-      defaultCommand: this.defaultCommand,
+      defaultCommand: sessionLaunch?.command ?? this.defaultCommand,
       defaultModes: this.defaultModes,
       modelTransformer: this.modelTransformer,
       sessionResponseTransformer: this.sessionResponseTransformer,
@@ -895,7 +920,11 @@ export class ACPAgentClient implements AgentClient {
       capabilities: this.capabilities,
       handle,
       agentId: launchContext?.agentId,
-      launchEnv: launchContext?.env,
+      launchEnv:
+        launchContext?.env || sessionLaunch?.env
+          ? { ...launchContext?.env, ...sessionLaunch?.env }
+          : undefined,
+      sessionCleanup: sessionLaunch?.cleanup,
       extensionCommandsParser: this.extensionCommandsParser,
       waitForInitialCommands: this.waitForInitialCommands,
       initialCommandsWaitTimeoutMs: this.initialCommandsWaitTimeoutMs,
@@ -1360,6 +1389,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
   ) => Promise<void>;
   private readonly agentId?: string;
   private readonly launchEnv?: Record<string, string>;
+  private readonly sessionCleanup?: () => Promise<void> | void;
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private pendingUserMessage: PendingUserMessage | null = null;
@@ -1419,6 +1449,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     this.availableModes = options.defaultModes;
     this.agentId = options.agentId;
     this.launchEnv = options.launchEnv;
+    this.sessionCleanup = options.sessionCleanup;
     this.initialHandle = options.handle;
     this.config = { ...config, provider: options.provider };
     this.currentMode = config.modeId ?? null;
@@ -2145,23 +2176,29 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       }
     }
 
-    const terminalTerminations = Array.from(this.terminalEntries.values(), (terminal) =>
-      this.terminateProcess(terminal.child, {
-        gracefulTimeoutMs: 2_000,
-        forceTimeoutMs: 2_000,
-      }),
-    );
-    await Promise.all(terminalTerminations);
-    this.terminalEntries.clear();
+    try {
+      const terminalTerminations = Array.from(this.terminalEntries.values(), (terminal) =>
+        this.terminateProcess(terminal.child, {
+          gracefulTimeoutMs: 2_000,
+          forceTimeoutMs: 2_000,
+        }),
+      );
+      await Promise.all(terminalTerminations);
+      this.terminalEntries.clear();
 
-    if (this.child) {
-      await this.terminateProcess(this.child, { gracefulTimeoutMs: 2_000, forceTimeoutMs: 2_000 });
+      if (this.child) {
+        await this.terminateProcess(this.child, {
+          gracefulTimeoutMs: 2_000,
+          forceTimeoutMs: 2_000,
+        });
+      }
+    } finally {
+      await this.sessionCleanup?.();
+      this.subscribers.clear();
+      this.connection = null;
+      this.child = null;
+      this.activeForegroundTurnId = null;
     }
-
-    this.subscribers.clear();
-    this.connection = null;
-    this.child = null;
-    this.activeForegroundTurnId = null;
   }
 
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {

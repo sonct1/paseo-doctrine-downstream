@@ -32,7 +32,7 @@ import {
   buildSelectableProviderSelectorProviders,
   type ProviderSelectorProvider,
 } from "@/provider-selection/provider-selection";
-import { useSessionStore } from "@/stores/session-store";
+import { useSessionStore, type Agent } from "@/stores/session-store";
 import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import {
@@ -56,6 +56,7 @@ import type {
   AgentProvider,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
+import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
@@ -83,20 +84,31 @@ import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
 interface AgentControlOption {
   id: string;
   label: string;
+  description?: string;
 }
 
-type AgentControlSelector = "provider" | "mode" | "model" | "thinking" | `feature-${string}`;
+type AgentControlSelector =
+  | "role"
+  | "provider"
+  | "mode"
+  | "model"
+  | "thinking"
+  | `feature-${string}`;
 
 const EMPTY_AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [];
 
 interface ControlledAgentControlsProps {
   provider: string;
+  roleOptions?: AgentControlOption[];
+  selectedRoleId?: PaseoRoleId;
+  onSelectRole?: (roleId: PaseoRoleId) => void;
   providerOptions?: AgentControlOption[];
   selectedProviderId?: string;
   onSelectProvider?: (providerId: string) => void;
   modelOptions?: AgentControlOption[];
   selectedModelId?: string;
   onSelectModel?: (modelId: string) => void;
+  modelSelectionDisabled?: boolean;
   onSelectProviderAndModel?: (provider: string, modelId: string) => void;
   thinkingOptions?: AgentControlOption[];
   selectedThinkingOptionId?: string;
@@ -118,6 +130,9 @@ interface ControlledAgentControlsProps {
 }
 
 export interface DraftAgentControlsProps {
+  roleOptions?: ReadonlyArray<{ id: PaseoRoleId; label: string; description?: string }>;
+  selectedRole?: PaseoRoleId | null;
+  onSelectRole?: (roleId: PaseoRoleId) => void;
   providerDefinitions: AgentProviderDefinition[];
   selectedProvider: AgentProvider | null;
   onSelectProvider: (provider: AgentProvider) => void;
@@ -207,12 +222,14 @@ function getFeatureIconColor(
 type ActiveSheet = "thinking" | "features" | null;
 
 function resolveHasAnyControl({
+  roleOptions,
   providerOptions,
   canSelectModel,
   thinkingOptions,
   features,
   hasMode,
 }: {
+  roleOptions: AgentControlOption[] | undefined;
   providerOptions: AgentControlOption[] | undefined;
   canSelectModel: boolean;
   thinkingOptions: AgentControlOption[] | undefined;
@@ -220,6 +237,7 @@ function resolveHasAnyControl({
   hasMode: boolean;
 }) {
   return (
+    Boolean(roleOptions?.length) ||
     Boolean(providerOptions?.length) ||
     canSelectModel ||
     Boolean(thinkingOptions?.length) ||
@@ -229,7 +247,25 @@ function resolveHasAnyControl({
 }
 
 function toComboboxOptions(options: AgentControlOption[] | undefined): ComboboxOption[] {
-  return (options ?? []).map((o) => ({ id: o.id, label: o.label }));
+  return (options ?? []).map((o) => ({
+    id: o.id,
+    label: o.label,
+    description: o.description,
+  }));
+}
+
+function hasSelectableOptions(
+  options: AgentControlOption[] | undefined,
+  onSelect: ((id: PaseoRoleId) => void) | undefined,
+): boolean {
+  return onSelect !== undefined && Boolean(options?.length);
+}
+
+function isModelControlDisabled(
+  controlsDisabled: boolean,
+  modelSelectionDisabled: boolean | undefined,
+): boolean {
+  return controlsDisabled || modelSelectionDisabled === true;
 }
 
 function toThinkingControlOptions(options: AgentControlOption[] | undefined): AgentControlOption[] {
@@ -333,6 +369,7 @@ type AgentControlsSlice = {
   features: AgentFeature[] | undefined;
   thinkingOptionId: string | null | undefined;
   lastUsage: unknown;
+  launchContract: Agent["launchContract"];
 } | null;
 
 function selectAgentControlsSlice(
@@ -352,7 +389,12 @@ function selectAgentControlsSlice(
     features: currentAgent.features,
     thinkingOptionId: currentAgent.thinkingOptionId,
     lastUsage: currentAgent.lastUsage,
+    launchContract: currentAgent.launchContract,
   };
+}
+
+function resolveBoundRoleId(agent: AgentControlsSlice): PaseoRoleId | undefined {
+  return agent?.launchContract?.roleId;
 }
 
 function resolveSnapshotSelectedEntry(
@@ -401,12 +443,16 @@ function buildOpenChangeHandler(
 
 function ControlledAgentControls({
   provider,
+  roleOptions,
+  selectedRoleId,
+  onSelectRole,
   providerOptions,
   selectedProviderId,
   onSelectProvider,
   modelOptions,
   selectedModelId,
   onSelectModel,
+  modelSelectionDisabled,
   onSelectProviderAndModel,
   thinkingOptions,
   selectedThinkingOptionId,
@@ -439,12 +485,14 @@ function ControlledAgentControls({
   const availableWidthRef = useRef(0);
 
   const providerAnchorRef = useRef<View>(null);
+  const roleAnchorRef = useRef<View>(null);
   const _modelAnchorRef = useRef<View>(null);
   const thinkingAnchorRef = useRef<View>(null);
 
   const canSelectProvider = Boolean(
     onSelectProvider && providerOptions && providerOptions.length > 0,
   );
+  const canSelectRole = hasSelectableOptions(roleOptions, onSelectRole);
   const canSelectModel = Boolean(onSelectModel);
   const canSelectThinking = Boolean(
     onSelectThinkingOption && thinkingOptions && thinkingOptions.length > 0,
@@ -454,6 +502,11 @@ function ControlledAgentControls({
     providerOptions,
     selectedProviderId,
     t("agentControls.provider.fallback"),
+  );
+  const displayRole = findOptionLabel(
+    roleOptions,
+    selectedRoleId,
+    t("agentControls.role.fallback"),
   );
   const formattedThinkingOptions = useMemo(
     () => toThinkingControlOptions(thinkingOptions),
@@ -466,6 +519,7 @@ function ControlledAgentControls({
   );
 
   const hasAnyControl = resolveHasAnyControl({
+    roleOptions,
     providerOptions,
     canSelectModel,
     thinkingOptions,
@@ -532,11 +586,15 @@ function ControlledAgentControls({
     }
   }, [updateDensityForWidth]);
 
-  const modelDisabled = disabled;
+  const modelDisabled = isModelControlDisabled(disabled, modelSelectionDisabled);
 
   const comboboxProviderOptions = useMemo<ComboboxOption[]>(
     () => toComboboxOptions(providerOptions),
     [providerOptions],
+  );
+  const comboboxRoleOptions = useMemo<ComboboxOption[]>(
+    () => toComboboxOptions(roleOptions),
+    [roleOptions],
   );
   const fallbackModelSelectorProviders = useMemo(
     () => buildFallbackModelSelectorProviders(provider, modelOptions),
@@ -576,17 +634,25 @@ function ControlledAgentControls({
   const handleProviderPress = useCallback(() => {
     handleOpenChange("provider")(openSelector !== "provider");
   }, [handleOpenChange, openSelector]);
+  const handleRolePress = useCallback(() => {
+    handleOpenChange("role")(openSelector !== "role");
+  }, [handleOpenChange, openSelector]);
 
   const handleThinkingPress = useCallback(() => {
     handleOpenChange("thinking")(openSelector !== "thinking");
   }, [handleOpenChange, openSelector]);
 
   const handleProviderOpenChange = useMemo(() => handleOpenChange("provider"), [handleOpenChange]);
+  const handleRoleOpenChange = useMemo(() => handleOpenChange("role"), [handleOpenChange]);
   const handleThinkingOpenChange = useMemo(() => handleOpenChange("thinking"), [handleOpenChange]);
 
   const handleProviderSelect = useCallback(
     (id: string) => onSelectProvider?.(id),
     [onSelectProvider],
+  );
+  const handleRoleSelect = useCallback(
+    (id: string) => onSelectRole?.(id as PaseoRoleId),
+    [onSelectRole],
   );
   const handleThinkingSelect = useCallback(
     (id: string) => onSelectThinkingOption?.(id),
@@ -615,6 +681,16 @@ function ControlledAgentControls({
         openSelector === "provider",
       ),
     [canSelectProvider, disabled, openSelector],
+  );
+  const rolePressableStyle = useMemo(
+    () =>
+      makeBadgePressableStyle(
+        styles.modeBadge,
+        styles.disabledBadge,
+        disabled || !canSelectRole,
+        openSelector === "role",
+      ),
+    [canSelectRole, disabled, openSelector],
   );
 
   const handleOpenSheet = useCallback((sheet: Exclude<ActiveSheet, null>) => {
@@ -659,6 +735,8 @@ function ControlledAgentControls({
         {!isCompact ? (
           <DesktopAgentControlsContent
             provider={provider}
+            roleOptions={roleOptions}
+            selectedRoleId={selectedRoleId}
             providerOptions={providerOptions}
             selectedProviderId={selectedProviderId}
             modelOptions={modelOptions}
@@ -676,24 +754,32 @@ function ControlledAgentControls({
             disabled={disabled}
             isModelLoading={isModelLoading}
             canSelectProvider={canSelectProvider}
+            canSelectRole={canSelectRole}
             canSelectModel={canSelectModel}
             canSelectThinking={canSelectThinking}
             modelSelectorProviders={effectiveModelSelectorProviders}
             modelDisabled={modelDisabled}
             comboboxProviderOptions={comboboxProviderOptions}
+            comboboxRoleOptions={comboboxRoleOptions}
             comboboxThinkingOptions={comboboxThinkingOptions}
             displayProvider={displayProvider}
+            displayRole={displayRole}
             displayThinking={displayThinking}
             openSelector={openSelector}
             providerAnchorRef={providerAnchorRef}
+            roleAnchorRef={roleAnchorRef}
             thinkingAnchorRef={thinkingAnchorRef}
             providerPressableStyle={providerPressableStyle}
+            rolePressableStyle={rolePressableStyle}
             handleProviderPress={handleProviderPress}
+            handleRolePress={handleRolePress}
             handleThinkingPress={handleThinkingPress}
             handleProviderSelect={handleProviderSelect}
+            handleRoleSelect={handleRoleSelect}
             handleThinkingSelect={handleThinkingSelect}
             handleDesktopModelSelect={handleDesktopModelSelect}
             handleProviderOpenChange={handleProviderOpenChange}
+            handleRoleOpenChange={handleRoleOpenChange}
             handleThinkingOpenChange={handleThinkingOpenChange}
             handleOpenChange={handleOpenChange}
             handleNestedOpenChange={handleSheetOpenChange}
@@ -709,6 +795,16 @@ function ControlledAgentControls({
         ) : (
           <SheetAgentControlsContent
             provider={provider}
+            roleOptions={roleOptions}
+            selectedRoleId={selectedRoleId}
+            canSelectRole={canSelectRole}
+            comboboxRoleOptions={comboboxRoleOptions}
+            displayRole={displayRole}
+            roleAnchorRef={roleAnchorRef}
+            rolePressableStyle={rolePressableStyle}
+            handleRolePress={handleRolePress}
+            handleRoleSelect={handleRoleSelect}
+            handleRoleOpenChange={handleRoleOpenChange}
             selectedModelId={selectedModelId}
             selectedThinkingOptionId={selectedThinkingOptionId}
             features={features}
@@ -747,6 +843,8 @@ function ControlledAgentControls({
 
 interface DesktopAgentControlsContentProps {
   provider: string;
+  roleOptions?: AgentControlOption[];
+  selectedRoleId?: PaseoRoleId;
   providerOptions?: AgentControlOption[];
   selectedProviderId?: string;
   modelOptions?: AgentControlOption[];
@@ -764,24 +862,32 @@ interface DesktopAgentControlsContentProps {
   disabled: boolean;
   isModelLoading: boolean;
   canSelectProvider: boolean;
+  canSelectRole: boolean;
   canSelectModel: boolean;
   canSelectThinking: boolean;
   modelSelectorProviders: ProviderSelectorProvider[];
   modelDisabled: boolean;
   comboboxProviderOptions: ComboboxOption[];
+  comboboxRoleOptions: ComboboxOption[];
   comboboxThinkingOptions: ComboboxOption[];
   displayProvider: string;
+  displayRole: string;
   displayThinking: string;
   openSelector: AgentControlSelector | null;
   providerAnchorRef: RefObject<View | null>;
+  roleAnchorRef: RefObject<View | null>;
   thinkingAnchorRef: RefObject<View | null>;
   providerPressableStyle: (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
+  rolePressableStyle: (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
   handleProviderPress: () => void;
+  handleRolePress: () => void;
   handleThinkingPress: () => void;
   handleProviderSelect: (id: string) => void;
+  handleRoleSelect: (id: string) => void;
   handleThinkingSelect: (id: string) => void;
   handleDesktopModelSelect: (providerId: string, modelId: string) => void;
   handleProviderOpenChange: (open: boolean) => void;
+  handleRoleOpenChange: (open: boolean) => void;
   handleThinkingOpenChange: (open: boolean) => void;
   handleOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
   handleNestedOpenChange: (selector: AgentControlSelector) => (nextOpen: boolean) => void;
@@ -807,6 +913,8 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
   const { t } = useTranslation();
   const {
     provider,
+    roleOptions,
+    selectedRoleId,
     providerOptions,
     selectedProviderId,
     selectedModelId,
@@ -823,24 +931,32 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     disabled,
     isModelLoading,
     canSelectProvider,
+    canSelectRole,
     canSelectModel,
     canSelectThinking,
     modelSelectorProviders,
     modelDisabled,
     comboboxProviderOptions,
+    comboboxRoleOptions,
     comboboxThinkingOptions,
     displayProvider,
+    displayRole,
     displayThinking,
     openSelector,
     providerAnchorRef,
+    roleAnchorRef,
     thinkingAnchorRef,
     providerPressableStyle,
+    rolePressableStyle,
     handleProviderPress,
+    handleRolePress,
     handleThinkingPress,
     handleProviderSelect,
+    handleRoleSelect,
     handleThinkingSelect,
     handleDesktopModelSelect,
     handleProviderOpenChange,
+    handleRoleOpenChange,
     handleThinkingOpenChange,
     handleOpenChange,
     handleNestedOpenChange,
@@ -864,6 +980,32 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
   const handleOpenFeatures = useCallback(() => handleOpenSheet("features"), [handleOpenSheet]);
   return (
     <>
+      {roleOptions && roleOptions.length > 0 ? (
+        <>
+          <ComboboxTrigger
+            ref={roleAnchorRef}
+            collapsable={false}
+            disabled={disabled || !canSelectRole}
+            onPress={handleRolePress}
+            style={rolePressableStyle}
+            accessibilityRole="button"
+            accessibilityLabel={t("agentControls.role.select")}
+            testID="agent-role-selector"
+          >
+            <Text style={styles.modeBadgeText}>{displayRole}</Text>
+          </ComboboxTrigger>
+          <Combobox
+            options={comboboxRoleOptions}
+            value={selectedRoleId ?? ""}
+            onSelect={handleRoleSelect}
+            searchable={false}
+            open={openSelector === "role"}
+            onOpenChange={handleRoleOpenChange}
+            anchorRef={roleAnchorRef}
+            desktopPlacement="top-start"
+          />
+        </>
+      ) : null}
       {providerOptions && providerOptions.length > 0 ? (
         <>
           <ComboboxTrigger
@@ -1014,6 +1156,16 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
 
 interface SheetAgentControlsContentProps {
   provider: string;
+  roleOptions?: AgentControlOption[];
+  selectedRoleId?: PaseoRoleId;
+  canSelectRole: boolean;
+  comboboxRoleOptions: ComboboxOption[];
+  displayRole: string;
+  roleAnchorRef: RefObject<View | null>;
+  rolePressableStyle: (state: PressableStateCallbackType) => StyleProp<ViewStyle>;
+  handleRolePress: () => void;
+  handleRoleSelect: (id: string) => void;
+  handleRoleOpenChange: (open: boolean) => void;
   selectedModelId?: string;
   selectedThinkingOptionId?: string;
   features?: AgentFeature[];
@@ -1054,6 +1206,16 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
   const { t } = useTranslation();
   const {
     provider,
+    roleOptions,
+    selectedRoleId,
+    canSelectRole,
+    comboboxRoleOptions,
+    displayRole,
+    roleAnchorRef,
+    rolePressableStyle,
+    handleRolePress,
+    handleRoleSelect,
+    handleRoleOpenChange,
     selectedModelId,
     selectedThinkingOptionId,
     features,
@@ -1149,26 +1311,59 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     </View>
   );
 
-  return canSelectModel ? (
-    <CompactModelSheet
-      providers={modelSelectorProviders}
-      selectedProvider={provider}
-      selectedModel={selectedModelId ?? ""}
-      onSelect={handleSheetModelSelect}
-      favoriteKeys={favoriteKeys}
-      onToggleFavorite={onToggleFavoriteModel}
-      isLoading={isModelLoading}
-      disabled={modelDisabled}
-      onOpen={onModelSelectorOpen}
-      onClose={onDropdownClose}
-      onRetryProvider={onRetryModelProvider}
-      isRetryingProvider={isRetryingModelProvider}
-      serverId={modelSelectorServerId}
-      glyphSize={glyphSize}
-    >
-      {sheetControls}
-    </CompactModelSheet>
-  ) : null;
+  return (
+    <>
+      {roleOptions && roleOptions.length > 0 ? (
+        <>
+          <ComboboxTrigger
+            ref={roleAnchorRef}
+            collapsable={false}
+            disabled={disabled || !canSelectRole}
+            onPress={handleRolePress}
+            style={rolePressableStyle}
+            accessibilityRole="button"
+            accessibilityLabel={t("agentControls.role.select")}
+            testID="agent-role-selector"
+          >
+            <Text style={styles.modeBadgeText}>{displayRole}</Text>
+          </ComboboxTrigger>
+          <Combobox
+            options={comboboxRoleOptions}
+            value={selectedRoleId ?? ""}
+            onSelect={handleRoleSelect}
+            searchable={false}
+            title={t("agentControls.role.title")}
+            open={openSelector === "role"}
+            onOpenChange={handleRoleOpenChange}
+            anchorRef={roleAnchorRef}
+            presentation="push"
+          />
+        </>
+      ) : null}
+      {canSelectModel ? (
+        <CompactModelSheet
+          providers={modelSelectorProviders}
+          selectedProvider={provider}
+          selectedModel={selectedModelId ?? ""}
+          onSelect={handleSheetModelSelect}
+          favoriteKeys={favoriteKeys}
+          onToggleFavorite={onToggleFavoriteModel}
+          isLoading={isModelLoading}
+          disabled={modelDisabled}
+          onOpen={onModelSelectorOpen}
+          onClose={onDropdownClose}
+          onRetryProvider={onRetryModelProvider}
+          isRetryingProvider={isRetryingModelProvider}
+          serverId={modelSelectorServerId}
+          glyphSize={glyphSize}
+        >
+          {sheetControls}
+        </CompactModelSheet>
+      ) : (
+        sheetControls
+      )}
+    </>
+  );
 }
 
 function DesktopFeatureItem({
@@ -1497,6 +1692,11 @@ export const AgentControls = memo(function AgentControls({
 
   const agentProvider = agent?.provider;
   const activeModelId = modelSelection.activeModelId;
+  const boundRoleId = resolveBoundRoleId(agent);
+  const boundRoleOptions = useMemo(
+    () => PASEO_ROLE_SUMMARIES.filter((role) => role.id === boundRoleId),
+    [boundRoleId],
+  );
 
   const handleSelectModel = useCallback(
     async (modelId: string) => {
@@ -1638,10 +1838,13 @@ export const AgentControls = memo(function AgentControls({
   return (
     <ControlledAgentControls
       provider={agent.provider}
+      roleOptions={boundRoleOptions}
+      selectedRoleId={boundRoleId}
       modelSelectorProviders={agentModelSelectorProviders}
       modelOptions={modelOptions}
       selectedModelId={modelSelection.activeModelId ?? undefined}
       onSelectModel={handleSelectModel}
+      modelSelectionDisabled={Boolean(agent.launchContract)}
       favoriteKeys={favoriteKeys}
       onToggleFavoriteModel={handleToggleFavoriteModel}
       thinkingOptions={thinkingOptions.length > 1 ? thinkingOptions : undefined}
@@ -1663,6 +1866,9 @@ export const AgentControls = memo(function AgentControls({
 });
 
 export function DraftAgentControls({
+  roleOptions,
+  selectedRole,
+  onSelectRole,
   providerDefinitions,
   selectedProvider,
   onSelectProvider: _onSelectProvider,
@@ -1742,6 +1948,13 @@ export function DraftAgentControls({
   return (
     <ControlledAgentControls
       provider={selectedProvider ?? ""}
+      roleOptions={roleOptions?.map((role) => ({
+        id: role.id,
+        label: role.label,
+        description: role.description,
+      }))}
+      selectedRoleId={selectedRole ?? undefined}
+      onSelectRole={onSelectRole}
       modelSelectorProviders={modelSelectorProviders}
       modelOptions={modelOptions}
       selectedModelId={selectedModel}

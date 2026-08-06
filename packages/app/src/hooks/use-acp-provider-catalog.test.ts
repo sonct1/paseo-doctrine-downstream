@@ -41,6 +41,7 @@ describe("ACP provider catalog", () => {
   it("uses PATH commands for entries that were binary distributions upstream", () => {
     expect(findProvider("amp-acp").command).toEqual(["amp-acp"]);
     expect(findProvider("cursor").command).toEqual(["cursor-agent", "acp"]);
+    expect(findProvider("gemini-antigravity").command).toEqual(["agy-acp", "--agy-binary", "agy"]);
     expect(findProvider("codewhale").command).toEqual(["codewhale", "serve", "--acp"]);
     expect(findProvider("devin").command).toEqual(["devin", "acp"]);
     expect(findProvider("goose").command).toEqual(["goose", "acp"]);
@@ -78,5 +79,20 @@ describe("ACP provider catalog", () => {
     expect(droidPatch.providers?.["factory-droid"]?.params).toEqual({
       supportsMcpServers: false,
     });
+  });
+
+  it("keeps native role selection out of provider connection JSON", () => {
+    expect(buildAcpProviderConfigPatch(findProvider("cursor")).providers?.cursor).toMatchObject({
+      extends: "acp",
+      command: ["cursor-agent", "acp"],
+    });
+    expect(
+      buildAcpProviderConfigPatch(findProvider("cursor")).providers?.cursor,
+    ).not.toHaveProperty("roleBinding");
+    expect(
+      buildAcpProviderConfigPatch(findProvider("gemini-antigravity")).providers?.[
+        "gemini-antigravity"
+      ],
+    ).not.toHaveProperty("roleBinding");
   });
 });

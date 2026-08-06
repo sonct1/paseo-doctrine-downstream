@@ -213,6 +213,7 @@ describe("translation resources", () => {
     expect(en.composer.github.title_mr).toBe("Attach issue or MR");
     expect(en.composer.github.searchPlaceholder_mr).toBe("Search issues and MRs...");
     expect(en.agentControls.provider.fallback).toBe("Provider");
+    expect(en.agentControls.role.fallback).toBe("Role");
     expect(en.agentControls.hints.model).toBe("Change model");
     expect(en.agentControls.hints.mode).toBe("Change mode");
     expect(en.agentControls.features.title).toBe("Features");

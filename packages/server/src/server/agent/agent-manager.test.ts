@@ -9245,3 +9245,173 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
 
   expect(onWorkspaceStateMayHaveChanged).not.toHaveBeenCalled();
 });
+
+test("role-bound create persists immutable binding and passes only launch instructions", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
+  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class RoleCaptureClient extends TestAgentClient {
+    launchContexts: Array<AgentLaunchContext | undefined> = [];
+
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      if (!input.config.model) throw new Error("missing test model");
+      return {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: input.config.model,
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+
+    override async createSession(
+      config: AgentSessionConfig,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return new TestAgentSession(config);
+    }
+
+    override async resumeSession(
+      handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return super.resumeSession(handle, config, launchContext);
+    }
+  }
+
+  const client = new RoleCaptureClient("codex");
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000116",
+  });
+
+  try {
+    const created = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+      roleId: "lead",
+    });
+
+    expect(client.launchContexts[0]?.roleBinding).toMatchObject({
+      roleId: "lead",
+      instructions: expect.stringContaining("Role: Lead"),
+    });
+    expect(created.config.systemPrompt).toBeUndefined();
+    expect(created.roleBinding?.instructions).toContain("Role: Lead");
+    expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({
+      providerId: "codex",
+      model: "gpt-5.4",
+      routeKind: "codex-subscription",
+      modelProviderId: "openai",
+      credentialConfigured: true,
+    });
+    expect(toAgentPayload(created).roleBinding).toMatchObject({
+      roleId: "lead",
+      provider: "codex",
+      injectionMethod: "codex-developer-instructions",
+      workspaceProtocol: { status: "bound", readership: "full" },
+    });
+    expect(toAgentPayload(created).roleBinding).not.toHaveProperty("instructions");
+    expect(toAgentPayload(created).launchContract).toMatchObject({
+      roleId: "lead",
+      providerId: "codex",
+      model: "gpt-5.4",
+      credentialConfigured: true,
+    });
+    expect(toAgentPayload(created).launchContract).not.toHaveProperty("providerBinding");
+
+    const stored = await storage.get(created.id);
+    expect(stored?.roleBinding?.instructions).toContain("Role: Lead");
+    expect(stored?.launchContract?.providerBinding).toMatchObject({
+      routeKind: "codex-subscription",
+      modelProviderId: "openai",
+    });
+    expect(stored?.config?.systemPrompt).toBeUndefined();
+
+    const exactInstructions = created.roleBinding?.instructions;
+    await manager.reloadAgentSession(created.id);
+    expect(client.launchContexts[1]?.roleBinding).toEqual({
+      roleId: "lead",
+      instructions: exactInstructions,
+    });
+    expect(client.launchContexts[1]?.providerLaunchBinding).toEqual(
+      client.launchContexts[0]?.providerLaunchBinding,
+    );
+
+    await expect(manager.setAgentModel(created.id, "gpt-5.4-mini")).rejects.toThrow(
+      "Cannot change model on role-bound agent",
+    );
+    expect(manager.getAgent(created.id)?.config.model).toBe("gpt-5.4");
+
+    await expect(
+      manager.reloadAgentSession(created.id, { systemPrompt: "replace standing role" }),
+    ).rejects.toThrow("Cannot override systemPrompt on a role-bound agent");
+    expect(manager.getAgent(created.id)?.roleBinding?.definitionDigest).toBe(
+      created.roleBinding?.definitionDigest,
+    );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects caller systemPrompt before provider launch", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-system-prompt-"));
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir, systemPrompt: "override" },
+        "00000000-0000-4000-8000-000000000117",
+        { workspaceId: undefined, roleId: "peer" },
+      ),
+    ).rejects.toThrow("Cannot set systemPrompt on a role-bound agent");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects a legacy role wrapper before state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-legacy-role-wrapper-"));
+  const client = new TestAgentClient("codex-lead");
+  const manager = new AgentManager({
+    clients: { "codex-lead": client },
+    providerDefinitions: {
+      "codex-lead": {
+        enabled: true,
+        derivedFromProviderId: "codex",
+        roleBindingSupport: {
+          status: "unsupported",
+          reason: "Legacy provider transport is already pinned to Paseo role 'lead'.",
+        },
+      },
+    },
+    logger,
+  });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex-lead", cwd: workdir },
+        "00000000-0000-4000-8000-000000000118",
+        { workspaceId: undefined, roleId: "lead" },
+      ),
+    ).rejects.toThrow("Legacy provider transport is already pinned");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

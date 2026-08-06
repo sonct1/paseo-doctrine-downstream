@@ -330,6 +330,258 @@ process.stdin.on("data", (chunk) => {
 }
 
 describe("Codex app-server provider", () => {
+  test("injects a Paseo role through native developer instructions and disables native agents", async () => {
+    let threadStartParams: Record<string, unknown> | undefined;
+    const appServer = createFakeCodexAppServer({
+      "thread/start": (params) => {
+        threadStartParams = params as Record<string, unknown>;
+        return { thread: { id: "role-thread" } };
+      },
+    });
+    const client = createProviderWithFakeAppServer(appServer);
+    const session = await client.createSession(
+      createConfig({
+        daemonAppendSystemPrompt: "GLOBAL APPEND",
+        extra: {
+          codex: {
+            developer_instructions: "provider override",
+            features: { multi_agent: true, multi_agent_v2: true },
+            agents: { enabled: true },
+          },
+        },
+      }),
+      {
+        roleBinding: {
+          roleId: "lead",
+          instructions: "PASEO ROLE LEAD",
+        },
+        providerLaunchBinding: {
+          providerId: "codex",
+          providerFamily: "codex",
+          model: "gpt-5.4",
+          credentialConfigured: true,
+          routeKind: "codex-subscription",
+          modelProviderId: "openai",
+          authMethod: "codex-native",
+        },
+      },
+    );
+
+    try {
+      await session.startTurn("start role-bound work");
+
+      expect(threadStartParams?.developerInstructions).toBe("GLOBAL APPEND\n\nPASEO ROLE LEAD");
+      expect(threadStartParams?.config).toMatchObject({
+        model_provider: "openai",
+        features: { multi_agent: false, multi_agent_v2: false },
+        agents: { enabled: false },
+      });
+      expect(threadStartParams?.config).not.toHaveProperty("developer_instructions");
+      appServer.assertNoErrors();
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("materializes built-in Codex only from ChatGPT subscription auth", async () => {
+    const subscriptionServer = createFakeCodexAppServer({
+      "account/read": () => ({ account: { type: "chatgpt", email: "human@example.com" } }),
+    });
+    const subscriptionProvider = createProviderWithFakeAppServer(subscriptionServer);
+
+    await expect(
+      subscriptionProvider.materializeProviderLaunchBinding({
+        config: createConfig(),
+        requestedModel: "gpt-5.4",
+      }),
+    ).resolves.toEqual({
+      providerId: "codex",
+      providerFamily: "codex",
+      model: "gpt-5.4",
+      credentialConfigured: true,
+      routeKind: "codex-subscription",
+      modelProviderId: "openai",
+      authMethod: "codex-native",
+    });
+    subscriptionServer.assertNoErrors();
+
+    const apiKeyServer = createFakeCodexAppServer({
+      "account/read": () => ({ account: { type: "apiKey" } }),
+    });
+    const apiKeyProvider = createProviderWithFakeAppServer(apiKeyServer);
+    await expect(
+      apiKeyProvider.materializeProviderLaunchBinding({
+        config: createConfig(),
+        requestedModel: "gpt-5.4",
+      }),
+    ).rejects.toThrow("requires configured ChatGPT authentication; found apiKey");
+    apiKeyServer.assertNoErrors();
+  });
+
+  test("custom Codex route fails closed on missing model, URL, credentialRef, or key", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "codex-custom-preflight-"));
+    const credentialFile = path.join(tempDir, "codex-proxy.json");
+    writeFileSync(credentialFile, JSON.stringify({ OPENAI_API_KEY: "sk-private" }), {
+      mode: 0o600,
+    });
+    const customProvider = {
+      id: "codex-proxy",
+      label: "Codex Proxy",
+      extends: "codex",
+      credentialRef: "codex-proxy",
+    };
+
+    try {
+      const configured = new CodexAppServerAgentClient(
+        createTestLogger(),
+        {
+          env: {
+            OPENAI_BASE_URL: "https://proxy.example",
+            PASEO_PROVIDER_CREDENTIAL_FILE: credentialFile,
+          },
+        },
+        { customProvider },
+      );
+      await expect(
+        configured.materializeProviderLaunchBinding({ config: createConfig() }),
+      ).rejects.toThrow("requires an explicit model");
+
+      const noUrl = new CodexAppServerAgentClient(
+        createTestLogger(),
+        { env: { PASEO_PROVIDER_CREDENTIAL_FILE: credentialFile } },
+        { customProvider },
+      );
+      await expect(
+        noUrl.materializeProviderLaunchBinding({
+          config: createConfig(),
+          requestedModel: "custom-model",
+        }),
+      ).rejects.toThrow("requires a base URL");
+
+      const noRef = new CodexAppServerAgentClient(
+        createTestLogger(),
+        {
+          env: {
+            OPENAI_BASE_URL: "https://proxy.example",
+            PASEO_PROVIDER_CREDENTIAL_FILE: credentialFile,
+          },
+        },
+        { customProvider: { ...customProvider, credentialRef: undefined } },
+      );
+      await expect(
+        noRef.materializeProviderLaunchBinding({
+          config: createConfig(),
+          requestedModel: "custom-model",
+        }),
+      ).rejects.toThrow("requires a credentialRef");
+
+      const noKey = new CodexAppServerAgentClient(
+        createTestLogger(),
+        {
+          env: {
+            OPENAI_BASE_URL: "https://proxy.example",
+            PASEO_PROVIDER_CREDENTIAL_FILE: path.join(tempDir, "missing.json"),
+          },
+        },
+        { customProvider },
+      );
+      await expect(
+        noKey.materializeProviderLaunchBinding({
+          config: createConfig(),
+          requestedModel: "custom-model",
+        }),
+      ).rejects.toThrow("credential 'codex-proxy' is not configured");
+
+      await expect(
+        configured.materializeProviderLaunchBinding({
+          config: createConfig({ model: "custom-model" }),
+          requestedModel: "custom-model",
+        }),
+      ).resolves.toMatchObject({
+        providerId: "codex-proxy",
+        model: "custom-model",
+        routeKind: "openai-compatible",
+        modelProviderId: "codex-proxy",
+        baseUrl: "https://proxy.example/v1",
+        credentialRef: "codex-proxy",
+        credentialConfigured: true,
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("bound custom route overrides mutable config with exact command-backed auth", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "codex-bound-route-"));
+    const credentialFile = path.join(tempDir, "codex-proxy.json");
+    writeFileSync(credentialFile, JSON.stringify({ OPENAI_API_KEY: "sk-private" }), {
+      mode: 0o600,
+    });
+    let threadStartParams: Record<string, unknown> | undefined;
+    const appServer = createFakeCodexAppServer({
+      "thread/start": (params) => {
+        threadStartParams = params as Record<string, unknown>;
+        return { thread: { id: "custom-route-thread" } };
+      },
+    });
+    const session = new CodexAppServerAgentSession(
+      createConfig({
+        model: "custom-model",
+        extra: {
+          codex: {
+            model_provider: "openai",
+            model_providers: { openai: { base_url: "https://wrong.example/v1" } },
+          },
+        },
+      }),
+      null,
+      createTestLogger(),
+      async () => appServer.child,
+      {},
+      false,
+      false,
+      false,
+      undefined,
+      "interactive",
+      "PASEO ROLE PEER",
+      {
+        providerId: "codex-proxy",
+        providerFamily: "codex",
+        model: "custom-model",
+        credentialConfigured: true,
+        routeKind: "openai-compatible",
+        modelProviderId: "codex-proxy",
+        authMethod: "credential-command",
+        baseUrl: "https://proxy.example/v1",
+        credentialRef: "codex-proxy",
+        credentialFile,
+      },
+    );
+
+    try {
+      await session.startTurn("use exact route");
+      expect(threadStartParams?.developerInstructions).toBe("PASEO ROLE PEER");
+      expect(threadStartParams?.config).toMatchObject({
+        model_provider: "codex-proxy",
+        model_providers: {
+          "codex-proxy": {
+            base_url: "https://proxy.example/v1",
+            wire_api: "responses",
+            auth: {
+              command: process.execPath,
+              args: ["-e", expect.stringContaining("OPENAI_API_KEY"), credentialFile],
+            },
+          },
+        },
+      });
+      expect(threadStartParams?.config).not.toHaveProperty("model_providers.codex-proxy.env_key");
+      appServer.assertNoErrors();
+    } finally {
+      await session.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("getAvailableModes includes auto-review when the Codex version supports it", async () => {
     const session = createSession({}, { autoReviewEnabled: true });
 
@@ -1163,7 +1415,6 @@ describe("Codex app-server provider", () => {
           name: "Custom Codex",
           base_url: "https://custom-relay.example.com/v1",
           env_key: "OPENAI_API_KEY",
-          requires_openai_auth: false,
           wire_api: "responses",
         },
       },
@@ -1212,7 +1463,6 @@ describe("Codex app-server provider", () => {
               "/private/credentials/codex-command-auth.json",
             ],
           },
-          requires_openai_auth: false,
           wire_api: "responses",
         },
       },
@@ -1814,6 +2064,37 @@ describe("Codex app-server provider", () => {
 
     expect(env.PASEO_PROVIDER_CREDENTIAL_FILE).toBe("/private/credentials/codex-command-auth.json");
     expect(env.OPENAI_API_KEY).toBeUndefined();
+  });
+
+  test("isolates every role-bound Codex route from ambient OpenAI credentials", () => {
+    const env = buildCodexAppServerEnv(
+      {
+        env: {
+          OPENAI_API_KEY: "sk-runtime",
+          OPENAI_BASE_URL: "https://runtime.example/v1",
+          CODEX_API_KEY: "codex-runtime",
+          CODEX_ACCESS_TOKEN: "access-runtime",
+        },
+      },
+      {
+        OPENAI_API_KEY: "sk-launch",
+        OPENAI_BASE_URL: "https://launch.example/v1",
+      },
+      {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: "gpt-5.4",
+        credentialConfigured: true,
+        routeKind: "codex-subscription",
+        modelProviderId: "openai",
+        authMethod: "codex-native",
+      },
+    );
+
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.OPENAI_BASE_URL).toBeUndefined();
+    expect(env.CODEX_API_KEY).toBeUndefined();
+    expect(env.CODEX_ACCESS_TOKEN).toBeUndefined();
   });
 
   test("projects request_user_input into a question permission and running timeline tool call", () => {

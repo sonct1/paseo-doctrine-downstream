@@ -892,6 +892,9 @@ describe("PiRpcAgentSession", () => {
         systemPrompt: "Agent prompt",
         daemonAppendSystemPrompt: "Daemon prompt",
       }),
+      {
+        roleBinding: { roleId: "peer", instructions: "Immutable Peer role" },
+      },
     );
 
     const actualLaunch = pi.recordedLaunches[0]!;
@@ -911,7 +914,7 @@ describe("PiRpcAgentSession", () => {
 
     await expect(
       applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths[0]!, "Pi project prompt"),
-    ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt");
+    ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt\n\nImmutable Peer role");
 
     await session.close();
   });
@@ -934,6 +937,9 @@ describe("PiRpcAgentSession", () => {
       },
       {
         daemonAppendSystemPrompt: "Daemon prompt",
+      },
+      {
+        roleBinding: { roleId: "peer", instructions: "Immutable Peer role" },
       },
     );
 
@@ -959,7 +965,7 @@ describe("PiRpcAgentSession", () => {
     ]);
     await expect(
       applyPaseoExtensionSystemPrompt(actualLaunch.extensionPaths[0]!, "Pi project prompt"),
-    ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt");
+    ).resolves.toBe("Pi project prompt\n\nAgent prompt\n\nDaemon prompt\n\nImmutable Peer role");
   });
 
   test("updates model and thinking through Pi runtime commands", async () => {

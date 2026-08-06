@@ -22,6 +22,7 @@ import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
 } from "./provider-launch-config.js";
+import type { ProviderRoleBindingSupport } from "@getpaseo/protocol/role-binding";
 import {
   buildProviderRegistry,
   shutdownAgentClients,
@@ -34,6 +35,7 @@ import {
   formatProviderDiagnosticError,
 } from "./providers/diagnostic-utils.js";
 import type { MutableDaemonConfig } from "../daemon-config-store.js";
+import { detectLegacyProviderRole, resolveProviderRoleBindingSupport } from "./role-binding.js";
 
 const DEFAULT_REFRESH_TIMEOUT_MS = 60_000;
 const DEFAULT_DIAGNOSTIC_TIMEOUT_MS = 120_000;
@@ -148,7 +150,14 @@ export interface ProviderDiagnosticResult {
 
 export interface AgentManagerProviderState {
   providerDefinitions: Partial<
-    Record<AgentProvider, { enabled: boolean; derivedFromProviderId: string | null }>
+    Record<
+      AgentProvider,
+      {
+        enabled: boolean;
+        derivedFromProviderId: string | null;
+        roleBindingSupport: ProviderRoleBindingSupport;
+      }
+    >
   >;
   clients: Partial<Record<AgentProvider, AgentClient>>;
 }
@@ -272,6 +281,7 @@ export class ProviderSnapshotManager {
       providerDefinitions[provider] = {
         enabled: definition.enabled,
         derivedFromProviderId: definition.derivedFromProviderId,
+        roleBindingSupport: this.getRoleBindingSupport(provider),
       };
       if (definition.enabled) {
         clients[provider] = this.ensureClient(provider, definition);
@@ -533,6 +543,7 @@ export class ProviderSnapshotManager {
         label: definition.label,
         description: definition.description,
         defaultModeId: definition.defaultModeId,
+        roleBinding: this.getRoleBindingSupport(provider),
         error: toErrorMessage(error),
       };
     }
@@ -568,6 +579,18 @@ export class ProviderSnapshotManager {
     return !isBuiltin && this.providerOverrides?.[provider]?.extends ? "custom" : "builtin";
   }
 
+  private getRoleBindingSupport(provider: AgentProvider) {
+    const providerOverride = this.providerOverrides?.[provider];
+    const legacyRoleId = detectLegacyProviderRole(providerOverride?.command);
+    return resolveProviderRoleBindingSupport(
+      provider,
+      this.providerRegistry[provider]?.derivedFromProviderId ?? null,
+      legacyRoleId,
+      providerOverride?.roleBinding,
+      providerOverride?.command,
+    );
+  }
+
   private createLoadingEntries(): Map<AgentProvider, ProviderSnapshotEntry> {
     const entries = new Map<AgentProvider, ProviderSnapshotEntry>();
     for (const provider of this.getProviderIds()) {
@@ -580,6 +603,7 @@ export class ProviderSnapshotManager {
         label: definition?.label,
         description: definition?.description,
         defaultModeId: definition?.defaultModeId ?? null,
+        roleBinding: this.getRoleBindingSupport(provider),
       });
     }
     return entries;
@@ -599,6 +623,7 @@ export class ProviderSnapshotManager {
         label: definition?.label,
         description: definition?.description,
         defaultModeId: definition?.defaultModeId ?? null,
+        roleBinding: this.getRoleBindingSupport(provider),
       };
 
       if (!definition?.enabled || !current || current.status === "loading") {
@@ -763,6 +788,7 @@ export class ProviderSnapshotManager {
       label: definition.label,
       description: definition.description,
       defaultModeId: definition.defaultModeId,
+      roleBinding: this.getRoleBindingSupport(provider),
     };
     const setEntry = (entry: ProviderSnapshotEntry) => {
       if (!this.isCurrentProviderLoad(snapshotCwd, provider, load)) {

@@ -154,6 +154,11 @@ export const en = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "Role",
+      select: "Select Paseo role",
+      title: "Paseo role",
+    },
     provider: {
       fallback: "Provider",
       select: "Select agent provider",

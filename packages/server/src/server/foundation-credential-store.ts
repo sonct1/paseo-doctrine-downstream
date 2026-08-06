@@ -55,7 +55,7 @@ export function resolveFoundationCredentialFile(paseoHome: string, credentialRef
   return path.join(credentialsRoot(paseoHome), `${validRef}.json`);
 }
 
-function validateCredentialFile(filePath: string): boolean {
+export function isFoundationCredentialFileConfigured(filePath: string): boolean {
   try {
     const stat = lstatSync(filePath);
     if (!stat.isFile() || (stat.mode & 0o077) !== 0) return false;
@@ -119,7 +119,7 @@ export class FoundationCredentialStore {
       this.writeCredentialFile(validRef, configuredApiKey);
     }
     const filePath = resolveFoundationCredentialFile(this.paseoHome, validRef);
-    return { credentialRef: validRef, configured: validateCredentialFile(filePath) };
+    return { credentialRef: validRef, configured: isFoundationCredentialFileConfigured(filePath) };
   }
 
   public set(credentialRef: string, rawApiKey: string): FoundationCredentialStatus {

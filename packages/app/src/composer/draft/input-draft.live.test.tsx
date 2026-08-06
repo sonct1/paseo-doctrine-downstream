@@ -47,6 +47,17 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     workingDir: "/repo",
     setWorkingDir: () => undefined,
     setWorkingDirFromUser: () => undefined,
+    allProviderEntries: [
+      {
+        provider: "codex",
+        status: "ready",
+        enabled: true,
+        roleBinding: {
+          status: "supported",
+          injectionMethod: "codex-developer-instructions",
+        },
+      },
+    ],
     providerDefinitions: [{ id: "codex", label: "Codex", modes: [{ id: "auto", label: "Auto" }] }],
     providerDefinitionMap: new Map(),
     agentDefinition: undefined,
@@ -216,6 +227,18 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     expect(getLatest().composerState?.agentControls.selectedProvider).toBe("codex");
+    expect(getLatest().composerState?.selectedRole).toBe("lead");
+    expect(getLatest().composerState?.agentControls.roleOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "lead", label: "Lead" }),
+        expect.objectContaining({ id: "peer", label: "Peer" }),
+        expect.objectContaining({ id: "supervisor", label: "Supervisor" }),
+      ]),
+    );
+    await act(async () => {
+      getLatest().composerState?.setRoleFromUser("peer");
+    });
+    expect(getLatest().composerState?.selectedRole).toBe("peer");
     expect(getLatest().composerState?.commandDraftConfig).toEqual({
       provider: "codex",
       cwd: "/repo",

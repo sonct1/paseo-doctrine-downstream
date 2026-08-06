@@ -191,6 +191,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
   await createAgentCommand(dependencies, {
     kind: "mcp",
     provider: "claude",
+    roleId: "peer",
     cwd: "/tmp/paseo-create-test",
     workspaceId: "ws-create-test",
     title: "provider default",
@@ -207,6 +208,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     undefined,
     expect.objectContaining({
       workspaceId: "ws-create-test",
+      roleId: "peer",
     }),
   );
 });

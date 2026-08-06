@@ -156,6 +156,11 @@ export const ar: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "الدور",
+      select: "اختيار دور Paseo",
+      title: "دور Paseo",
+    },
     provider: {
       fallback: "مزود",
       select: "حدد مزود الوكيل",

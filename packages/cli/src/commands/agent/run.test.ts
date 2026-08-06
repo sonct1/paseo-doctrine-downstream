@@ -105,4 +105,8 @@ describe("runRunCommand option validation", () => {
       /Unsupported worktree mode/,
     );
   });
+
+  it("rejects an unknown Paseo role before connecting", async () => {
+    await expectInvalidOptions({ role: "architect" }, /Unsupported Paseo role/);
+  });
 });

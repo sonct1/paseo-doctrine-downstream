@@ -6,6 +6,7 @@ import pino from "pino";
 
 import type {
   AgentPersistenceHandle,
+  AgentLaunchContext,
   AgentPermissionResponse,
   AgentSessionConfig,
   AgentStreamEvent,
@@ -93,10 +94,13 @@ export class OmpHarness {
   async start(
     config: Partial<AgentSessionConfig> = {},
     paseoTools?: PaseoToolCatalog,
+    launchContext?: AgentLaunchContext,
   ): Promise<void> {
     const session = await this.client.createSession(
       { provider: "omp", cwd: CWD, ...config },
-      paseoTools ? { paseoTools } : undefined,
+      paseoTools || launchContext
+        ? { ...launchContext, ...(paseoTools ? { paseoTools } : {}) }
+        : undefined,
     );
     if (!(session instanceof OmpAgentSession)) {
       throw new Error("OMP client returned a non-OMP session");
@@ -108,6 +112,7 @@ export class OmpHarness {
   async resume(
     history: OmpResumeHistory,
     overrides: Partial<AgentSessionConfig> = {},
+    launchContext?: AgentLaunchContext,
   ): Promise<void> {
     const sessionFile = await writeOmpHistory(history);
     const handle: AgentPersistenceHandle = {
@@ -116,7 +121,7 @@ export class OmpHarness {
       nativeHandle: sessionFile,
       metadata: { cwd: CWD },
     };
-    const session = await this.client.resumeSession(handle, overrides);
+    const session = await this.client.resumeSession(handle, overrides, launchContext);
     if (!(session instanceof OmpAgentSession)) {
       throw new Error("OMP client returned a non-OMP session");
     }

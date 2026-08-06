@@ -27,6 +27,11 @@ const mockState = vi.hoisted(() => {
         env?: Record<string, string>;
         providerParams?: unknown;
       }>,
+      antigravity: [] as Array<{
+        command: string[];
+        env?: Record<string, string>;
+        providerParams?: unknown;
+      }>,
       trae: [] as Array<{
         command: string[];
         env?: Record<string, string>;
@@ -43,18 +48,21 @@ const mockState = vi.hoisted(() => {
     },
     isCommandAvailable: vi.fn(async (_command: string) => false),
     runtimeModels: new Map<string, AgentModelDefinition[]>(),
+    fetchCatalogCalls: new Map<string, number>(),
     cursorListFeaturesConfigs: [] as AgentSessionConfig[],
     reset() {
       this.constructorArgs.claude = [];
       this.constructorArgs.codex = [];
       this.constructorArgs.copilot = [];
       this.constructorArgs.cursor = [];
+      this.constructorArgs.antigravity = [];
       this.constructorArgs.trae = [];
       this.constructorArgs.pi = [];
       this.constructorArgs.genericAcp = [];
       this.isCommandAvailable.mockReset();
       this.isCommandAvailable.mockImplementation(async (_command: string) => false);
       this.runtimeModels.clear();
+      this.fetchCatalogCalls.clear();
       this.cursorListFeaturesConfigs = [];
     },
   };
@@ -141,6 +149,10 @@ vi.mock("./providers/codex-app-server-agent.js", () => ({
     }
 
     async fetchCatalog(): Promise<ProviderCatalog> {
+      mockState.fetchCatalogCalls.set(
+        this.provider,
+        (mockState.fetchCatalogCalls.get(this.provider) ?? 0) + 1,
+      );
       return {
         models: mockState.runtimeModels.get(this.provider) ?? [],
         modes: [],
@@ -394,6 +406,48 @@ vi.mock("./providers/cursor-acp-agent.js", () => ({
           options: [{ id: "false", label: "Off" }],
         },
       ];
+    }
+  },
+}));
+
+vi.mock("./providers/antigravity-acp-agent.js", () => ({
+  AntigravityACPAgentClient: class AntigravityACPAgentClient {
+    readonly capabilities = {
+      supportsStreaming: true,
+      supportsSessionPersistence: true,
+      supportsDynamicModes: true,
+      supportsMcpServers: true,
+      supportsReasoningStream: true,
+      supportsToolInvocations: true,
+    };
+    readonly provider = "acp";
+
+    constructor(options: {
+      command: string[];
+      env?: Record<string, string>;
+      providerParams?: unknown;
+    }) {
+      mockState.constructorArgs.antigravity.push({
+        command: options.command,
+        env: options.env,
+        providerParams: options.providerParams,
+      });
+    }
+
+    async createSession(): Promise<never> {
+      throw new Error("not implemented");
+    }
+
+    async resumeSession(): Promise<never> {
+      throw new Error("not implemented");
+    }
+
+    async fetchCatalog(): Promise<ProviderCatalog> {
+      return { models: [], modes: [] };
+    }
+
+    async isAvailable(): Promise<boolean> {
+      return true;
     }
   },
 }));
@@ -706,6 +760,34 @@ test("cursor provider extending acp uses CursorACPAgentClient", () => {
       env: {
         CURSOR_AGENT_LOG: "debug",
       },
+      providerParams: undefined,
+    },
+  ]);
+  expect(mockState.constructorArgs.genericAcp).toEqual([]);
+});
+
+test("explicit Antigravity role driver uses AntigravityACPAgentClient", () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      "gemini-antigravity": {
+        extends: "acp",
+        label: "Antigravity",
+        command: ["agy-acp", "--agy-binary", "agy"],
+        roleBinding: { driver: "antigravity-custom-agent" },
+      },
+    },
+  });
+
+  expect(registry["gemini-antigravity"].createClient(logger).provider).toBe("gemini-antigravity");
+  expect(mockState.constructorArgs.antigravity).toEqual([
+    {
+      command: ["agy-acp", "--agy-binary", "agy"],
+      env: undefined,
+      providerParams: undefined,
+    },
+    {
+      command: ["agy-acp", "--agy-binary", "agy"],
+      env: undefined,
       providerParams: undefined,
     },
   ]);
@@ -1460,6 +1542,38 @@ describe("fetchCatalog", () => {
 
     expect(catalog.models.map((model) => model.id)).toEqual(["codex-runtime"]);
     expect(catalog.modes).toEqual([]);
+  });
+
+  test("custom Codex route never inherits subscription models", async () => {
+    mockState.runtimeModels.set("codex", [
+      { provider: "codex", id: "subscription-model", label: "Subscription Model" },
+    ]);
+    const registry = buildProviderRegistry(logger, {
+      providerOverrides: {
+        "codex-proxy": {
+          extends: "codex",
+          label: "Codex Proxy",
+          credentialRef: "codex-proxy",
+          env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+          additionalModels: [{ id: "custom-model", label: "Custom Model", isDefault: true }],
+        },
+      },
+    });
+
+    const definitionCatalog = await registry["codex-proxy"].fetchCatalog({
+      scope: "workspace",
+      cwd: "/tmp/catalog",
+      force: false,
+    });
+    const clientCatalog = await registry["codex-proxy"].createClient(logger).fetchCatalog({
+      scope: "workspace",
+      cwd: "/tmp/catalog",
+      force: false,
+    });
+
+    expect(definitionCatalog.models.map((model) => model.id)).toEqual(["custom-model"]);
+    expect(clientCatalog.models.map((model) => model.id)).toEqual(["custom-model"]);
+    expect(mockState.fetchCatalogCalls.get("codex") ?? 0).toBe(0);
   });
 
   test("replacement models skip runtime model discovery but preserve additionalModels", async () => {

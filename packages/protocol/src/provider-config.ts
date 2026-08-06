@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentProvider } from "./agent-types.js";
 import { AgentProviderSchema } from "./provider-manifest.js";
+import { ProviderNativeRoleBindingConfigSchema } from "./role-binding.js";
 
 const ProviderCommandDefaultSchema = z.object({
   mode: z.literal("default"),
@@ -70,6 +71,7 @@ export const ProviderOverrideSchema = z.object({
   additionalModels: z.array(ProviderProfileModelSchema).optional(),
   disallowedTools: z.array(z.string()).optional(),
   paseoTools: ProviderPaseoToolsPolicySchema.optional(),
+  roleBinding: ProviderNativeRoleBindingConfigSchema.optional(),
   credentialRef: z
     .string()
     .regex(/^[a-z][a-z0-9-]{0,63}$/u)
@@ -126,6 +128,14 @@ export const ProviderOverridesSchema = z
           code: z.ZodIssueCode.custom,
           path: [providerId, "command"],
           message: `Provider "${providerId}" extending "acp" must declare command.`,
+        });
+      }
+
+      if (provider.roleBinding && provider.extends !== "acp") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [providerId, "roleBinding"],
+          message: `Provider "${providerId}" may declare roleBinding only when it extends "acp".`,
         });
       }
     }

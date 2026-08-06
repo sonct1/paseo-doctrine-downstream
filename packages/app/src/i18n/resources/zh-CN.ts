@@ -156,6 +156,11 @@ export const zhCN: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "角色",
+      select: "选择 Paseo 角色",
+      title: "Paseo 角色",
+    },
     provider: {
       fallback: "Provider",
       select: "选择 Agent Provider",

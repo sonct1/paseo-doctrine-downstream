@@ -32,6 +32,8 @@ function createSnapshot(
     persistence: input.persistence ?? null,
     title: input.title ?? null,
     labels: (input.labels ?? {}) as AgentSnapshotPayload["labels"],
+    roleBinding: input.roleBinding,
+    launchContract: input.launchContract,
   };
 }
 
@@ -66,6 +68,26 @@ describe("normalizeAgentSnapshot", () => {
 
     expect(agent.parentAgentId).toBe("parent-1");
     expect(agent.labels).toEqual(labels);
+  });
+
+  it("retains the secret-safe immutable launch readback", () => {
+    const launchContract: NonNullable<AgentSnapshotPayload["launchContract"]> = {
+      version: 1,
+      contractDigest: "a".repeat(64),
+      roleId: "lead",
+      providerId: "codex-proxy",
+      providerFamily: "codex",
+      model: "custom-model",
+      routeKind: "openai-compatible",
+      modelProviderId: "codex-proxy",
+      authMethod: "credential-command",
+      credentialConfigured: true,
+      createdAt: "2026-08-06T00:00:00.000Z",
+    };
+
+    expect(
+      normalizeAgentSnapshot(createSnapshot({ launchContract }), "server-1").launchContract,
+    ).toEqual(launchContract);
   });
 
   it("trims whitespace around the parent label", () => {

@@ -15,6 +15,7 @@ import type { AgentManager, CreateAgentOptions, ManagedAgent } from "../agent-ma
 import type { AgentPromptInput, AgentRunOptions, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentStorage } from "../agent-storage.js";
 import type { AgentOwner } from "../agent-owner.js";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
@@ -57,6 +58,7 @@ export interface CreateAgentFromSessionInput {
   kind: "session";
   config: AgentSessionConfig;
   workspaceId: string;
+  roleId?: PaseoRoleId;
   worktreeName?: string;
   initialPrompt?: string;
   clientMessageId?: string;
@@ -79,6 +81,7 @@ export interface CreateAgentFromSessionInput {
 export interface CreateAgentFromMcpInput {
   kind: "mcp";
   provider: string;
+  roleId?: PaseoRoleId;
   title: string;
   initialPrompt?: string;
   config?: Partial<AgentSessionConfig>;
@@ -287,6 +290,7 @@ async function resolveSessionCreateAgent(
       // agent belongs to that workspace, not the source one. createdWorkspaceId
       // is the freshly created worktree's workspace.
       workspaceId: requireResolvedWorkspaceId(workspaceId),
+      roleId: input.roleId,
     },
     prompt: hasPromptContent ? prompt : undefined,
     runOptions,
@@ -358,6 +362,7 @@ async function resolveMcpCreateAgent(
       workspaceId: intent.workspaceId,
       owner: input.owner,
       env: input.env,
+      roleId: input.roleId,
     },
     prompt: trimmedPrompt ? trimmedPrompt : undefined,
     setupContinuation,

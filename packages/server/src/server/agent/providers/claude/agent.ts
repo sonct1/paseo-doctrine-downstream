@@ -386,6 +386,7 @@ interface ClaudeAgentSessionOptions {
   handle?: AgentPersistenceHandle;
   agentId?: string;
   launchEnv?: Record<string, string>;
+  roleInstructions?: string;
   persistSession?: boolean;
   logger: Logger;
   queryFactory?: ClaudeQueryFactory;
@@ -1478,6 +1479,7 @@ export class ClaudeAgentClient implements AgentClient {
       runtimeSettings: this.runtimeSettings,
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
+      roleInstructions: launchContext?.roleBinding?.instructions,
       persistSession: options?.persistSession,
       logger: this.logger,
       queryFactory: this.queryFactory,
@@ -1507,6 +1509,7 @@ export class ClaudeAgentClient implements AgentClient {
       handle,
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
+      roleInstructions: launchContext?.roleBinding?.instructions,
       logger: this.logger,
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
@@ -1973,6 +1976,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly config: ClaudeAgentConfig;
   private readonly launchEnv?: Record<string, string>;
   private readonly agentId?: string;
+  private readonly roleInstructions?: string;
   private readonly defaults?: { agents?: Record<string, AgentDefinition> };
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly persistSession?: boolean;
@@ -2036,6 +2040,7 @@ class ClaudeAgentSession implements AgentSession {
     assertClaudeThinkingOptionSupported(config.model, config.thinkingOptionId);
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
+    this.roleInstructions = options.roleInstructions;
     this.defaults = options.defaults;
     this.runtimeSettings = options.runtimeSettings;
     this.persistSession = options.persistSession;
@@ -3025,7 +3030,11 @@ class ClaudeAgentSession implements AgentSession {
 
   private buildAppendedSystemPrompt(): string {
     return (
-      composeSystemPromptParts(this.config.systemPrompt, this.config.daemonAppendSystemPrompt) ?? ""
+      composeSystemPromptParts(
+        this.config.systemPrompt,
+        this.config.daemonAppendSystemPrompt,
+        this.roleInstructions,
+      ) ?? ""
     );
   }
 
@@ -3130,7 +3139,29 @@ class ClaudeAgentSession implements AgentSession {
         ...this.runtimeSettings.disallowedTools,
       ];
     }
+    this.applyRoleBindingOptions(base, appendedSystemPrompt);
     return base;
+  }
+
+  private applyRoleBindingOptions(base: ClaudeOptions, appendedSystemPrompt: string): void {
+    if (!this.roleInstructions) return;
+
+    base.systemPrompt = {
+      type: "preset",
+      preset: "claude_code",
+      append: appendedSystemPrompt,
+    };
+    base.agents = {};
+    base.disallowedTools = Array.from(
+      new Set([
+        ...(base.disallowedTools ?? []),
+        "Agent",
+        "Task",
+        "TeamCreate",
+        "TeamDelete",
+        "SendMessage",
+      ]),
+    );
   }
 
   private buildSettingsOptions(

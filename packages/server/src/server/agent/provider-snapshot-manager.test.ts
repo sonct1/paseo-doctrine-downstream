@@ -127,6 +127,109 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
+  test("native role capability excludes exact legacy role wrappers without inferring provider names", () => {
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: {
+        "codex-lead": {
+          extends: "codex",
+          label: "Legacy Codex Lead",
+          command: ["/opt/paseo/codex-profile", "lead"],
+        },
+        "clean-codex": {
+          extends: "codex",
+          label: "Clean Codex Transport",
+        },
+      },
+    });
+    try {
+      const snapshot = manager.getSnapshot("/tmp/project");
+      expect(snapshot.find((entry) => entry.provider === "codex")?.roleBinding).toMatchObject({
+        status: "supported",
+      });
+      expect(snapshot.find((entry) => entry.provider === "codex-lead")?.roleBinding).toMatchObject({
+        status: "unsupported",
+      });
+      expect(snapshot.find((entry) => entry.provider === "clean-codex")?.roleBinding).toMatchObject(
+        { status: "supported" },
+      );
+
+      expect(
+        manager.getAgentManagerProviderState().providerDefinitions["codex-lead"]
+          ?.roleBindingSupport,
+      ).toMatchObject({ status: "unsupported" });
+    } finally {
+      manager.destroy();
+    }
+  });
+
+  test("auto-detects qualified native ACP role drivers without role-specific provider JSON", () => {
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: {
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+        },
+        "gemini-antigravity": {
+          extends: "acp",
+          label: "Antigravity",
+          command: ["agy-acp", "--agy-binary", "agy"],
+        },
+        "plain-acp": {
+          extends: "acp",
+          label: "Plain ACP",
+          command: ["plain-acp"],
+        },
+      },
+    });
+    try {
+      const snapshot = manager.getSnapshot("/tmp/project");
+      expect(snapshot.find((entry) => entry.provider === "cursor")?.roleBinding).toMatchObject({
+        status: "supported",
+        injectionMethod: "cursor-project-rule-capsule",
+      });
+      expect(
+        snapshot.find((entry) => entry.provider === "gemini-antigravity")?.roleBinding,
+      ).toMatchObject({
+        status: "supported",
+        injectionMethod: "antigravity-custom-agent",
+      });
+      expect(snapshot.find((entry) => entry.provider === "plain-acp")?.roleBinding).toMatchObject({
+        status: "unsupported",
+      });
+    } finally {
+      manager.destroy();
+    }
+  });
+
+  test("fails closed for the retired Cursor plugin driver", () => {
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: {
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+          roleBinding: { driver: "cursor-plugin" },
+        },
+      },
+    });
+    try {
+      expect(
+        manager.getSnapshot("/tmp/project").find((entry) => entry.provider === "cursor"),
+      ).toMatchObject({
+        roleBinding: {
+          status: "unsupported",
+          reason: expect.stringContaining("retired"),
+        },
+      });
+    } finally {
+      manager.destroy();
+    }
+  });
+
   test("providerOverrides with enabled:false marks the provider as unavailable without probing", async () => {
     const isAvailable = vi.fn(async () => true);
     const fetchCatalog = vi.fn(async () => ({

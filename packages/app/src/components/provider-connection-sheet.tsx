@@ -39,6 +39,7 @@ function useProviderConnectionForm(input: {
       mode: input.mode,
       providerId: input.provider,
       providerLabel: input.providerLabel,
+      modelId: "",
       baseUrl: input.baseUrl,
     }),
   );
@@ -94,7 +95,18 @@ export function ProviderConnectionSheet({
         providers: {
           [targetProvider]: {
             ...(mode === "create"
-              ? { extends: "codex", label: state.providerLabel.trim(), enabled: true }
+              ? {
+                  extends: "codex",
+                  label: state.providerLabel.trim(),
+                  enabled: true,
+                  additionalModels: [
+                    {
+                      id: state.modelId.trim(),
+                      label: state.modelId.trim(),
+                      isDefault: true,
+                    },
+                  ],
+                }
               : {}),
             credentialRef: targetCredentialRef,
             env: {
@@ -187,6 +199,19 @@ export function ProviderConnectionSheet({
                 onChangeText={model.setProviderLabel}
                 autoCorrect={false}
                 placeholder="Codex proxy"
+              />
+            </Field>
+            <Field
+              label={t("settings.providers.models.modelId")}
+              testID="provider-connection-model-id"
+            >
+              <FormTextInput
+                size={controlSize}
+                value={state.modelId}
+                onChangeText={model.setModelId}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={t("settings.providers.models.modelIdPlaceholder")}
               />
             </Field>
           </>

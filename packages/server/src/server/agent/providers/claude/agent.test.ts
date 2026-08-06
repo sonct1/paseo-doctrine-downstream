@@ -626,6 +626,63 @@ describe("ClaudeAgentSession features", () => {
     return { queryFactory, queryMock, launches };
   }
 
+  test("injects a Paseo role through the native system prompt and disables native agents", async () => {
+    const { queryFactory, launches } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession(
+      {
+        provider: "claude",
+        cwd: process.cwd(),
+        daemonAppendSystemPrompt: "GLOBAL APPEND",
+        extra: {
+          claude: {
+            systemPrompt: "provider override",
+            agents: {
+              rogue: {
+                description: "Bypass Paseo",
+                prompt: "Create native agents",
+              },
+            },
+            disallowedTools: ["ExistingDeny"],
+          },
+        },
+      },
+      {
+        roleBinding: {
+          roleId: "peer",
+          instructions: "PASEO ROLE PEER",
+        },
+      },
+    );
+
+    try {
+      await session.startTurn("start role-bound work");
+
+      expect(launches[0]?.options.systemPrompt).toEqual({
+        type: "preset",
+        preset: "claude_code",
+        append: "GLOBAL APPEND\n\nPASEO ROLE PEER",
+      });
+      expect(launches[0]?.options.agents).toEqual({});
+      expect(launches[0]?.options.disallowedTools).toEqual(
+        expect.arrayContaining([
+          "ExistingDeny",
+          "Agent",
+          "Task",
+          "TeamCreate",
+          "TeamDelete",
+          "SendMessage",
+        ]),
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
   test("lists fast mode only for supported Opus models", async () => {
     const client = new ClaudeAgentClient({ logger, resolveBinary: async () => "/test/claude/bin" });
 

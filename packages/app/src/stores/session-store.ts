@@ -33,6 +33,7 @@ import type {
   AgentPersistenceHandle,
 } from "@getpaseo/protocol/agent-types";
 import type {
+  AgentSnapshotPayload,
   ServerInfoStatusPayload,
   ProjectPlacementPayload,
   ServerCapabilities,
@@ -142,6 +143,8 @@ export interface Agent {
   parentAgentId: string | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
+  roleBinding?: AgentSnapshotPayload["roleBinding"];
+  launchContract?: AgentSnapshotPayload["launchContract"];
 }
 
 export interface WorkspaceDescriptor {

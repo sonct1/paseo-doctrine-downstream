@@ -104,7 +104,7 @@ Host và app phải cùng hỗ trợ feature `foundationCredentials`.
 
 1. Mở **Settings → Host → Providers**.
 2. Trong **Add provider**, chọn **OpenAI-compatible → Add**.
-3. Nhập Provider ID, Name, Responses Base URL và API key riêng.
+3. Nhập Provider ID, Name, exact Model ID, Responses Base URL và API key riêng.
 4. Chọn **Save**. Agent mới dùng provider mới ngay; agent đang chạy giữ launch config cũ.
 
 Base URL phải là absolute HTTPS URL, không chứa embedded credential, query hoặc fragment. WebUI chuẩn hóa
@@ -114,17 +114,16 @@ suffix `/v1`. Provider ID chỉ dùng lowercase letter, number và hyphen, bắt
 đang có. **Delete API key** là action destructive riêng và có confirmation; xóa provider config không tự
 xóa secret để tránh phá provider alias khác đang dùng chung `credentialRef`.
 
-Nhiều role-specific provider có thể dùng chung một `credentialRef`; WebUI phải giữ ref hiện có khi sửa
-endpoint hoặc rotate key, thay vì đổi ref sang provider ID của alias. Xóa shared credential sẽ làm mọi
-provider dùng ref đó fail closed cho tới khi lưu key mới.
+Nhiều transport alias có thể dùng chung một `credentialRef`; WebUI phải giữ ref hiện có khi sửa endpoint
+hoặc rotate key, thay vì đổi ref sang provider ID của alias. Xóa shared credential sẽ làm mọi provider dùng
+ref đó fail closed cho tới khi lưu key mới.
 
-Provider OpenAI-compatible mới chỉ là transport/cost route, không tự chứng minh role binding. Provider
-list hiển thị **Configured · qualification pending** và không đếm inherited model catalog như endpoint
-evidence. Muốn dùng Lead, Peer hoặc Supervisor của Foundation, giữ exact role-specific provider command từ
-`foundation/dist/templates/paseo-provider-overrides.example.json`, rồi dùng **Connection** để điền endpoint
-và credential cho provider đó. Chỉ enable sau fresh role/tool canary và authoritative
-`paseo agent inspect <agent-id> --json` readback. Agent tự mô tả provider/model không phải route evidence.
-Wrapper role-specific cần `jq`; `paseo-foundation inspect` báo path/version của tool này.
+Provider OpenAI-compatible mới chỉ là transport/cost route; role được chọn độc lập trong create flow.
+WebUI đi theo `workspace → role → provider → model/config → spawn`. Daemon chỉ spawn sau khi compose được
+immutable launch contract và preflight đủ exact model, URL, `credentialRef` cùng configured key. Custom
+catalog không kế thừa model subscription. Sau fresh canary, dùng authoritative
+`paseo agent inspect <agent-id> --json` để đọc effective `Role`, `ProviderId`, `Model` và
+`CredentialConfigured`; agent tự mô tả route không phải evidence.
 
 API key đi qua `foundation.credentials.set.request`, được daemon ghi trực tiếp vào private
 `PASEO_HOME/config.json` tại:
@@ -136,8 +135,9 @@ agents.credentials.<credentialRef>.OPENAI_API_KEY
 `config.json` dùng private permission `0600`. Daemon đồng thời materialize một private runtime projection
 tại `PASEO_HOME/credentials/providers/<credentialRef>.json` để tương thích với command-backed auth hiện
 tại; file projection được regenerate từ config sau restart. Mutable provider config chỉ giữ
-`credentialRef`, base URL và credential-file path; config RPC, status RPC, inspect output và WebUI không
-trả key. Key không nằm trong process arguments hoặc mutable provider environment.
+`credentialRef`, base URL và model metadata. Daemon tự resolve private credential-file path cho
+command-backed auth; config RPC, status RPC, inspect output và WebUI không trả key hoặc path đó. Key không
+nằm trong process arguments hoặc mutable provider environment.
 
 Không đặt `OPENAI_API_KEY`, token, password hoặc secret vào mutable provider `env`; protocol tiếp tục
 reject các field đó. Provider config có thể giữ non-secret metadata như `OPENAI_BASE_URL`.

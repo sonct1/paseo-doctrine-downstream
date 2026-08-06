@@ -113,6 +113,7 @@ export interface ProviderSnapshotEntry {
   label?: string;
   description?: string;
   defaultModeId?: string | null;
+  roleBinding?: import("@getpaseo/protocol/role-binding").ProviderRoleBindingSupport;
 }
 
 export interface AgentCreateConfigParent {
@@ -584,9 +585,46 @@ export interface AgentSessionConfig {
   internal?: boolean;
 }
 
+interface ProviderLaunchBindingBase {
+  providerId: AgentProvider;
+  providerFamily: string;
+  model: string;
+  credentialConfigured: boolean | null;
+}
+
+export type ProviderLaunchBinding =
+  | (ProviderLaunchBindingBase & {
+      routeKind: "codex-subscription";
+      modelProviderId: "openai";
+      authMethod: "codex-native";
+    })
+  | (ProviderLaunchBindingBase & {
+      routeKind: "openai-compatible";
+      modelProviderId: string;
+      authMethod: "credential-command";
+      baseUrl: string;
+      credentialRef: string;
+      credentialFile: string;
+    })
+  | (ProviderLaunchBindingBase & {
+      routeKind: "provider-native";
+      modelProviderId: null;
+      authMethod: "provider-native";
+    });
+
 export interface AgentLaunchContext {
   agentId?: string;
   env?: Record<string, string>;
+  /**
+   * Daemon-owned, immutable Foundation role instructions. Clients cannot set
+   * this field; provider adapters map it to their native durable channel.
+   */
+  roleBinding?: {
+    roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId;
+    instructions: string;
+  };
+  /** Exact daemon-owned provider route paired with the role for this session. */
+  providerLaunchBinding?: ProviderLaunchBinding;
   /**
    * Runtime-only internal Paseo tools. This must never be persisted into
    * AgentSessionConfig; providers may adapt it to their native tool surface.
@@ -696,6 +734,14 @@ export interface AgentClient {
     launchContext?: AgentLaunchContext,
     options?: AgentResumeSessionOptions,
   ): Promise<AgentSession>;
+  /**
+   * Materialize and preflight the exact non-secret route used by a role-bound
+   * session. Codex implements this for subscription and custom routes.
+   */
+  materializeProviderLaunchBinding?(input: {
+    config: AgentSessionConfig;
+    requestedModel?: string;
+  }): Promise<ProviderLaunchBinding>;
   /**
    * Discover models and modes together. Implementations may use one upstream
    * process, separate upstream calls, static modes, or private helpers; callers

@@ -15,6 +15,7 @@ import { parseDuration } from "../../utils/duration.js";
 import { collectMultiple } from "../../utils/command-options.js";
 import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { buildWorkspaceSource } from "../workspace/create.js";
+import { PaseoRoleIdSchema, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
 export { resolveProviderAndModel } from "../../utils/provider-model.js";
 
@@ -28,6 +29,7 @@ export function addRunOptions(cmd: Command): Command {
       // ownership transfer. Added in v0.2.0; remove after 2027-01-17.
       .addOption(new Option("--detach", "Legacy alias for --background").hideHelp())
       .option("--title <title>", "Assign a title to the agent")
+      .option("--role <role>", "Paseo Foundation role: lead, peer, or supervisor")
       .addOption(new Option("--name <name>", "Hidden alias for --title").hideHelp())
       .option(
         "--provider <provider>",
@@ -110,6 +112,7 @@ export interface AgentRunOptions extends CommandOptions {
   background?: boolean;
   detach?: boolean;
   title?: string;
+  role?: string;
   name?: string;
   provider?: string;
   model?: string;
@@ -383,6 +386,7 @@ function validateRunOptions(prompt: string, options: AgentRunOptions, outputSche
   }
 
   validateRunWorkspaceOptions(options);
+  parseRoleOption(options.role);
 
   if (outputSchema && runsInBackground(options)) {
     throw {
@@ -391,6 +395,19 @@ function validateRunOptions(prompt: string, options: AgentRunOptions, outputSche
       details: "Structured output requires waiting for the agent to finish",
     } satisfies CommandError;
   }
+}
+
+function parseRoleOption(role: string | undefined): PaseoRoleId | undefined {
+  if (!role) return undefined;
+  const parsed = PaseoRoleIdSchema.safeParse(role.trim().toLowerCase());
+  if (!parsed.success) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: `Unsupported Paseo role: ${role}`,
+      details: "Use --role lead, --role peer, or --role supervisor",
+    } satisfies CommandError;
+  }
+  return parsed.data;
 }
 
 function runsInBackground(options: Pick<AgentRunOptions, "background" | "detach">): boolean {
@@ -593,6 +610,7 @@ export async function runRunCommand(
   const waitTimeoutMs = parseWaitTimeoutOption(options.waitTimeout);
 
   const resolvedProviderModel = resolveProviderAndModel(options);
+  const roleId = parseRoleOption(options.role);
   const resolvedTitle = options.title ?? options.name;
 
   const client = await connectToDaemonOrThrow(options.host, host);
@@ -631,6 +649,7 @@ export async function runRunCommand(
             provider: resolvedProviderModel.provider,
             cwd: runCwd,
             workspaceId,
+            roleId,
             callerAgentId,
             title: resolvedTitle,
             modeId: options.mode,
@@ -702,6 +721,7 @@ export async function runRunCommand(
       provider: resolvedProviderModel.provider,
       cwd: runCwd,
       workspaceId,
+      roleId,
       callerAgentId,
       title: resolvedTitle,
       modeId: options.mode,

@@ -15,6 +15,28 @@ interface AgentInspect {
   Id: string;
   Name: string;
   Provider: string;
+  Role: string | null;
+  RoleBinding: {
+    DefinitionVersion: string;
+    DefinitionDigest: string;
+    BindingDigest: string;
+    InjectionMethod: string;
+    Qualification: string;
+    ProtocolStatus: string;
+    ProtocolDigest: string | null;
+  } | null;
+  LaunchContract: {
+    Version: number;
+    ContractDigest: string;
+    ProviderId: string;
+    ProviderFamily: string;
+    Model: string;
+    RouteKind: string;
+    ModelProviderId: string | null;
+    AuthMethod: string;
+    CredentialConfigured: boolean | null;
+  } | null;
+  CredentialConfigured: boolean | null;
   Model: string;
   Thinking: string;
   Status: string;
@@ -125,13 +147,45 @@ function buildCapabilities(snapshot: AgentSnapshotPayload): AgentInspect["Capabi
   };
 }
 
+function buildRoleBinding(snapshot: AgentSnapshotPayload): AgentInspect["RoleBinding"] {
+  if (!snapshot.roleBinding) return null;
+  return {
+    DefinitionVersion: snapshot.roleBinding.definitionVersion,
+    DefinitionDigest: snapshot.roleBinding.definitionDigest,
+    BindingDigest: snapshot.roleBinding.bindingDigest,
+    InjectionMethod: snapshot.roleBinding.injectionMethod,
+    Qualification: snapshot.roleBinding.qualification,
+    ProtocolStatus: snapshot.roleBinding.workspaceProtocol.status,
+    ProtocolDigest: snapshot.roleBinding.workspaceProtocol.digest ?? null,
+  };
+}
+
+function buildLaunchContract(snapshot: AgentSnapshotPayload): AgentInspect["LaunchContract"] {
+  if (!snapshot.launchContract) return null;
+  return {
+    Version: snapshot.launchContract.version,
+    ContractDigest: snapshot.launchContract.contractDigest,
+    ProviderId: snapshot.launchContract.providerId,
+    ProviderFamily: snapshot.launchContract.providerFamily,
+    Model: snapshot.launchContract.model,
+    RouteKind: snapshot.launchContract.routeKind,
+    ModelProviderId: snapshot.launchContract.modelProviderId,
+    AuthMethod: snapshot.launchContract.authMethod,
+    CredentialConfigured: snapshot.launchContract.credentialConfigured,
+  };
+}
+
 /** Convert agent snapshot to inspection data */
 function toInspectData(snapshot: AgentSnapshotPayload): AgentInspect {
   return {
     Id: snapshot.id,
     Name: snapshot.title ?? "-",
     Provider: snapshot.provider,
-    Model: resolveModel(snapshot) ?? "-",
+    Role: snapshot.launchContract?.roleId ?? snapshot.roleBinding?.roleId ?? null,
+    RoleBinding: buildRoleBinding(snapshot),
+    LaunchContract: buildLaunchContract(snapshot),
+    CredentialConfigured: snapshot.launchContract?.credentialConfigured ?? null,
+    Model: snapshot.launchContract?.model ?? resolveModel(snapshot) ?? "-",
     Thinking: snapshot.effectiveThinkingOptionId ?? "auto",
     Status: snapshot.status,
     Archived: snapshot.archivedAt != null,
@@ -160,6 +214,11 @@ function toInspectRows(agent: AgentInspect): InspectRow[] {
     { key: "Id", value: agent.Id },
     { key: "Name", value: agent.Name },
     { key: "Provider", value: agent.Provider },
+    { key: "Role", value: agent.Role ?? "null" },
+    {
+      key: "CredentialConfigured",
+      value: agent.CredentialConfigured === null ? "unknown" : String(agent.CredentialConfigured),
+    },
     { key: "Model", value: agent.Model },
     { key: "Thinking", value: agent.Thinking },
     { key: "Status", value: agent.Status },
@@ -170,6 +229,20 @@ function toInspectRows(agent: AgentInspect): InspectRow[] {
     { key: "CreatedAt", value: agent.CreatedAt },
     { key: "UpdatedAt", value: agent.UpdatedAt },
   ];
+
+  if (agent.RoleBinding) {
+    rows.push({
+      key: "RoleBinding",
+      value: `Version: ${agent.RoleBinding.DefinitionVersion}, Definition: ${agent.RoleBinding.DefinitionDigest}, Binding: ${agent.RoleBinding.BindingDigest}, Injection: ${agent.RoleBinding.InjectionMethod}, Qualification: ${agent.RoleBinding.Qualification}, Protocol: ${agent.RoleBinding.ProtocolStatus}${agent.RoleBinding.ProtocolDigest ? ` (${agent.RoleBinding.ProtocolDigest})` : ""}`,
+    });
+  }
+
+  if (agent.LaunchContract) {
+    rows.push({
+      key: "LaunchContract",
+      value: `Version: ${agent.LaunchContract.Version}, Digest: ${agent.LaunchContract.ContractDigest}, ProviderId: ${agent.LaunchContract.ProviderId}, Family: ${agent.LaunchContract.ProviderFamily}, Model: ${agent.LaunchContract.Model}, Route: ${agent.LaunchContract.RouteKind}, ModelProviderId: ${agent.LaunchContract.ModelProviderId ?? "null"}, Auth: ${agent.LaunchContract.AuthMethod}`,
+    });
+  }
 
   if (agent.LastUsage) {
     rows.push({

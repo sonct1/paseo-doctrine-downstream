@@ -33,6 +33,7 @@ import {
   type ImportProviderSessionInput,
   type ListImportableSessionsOptions,
   type ProviderCatalog,
+  type ProviderLaunchBinding,
 } from "../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import type { Logger } from "pino";
@@ -85,6 +86,7 @@ import {
   type ProviderImageOutput,
 } from "./provider-image-output.js";
 import { normalizeProviderReplayTimestamp } from "../provider-history-timestamps.js";
+import { isFoundationCredentialFileConfigured } from "../../foundation-credential-store.js";
 import {
   formatProviderDiagnostic,
   formatProviderDiagnosticError,
@@ -246,6 +248,7 @@ interface CodexAppServerAgentDeps {
     id: string;
     label: string;
     extends: string;
+    credentialRef?: string;
   };
   customCodexConfig?: Record<string, unknown> | null;
   _createCodexClient?: (
@@ -3017,16 +3020,29 @@ function toCodexTextInput(text: string): Extract<CodexAppServerUserInput, { type
 export function buildCodexAppServerEnv(
   runtimeSettings?: ProviderRuntimeSettings,
   launchEnv?: Record<string, string>,
+  providerLaunchBinding?: ProviderLaunchBinding,
 ): NodeJS.ProcessEnv {
   return createProviderEnv({
     runtimeSettings,
-    overlays: [launchEnv, buildCodexCredentialIsolationOverlay(runtimeSettings)],
+    overlays: [
+      launchEnv,
+      buildCodexCredentialIsolationOverlay(runtimeSettings, providerLaunchBinding),
+    ],
   });
 }
 
 function buildCodexCredentialIsolationOverlay(
   runtimeSettings: ProviderRuntimeSettings | undefined,
+  providerLaunchBinding?: ProviderLaunchBinding,
 ): Record<string, undefined> | undefined {
+  if (providerLaunchBinding) {
+    return {
+      OPENAI_API_KEY: undefined,
+      OPENAI_BASE_URL: undefined,
+      CODEX_API_KEY: undefined,
+      CODEX_ACCESS_TOKEN: undefined,
+    };
+  }
   if (!runtimeSettings?.env?.PASEO_PROVIDER_CREDENTIAL_FILE?.trim()) {
     return undefined;
   }
@@ -3056,6 +3072,77 @@ function normalizeOpenAICompatibleBaseUrl(value: string): string | null {
     return withoutTrailingSlashes;
   }
   return `${withoutTrailingSlashes}/v1`;
+}
+
+function normalizeFoundationOpenAICompatibleBaseUrl(value: string): string {
+  const normalized = normalizeOpenAICompatibleBaseUrl(value);
+  if (!normalized) {
+    throw new Error("Custom Codex provider requires a non-empty base URL");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error("Custom Codex provider base URL must be an absolute HTTPS URL");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      "Custom Codex provider base URL must be HTTPS without credentials, query, or fragment",
+    );
+  }
+  return normalized;
+}
+
+function hasCustomCodexRouteSignal(runtimeSettings: ProviderRuntimeSettings | undefined): boolean {
+  const env = runtimeSettings?.env;
+  return Boolean(env?.OPENAI_BASE_URL?.trim() || env?.PASEO_PROVIDER_CREDENTIAL_FILE?.trim());
+}
+
+function materializeCustomCodexLaunchBinding(input: {
+  customProvider: NonNullable<CodexAppServerAgentDeps["customProvider"]>;
+  runtimeSettings: ProviderRuntimeSettings | undefined;
+  model: string;
+  requestedModel?: string;
+}): ProviderLaunchBinding | null {
+  const rawBaseUrl = input.runtimeSettings?.env?.OPENAI_BASE_URL?.trim();
+  const credentialFile = input.runtimeSettings?.env?.PASEO_PROVIDER_CREDENTIAL_FILE?.trim();
+  const credentialRef = input.customProvider.credentialRef?.trim();
+  const hasCustomRoute = Boolean(rawBaseUrl || credentialFile || credentialRef);
+  if (!hasCustomRoute) return null;
+  if (!input.requestedModel?.trim()) {
+    throw new Error(
+      `Custom Codex provider '${input.customProvider.id}' requires an explicit model`,
+    );
+  }
+  if (!rawBaseUrl) {
+    throw new Error(`Custom Codex provider '${input.customProvider.id}' requires a base URL`);
+  }
+  if (!credentialRef || !credentialFile) {
+    throw new Error(`Custom Codex provider '${input.customProvider.id}' requires a credentialRef`);
+  }
+  if (!isFoundationCredentialFileConfigured(credentialFile)) {
+    throw new Error(
+      `Custom Codex provider '${input.customProvider.id}' credential '${credentialRef}' is not configured`,
+    );
+  }
+  return {
+    providerId: input.customProvider.id,
+    providerFamily: CODEX_PROVIDER,
+    model: input.model,
+    credentialConfigured: true,
+    routeKind: "openai-compatible",
+    modelProviderId: input.customProvider.id,
+    authMethod: "credential-command",
+    baseUrl: normalizeFoundationOpenAICompatibleBaseUrl(rawBaseUrl),
+    credentialRef,
+    credentialFile,
+  };
 }
 
 const READ_FOUNDATION_CREDENTIAL_SCRIPT =
@@ -3088,15 +3175,44 @@ function buildCodexCustomProviderConfig(
       command: process.execPath,
       args: ["-e", READ_FOUNDATION_CREDENTIAL_SCRIPT, credentialFile],
     };
-    providerConfig.requires_openai_auth = false;
   } else if (runtimeSettings?.env?.OPENAI_API_KEY?.trim()) {
     providerConfig.env_key = "OPENAI_API_KEY";
-    providerConfig.requires_openai_auth = false;
   }
   return {
     model_provider: customProvider.id,
     model_providers: {
       [customProvider.id]: providerConfig,
+    },
+  };
+}
+
+function buildCodexBoundProviderConfig(
+  binding: ProviderLaunchBinding | undefined,
+): Record<string, unknown> | null {
+  if (!binding || binding.providerFamily !== CODEX_PROVIDER) return null;
+  if (binding.routeKind === "codex-subscription") {
+    return { model_provider: "openai" };
+  }
+  if (binding.routeKind !== "openai-compatible") {
+    throw new Error(`Unsupported Codex route kind '${binding.routeKind}'`);
+  }
+  if (!isFoundationCredentialFileConfigured(binding.credentialFile)) {
+    throw new Error(
+      `Custom Codex provider '${binding.providerId}' credential '${binding.credentialRef}' is not configured`,
+    );
+  }
+  return {
+    model_provider: binding.modelProviderId,
+    model_providers: {
+      [binding.modelProviderId]: {
+        name: binding.providerId,
+        base_url: binding.baseUrl,
+        wire_api: "responses",
+        auth: {
+          command: process.execPath,
+          args: ["-e", READ_FOUNDATION_CREDENTIAL_SCRIPT, binding.credentialFile],
+        },
+      },
     },
   };
 }
@@ -3211,6 +3327,8 @@ export class CodexAppServerAgentSession implements AgentSession {
     private readonly autoReviewEnabled: boolean = false,
     private readonly agentId?: string,
     private readonly initialResumePurpose: "interactive" | "history" = "interactive",
+    private readonly roleInstructions?: string,
+    private readonly providerLaunchBinding?: ProviderLaunchBinding,
   ) {
     this.logger = logger.child({
       module: "agent",
@@ -3478,6 +3596,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       match.developer_instructions,
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
+      this.roleInstructions,
     );
     if (developerInstructions) settings.developer_instructions = developerInstructions;
     if (this.config.model) settings.model = this.config.model;
@@ -3667,6 +3786,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       const developerInstructions = composeSystemPromptParts(
         this.config.systemPrompt,
         this.config.daemonAppendSystemPrompt,
+        this.roleInstructions,
       );
       if (developerInstructions) {
         params.developerInstructions = developerInstructions;
@@ -3820,6 +3940,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     const developerInstructions = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
+      this.roleInstructions,
     );
     if (developerInstructions) {
       params.developerInstructions = developerInstructions;
@@ -4651,6 +4772,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     const developerInstructions = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
+      this.roleInstructions,
     );
     const params: Record<string, unknown> = {
       model,
@@ -4698,6 +4820,21 @@ export class CodexAppServerAgentSession implements AgentSession {
     }
     if (this.deps.customCodexConfig) {
       Object.assign(innerConfig, this.deps.customCodexConfig);
+    }
+    const boundProviderConfig = buildCodexBoundProviderConfig(this.providerLaunchBinding);
+    if (boundProviderConfig) {
+      Object.assign(innerConfig, boundProviderConfig);
+    }
+    if (this.roleInstructions) {
+      const features = toObjectRecord(innerConfig.features) ?? {};
+      const agents = toObjectRecord(innerConfig.agents) ?? {};
+      innerConfig.features = {
+        ...features,
+        multi_agent: false,
+        multi_agent_v2: false,
+      };
+      innerConfig.agents = { ...agents, enabled: false };
+      delete innerConfig.developer_instructions;
     }
     return Object.keys(innerConfig).length > 0 ? innerConfig : null;
   }
@@ -6426,9 +6563,81 @@ export class CodexAppServerAgentClient implements AgentClient {
     return this.autoReviewEnabledPromise;
   }
 
+  async materializeProviderLaunchBinding(input: {
+    config: AgentSessionConfig;
+    requestedModel?: string;
+  }): Promise<ProviderLaunchBinding> {
+    const model = input.config.model?.trim();
+    if (!model) {
+      throw new Error(`Codex provider '${input.config.provider}' requires an exact model`);
+    }
+
+    const customProvider = this.deps.customProvider;
+    if (!customProvider && hasCustomCodexRouteSignal(this.runtimeSettings)) {
+      throw new Error(
+        "Built-in Codex subscription provider cannot carry a custom endpoint or credentialRef",
+      );
+    }
+    if (customProvider) {
+      const customBinding = materializeCustomCodexLaunchBinding({
+        customProvider,
+        runtimeSettings: this.runtimeSettings,
+        model,
+        requestedModel: input.requestedModel,
+      });
+      if (customBinding) return customBinding;
+    }
+    const providerId = customProvider ? customProvider.id : CODEX_PROVIDER;
+    return await this.materializeCodexSubscriptionBinding(providerId, model);
+  }
+
+  private async materializeCodexSubscriptionBinding(
+    providerId: string,
+    model: string,
+  ): Promise<ProviderLaunchBinding> {
+    const candidate: ProviderLaunchBinding = {
+      providerId,
+      providerFamily: CODEX_PROVIDER,
+      model,
+      credentialConfigured: false,
+      routeKind: "codex-subscription",
+      modelProviderId: "openai",
+      authMethod: "codex-native",
+    };
+    const accountType = await this.readCodexAccountType(candidate);
+    if (accountType !== "chatgpt") {
+      throw new Error(
+        `Codex subscription provider '${providerId}' requires configured ChatGPT authentication; found ${accountType ?? "no account"}`,
+      );
+    }
+    return { ...candidate, credentialConfigured: true };
+  }
+
+  private async readCodexAccountType(binding: ProviderLaunchBinding): Promise<string | null> {
+    const child = await this.spawnAppServer(undefined, { providerLaunchBinding: binding });
+    const client =
+      this.deps._createCodexClient?.(child, this.logger, () => ({})) ??
+      new CodexAppServerClient(child, this.logger);
+    try {
+      await client.request("initialize", buildCodexAppServerInitializeParams());
+      client.notify("initialized", {});
+      const response = toObjectRecord(
+        await client.request("account/read", { refreshToken: false }),
+      );
+      const account = toObjectRecord(response?.account);
+      return typeof account?.type === "string" ? account.type : null;
+    } finally {
+      await client.dispose();
+    }
+  }
+
   private async spawnAppServer(
     launchEnv?: Record<string, string>,
-    options?: { goalsEnabled?: boolean; agentId?: string },
+    options?: {
+      goalsEnabled?: boolean;
+      agentId?: string;
+      providerLaunchBinding?: ProviderLaunchBinding;
+    },
   ): Promise<ChildProcessWithoutNullStreams> {
     const launchPrefix = await resolveCodexLaunchPrefix(this.runtimeSettings);
     const args = [...launchPrefix.args, "app-server"];
@@ -6449,7 +6658,13 @@ export class CodexAppServerAgentClient implements AgentClient {
       stdio: ["pipe", "pipe", "pipe"],
       ...createProviderEnvSpec({
         runtimeSettings: this.runtimeSettings,
-        overlays: [launchEnv, buildCodexCredentialIsolationOverlay(this.runtimeSettings)],
+        overlays: [
+          launchEnv,
+          buildCodexCredentialIsolationOverlay(
+            this.runtimeSettings,
+            options?.providerLaunchBinding,
+          ),
+        ],
       }),
     });
     assertChildWithPipes(child);
@@ -6476,12 +6691,19 @@ export class CodexAppServerAgentClient implements AgentClient {
       null,
       this.logger,
       () =>
-        this.spawnAppServer(launchContext?.env, { goalsEnabled, agentId: launchContext?.agentId }),
+        this.spawnAppServer(launchContext?.env, {
+          goalsEnabled,
+          agentId: launchContext?.agentId,
+          providerLaunchBinding: launchContext?.providerLaunchBinding,
+        }),
       this.sessionDeps(),
       options?.persistSession === false,
       goalsEnabled,
       autoReviewEnabled,
       launchContext?.agentId,
+      "interactive",
+      launchContext?.roleBinding?.instructions,
+      launchContext?.providerLaunchBinding,
     );
     await session.connect();
     return session;
@@ -6507,13 +6729,19 @@ export class CodexAppServerAgentClient implements AgentClient {
       handle,
       this.logger,
       () =>
-        this.spawnAppServer(launchContext?.env, { goalsEnabled, agentId: launchContext?.agentId }),
+        this.spawnAppServer(launchContext?.env, {
+          goalsEnabled,
+          agentId: launchContext?.agentId,
+          providerLaunchBinding: launchContext?.providerLaunchBinding,
+        }),
       this.sessionDeps(),
       false,
       goalsEnabled,
       autoReviewEnabled,
       launchContext?.agentId,
       options?.purpose ?? "interactive",
+      launchContext?.roleBinding?.instructions,
+      launchContext?.providerLaunchBinding,
     );
     await session.connect();
     return session;

@@ -109,7 +109,11 @@ export async function ensureAgentLoaded(
         handle,
         buildConfigOverrides(record),
         agentId,
-        extractTimestamps(record),
+        {
+          ...extractTimestamps(record),
+          roleBinding: record.launchContract ? undefined : record.roleBinding,
+          launchContract: record.launchContract,
+        },
         record.archivedAt ? { purpose: "history" } : undefined,
       );
       deps.logger.info({ agentId, provider: record.provider }, "Agent resumed from persistence");
@@ -124,6 +128,8 @@ export async function ensureAgentLoaded(
         labels: record.labels,
         workspaceId: record.workspaceId,
         owner: record.owner,
+        roleBinding: record.launchContract ? undefined : record.roleBinding,
+        launchContract: record.launchContract,
       });
       deps.logger.info({ agentId, provider: record.provider }, "Agent created from stored config");
     }

@@ -2377,7 +2377,11 @@ export class PiRpcAgentClient implements AgentClient {
     };
     const mcpConfig = await this.prepareMcpConfig(config.cwd, config.mcpServers, mcpEnv);
     const paseoExtension = createPiPaseoExtensionFile(
-      composeSystemPromptParts(config.systemPrompt, config.daemonAppendSystemPrompt),
+      composeSystemPromptParts(
+        config.systemPrompt,
+        config.daemonAppendSystemPrompt,
+        launchContext?.roleBinding?.instructions,
+      ),
     );
     let runtimeSession: PiRuntimeSession;
     try {
@@ -2439,6 +2443,7 @@ export class PiRpcAgentClient implements AgentClient {
       composeSystemPromptParts(
         resumeConfig.config.systemPrompt,
         resumeConfig.config.daemonAppendSystemPrompt,
+        launchContext?.roleBinding?.instructions,
       ),
     );
     let runtimeSession: PiRuntimeSession;

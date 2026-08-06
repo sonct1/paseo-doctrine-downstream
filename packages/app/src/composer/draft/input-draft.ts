@@ -22,6 +22,7 @@ import {
 } from "@/provider-selection/provider-selection";
 import { useDraftStore } from "@/stores/draft-store";
 import { toDraftInputIfReady } from "@/stores/draft-store/state";
+import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
 type AttachmentUpdater =
   | UserComposerAttachment[]
@@ -48,6 +49,8 @@ type DraftComposerState = UseAgentFormStateResult & {
   featureValues: Record<string, unknown> | undefined;
   agentControls: DraftAgentControlsProps;
   commandDraftConfig: DraftCommandConfig | undefined;
+  selectedRole: PaseoRoleId | null;
+  setRoleFromUser: (roleId: PaseoRoleId) => void;
 };
 
 export interface AgentInputDraft {
@@ -84,6 +87,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
   );
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<PaseoRoleId>("lead");
   const text = draft?.text ?? "";
   const attachments = draft?.attachments ?? [];
   const isHydrated = hydratedDraftKey === draftKey;
@@ -186,6 +190,29 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   );
 
   const workingDir = lockedWorkingDir || formState.workingDir;
+  const allProviderEntries = formState.allProviderEntries;
+  const selectedProvider = formState.selectedProvider;
+  const setProviderFromUser = formState.setProviderFromUser;
+  useEffect(() => {
+    const entries = allProviderEntries ?? [];
+    if (!entries.some((entry) => entry.roleBinding !== undefined)) {
+      return;
+    }
+    const selectedEntry = entries.find((entry) => entry.provider === selectedProvider);
+    if (selectedEntry?.roleBinding?.status === "supported") {
+      return;
+    }
+    const compatible = entries.find(
+      (entry) =>
+        entry.enabled !== false &&
+        entry.status === "ready" &&
+        entry.roleBinding?.status === "supported",
+    );
+    if (compatible) {
+      setProviderFromUser(compatible.provider);
+    }
+  }, [allProviderEntries, selectedProvider, setProviderFromUser]);
+
   const {
     features: draftFeatures,
     featureValues: draftFeatureValues,
@@ -226,18 +253,43 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       return null;
     }
 
+    const roleBindingAvailable = formState.allProviderEntries?.some(
+      (entry) => entry.roleBinding !== undefined,
+    );
+    const compatibleProviderIds = new Set(
+      (formState.allProviderEntries ?? [])
+        .filter((entry) => entry.roleBinding?.status === "supported")
+        .map((entry) => entry.provider),
+    );
+    const roleAwareFormState = roleBindingAvailable
+      ? {
+          ...formState,
+          providerDefinitions: formState.providerDefinitions.filter((definition) =>
+            compatibleProviderIds.has(definition.id),
+          ),
+          modelSelectorProviders: formState.modelSelectorProviders.filter((provider) =>
+            compatibleProviderIds.has(provider.id),
+          ),
+        }
+      : formState;
+
     return {
-      ...formState,
+      ...roleAwareFormState,
       workingDir,
       effectiveModelId,
       effectiveThinkingOptionId,
       featureValues: draftFeatureValues,
       agentControls: buildDraftAgentControls({
-        formState,
+        formState: roleAwareFormState,
+        roleOptions: roleBindingAvailable ? PASEO_ROLE_SUMMARIES : [],
+        selectedRole: roleBindingAvailable ? selectedRole : null,
+        onSelectRole: setSelectedRole,
         features: draftFeatures,
         onSetFeature: setDraftFeatureValue,
       }),
       commandDraftConfig,
+      selectedRole: roleBindingAvailable ? selectedRole : null,
+      setRoleFromUser: setSelectedRole,
     };
   }, [
     commandDraftConfig,
@@ -247,6 +299,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     draftFeatures,
     draftFeatureValues,
     formState,
+    selectedRole,
     setDraftFeatureValue,
     workingDir,
   ]);

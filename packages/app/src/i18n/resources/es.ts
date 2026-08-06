@@ -156,6 +156,11 @@ export const es: TranslationResources = {
     },
   },
   agentControls: {
+    role: {
+      fallback: "Rol",
+      select: "Seleccionar rol de Paseo",
+      title: "Rol de Paseo",
+    },
     provider: {
       fallback: "Proveedor",
       select: "Seleccionar proveedor de agente",

@@ -3,7 +3,7 @@ import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider } from "../agent-sdk-types.js";
-import type { AgentManager } from "../agent-manager.js";
+import type { AgentManager, ManagedAgent } from "../agent-manager.js";
 import {
   AgentFeatureSchema,
   AgentPermissionRequestPayloadSchema,
@@ -60,6 +60,7 @@ import {
 } from "../mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
 import { ChatMessageSchema } from "@getpaseo/protocol/chat/types";
+import { LaunchContractReceiptSchema } from "@getpaseo/protocol/launch-contract";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import { postChatMessageWithMentions } from "../../chat/post.js";
 import { respondToAgentPermission } from "../permission-response.js";
@@ -95,6 +96,9 @@ import type {
 } from "./types.js";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import { toRoleBindingReceipt } from "../role-binding.js";
+import { toLaunchContractReceipt } from "../launch-contract.js";
+import { PaseoRoleIdSchema, RoleBindingReceiptSchema } from "@getpaseo/protocol/role-binding";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -152,6 +156,17 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+function projectFoundationLaunchReceipts(
+  agent: Pick<ManagedAgent, "roleBinding" | "launchContract">,
+) {
+  return {
+    ...(agent.roleBinding ? { roleBinding: toRoleBindingReceipt(agent.roleBinding) } : {}),
+    ...(agent.launchContract
+      ? { launchContract: toLaunchContractReceipt(agent.launchContract) }
+      : {}),
+  };
 }
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -989,6 +1004,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     provider: ProviderModelInputSchema.describe(
       "Required provider/model pair, for example codex/gpt-5.4.",
     ),
+    role: PaseoRoleIdSchema.optional().describe(
+      "Paseo Foundation role to bind through the provider-native durable instruction channel.",
+    ),
     labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
     settings: CreateAgentSettingsInputSchema.optional().describe(
       "Initial runtime settings for the new agent.",
@@ -1471,7 +1489,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt. Do not guess; call list_providers and list_models first if uncertain.",
+        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt; choose role=lead|peer|supervisor for a Foundation role-first launch. Do not guess; call list_providers and list_models first if uncertain.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -1481,6 +1499,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         workspaceId: z.string().optional(),
         currentModeId: z.string().nullable(),
         availableModes: z.array(ProviderModeSchema),
+        roleBinding: RoleBindingReceiptSchema.optional(),
+        launchContract: LaunchContractReceiptSchema.optional(),
         lastMessage: z.string().nullable().optional(),
         permission: AgentPermissionRequestPayloadSchema.nullable().optional(),
         guidance: z.string().optional(),
@@ -1519,6 +1539,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           kind: "mcp",
           provider: parsedArgs.provider,
+          roleId: parsedArgs.role,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
           cwd: resolvedArgs.cwd,
@@ -1551,6 +1572,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ...(liveSnapshot.workspaceId ? { workspaceId: liveSnapshot.workspaceId } : {}),
             currentModeId: liveSnapshot.currentModeId,
             availableModes: liveSnapshot.availableModes,
+            ...projectFoundationLaunchReceipts(liveSnapshot),
             lastMessage: result.lastMessage,
             permission: sanitizePermissionRequest(result.permission),
           };
@@ -1583,6 +1605,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...(currentSnapshot.workspaceId ? { workspaceId: currentSnapshot.workspaceId } : {}),
           currentModeId: currentSnapshot.currentModeId,
           availableModes: currentSnapshot.availableModes,
+          ...projectFoundationLaunchReceipts(currentSnapshot),
           lastMessage: null,
           permission: null,
           ...(guidance ? { guidance } : {}),

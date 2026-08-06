@@ -9,6 +9,8 @@ import { toStoredAgentRecord } from "./agent-projections.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
 import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./agent-owner.js";
+import { PersistedRoleBindingSchema } from "./role-binding.js";
+import { PersistedLaunchContractSchema } from "./launch-contract.js";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
@@ -66,6 +68,8 @@ const STORED_AGENT_SCHEMA = z.object({
   internal: z.boolean().optional(),
   archivedAt: z.string().nullable().optional(),
   owner: AgentOwnerSchema.optional(),
+  roleBinding: PersistedRoleBindingSchema.optional(),
+  launchContract: PersistedLaunchContractSchema.optional(),
 });
 
 export type SerializableAgentConfig = Pick<

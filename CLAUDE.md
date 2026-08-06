@@ -41,6 +41,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/providers.md](docs/providers.md)                             | Adding a new agent provider end-to-end                                                                                         |
 | [docs/forge-providers.md](docs/forge-providers.md)                 | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
 | [docs/custom-providers.md](docs/custom-providers.md)               | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
+| [docs/native-role-binding.md](docs/native-role-binding.md)         | Native Foundation roles, immutable launch contracts, provider capability, and qualification gates                              |
 | [docs/foundation-product.md](docs/foundation-product.md)           | Foundation distribution, macOS installer, Control Workspace, WebUI provider credentials                                        |
 | [docs/dev-pilot.md](docs/dev-pilot.md)                             | Controlled macOS dev-pilot install, qualification, stop conditions, rollback, and known limits                                 |
 | [docs/service-proxy.md](docs/service-proxy.md)                     | Service proxy: exposing workspace scripts at public URLs, DNS setup, reverse proxy config                                      |

@@ -20,6 +20,8 @@ import type {
 import type { ManagedAgent } from "./agent-manager.js";
 import type { JsonValue } from "../json-utils.js";
 import { isStoredAgentProviderAvailable, toAgentPersistenceHandle } from "../persistence-hooks.js";
+import { toRoleBindingReceipt } from "./role-binding.js";
+import { toLaunchContractReceipt } from "./launch-contract.js";
 export type { ManagedAgent };
 
 interface ProjectionOptions {
@@ -94,6 +96,8 @@ export function toStoredAgentRecord(
       : null,
     internal: options?.internal,
     owner: agent.owner,
+    ...(agent.roleBinding ? { roleBinding: agent.roleBinding } : {}),
+    ...(agent.launchContract ? { launchContract: agent.launchContract } : {}),
   } satisfies StoredAgentRecord;
 }
 
@@ -135,6 +139,10 @@ export function toAgentPayload(
     persistence: projectPersistenceHandleForWire(agent.persistence),
     title: options?.title ?? null,
     labels: agent.labels,
+    ...(agent.roleBinding ? { roleBinding: toRoleBindingReceipt(agent.roleBinding) } : {}),
+    ...(agent.launchContract
+      ? { launchContract: toLaunchContractReceipt(agent.launchContract) }
+      : {}),
   };
 
   const usage = sanitizeUsage(agent.lastUsage);
@@ -244,6 +252,10 @@ export function buildStoredAgentPayload(
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
     labels: normalizeLabels(record.labels),
+    ...(record.roleBinding ? { roleBinding: toRoleBindingReceipt(record.roleBinding) } : {}),
+    ...(record.launchContract
+      ? { launchContract: toLaunchContractReceipt(record.launchContract) }
+      : {}),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }
