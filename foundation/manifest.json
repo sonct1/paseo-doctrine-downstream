@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.4",
+  "distributionVersion": "0.1.0-dev.5",
   "foundationSource": {
-    "commit": "7105f5d900fdc6072a1ff38b146c972e7898f60a",
-    "ref": "foundation-v0.1.0-dev.4"
+    "commit": "f237d64de4af9ea72d6024f33887630f4ea3c64c",
+    "ref": "f237d64"
   },
   "files": [
     {
@@ -19,7 +19,7 @@
     {
       "path": "docs/PORTABLE_BOOTSTRAP_AND_ROUTING.md",
       "mode": "0644",
-      "sha256": "b217007e2d209326801fe736704ac93bd538f294d7897a00ba45b07efe65aeb6"
+      "sha256": "d87711e79959de7cf51da240259eb67309379a8bb408c3e71ff161e504144bd1"
     },
     {
       "path": "docs/ROLE_CONTRACTS.md",
@@ -29,7 +29,7 @@
     {
       "path": "docs/ROLE_INSTRUCTION_BINDING.md",
       "mode": "0644",
-      "sha256": "bbf3b358c2f9e1bba21a48faa8080c7372eb110b01098d7efaaf8d8f65367278"
+      "sha256": "78a7f057d830ac006a582159d808fd1eaadf838e9daad90d48bed79c67224a38"
     },
     {
       "path": "docs/SUPERVISOR_NOTEBOOK.md",
@@ -52,6 +52,81 @@
       "sha256": "f2fd0f971e692efdc72347182cdd4ddee55f39ae26f4cd264e793361c49dffa3"
     },
     {
+      "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
+      "mode": "0644",
+      "sha256": "c0d81861615c0b8066fbbabc1a4e85bd472d3198914c6965a3a8245ab88c858e"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
+      "mode": "0644",
+      "sha256": "ab509c6252285ad5a2d8769c600ddf15d9cf0127cab803a4401d0400721e8219"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-lead/skills/repo-refresh/SKILL.md",
+      "mode": "0644",
+      "sha256": "33efa43368c3d36712f4cbf96c2a3c1a5ee1a6f3229e99a9fa6ca2a503e78a37"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-lead/skills/repo-refresh/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "4107c600b0977762a978a6ed5c92829af5373645910cd09c41747885eada9321"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-lead/skills/repo-refresh/references/refresh-standard.md",
+      "mode": "0644",
+      "sha256": "2d274773612515c2c1690d18fe8ebc9cc2fa74d1e74d97bca7f76a857250c596"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
+      "mode": "0644",
+      "sha256": "e7850627c2fbf10a39ee49d563a9eea12c9820a0eb8bdb6f6b8578187eabd97e"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
+      "mode": "0644",
+      "sha256": "6108444f7c76f25119150c1450d9780ee2188f7a6d41b4b03537df5e89f9f47d"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-peer/skills/frontend-design/SKILL.md",
+      "mode": "0644",
+      "sha256": "094c836eef3074a23afc5cb93eedb9fc5a103024e7d8e00028f33e7b1a73d0e3"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
+      "mode": "0644",
+      "sha256": "8804ec91ab76fff5ba9e640a3baceedacc6eaf9c23fa6f6ffb8742386a6c805c"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
+      "mode": "0644",
+      "sha256": "5c515995f30ee3d2a2d410704808f16e168086ee3f0ca0df85e0c80ef1b861b8"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/skills/architecture-premise-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "1e6be6af83c5e638b3afb2a3a977fd995736adc044d76f3b68920b1b06368488"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/skills/paseo-supervisor/SKILL.md",
+      "mode": "0644",
+      "sha256": "278183877f85948e31ee92ed748d93c966dafdc7be68d4737bd192bd66c9e0fa"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/skills/paseo-supervisor/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "2b29473e0dfe7b73b9741a09f4f75d10e210a3926b305fe3af99120dcf948281"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/skills/test-proof-debt-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "76cbd66667822ccfffa9f2881a0e16588a3926e31128b03b716071f8a6ef7c48"
+    },
+    {
+      "path": "profiles/claude-plugins/paseo-supervisor/skills/test-proof-debt-audit/references/catalog.md",
+      "mode": "0644",
+      "sha256": "4b1cb8a85502bd139f744488a85d55e86316f20ed12c29d55c32286b76ed9afd"
+    },
+    {
       "path": "profiles/claude/paseo-lead.md",
       "mode": "0644",
       "sha256": "ab509c6252285ad5a2d8769c600ddf15d9cf0127cab803a4401d0400721e8219"
@@ -69,17 +144,17 @@
     {
       "path": "profiles/codex/lead.config.toml",
       "mode": "0644",
-      "sha256": "d83fc24a994ef2895175337996ee648ce3f25506147b8973a8b37a4b961ff6dd"
+      "sha256": "a2173ca61799ba5b9a3178c245db3a1176f089479120b23c30fbdb5ba6b05cfe"
     },
     {
       "path": "profiles/codex/peer.config.toml",
       "mode": "0644",
-      "sha256": "2a7b2c11765cab8a0e0c9142f3d6c4c6f57a7ca30a63b7d6275aac7ba9529ea8"
+      "sha256": "e22044ef321e5ff572646e5c0adf6c19cefe0a9000244a234c3c2243da35bd75"
     },
     {
       "path": "profiles/codex/supervisor.config.toml",
       "mode": "0644",
-      "sha256": "ed27619dd8a22c45ebcf8fe58d607149e2ebfa7b1002107c6da78b711f1d24f5"
+      "sha256": "f24c0301fa3bf4e10a128dca87e193cca1b7f5fa8b478f007d8762626004c52c"
     },
     {
       "path": "profiles/cursor/paseo-lead/.cursor-plugin/plugin.json",
@@ -92,6 +167,21 @@
       "sha256": "139e31f18b66171bf430def5bfde8046c626860ea2c1c66435160c117958c18d"
     },
     {
+      "path": "profiles/cursor/paseo-lead/skills/repo-refresh/SKILL.md",
+      "mode": "0644",
+      "sha256": "33efa43368c3d36712f4cbf96c2a3c1a5ee1a6f3229e99a9fa6ca2a503e78a37"
+    },
+    {
+      "path": "profiles/cursor/paseo-lead/skills/repo-refresh/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "4107c600b0977762a978a6ed5c92829af5373645910cd09c41747885eada9321"
+    },
+    {
+      "path": "profiles/cursor/paseo-lead/skills/repo-refresh/references/refresh-standard.md",
+      "mode": "0644",
+      "sha256": "2d274773612515c2c1690d18fe8ebc9cc2fa74d1e74d97bca7f76a857250c596"
+    },
+    {
       "path": "profiles/cursor/paseo-peer/.cursor-plugin/plugin.json",
       "mode": "0644",
       "sha256": "4bdc2a5610735255fb07a9bd3c0be491fee3b71447e0f7978d1691774ab6d5a6"
@@ -102,6 +192,11 @@
       "sha256": "802581d31e707bced0eef9639320880fdacba9f7021d45114b36a33873224080"
     },
     {
+      "path": "profiles/cursor/paseo-peer/skills/frontend-design/SKILL.md",
+      "mode": "0644",
+      "sha256": "094c836eef3074a23afc5cb93eedb9fc5a103024e7d8e00028f33e7b1a73d0e3"
+    },
+    {
       "path": "profiles/cursor/paseo-supervisor/.cursor-plugin/plugin.json",
       "mode": "0644",
       "sha256": "2af52f47685f1cfc4ac105e9122b605f31b501840a59212c76d92ba9e0bdea7d"
@@ -110,6 +205,31 @@
       "path": "profiles/cursor/paseo-supervisor/rules/paseo-supervisor.mdc",
       "mode": "0644",
       "sha256": "ad6a82911fc7f47013d4c53fdc7393a442d07d7830eefb2da9d9a2cec472e5d9"
+    },
+    {
+      "path": "profiles/cursor/paseo-supervisor/skills/architecture-premise-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "1e6be6af83c5e638b3afb2a3a977fd995736adc044d76f3b68920b1b06368488"
+    },
+    {
+      "path": "profiles/cursor/paseo-supervisor/skills/paseo-supervisor/SKILL.md",
+      "mode": "0644",
+      "sha256": "278183877f85948e31ee92ed748d93c966dafdc7be68d4737bd192bd66c9e0fa"
+    },
+    {
+      "path": "profiles/cursor/paseo-supervisor/skills/paseo-supervisor/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "2b29473e0dfe7b73b9741a09f4f75d10e210a3926b305fe3af99120dcf948281"
+    },
+    {
+      "path": "profiles/cursor/paseo-supervisor/skills/test-proof-debt-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "76cbd66667822ccfffa9f2881a0e16588a3926e31128b03b716071f8a6ef7c48"
+    },
+    {
+      "path": "profiles/cursor/paseo-supervisor/skills/test-proof-debt-audit/references/catalog.md",
+      "mode": "0644",
+      "sha256": "4b1cb8a85502bd139f744488a85d55e86316f20ed12c29d55c32286b76ed9afd"
     },
     {
       "path": "profiles/omp/paseo-lead.md",
@@ -132,19 +252,64 @@
       "sha256": "e19bc178f1ff2ba0591fa22c8ebdf830f62357dca9e7b0548500e7b28c1a3e9a"
     },
     {
+      "path": "profiles/opencode-role-roots/lead/skills/repo-refresh/SKILL.md",
+      "mode": "0644",
+      "sha256": "33efa43368c3d36712f4cbf96c2a3c1a5ee1a6f3229e99a9fa6ca2a503e78a37"
+    },
+    {
+      "path": "profiles/opencode-role-roots/lead/skills/repo-refresh/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "4107c600b0977762a978a6ed5c92829af5373645910cd09c41747885eada9321"
+    },
+    {
+      "path": "profiles/opencode-role-roots/lead/skills/repo-refresh/references/refresh-standard.md",
+      "mode": "0644",
+      "sha256": "2d274773612515c2c1690d18fe8ebc9cc2fa74d1e74d97bca7f76a857250c596"
+    },
+    {
+      "path": "profiles/opencode-role-roots/peer/skills/frontend-design/SKILL.md",
+      "mode": "0644",
+      "sha256": "094c836eef3074a23afc5cb93eedb9fc5a103024e7d8e00028f33e7b1a73d0e3"
+    },
+    {
+      "path": "profiles/opencode-role-roots/supervisor/skills/architecture-premise-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "1e6be6af83c5e638b3afb2a3a977fd995736adc044d76f3b68920b1b06368488"
+    },
+    {
+      "path": "profiles/opencode-role-roots/supervisor/skills/paseo-supervisor/SKILL.md",
+      "mode": "0644",
+      "sha256": "278183877f85948e31ee92ed748d93c966dafdc7be68d4737bd192bd66c9e0fa"
+    },
+    {
+      "path": "profiles/opencode-role-roots/supervisor/skills/paseo-supervisor/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "2b29473e0dfe7b73b9741a09f4f75d10e210a3926b305fe3af99120dcf948281"
+    },
+    {
+      "path": "profiles/opencode-role-roots/supervisor/skills/test-proof-debt-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "76cbd66667822ccfffa9f2881a0e16588a3926e31128b03b716071f8a6ef7c48"
+    },
+    {
+      "path": "profiles/opencode-role-roots/supervisor/skills/test-proof-debt-audit/references/catalog.md",
+      "mode": "0644",
+      "sha256": "4b1cb8a85502bd139f744488a85d55e86316f20ed12c29d55c32286b76ed9afd"
+    },
+    {
       "path": "profiles/opencode/lead.config.json",
       "mode": "0644",
-      "sha256": "1fc892e6953bbb868e944aa2f7848974ee463f91f60fa78ec884d24c81e2ebbf"
+      "sha256": "ce1664fa7b929964da05c91ee0092c0b71dbf497406ee033ff541db8f221c725"
     },
     {
       "path": "profiles/opencode/peer.config.json",
       "mode": "0644",
-      "sha256": "8d43b77dbe04453c39fe700854bae0ecdfb38341310927ae766583061a8db964"
+      "sha256": "ac002ac4cf173d4c4baf444dd85a755d7eca1ef75405b0e3bc37913ff7597b0c"
     },
     {
       "path": "profiles/opencode/supervisor.config.json",
       "mode": "0644",
-      "sha256": "09e98315a393f967c627a173c509559307667cb09eb9565f1028649fcc5109a1"
+      "sha256": "31ae9c0c180b2a91e466eb2fd04d1d828f33d903e211763abef44813eac5f438"
     },
     {
       "path": "references/demonthorn-agent-orchestration-deep-dive.md",
@@ -187,24 +352,79 @@
       "sha256": "da97285b85cf2d219d937b02285657ec94691dc5f6f531ee027c89ae8527bc3f"
     },
     {
+      "path": "skills/architecture-premise-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "1e6be6af83c5e638b3afb2a3a977fd995736adc044d76f3b68920b1b06368488"
+    },
+    {
+      "path": "skills/frontend-design/SKILL.md",
+      "mode": "0644",
+      "sha256": "094c836eef3074a23afc5cb93eedb9fc5a103024e7d8e00028f33e7b1a73d0e3"
+    },
+    {
+      "path": "skills/paseo-supervisor/SKILL.md",
+      "mode": "0644",
+      "sha256": "278183877f85948e31ee92ed748d93c966dafdc7be68d4737bd192bd66c9e0fa"
+    },
+    {
       "path": "skills/paseo-supervisor/agents/openai.yaml",
       "mode": "0644",
       "sha256": "2b29473e0dfe7b73b9741a09f4f75d10e210a3926b305fe3af99120dcf948281"
     },
     {
-      "path": "skills/paseo-supervisor/SKILL.md",
+      "path": "skills/repo-refresh/SKILL.md",
       "mode": "0644",
-      "sha256": "19598e36ae06cbd5ade451c245cced61744dfbe982c3f689e82b45ff197fc2fe"
+      "sha256": "33efa43368c3d36712f4cbf96c2a3c1a5ee1a6f3229e99a9fa6ca2a503e78a37"
     },
     {
-      "path": "templates/paseo-provider-overrides.example.json",
+      "path": "skills/repo-refresh/agents/openai.yaml",
       "mode": "0644",
-      "sha256": "37def1da74e13da63f786e74eb5a576ecb263c019b4aef1586f588732361cfc2"
+      "sha256": "4107c600b0977762a978a6ed5c92829af5373645910cd09c41747885eada9321"
+    },
+    {
+      "path": "skills/repo-refresh/references/refresh-standard.md",
+      "mode": "0644",
+      "sha256": "2d274773612515c2c1690d18fe8ebc9cc2fa74d1e74d97bca7f76a857250c596"
+    },
+    {
+      "path": "skills/role-bundles.json",
+      "mode": "0644",
+      "sha256": "8dedd753b1f9bcf3295327abc92cf4974ce48df908428d95d2f6cd31cc17646a"
+    },
+    {
+      "path": "skills/test-proof-debt-audit/SKILL.md",
+      "mode": "0644",
+      "sha256": "76cbd66667822ccfffa9f2881a0e16588a3926e31128b03b716071f8a6ef7c48"
+    },
+    {
+      "path": "skills/test-proof-debt-audit/references/catalog.md",
+      "mode": "0644",
+      "sha256": "4b1cb8a85502bd139f744488a85d55e86316f20ed12c29d55c32286b76ed9afd"
+    },
+    {
+      "path": "skills/ultra-review/SKILL.md",
+      "mode": "0644",
+      "sha256": "6f35f0dbcd788ec963be0936142be2d6e1721858546dae89dc51ca5e8ad5f63c"
+    },
+    {
+      "path": "skills/ultra-review/agents/openai.yaml",
+      "mode": "0644",
+      "sha256": "793b28f5d446ee2565370c9d377f24f21bb2a0276040e13439165c56e02337c2"
+    },
+    {
+      "path": "skills/ultra-review/scripts/create_ultra_review_report.py",
+      "mode": "0644",
+      "sha256": "acc3059422075b952eeb0edf9694a6826f89f979a8eee2e4c6b1a9dd452cca2e"
     },
     {
       "path": "templates/WORKSPACE_PROTOCOL.md",
       "mode": "0644",
       "sha256": "8cfba3fddd0cd15978e97d11c6f2a75792ca731af67eee0f0578d33a9540c0b5"
+    },
+    {
+      "path": "templates/paseo-provider-overrides.example.json",
+      "mode": "0644",
+      "sha256": "e6b91edc3a2b2ee46bf336d886f39f5106378dcb2140ab329d943bb032676825"
     }
   ]
 }

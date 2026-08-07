@@ -331,6 +331,7 @@ process.stdin.on("data", (chunk) => {
 
 describe("Codex app-server provider", () => {
   test("injects a Paseo role through native developer instructions and disables native agents", async () => {
+    vi.stubEnv("PASEO_FOUNDATION_CURRENT", "/missing/foundation-release");
     let threadStartParams: Record<string, unknown> | undefined;
     const appServer = createFakeCodexAppServer({
       "thread/start": (params) => {
@@ -376,10 +377,17 @@ describe("Codex app-server provider", () => {
         features: { multi_agent: false, multi_agent_v2: false },
         agents: { enabled: false },
       });
+      const threadConfig = threadStartParams?.config as
+        | { skills?: { config?: Array<{ enabled: boolean }> } }
+        | undefined;
+      expect((threadConfig?.skills?.config ?? []).every((entry) => entry.enabled === false)).toBe(
+        true,
+      );
       expect(threadStartParams?.config).not.toHaveProperty("developer_instructions");
       appServer.assertNoErrors();
     } finally {
       await session.close();
+      vi.unstubAllEnvs();
     }
   });
 

@@ -6,14 +6,14 @@
         "label": "Claude Paseo Lead candidate",
         "enabled": false,
         "paseoTools": { "enabled": true },
-        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-lead"]
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CLAUDE_LEAD_PLUGIN_ROOT}}", "--agent", "paseo-lead"]
       },
       "claude-peer": {
         "extends": "claude",
         "label": "Claude Paseo Peer candidate",
         "enabled": false,
         "paseoTools": { "enabled": false },
-        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-peer"]
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CLAUDE_PEER_PLUGIN_ROOT}}", "--agent", "paseo-peer"]
       },
       "claude-supervisor": {
         "extends": "claude",
@@ -23,7 +23,7 @@
           "enabled": true,
           "allowedTools": ["list_workspaces", "list_workspace_scripts", "get_agent_status", "list_agents", "get_agent_activity", "list_pending_permissions", "list_terminals", "capture_terminal", "list_schedules", "inspect_schedule", "schedule_logs", "list_providers", "list_models", "inspect_provider"]
         },
-        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--agent", "paseo-supervisor"]
+        "command": ["{{REQUIRED_ABSOLUTE_PATH: CLAUDE_BINARY}}", "--plugin-dir", "{{REQUIRED_ABSOLUTE_PATH: FOUNDATION_CLAUDE_SUPERVISOR_PLUGIN_ROOT}}", "--agent", "paseo-supervisor"]
       },
       "codex-lead-cliproxy": {
         "extends": "codex",

@@ -24,7 +24,12 @@ import {
   rollbackInstall,
   uninstallFoundation,
 } from "./install.js";
-import { resolveInstallLayout, resolveProductLayout, roleLinks } from "./layout.js";
+import {
+  FOUNDATION_SKILL_NAMES,
+  resolveInstallLayout,
+  resolveProductLayout,
+  roleLinks,
+} from "./layout.js";
 import { createInstallPlan } from "./plan.js";
 import type { InstallPlan } from "./schema.js";
 
@@ -47,8 +52,51 @@ function resignPlan(plan: Omit<InstallPlan, "planId">): InstallPlan {
   };
 }
 
+function materializeLegacySupervisorSkill(releasePath: string): void {
+  const skillRoot = path.join(releasePath, "skills", "paseo-supervisor");
+  mkdirSync(skillRoot, { recursive: true });
+  writeFileSync(path.join(skillRoot, "SKILL.md"), "---\nname: paseo-supervisor\n---\n");
+}
+
 afterEach(() => {
   for (const home of temporaryHomes.splice(0)) rmSync(home, { recursive: true, force: true });
+});
+
+describe("Foundation role links", () => {
+  it("projects every allowlisted skill package from the selected distribution", () => {
+    const home = temporaryHome();
+    const inventoryRoot = path.join(home, "inventory");
+    const releasePath = path.join(home, "release");
+    for (const name of FOUNDATION_SKILL_NAMES) {
+      const skillRoot = path.join(inventoryRoot, "skills", name);
+      mkdirSync(skillRoot, { recursive: true });
+      writeFileSync(path.join(skillRoot, "SKILL.md"), `---\nname: ${name}\n---\n`);
+    }
+
+    const skillTargets = roleLinks({ home, releasePath, skillInventoryRoot: inventoryRoot })
+      .map(({ target }) => target)
+      .filter((target) => path.dirname(target) === path.join(home, ".codex", "skills"));
+
+    expect(skillTargets.map((target) => path.basename(target))).toEqual(
+      [...FOUNDATION_SKILL_NAMES].sort(),
+    );
+  });
+
+  it("rejects an unowned skill package in the immutable distribution", () => {
+    const home = temporaryHome();
+    const inventoryRoot = path.join(home, "inventory");
+    const skillRoot = path.join(inventoryRoot, "skills", "foreign-skill");
+    mkdirSync(skillRoot, { recursive: true });
+    writeFileSync(path.join(skillRoot, "SKILL.md"), "---\nname: foreign-skill\n---\n");
+
+    expect(() =>
+      roleLinks({
+        home,
+        releasePath: path.join(home, "release"),
+        skillInventoryRoot: inventoryRoot,
+      }),
+    ).toThrow("unexpected Foundation skill package: foreign-skill");
+  });
 });
 
 describe("Foundation host inspection", () => {
@@ -248,6 +296,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
   it("refuses to uninstall a legacy migration record without its exact link snapshot", () => {
     const home = temporaryHome();
     const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
+    materializeLegacySupervisorSkill(legacyRelease);
     const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
     const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
     mkdirSync(path.dirname(layout.currentLink), { recursive: true });
@@ -480,6 +529,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const home = temporaryHome();
     const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
     const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
+    materializeLegacySupervisorSkill(legacyRelease);
     const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
     mkdirSync(path.dirname(layout.currentLink), { recursive: true });
     symlinkSync(legacyRelease, layout.currentLink);
@@ -496,8 +546,14 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     });
 
     const applied = applyInstallPlan(plan);
-    expect(applied.record.previousLinks?.map(({ previousTarget }) => previousTarget)).toEqual(
+    const previousTargets = applied.record.previousLinks?.map(
+      ({ previousTarget }) => previousTarget,
+    );
+    expect(previousTargets?.filter((target) => target !== null)).toEqual(
       legacyLinks.map(({ source }) => source),
+    );
+    expect(previousTargets?.filter((target) => target === null)).toHaveLength(
+      plan.links.length - legacyLinks.length,
     );
     const rolledBack = rollbackInstall(home);
 

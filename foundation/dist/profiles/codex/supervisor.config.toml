@@ -20,3 +20,27 @@ multi_agent_v2 = false
 
 [agents]
 enabled = false
+
+[[skills.config]]
+path = "~/.codex/skills/paseo-supervisor/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "~/.codex/skills/architecture-premise-audit/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "~/.codex/skills/test-proof-debt-audit/SKILL.md"
+enabled = true
+
+[[skills.config]]
+path = "~/.codex/skills/repo-refresh/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "~/.codex/skills/ultra-review/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "~/.codex/skills/frontend-design/SKILL.md"
+enabled = false

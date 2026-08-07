@@ -37,6 +37,7 @@ import {
 } from "../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import type { Logger } from "pino";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -47,6 +48,12 @@ import path from "node:path";
 import { z } from "zod";
 import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
 import { composeSystemPromptParts } from "../system-prompt.js";
+import {
+  filterFoundationSkills,
+  loadFoundationSkillPolicy,
+  mergeCodexFoundationSkillConfig,
+  type FoundationSkillPolicy,
+} from "../foundation-skill-policy.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import {
   mapCodexToolCallEnvelope,
@@ -687,6 +694,7 @@ async function listCodexCustomPrompts(): Promise<AgentSlashCommand[]> {
 export async function listCodexSkills(
   cwd: string,
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">,
+  foundationSkillPolicy?: FoundationSkillPolicy | null,
 ): Promise<AgentSlashCommand[]> {
   const candidates: string[] = [];
   candidates.push(path.join(cwd, ".codex", "skills"));
@@ -745,7 +753,9 @@ export async function listCodexSkills(
     }
   }
 
-  return Array.from(commandsByName.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return filterFoundationSkills(Array.from(commandsByName.values()), foundationSkillPolicy).sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -3315,6 +3325,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     name: string;
   } | null = null;
   private cachedSkills: Array<{ name: string; description: string; path: string }> = [];
+  private readonly foundationSkillPolicy: FoundationSkillPolicy | null;
 
   constructor(
     config: AgentSessionConfig,
@@ -3329,12 +3340,14 @@ export class CodexAppServerAgentSession implements AgentSession {
     private readonly initialResumePurpose: "interactive" | "history" = "interactive",
     private readonly roleInstructions?: string,
     private readonly providerLaunchBinding?: ProviderLaunchBinding,
+    roleId?: PaseoRoleId,
   ) {
     this.logger = logger.child({
       module: "agent",
       provider: CODEX_PROVIDER,
       agentId: this.agentId,
     });
+    this.foundationSkillPolicy = roleId ? loadFoundationSkillPolicy(roleId) : null;
     if (config.modeId === undefined) {
       throw new Error("Codex agent requires modeId to be specified");
     }
@@ -3535,7 +3548,10 @@ export class CodexAppServerAgentSession implements AgentSession {
           }
         }
       }
-      this.cachedSkills = Array.from(skillsByName.values());
+      this.cachedSkills = filterFoundationSkills(
+        Array.from(skillsByName.values()),
+        this.foundationSkillPolicy,
+      );
     } catch (error) {
       this.logger.trace(
         {
@@ -4564,7 +4580,11 @@ export class CodexAppServerAgentSession implements AgentSession {
     }));
     const fallbackSkills =
       appServerSkills.length === 0
-        ? await listCodexSkills(this.config.cwd, this.deps.workspaceGitService)
+        ? await listCodexSkills(
+            this.config.cwd,
+            this.deps.workspaceGitService,
+            this.foundationSkillPolicy,
+          )
         : [];
     const builtin: AgentSlashCommand[] = [
       {
@@ -4834,6 +4854,17 @@ export class CodexAppServerAgentSession implements AgentSession {
         multi_agent_v2: false,
       };
       innerConfig.agents = { ...agents, enabled: false };
+      if (this.foundationSkillPolicy) {
+        const skills = toObjectRecord(innerConfig.skills) ?? {};
+        innerConfig.skills = {
+          ...skills,
+          config: mergeCodexFoundationSkillConfig(
+            skills.config,
+            this.foundationSkillPolicy,
+            resolveCodexHomeDir(),
+          ),
+        };
+      }
       delete innerConfig.developer_instructions;
     }
     return Object.keys(innerConfig).length > 0 ? innerConfig : null;
@@ -6704,6 +6735,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       "interactive",
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
+      launchContext?.roleBinding?.roleId,
     );
     await session.connect();
     return session;
@@ -6742,6 +6774,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       options?.purpose ?? "interactive",
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
+      launchContext?.roleBinding?.roleId,
     );
     await session.connect();
     return session;

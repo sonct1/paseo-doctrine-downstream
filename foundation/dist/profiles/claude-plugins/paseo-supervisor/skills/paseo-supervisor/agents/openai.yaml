@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paseo Supervisor"
+  short_description: "Observe orchestration and guide bounded recovery"
+  default_prompt: "Use $paseo-supervisor to inspect this Paseo workflow, identify material coordination friction, and propose the smallest authorized recovery."

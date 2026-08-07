@@ -17,7 +17,12 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { inspectMachine } from "./inspection.js";
-import { resolveInstallLayout, resolveProductLayout, roleLinks } from "./layout.js";
+import {
+  foundationSkillNamesFromTargets,
+  resolveInstallLayout,
+  resolveProductLayout,
+  roleLinks,
+} from "./layout.js";
 import {
   FoundationManifestSchema,
   InstallRecordSchema,
@@ -278,11 +283,13 @@ function validateTransactionOwnership(home: string, transaction: InstallTransact
     home: resolvedHome,
     distributionVersion: path.basename(transaction.releasePath),
   });
+  const transactionTargets = transaction.previousLinks.map(({ target }) => target);
+  const skillNames = foundationSkillNamesFromTargets(resolvedHome, transactionTargets);
   const expectedTargets = roleLinks({
     home: resolvedHome,
     releasePath: transaction.releasePath,
+    skillNames,
   }).map(({ target }) => target);
-  const transactionTargets = transaction.previousLinks.map(({ target }) => target);
   const stagingSuffix = `${transaction.ownerPid}-${transaction.planId.slice(0, 12)}-staging`;
   const expectedReleaseStaging = path.join(
     install.releasesRoot,
@@ -342,7 +349,15 @@ export function recoverInterruptedInstall(home: string): boolean {
     throw new Error(`install transaction owner PID ${transaction.ownerPid} is still running`);
   }
   // Validate every final path before restoring any link so a failed recovery is no-write.
-  const activeLinks = roleLinks({ home: transaction.home, releasePath: transaction.releasePath });
+  const skillNames = foundationSkillNamesFromTargets(
+    transaction.home,
+    transaction.previousLinks.map(({ target }) => target),
+  );
+  const activeLinks = roleLinks({
+    home: transaction.home,
+    releasePath: transaction.releasePath,
+    skillNames,
+  });
   for (const [index, previous] of transaction.previousLinks.entries()) {
     if (
       !linkMatchesAllowedState(previous.target, [
@@ -547,8 +562,16 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
 
 function validateRecordOwnership(home: string, record: InstallRecord): void {
   const install = resolveInstallLayout({ home, distributionVersion: record.distributionVersion });
-  const expectedLinks = roleLinks({ home: install.home, releasePath: install.releasePath });
   const recordLinks = record.installedLinks.map(({ source, target }) => ({ source, target }));
+  const skillNames = foundationSkillNamesFromTargets(
+    install.home,
+    recordLinks.map(({ target }) => target),
+  );
+  const expectedLinks = roleLinks({
+    home: install.home,
+    releasePath: install.releasePath,
+    skillNames,
+  });
   const previousTargets = record.previousLinks?.map(({ target }) => target);
   const expectedTargets = expectedLinks.map(({ target }) => target);
   if (

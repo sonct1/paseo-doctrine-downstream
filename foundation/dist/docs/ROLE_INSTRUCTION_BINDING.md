@@ -80,6 +80,30 @@ này không cấp authority và hết hiệu lực cùng assignment. Custom Resp
 auth là supported transport choice khi exact provider binding được giữ. Role profile có thể chạy trên
 `full-access`, nhưng mutation authority vẫn đến từ assignment.
 
+Codex role profile đồng thời pin `skills.config` theo exact installed path. Bundle hiện tại là:
+
+| Role | Enabled skill |
+|---|---|
+| Lead | `repo-refresh` (`explicit-only`) |
+| Peer | `frontend-design` |
+| Supervisor | `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` |
+
+Mọi package ngoài bundle của role phải có `enabled=false`; global symlink hoặc package presence không
+được biến thành role eligibility. [`skills/role-bundles.json`](../skills/role-bundles.json) là canonical
+package provenance/admission map; provider projection phải derive từ file này thay vì tự lập matrix.
+Exact Demonthorn package giữ exact bytes. `architecture-premise-audit` là
+`FOUNDATION_DERIVATIVE`: active package bỏ dependency MMO không liên quan nhưng historical source vẫn
+giữ nguyên để audit lineage. `repo-refresh` chỉ được explicit invocation trong exact Lead lease;
+`frontend-design` chỉ dùng khi target owner yêu cầu rendered UI work. Exact `ultra-review` được ship
+nhưng `packaged-disabled`; chỉ một Foundation-authored adaptation đã thay native subagent/provider/path
+hard-code và có complete receive/verification path mới có thể xin admission riêng.
+
+Provider-native không đồng nghĩa user-global. Codex dùng global package link cộng `skills.config`
+theo role. Claude dùng role plugin được chọn bằng `--plugin-dir`; OpenCode dùng isolated role config
+root cộng per-agent skill permission; Cursor dùng role plugin root sau khi route canary pass. Không
+project role-sensitive package vào `~/.agents/skills` hoặc một global provider folder nếu provider
+không có fresh evidence rằng non-owning role bị hide/deny.
+
 ## Provider-native role sources
 
 Repository giữ model-neutral role source cho Lead, Peer và Supervisor dưới `profiles/claude/`,

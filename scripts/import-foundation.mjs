@@ -3,11 +3,14 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  cpSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -37,7 +40,7 @@ const FILES = [
   "scripts/omp-role",
 ];
 
-const DIRECTORIES = ["profiles", "skills/paseo-supervisor", "templates"];
+const DIRECTORIES = ["profiles", "skills", "templates"];
 
 function fail(message) {
   throw new Error(message);
@@ -119,6 +122,77 @@ function sha256(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
+function copyDirectory(source, destination) {
+  cpSync(source, destination, { recursive: true, force: false, errorOnExist: true });
+}
+
+function buildProviderSkillProjections(distributionVersion) {
+  const bundlePath = path.join(OUTPUT_ROOT, "skills", "role-bundles.json");
+  const bundle = JSON.parse(readFileSync(bundlePath, "utf8"));
+  if (bundle.schemaVersion !== 1 || typeof bundle.roles !== "object" || bundle.roles === null) {
+    fail("invalid Foundation role bundle manifest");
+  }
+
+  for (const role of ["lead", "peer", "supervisor"]) {
+    const roleBundle = bundle.roles[role];
+    if (
+      !roleBundle ||
+      !Array.isArray(roleBundle.active) ||
+      !Array.isArray(roleBundle.explicitOnly)
+    ) {
+      fail(`invalid Foundation role bundle: ${role}`);
+    }
+    const admitted = [...roleBundle.active, ...roleBundle.explicitOnly];
+    if (new Set(admitted).size !== admitted.length) fail(`duplicate admitted skill: ${role}`);
+
+    const claudeRoot = path.join(OUTPUT_ROOT, "profiles", "claude-plugins", `paseo-${role}`);
+    mkdirSync(path.join(claudeRoot, ".claude-plugin"), { recursive: true, mode: 0o755 });
+    mkdirSync(path.join(claudeRoot, "agents"), { recursive: true, mode: 0o755 });
+    writeFileSync(
+      path.join(claudeRoot, ".claude-plugin", "plugin.json"),
+      `${JSON.stringify(
+        {
+          name: `paseo-${role}`,
+          description: `Paseo ${role} role-bound skill projection`,
+          version: distributionVersion,
+          author: { name: "Paseo Foundation" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    cpSync(
+      path.join(OUTPUT_ROOT, "profiles", "claude", `paseo-${role}.md`),
+      path.join(claudeRoot, "agents", `paseo-${role}.md`),
+    );
+
+    const openCodeRoot = path.join(OUTPUT_ROOT, "profiles", "opencode-role-roots", role);
+    for (const skillName of admitted) {
+      const skillSource = path.join(OUTPUT_ROOT, "skills", skillName);
+      if (!statSync(path.join(skillSource, "SKILL.md")).isFile()) {
+        fail(`admitted Foundation skill is missing: ${skillName}`);
+      }
+      copyDirectory(skillSource, path.join(claudeRoot, "skills", skillName));
+      copyDirectory(skillSource, path.join(openCodeRoot, "skills", skillName));
+      copyDirectory(
+        skillSource,
+        path.join(OUTPUT_ROOT, "profiles", "cursor", `paseo-${role}`, "skills", skillName),
+      );
+    }
+  }
+}
+
+function distributionFiles(root, prefix = "") {
+  const files = [];
+  for (const entry of readdirSync(path.join(root, prefix), { withFileTypes: true })) {
+    const relativePath = path.posix.join(prefix, entry.name);
+    if (entry.isDirectory()) files.push(...distributionFiles(root, relativePath));
+    else if (entry.isFile()) files.push(relativePath);
+    else fail(`generated Foundation distribution contains a non-regular file: ${relativePath}`);
+  }
+  return files;
+}
+
 function writeJsonAtomic(filePath, value) {
   mkdirSync(path.dirname(filePath), { recursive: true });
   const temporary = `${filePath}.tmp-${process.pid}`;
@@ -143,7 +217,6 @@ function main() {
   rmSync(OUTPUT_ROOT, { recursive: true, force: true });
   mkdirSync(OUTPUT_ROOT, { recursive: true, mode: 0o755 });
 
-  const manifestFiles = [];
   for (const sourceFile of sourceFiles) {
     const relativePath = sourceFile.path;
     const destinationPath = path.join(OUTPUT_ROOT, relativePath);
@@ -152,12 +225,19 @@ function main() {
     writeFileSync(destinationPath, bytes);
     const mode = sourceFile.mode === "100755" ? 0o755 : 0o644;
     chmodSync(destinationPath, mode);
-    manifestFiles.push({
-      path: relativePath,
-      mode: mode.toString(8).padStart(4, "0"),
-      sha256: sha256(destinationPath),
-    });
   }
+
+  buildProviderSkillProjections(options["foundation-version"]);
+  const manifestFiles = distributionFiles(OUTPUT_ROOT)
+    .sort()
+    .map((relativePath) => {
+      const filePath = path.join(OUTPUT_ROOT, relativePath);
+      return {
+        path: relativePath,
+        mode: (statSync(filePath).mode & 0o777).toString(8).padStart(4, "0"),
+        sha256: sha256(filePath),
+      };
+    });
 
   const manifest = {
     schemaVersion: 1,

@@ -361,9 +361,11 @@ export function inspectMachine(
   const manifestRaw: unknown = readJson(product.manifestPath);
   const manifest = FoundationManifestSchema.parse(manifestRaw);
   const install = resolveInstallLayout({ home, distributionVersion: manifest.distributionVersion });
-  const links = roleLinks({ home, releasePath: install.releasePath }).map((link) =>
-    classifyPath({ ...link, shareRoot: install.shareRoot }),
-  );
+  const links = roleLinks({
+    home,
+    releasePath: install.releasePath,
+    skillInventoryRoot: product.distributionRoot,
+  }).map((link) => classifyPath({ ...link, shareRoot: install.shareRoot }));
   const currentLink = classifyPath({
     target: install.currentLink,
     source: install.releasePath,

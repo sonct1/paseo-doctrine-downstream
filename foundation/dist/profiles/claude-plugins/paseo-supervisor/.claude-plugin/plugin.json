@@ -1,0 +1,8 @@
+{
+  "name": "paseo-supervisor",
+  "description": "Paseo supervisor role-bound skill projection",
+  "version": "0.1.0-dev.5",
+  "author": {
+    "name": "Paseo Foundation"
+  }
+}

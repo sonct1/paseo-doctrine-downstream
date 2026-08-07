@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,46 @@ export interface InstallLayout {
   transactionPath: string;
   controlHome: string;
   legacyRecordPath: string;
+}
+
+export const FOUNDATION_SKILL_NAMES = [
+  "architecture-premise-audit",
+  "frontend-design",
+  "paseo-supervisor",
+  "repo-refresh",
+  "test-proof-debt-audit",
+  "ultra-review",
+] as const;
+
+function skillNamesAt(root: string): string[] {
+  const skillsRoot = path.join(root, "skills");
+  if (!existsSync(skillsRoot)) return [];
+  const allowed = new Set<string>(FOUNDATION_SKILL_NAMES);
+  const names = readdirSync(skillsRoot, { withFileTypes: true })
+    .filter(
+      (entry) => entry.isDirectory() && existsSync(path.join(skillsRoot, entry.name, "SKILL.md")),
+    )
+    .map((entry) => entry.name)
+    .sort();
+  for (const name of names) {
+    if (!allowed.has(name)) throw new Error(`unexpected Foundation skill package: ${name}`);
+  }
+  return names;
+}
+
+export function foundationSkillNamesFromTargets(home: string, targets: string[]): string[] {
+  const skillsRoot = path.join(path.resolve(home), ".codex", "skills");
+  const allowed = new Set<string>(FOUNDATION_SKILL_NAMES);
+  const names = targets
+    .filter((target) => path.dirname(target) === skillsRoot)
+    .map((target) => path.basename(target));
+  if (new Set(names).size !== names.length) {
+    throw new Error("Foundation role links contain duplicate skill targets");
+  }
+  for (const name of names) {
+    if (!allowed.has(name)) throw new Error(`unexpected Foundation skill target: ${name}`);
+  }
+  return names.sort();
 }
 
 function isProductRoot(candidate: string): boolean {
@@ -72,9 +112,17 @@ export function resolveInstallLayout(input: {
 export function roleLinks(input: {
   home: string;
   releasePath: string;
+  skillInventoryRoot?: string;
+  skillNames?: string[];
 }): Array<{ source: string; target: string }> {
   const codexRoot = path.join(input.home, ".codex");
   const paseoBin = path.join(input.home, ".paseo", "bin");
+  const skillNames =
+    input.skillNames ?? skillNamesAt(input.skillInventoryRoot ?? input.releasePath);
+  const skillLinks = skillNames.map((name) => ({
+    source: path.join(input.releasePath, "skills", name),
+    target: path.join(codexRoot, "skills", name),
+  }));
   return [
     {
       source: path.join(input.releasePath, "profiles", "codex", "lead.config.toml"),
@@ -88,10 +136,7 @@ export function roleLinks(input: {
       source: path.join(input.releasePath, "profiles", "codex", "supervisor.config.toml"),
       target: path.join(codexRoot, "supervisor.config.toml"),
     },
-    {
-      source: path.join(input.releasePath, "skills", "paseo-supervisor"),
-      target: path.join(codexRoot, "skills", "paseo-supervisor"),
-    },
+    ...skillLinks,
     {
       source: path.join(input.releasePath, "scripts", "codex-profile"),
       target: path.join(paseoBin, "codex-profile"),

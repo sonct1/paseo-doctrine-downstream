@@ -44,11 +44,14 @@ profiles. Với role đã được đúng authority chọn, session route phải
 ```text
 base provider: opencode
 launchContext.env.OPENCODE_CONFIG_CONTENT: exact JSON content của <role>.config.json
+launchContext.env.OPENCODE_CONFIG_DIR: <installed-release>/profiles/opencode-role-roots/<role>
 session modeId: omitted
 ```
 
 `launchContext.env` buộc OpenCode adapter tạo dedicated server với process-local environment.
-Không tạo ba global derived OpenCode providers: normal settings của installed
+`OPENCODE_CONFIG_DIR` trỏ vào generated role projection chỉ chứa skill được admission cho role đó;
+không project Foundation role skill vào `~/.agents/skills`, `~/.claude/skills` hoặc global OpenCode
+skill root. Không tạo ba global derived OpenCode providers: normal settings của installed
 `OpenCodeServerManager` có thể singleton-scoped và giữ command/runtime đầu tiên; có
 `launchContext.env` mới buộc dedicated server. Không đặt JSON/profile trong command arguments,
 không ghi global OpenCode config, không install, không restart daemon và không claim activation.
@@ -60,9 +63,10 @@ custom primary agent và đặt matching `default_agent`, route phải omit `mod
 minh role marker. Missing/mismatched `default_agent` hoặc fallback warning là `UNKNOWN/BLOCKED`, không
 silent fallback.
 
-Không blanket-deny `permission.skill`: Peer có thể dùng micro skill implementation/test/debug/research
-trong exact assignment lease. Standing profile và assignment vẫn cấm orchestration skill/authority;
-đây là protocol boundary, không phải claim về technical filesystem enforcement.
+Không blanket-deny toàn bộ `permission.skill`: role config deny exact Foundation package không thuộc
+bundle nhưng vẫn cho phép micro skill implementation/test/debug/research ngoài Foundation trong exact
+assignment lease. Standing profile và assignment vẫn cấm orchestration skill/authority; isolated
+role root cộng exact permission map là technical discovery boundary cho Foundation package.
 
 Paseo `0.2.5` CLI `--env` đi vào `launchContext.env`; generic ACP `session/new` và `prompt` vẫn không
 transport `systemPrompt`. Provider wiring, activation và fresh canary là Human-authorized work riêng.
@@ -73,7 +77,7 @@ Repository có ba model-neutral role sources cho mỗi provider:
 
 | Provider | Source | Candidate route | Evidence hiện tại |
 |---|---|---|---|
-| Claude | `profiles/claude/paseo-<role>.md` | provider override chạy Claude với `--agent paseo-<role>` sau authorized source activation | `claude-peer` role-qualified observed; new Lead/Supervisor sources `ROLE_BINDING_CANDIDATE/UNKNOWN` |
+| Claude | `profiles/claude/paseo-<role>.md` + generated `profiles/claude-plugins/paseo-<role>/` | provider override chạy Claude với exact `--plugin-dir` và `--agent paseo-<role>` sau authorized source activation | role source có prior evidence; generated skill projection vẫn cần fresh role-visible canary |
 | Antigravity | `profiles/antigravity/agents/paseo-<role>/agent.md` | generic ACP override chạy `agy-acp --agy-binary scripts/antigravity-role`; wrapper pin `agy --agent paseo-<role>` từ exact env allowlist | static source/wrapper pass; discovery/auth canary không đủ sạch, giữ `UNKNOWN` |
 | OMP | `profiles/omp/paseo-<role>.md` + shared `role.config.yml` | derived `omp` provider chạy `scripts/omp-role <role>`; wrapper append prompt, pin built-in tool allowlist không có `task`/`hub`, deny prompt/config/tool override, rồi OMP adapter append model/mode | direct RPC marker pass; `9router/deepseek-v4-flash` Peer marker + allowlist canary pass; fresh isolated Paseo role-catalog readback pass với `task`/`hub` absent |
 | Cursor | `profiles/cursor/paseo-<role>/` | `cursor-agent --plugin-dir <absolute-role-plugin> acp` | manifest/rule static pass nhưng Peer marker fail ở direct CLI và exact ACP; `BLOCKED_CURRENT_RUNTIME` |

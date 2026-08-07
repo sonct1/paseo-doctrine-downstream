@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ultra Review"
+  short_description: "Artifact-based parallel review pipeline"
+  default_prompt: "Use $ultra-review with review_name=<slug> to run independent review scouts, assign the foundation-accommodation lens when work relies on existing modules, write docs/ultrareview/<date>-<slug>-round-<n>.md, and print the full report."

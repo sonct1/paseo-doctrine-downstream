@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "architecture-premise-audit": {
+      "provenance": "FOUNDATION_DERIVATIVE",
+      "source": "references/demonthorn-skills-refs/architecture-premise-audit.md",
+      "admission": "active"
+    },
+    "frontend-design": {
+      "provenance": "DEMONTHORN_EXACT",
+      "source": "references/demonthorn-skills-refs/frontend-design/SKILL.md",
+      "admission": "active"
+    },
+    "paseo-supervisor": {
+      "provenance": "FOUNDATION_AUTHORED",
+      "source": "skills/paseo-supervisor/SKILL.md",
+      "admission": "active"
+    },
+    "repo-refresh": {
+      "provenance": "DEMONTHORN_EXACT",
+      "source": "references/demonthorn-skills-refs/repo-refresh/SKILL.md",
+      "admission": "explicit-only"
+    },
+    "test-proof-debt-audit": {
+      "provenance": "DEMONTHORN_EXACT",
+      "source": "references/demonthorn-skills-refs/test-proof-debt-audit/SKILL.md",
+      "admission": "active"
+    },
+    "ultra-review": {
+      "provenance": "DEMONTHORN_EXACT",
+      "source": "references/demonthorn-skills-refs/ultra-review/SKILL.md",
+      "admission": "packaged-disabled"
+    }
+  },
+  "roles": {
+    "lead": {
+      "active": [],
+      "explicitOnly": ["repo-refresh"],
+      "packagedDisabled": ["ultra-review"]
+    },
+    "peer": {
+      "active": ["frontend-design"],
+      "explicitOnly": [],
+      "packagedDisabled": []
+    },
+    "supervisor": {
+      "active": [
+        "architecture-premise-audit",
+        "paseo-supervisor",
+        "test-proof-debt-audit"
+      ],
+      "explicitOnly": [],
+      "packagedDisabled": []
+    }
+  }
+}
