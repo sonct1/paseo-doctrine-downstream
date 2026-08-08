@@ -163,6 +163,7 @@ import { ProviderCatalogSession } from "./session/provider/provider-catalog-sess
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
+import { WorkspaceProtocolSession } from "./session/workspace-protocol/workspace-protocol-session.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
@@ -661,6 +662,7 @@ export class Session {
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
+  private readonly workspaceProtocolSession: WorkspaceProtocolSession;
   private readonly daemonSession: DaemonSession;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
@@ -876,6 +878,13 @@ export class Session {
       logger: this.sessionLogger,
     });
     this.projectConfigSession = new ProjectConfigSession({
+      host: {
+        emit: (msg) => this.emit(msg),
+      },
+      projectRegistry: this.projectRegistry,
+      logger: this.sessionLogger,
+    });
+    this.workspaceProtocolSession = new WorkspaceProtocolSession({
       host: {
         emit: (msg) => this.emit(msg),
       },
@@ -1831,6 +1840,7 @@ export class Session {
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchAgentLifecycleMessage(msg) ??
+      this.dispatchProjectConfigurationMessage(msg) ??
       this.dispatchAgentConfigMessage(msg) ??
       this.dispatchCheckoutMessage(msg) ??
       this.dispatchWorkspaceRecoveryMessage(msg) ??
@@ -2064,10 +2074,23 @@ export class Session {
         });
         return undefined;
       }
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchProjectConfigurationMessage(
+    msg: SessionInboundMessage,
+  ): Promise<void> | undefined {
+    switch (msg.type) {
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
         return this.projectConfigSession.handleWriteProjectConfigRequest(msg);
+      case "foundation.workspaceProtocol.inspect.request":
+        return this.workspaceProtocolSession.handleInspectRequest(msg);
+      case "foundation.workspaceProtocol.write.request":
+        return this.workspaceProtocolSession.handleWriteRequest(msg);
       default:
         return undefined;
     }

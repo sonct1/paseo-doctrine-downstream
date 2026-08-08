@@ -2256,6 +2256,36 @@ export const zhCN: TranslationResources = {
     project: {
       noEditableTarget: "此项目无法在这个 Host 上编辑。",
       backToProjects: "返回 Projects",
+      workspaceProtocol: {
+        title: "Workspace protocol",
+        info: "Repository-specific orchestration rules that Paseo binds to Foundation roles",
+        unsupportedTitle: "Update this host to manage the workspace protocol",
+        unsupportedDescription:
+          "This daemon does not expose Workspace Protocol editing in Paseo yet.",
+        unreadableTitle: "Workspace Protocol cannot be read",
+        unreadableDescription:
+          "Check the file permissions or path on the host, then reload. Paseo will not overwrite it.",
+        loadFailedTitle: "Could not load Workspace Protocol",
+        loadFailedDescription: "The host did not return the protocol state.",
+        missingTitle: "Workspace Protocol is required",
+        missingDescription:
+          "Review the generated repository defaults, then bootstrap the file from this screen.",
+        invalidTitle: "Workspace Protocol needs correction",
+        invalidDescription: "Fix these checks before saving:",
+        staleTitle: "Workspace Protocol changed on disk",
+        staleDescription: "Reload the current file before applying your edits.",
+        writeFailedTitle: "Could not save Workspace Protocol",
+        writeFailedDescription:
+          "Paseo left the existing file unchanged. Check permissions, then try again.",
+        editorAccessibility: "Workspace Protocol content",
+        bootstrap: "Bootstrap protocol",
+        saved: "Workspace Protocol saved",
+        status: {
+          missing: "Bootstrap required",
+          valid: "Active protocol",
+          invalid: "Correction required",
+        },
+      },
       edit: {
         title: "编辑 Project",
         name: "名称",

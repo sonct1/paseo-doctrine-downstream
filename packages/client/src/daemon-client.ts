@@ -99,6 +99,7 @@ import type {
   SendAgentMessageRequest,
   PaseoConfigRaw,
   PaseoConfigRevision,
+  WorkspaceProtocolRevision,
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
 } from "@getpaseo/protocol/messages";
@@ -459,6 +460,14 @@ type WriteProjectConfigPayload = Extract<
   SessionOutboundMessage,
   { type: "write_project_config_response" }
 >["payload"];
+type WorkspaceProtocolInspectPayload = Extract<
+  SessionOutboundMessage,
+  { type: "foundation.workspaceProtocol.inspect.response" }
+>["payload"];
+type WorkspaceProtocolWritePayload = Extract<
+  SessionOutboundMessage,
+  { type: "foundation.workspaceProtocol.write.response" }
+>["payload"];
 
 type ListCommandsPayload = ListCommandsResponse["payload"];
 type ListCommandsDraftConfig = Pick<
@@ -469,6 +478,12 @@ export interface WriteProjectConfigInput {
   repoRoot: string;
   config: PaseoConfigRaw;
   expectedRevision: PaseoConfigRevision | null;
+  requestId?: string;
+}
+export interface WriteWorkspaceProtocolInput {
+  repoRoot: string;
+  content: string;
+  expectedRevision: WorkspaceProtocolRevision | null;
   requestId?: string;
 }
 interface ListCommandsOptions {
@@ -4657,6 +4672,33 @@ export class DaemonClient {
         expectedRevision: input.expectedRevision,
       },
       responseType: "write_project_config_response",
+    });
+  }
+
+  async inspectWorkspaceProtocol(
+    repoRoot: string,
+    requestId?: string,
+  ): Promise<WorkspaceProtocolInspectPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "foundation.workspaceProtocol.inspect.request",
+        repoRoot,
+      },
+    });
+  }
+
+  async writeWorkspaceProtocol(
+    input: WriteWorkspaceProtocolInput,
+  ): Promise<WorkspaceProtocolWritePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: input.requestId,
+      message: {
+        type: "foundation.workspaceProtocol.write.request",
+        repoRoot: input.repoRoot,
+        content: input.content,
+        expectedRevision: input.expectedRevision,
+      },
     });
   }
 

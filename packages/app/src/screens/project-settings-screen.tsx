@@ -7,6 +7,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Pencil, Plus } from "lucide-react-native";
 import { ProjectIconView } from "@/components/project-icon-view";
+import { WorkspaceProtocolSettings } from "@/components/workspace-protocol-settings";
 import type {
   PaseoConfigRaw,
   PaseoConfigRevision,
@@ -203,6 +204,10 @@ function ProjectSettingsBody({
 
   const data = readQuery.data;
   const supportsCustomIcon = useHostFeature(selectedHost.serverId, "projectCustomIcon");
+  const supportsWorkspaceProtocol = useHostFeature(
+    selectedHost.serverId,
+    "workspaceProtocolEditing",
+  );
   const customIconRevision = selectedHost.customIconRevision ?? null;
   const projectIconTargets = useMemo(
     () => [
@@ -284,6 +289,13 @@ function ProjectSettingsBody({
         client={client}
         supportsCustomIcon={supportsCustomIcon}
         snapshot={editSnapshot}
+      />
+
+      <WorkspaceProtocolSettings
+        client={client}
+        serverId={selectedHost.serverId}
+        repoRoot={selectedHost.repoRoot}
+        supported={supportsWorkspaceProtocol}
       />
 
       {renderContent({

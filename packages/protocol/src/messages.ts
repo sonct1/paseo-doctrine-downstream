@@ -82,6 +82,14 @@ import {
   type PaseoScriptEntryRaw,
   type ProjectConfigRpcError,
 } from "./paseo-config-schema.js";
+import {
+  WorkspaceProtocolRevisionSchema,
+  WorkspaceProtocolRpcErrorSchema,
+  WorkspaceProtocolSnapshotSchema,
+  type WorkspaceProtocolRevision,
+  type WorkspaceProtocolRpcError,
+  type WorkspaceProtocolSnapshot,
+} from "./workspace-protocol-schema.js";
 export {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -95,6 +103,12 @@ export {
   type PaseoMetadataGenerationEntry,
   type PaseoScriptEntryRaw,
   type ProjectConfigRpcError,
+  WorkspaceProtocolRevisionSchema,
+  WorkspaceProtocolRpcErrorSchema,
+  WorkspaceProtocolSnapshotSchema,
+  type WorkspaceProtocolRevision,
+  type WorkspaceProtocolRpcError,
+  type WorkspaceProtocolSnapshot,
 };
 // ---------------------------------------------------------------------------
 // Mutable daemon config schemas (shared between server store and client)
@@ -1302,6 +1316,20 @@ export const WriteProjectConfigRequestMessageSchema = z.object({
   repoRoot: z.string(),
   config: PaseoConfigRawSchema,
   expectedRevision: PaseoConfigRevisionSchema.nullable(),
+});
+
+export const WorkspaceProtocolInspectRequestMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.inspect.request"),
+  requestId: z.string(),
+  repoRoot: z.string(),
+});
+
+export const WorkspaceProtocolWriteRequestMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.write.request"),
+  requestId: z.string(),
+  repoRoot: z.string(),
+  content: z.string(),
+  expectedRevision: WorkspaceProtocolRevisionSchema.nullable(),
 });
 
 // ============================================================================
@@ -2628,6 +2656,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsDeleteRequestSchema,
   ReadProjectConfigRequestMessageSchema,
   WriteProjectConfigRequestMessageSchema,
+  WorkspaceProtocolInspectRequestMessageSchema,
+  WorkspaceProtocolWriteRequestMessageSchema,
   DictationStreamStartMessageSchema,
   DictationStreamChunkMessageSchema,
   DictationStreamFinishMessageSchema,
@@ -2957,6 +2987,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRecovery: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
+        // COMPAT(workspaceProtocolEditing): added in the Foundation WebUI slice; keep optional for older daemons.
+        workspaceProtocolEditing: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -4111,6 +4143,38 @@ export const WriteProjectConfigResponseMessageSchema = z.object({
       repoRoot: z.string(),
       ok: z.literal(false),
       error: ProjectConfigRpcErrorSchema,
+    }),
+  ]),
+});
+
+export const WorkspaceProtocolInspectResponseMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.inspect.response"),
+  payload: z.union([
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(true),
+      snapshot: WorkspaceProtocolSnapshotSchema,
+    }),
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(false),
+      error: WorkspaceProtocolRpcErrorSchema,
+    }),
+  ]),
+});
+
+export const WorkspaceProtocolWriteResponseMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.write.response"),
+  payload: z.union([
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(true),
+      snapshot: WorkspaceProtocolSnapshotSchema,
+    }),
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(false),
+      error: WorkspaceProtocolRpcErrorSchema,
     }),
   ]),
 });
@@ -5502,6 +5566,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsDeleteResponseSchema,
   ReadProjectConfigResponseMessageSchema,
   WriteProjectConfigResponseMessageSchema,
+  WorkspaceProtocolInspectResponseMessageSchema,
+  WorkspaceProtocolWriteResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
   SetAgentModelResponseMessageSchema,
   SetAgentThinkingResponseMessageSchema,

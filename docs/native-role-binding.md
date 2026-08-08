@@ -103,6 +103,11 @@ Paseo không copy protocol vào global config. Repository tiếp tục sở hữ
 - role-specific readership;
 - receipt của lần bind.
 
+Human quản lý file từ WebUI Project Settings. UI đọc trạng thái `missing|valid|invalid|unreadable`,
+preview một baseline repository-specific khi thiếu, rồi chỉ bootstrap sau explicit Human action. Edit/save
+dùng revision gồm digest để không overwrite thay đổi ngoài Paseo; content invalid, stale hoặc unreadable
+đều fail closed và giữ current bytes. CLI/MCP không phải setup path dành cho Human.
+
 Lead được bind full protocol trước orchestration. Peer không đọc full protocol và chỉ nhận relevant constraints trong assignment. Supervisor chỉ được bind full protocol khi governance assignment yêu cầu create/audit/update.
 
 ## UX
@@ -115,6 +120,10 @@ Create flow đi theo thứ tự:
 4. chọn một provider tương thích;
 5. chọn model/mode và preview binding receipt;
 6. nhập assignment rồi spawn.
+
+Nếu protocol thiếu hoặc invalid, create flow phải đưa Human về Project Settings để bootstrap/correct
+trên WebUI; không yêu cầu copy/paste command. Redirect/gate này là bước admission tiếp theo sau lát cắt
+Project Settings hiện tại.
 
 Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
@@ -149,3 +158,5 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Cursor capsule phải giữ exact role marker qua ACP create/resume mà không ghi `.cursor/rules` vào target repository.
 - Antigravity wrapper phải pin exact materialized agent trên discovery/prompt/resume, reject caller `--agent`, cleanup only exact owned profile, và hiện third-party auth notice.
 - Legacy no-role sessions tiếp tục chạy như trước.
+- Workspace Protocol bootstrap không overwrite file vừa xuất hiện hoặc vừa đổi ngoài WebUI, và invalid
+  preview không tạo partial file.
