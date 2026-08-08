@@ -80,9 +80,11 @@ Authority:
 - Chỉ designated successor Lead được record successor_acknowledged hoặc rejection của chính nó.
 - Chỉ Human-facing caller được record predecessor_released.
 
-Receipt không tự detach, archive, stop, đổi role binding hoặc enforce write lease. Mỗi thời điểm vẫn chỉ
-có một actual write Owner theo Human/repository authority. Nếu runtime tools chưa available, dừng ở
-manual frozen packet và báo UNKNOWN; không dùng chat prose giả làm receipt.
+Các receipt trước final release không đổi authority. `predecessor_released` chỉ được ghi ở idle boundary;
+transition này atomically chuyển `currentWriteOwnerAgentId` sang successor và daemon từ chối mọi prompt
+mới hoặc unarchive-and-prompt cho predecessor bằng `agent_write_lease_released`. Nó không detach,
+archive hoặc đổi role binding. Nếu runtime tools chưa available, dừng ở manual frozen packet và báo
+UNKNOWN; không dùng chat prose giả làm receipt.
 
 ## Skill usage
 
@@ -102,5 +104,5 @@ P1 rejection, rationale, isolated P2 runtime qualification và integrated P0 cal
 docs/research/p1-adjacent-lead-handoff-pilot-2026-08-08.md. Candidate P2 trực tiếp bắt buộc các field mà
 successor đã chỉ ra là thiếu. P0 canary chứng minh native tool invocation và durable state readback trên
 paid Codex Lead; P2 qualification chứng minh ordered workflow và durable readback trong dev daemon cô
-lập. Hai bằng chứng chưa chứng minh release activation, production operation hoặc write-lease
-enforcement.
+lập. Runtime lease gate đã có focused race/boundary tests trên candidate branch, nhưng chưa có
+paid-provider end-to-end release canary hoặc production qualification.

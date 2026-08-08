@@ -1997,7 +1997,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Transition Lead handoff",
       description:
-        "Record explicit Human authorization/release or the designated successor's acknowledgement/rejection. This records receipts only; it never detaches, archives, or changes role binding.",
+        "Record explicit Human authorization/release or the designated successor's acknowledgement/rejection. Final release requires an idle predecessor, transfers current write ownership, and blocks later predecessor prompts without detaching, archiving, or changing role binding.",
       inputSchema: {
         predecessorAgentId: z.string().min(1),
         handoffId: z.string().min(1),
@@ -2012,7 +2012,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         throw new Error("Only a Human-facing caller can authorize or release a Lead handoff");
       }
       const handoff = await transitionLeadHandoff(
-        { agentStorage },
+        { agentStorage, hasInFlightRun: (agentId) => agentManager.hasInFlightRun(agentId) },
         {
           predecessorAgentId,
           handoffId,

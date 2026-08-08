@@ -38,6 +38,7 @@ function scenario() {
   return {
     records,
     dependencies: {
+      hasInFlightRun: vi.fn(() => false),
       agentStorage: {
         get: vi.fn(async (id: string) => records.get(id) ?? null),
         upsert: vi.fn(async (record: StoredAgentRecord) => {
@@ -123,6 +124,7 @@ describe("Lead handoff packets", () => {
     });
 
     expect(packet.status).toBe("predecessor_released");
+    expect(packet.currentWriteOwnerAgentId).toBe("lead-new");
     expect(packet.receipts.map((receipt) => receipt.transition)).toEqual([
       "successor_authorized",
       "successor_acknowledged",
@@ -130,6 +132,42 @@ describe("Lead handoff packets", () => {
     ]);
     expect(testCase.records.get("lead-old")?.roleBinding?.roleId).toBe("lead");
     expect(testCase.records.get("lead-new")?.roleBinding?.roleId).toBe("lead");
+  });
+
+  test("rejects release while the predecessor is running without partial mutation", async () => {
+    const testCase = scenario();
+    let packet = await prepareLeadHandoff(testCase.dependencies, completePacketInput());
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_authorized",
+      actorAgentId: null,
+      successorAgentId: "lead-new",
+      note: "Human authorization",
+    });
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_acknowledged",
+      actorAgentId: "lead-new",
+      note: "Packet accepted",
+    });
+    testCase.dependencies.hasInFlightRun.mockReturnValue(true);
+
+    await expect(
+      transitionLeadHandoff(testCase.dependencies, {
+        predecessorAgentId: "lead-old",
+        handoffId: packet.id,
+        transition: "predecessor_released",
+        actorAgentId: null,
+        note: "Unsafe release attempt",
+      }),
+    ).rejects.toThrow("in-flight run");
+
+    expect(testCase.records.get("lead-old")?.leadHandoffs?.[0]).toMatchObject({
+      status: "successor_acknowledged",
+      currentWriteOwnerAgentId: "lead-old",
+    });
   });
 
   test("rejects a false owner and a non-designated successor acknowledgement", async () => {

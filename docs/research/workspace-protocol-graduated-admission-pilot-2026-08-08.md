@@ -96,11 +96,11 @@ PASS
 ```
 
 Canary này qualify paid-provider role binding, durable assignment values qua một explicit reload và
-inspectability của receipt. Nó không chứng minh multi-day continuity effect, runtime write-lease
-enforcement hoặc production acceptance.
+inspectability của receipt. Nó không chứng minh multi-day continuity effect, paid-provider handoff
+release behavior hoặc production acceptance.
 
 ## Gate tiếp theo
 
-Trước production promotion vẫn cần: một missing-protocol Human bootstrap canary; runtime write-lease
-decision/enforcement; multi-day continuity evidence; và record false-block, exception-use,
+Trước production promotion vẫn cần: một missing-protocol Human bootstrap canary; paid-provider
+end-to-end handoff release canary; multi-day continuity evidence; và record false-block, exception-use,
 correction/handback outcome. Không dùng test count hay notification làm acceptance.

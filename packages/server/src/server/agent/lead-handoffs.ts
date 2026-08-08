@@ -6,9 +6,11 @@ import type {
 } from "@getpaseo/protocol/lead-handoff";
 
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
+import { withAgentAuthorityLock } from "./agent-authority-lock.js";
 
 export interface LeadHandoffDependencies {
   agentStorage: Pick<AgentStorage, "get" | "upsert">;
+  hasInFlightRun?: (agentId: string) => boolean;
 }
 
 const recordUpdates = new Map<string, Promise<unknown>>();
@@ -157,73 +159,102 @@ export async function transitionLeadHandoff(
     }
     await requireAdjacentLeads(dependencies, input.predecessorAgentId, input.successorAgentId);
   }
-  return updatePredecessorRecord(dependencies, input.predecessorAgentId, (record) => {
-    const packets = record.leadHandoffs ?? [];
-    const index = packets.findIndex((packet) => packet.id === input.handoffId);
-    if (index < 0) {
-      throw new Error("Lead handoff " + input.handoffId + " not found");
-    }
-    const packet = packets[index];
-    const repeated = packet.receipts.find(
-      (receipt) =>
-        receipt.transition === input.transition &&
-        receipt.actorAgentId === input.actorAgentId &&
-        receipt.note === input.note,
-    );
-    if (repeated && packet.status === input.transition) {
-      return { record, result: packet };
-    }
-    const expected = EXPECTED_STATUS[input.transition];
-    if (packet.status !== expected) {
-      throw new Error(
-        "Lead handoff " +
-          packet.id +
-          " is " +
-          packet.status +
-          "; " +
-          input.transition +
-          " requires " +
-          expected,
+  const transition = () =>
+    updatePredecessorRecord(dependencies, input.predecessorAgentId, (record) => {
+      const packets = record.leadHandoffs ?? [];
+      const index = packets.findIndex((packet) => packet.id === input.handoffId);
+      if (index < 0) {
+        throw new Error("Lead handoff " + input.handoffId + " not found");
+      }
+      const packet = packets[index];
+      const repeated = packet.receipts.find(
+        (receipt) =>
+          receipt.transition === input.transition &&
+          receipt.actorAgentId === input.actorAgentId &&
+          receipt.note === input.note,
       );
+      if (repeated && packet.status === input.transition) {
+        return { record, result: packet };
+      }
+      const expected = EXPECTED_STATUS[input.transition];
+      if (packet.status !== expected) {
+        throw new Error(
+          "Lead handoff " +
+            packet.id +
+            " is " +
+            packet.status +
+            "; " +
+            input.transition +
+            " requires " +
+            expected,
+        );
+      }
+      if (
+        input.transition === "successor_acknowledged" &&
+        input.actorAgentId !== packet.successorAgentId
+      ) {
+        throw new Error("Only the designated successor Lead can acknowledge this handoff");
+      }
+      if (
+        (input.transition === "successor_authorized" ||
+          input.transition === "predecessor_released") &&
+        input.actorAgentId !== null
+      ) {
+        throw new Error(input.transition + " requires an explicit Human-facing action");
+      }
+      if (
+        input.transition === "rejected" &&
+        input.actorAgentId !== null &&
+        input.actorAgentId !== packet.successorAgentId
+      ) {
+        throw new Error("Only Human or the designated successor Lead can reject this handoff");
+      }
+      const transitioned: LeadHandoffPacket = {
+        ...packet,
+        ...(input.transition === "successor_authorized"
+          ? { successorAgentId: input.successorAgentId as string }
+          : {}),
+        ...(input.transition === "predecessor_released"
+          ? { currentWriteOwnerAgentId: packet.successorAgentId as string }
+          : {}),
+        status: input.transition,
+        receipts: [
+          ...packet.receipts,
+          {
+            transition: input.transition,
+            actorAgentId: input.actorAgentId,
+            note: input.note,
+            at: new Date().toISOString(),
+          },
+        ],
+      };
+      const nextPackets = [...packets];
+      nextPackets[index] = transitioned;
+      return { record: { ...record, leadHandoffs: nextPackets }, result: transitioned };
+    });
+
+  if (input.transition !== "predecessor_released") {
+    return transition();
+  }
+  if (!dependencies.hasInFlightRun) {
+    throw new Error("predecessor_released requires runtime safe-boundary enforcement");
+  }
+  return withAgentAuthorityLock(input.predecessorAgentId, async () => {
+    if (dependencies.hasInFlightRun?.(input.predecessorAgentId)) {
+      throw new Error("Cannot release predecessor while it has an in-flight run");
     }
-    if (
-      input.transition === "successor_acknowledged" &&
-      input.actorAgentId !== packet.successorAgentId
-    ) {
-      throw new Error("Only the designated successor Lead can acknowledge this handoff");
-    }
-    if (
-      (input.transition === "successor_authorized" ||
-        input.transition === "predecessor_released") &&
-      input.actorAgentId !== null
-    ) {
-      throw new Error(input.transition + " requires an explicit Human-facing action");
-    }
-    if (
-      input.transition === "rejected" &&
-      input.actorAgentId !== null &&
-      input.actorAgentId !== packet.successorAgentId
-    ) {
-      throw new Error("Only Human or the designated successor Lead can reject this handoff");
-    }
-    const transitioned: LeadHandoffPacket = {
-      ...packet,
-      ...(input.transition === "successor_authorized"
-        ? { successorAgentId: input.successorAgentId as string }
-        : {}),
-      status: input.transition,
-      receipts: [
-        ...packet.receipts,
-        {
-          transition: input.transition,
-          actorAgentId: input.actorAgentId,
-          note: input.note,
-          at: new Date().toISOString(),
-        },
-      ],
-    };
-    const nextPackets = [...packets];
-    nextPackets[index] = transitioned;
-    return { record: { ...record, leadHandoffs: nextPackets }, result: transitioned };
+    return transition();
   });
+}
+
+export function assertAgentPromptLease(record: StoredAgentRecord | null): void {
+  if (!record) return;
+  const released = record.leadHandoffs?.find(
+    (packet) =>
+      packet.status === "predecessor_released" && packet.currentWriteOwnerAgentId !== record.id,
+  );
+  if (!released) return;
+  throw new Error(
+    `agent_write_lease_released: ${record.id}; successor=${released.currentWriteOwnerAgentId}; handoff=${released.id}`,
+  );
 }

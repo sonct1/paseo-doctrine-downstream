@@ -50,8 +50,9 @@ Sau khi implementation hoàn tất, cùng isolated dev daemon đã chạy exact 
 Restart readback trả packet ở trạng thái `predecessor_released` với ba receipt theo đúng thứ tự:
 `successor_authorized`, `successor_acknowledged`, `predecessor_released`. `actorAgentId` lần lượt là
 `null`, exact successor ID, `null`. Cả hai agent có `archivedAt: null`; workflow không detach, archive,
-đổi role binding hoặc chuyển write lease. Sau daemon restart, runtime projection là `closed`, phù hợp với
-durable record chưa được initialize lại và không phải handoff lifecycle mutation.
+đổi role binding hoặc chuyển write lease ở revision được pilot lúc đó. Sau daemon restart, runtime
+projection là `closed`, phù hợp với durable record chưa được initialize lại và không phải handoff
+lifecycle mutation.
 
 Hai activation finding có giá trị:
 
@@ -87,5 +88,6 @@ diagnostic evidence; không thay thế end-to-end callable proof.
 - Candidate P0 đã có paid-provider callable proof trên integrated daemon, nhưng chưa release-activated
   hoặc production-qualified.
 - Candidate P2 đã qualified trên isolated runtime, chưa release-activated hoặc production-qualified.
-- Receipt ghi nhận authority decision nhưng chưa enforce runtime write lease.
+- Candidate hiện enforce final release ở daemon prompt boundary và reject release khi predecessor còn
+  in-flight; paid-provider end-to-end release canary vẫn chưa chạy.
 - Cooling, corroboration và predecessor retention policy vẫn là open doctrine decisions.

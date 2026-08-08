@@ -92,7 +92,8 @@ Require an exact Human handoff/replacement mandate and a role-bound predecessor 
    transition_lead_handoff with successor_acknowledged, or rejects the packet with discrepancies.
 6. Only after successor ACK may Human record predecessor_released.
 
-These transitions are durable receipts, not lifecycle mutations. They never call detach, archive an
-agent, change role binding, or enforce a write lease. Keep one actual write Owner throughout. If the
-first-class handoff tools are unavailable, stop with a manual frozen packet and report the mechanism as
-unsupported; do not fake transition receipts with chat prose.
+The first transitions are durable receipts, not lifecycle mutations. Final `predecessor_released`
+requires an idle predecessor, transfers `currentWriteOwnerAgentId` to the successor, and blocks later
+prompt dispatch or unarchive-and-prompt for the predecessor. It does not detach, archive, or change role
+binding. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
+the mechanism as unsupported; do not fake transition receipts with chat prose.

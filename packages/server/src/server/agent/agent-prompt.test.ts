@@ -230,6 +230,45 @@ test("safe-boundary prompt delivery never replaces an in-flight run", async () =
   expect(streamAgent).toHaveBeenCalledOnce();
 });
 
+test("released predecessor cannot be prompted or unarchived", async () => {
+  const streamAgent = vi.fn(() => (async function* noop() {})());
+  const agentManager: AgentManager = Object.create(AgentManager.prototype);
+  Reflect.set(
+    agentManager,
+    "getAgent",
+    vi.fn(() => null),
+  );
+  Reflect.set(agentManager, "streamAgent", streamAgent);
+
+  const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
+  const upsert = vi.fn();
+  Reflect.set(agentStorage, "upsert", upsert);
+  Reflect.set(agentStorage, "get", async () => ({
+    id: "lead-old",
+    archivedAt: "2026-08-08T01:00:00.000Z",
+    leadHandoffs: [
+      {
+        id: "handoff-1",
+        status: "predecessor_released",
+        currentWriteOwnerAgentId: "lead-new",
+      },
+    ],
+  }));
+
+  await expect(
+    sendPromptToAgent({
+      agentManager,
+      agentStorage,
+      agentId: "lead-old",
+      prompt: "continue writing",
+      logger: createTestLogger(),
+    }),
+  ).rejects.toThrow("agent_write_lease_released");
+
+  expect(upsert).not.toHaveBeenCalled();
+  expect(streamAgent).not.toHaveBeenCalled();
+});
+
 test("finish notifications tell the parent the child's last assistant message", async () => {
   const scenario = createFinishNotificationScenario({
     childLastAssistantMessage: "Implemented the cleanup and all checks pass.",
