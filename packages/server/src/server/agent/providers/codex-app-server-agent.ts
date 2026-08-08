@@ -809,6 +809,16 @@ interface CodexMcpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   tool_timeout_sec?: number;
+  required?: boolean;
+}
+
+function isInternalPaseoMcpConfig(name: string, config: McpServerConfig): boolean {
+  if (name !== "paseo" || (config.type !== "http" && config.type !== "sse")) return false;
+  try {
+    return new URL(config.url).pathname === "/mcp/agents";
+  } catch {
+    return false;
+  }
 }
 
 function toCodexMcpConfig(config: McpServerConfig): CodexMcpServerConfig {
@@ -3255,6 +3265,11 @@ export class CodexAppServerAgentSession implements AgentSession {
   private currentMode: string;
   private currentThreadId: string | null = null;
   private runtimeThreadConfigAppliedForThreadId: string | null = null;
+  private pendingRuntimeThreadConfigApply: {
+    client: CodexAppServerClient;
+    threadId: string;
+    promise: Promise<void>;
+  } | null = null;
   private currentTurnId: string | null = null;
   private pendingForegroundTurnIdentification: {
     foregroundTurnId: string;
@@ -3434,6 +3449,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (this.currentThreadId) {
         await this.ensureThreadLoaded({
           allowArchivedHistory: this.initialResumePurpose === "history",
+          applyRuntimeOverrides: this.initialResumePurpose !== "history",
         });
         await this.loadPersistedHistory();
       }
@@ -3791,14 +3807,45 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private async ensureThreadLoaded(
-    options: { allowArchivedHistory?: boolean } = {},
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean } = {},
   ): Promise<void> {
-    if (!this.client || !this.currentThreadId) return;
+    const client = this.client;
+    const threadId = this.currentThreadId;
+    if (!client || !threadId) return;
+    const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
+    if (applyRuntimeOverrides) {
+      const pending = this.pendingRuntimeThreadConfigApply;
+      if (pending?.client === client && pending.threadId === threadId) {
+        await pending.promise;
+      } else {
+        const promise = this.ensureThreadLoadedFor(client, threadId, options);
+        this.pendingRuntimeThreadConfigApply = { client, threadId, promise };
+        try {
+          await promise;
+        } finally {
+          if (this.pendingRuntimeThreadConfigApply?.promise === promise) {
+            this.pendingRuntimeThreadConfigApply = null;
+          }
+        }
+      }
+      if (this.client !== client || this.currentThreadId !== threadId) {
+        await this.ensureThreadLoaded(options);
+      }
+      return;
+    }
+    await this.ensureThreadLoadedFor(client, threadId, options);
+  }
+
+  private async ensureThreadLoadedFor(
+    client: CodexAppServerClient,
+    threadId: string,
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean },
+  ): Promise<void> {
     try {
-      const loaded = toObjectRecord(await this.client.request("thread/loaded/list", {}));
+      const loaded = toObjectRecord(await client.request("thread/loaded/list", {}));
       const ids = Array.isArray(loaded?.data) ? loaded.data : [];
-      const applyRuntimeOverrides = this.initialResumePurpose === "interactive";
-      const params: Record<string, unknown> = { threadId: this.currentThreadId };
+      const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
+      const params: Record<string, unknown> = { threadId };
       const developerInstructions = applyRuntimeOverrides
         ? composeSystemPromptParts(
             this.config.systemPrompt,
@@ -3811,19 +3858,18 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (codexConfig) params.config = codexConfig;
       const hasRuntimeOverrides = Boolean(developerInstructions) || codexConfig !== null;
       if (
-        ids.includes(this.currentThreadId) &&
+        ids.includes(threadId) &&
         (!applyRuntimeOverrides ||
           !hasRuntimeOverrides ||
-          this.runtimeThreadConfigAppliedForThreadId === this.currentThreadId)
+          this.runtimeThreadConfigAppliedForThreadId === threadId)
       ) {
         return;
       }
-      await this.client.request("thread/resume", params);
-      if (hasRuntimeOverrides) {
-        this.runtimeThreadConfigAppliedForThreadId = this.currentThreadId;
+      await client.request("thread/resume", params);
+      if (hasRuntimeOverrides && this.client === client && this.currentThreadId === threadId) {
+        this.runtimeThreadConfigAppliedForThreadId = threadId;
       }
     } catch (error) {
-      const threadId = this.currentThreadId;
       const message = error instanceof Error ? error.message : String(error);
       if (
         options.allowArchivedHistory === true &&
@@ -4842,7 +4888,10 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (this.config.mcpServers) {
       const mcpServers: Record<string, CodexMcpServerConfig> = {};
       for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
-        mcpServers[name] = toCodexMcpConfig(serverConfig);
+        mcpServers[name] = {
+          ...toCodexMcpConfig(serverConfig),
+          ...(isInternalPaseoMcpConfig(name, serverConfig) ? { required: true } : {}),
+        };
       }
       innerConfig.mcp_servers = mcpServers;
     }

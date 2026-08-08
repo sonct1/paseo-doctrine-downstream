@@ -1235,6 +1235,7 @@ describe("Codex app-server provider", () => {
           paseo: {
             url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
             http_headers: { Authorization: "Bearer test-token" },
+            required: true,
           },
         },
       },
@@ -1243,7 +1244,7 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
-  test("does not apply runtime MCP or role config while loading already-loaded history", async () => {
+  test("defers runtime config during history load and applies it on the first interactive use", async () => {
     const threadRequests: Array<{ method: string; params: unknown }> = [];
     const appServer = createFakeCodexAppServer({
       "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
@@ -1275,8 +1276,60 @@ describe("Codex app-server provider", () => {
     expect(threadRequests).toEqual([
       { method: "thread/read", params: { threadId: "archived-thread-id", includeTurns: true } },
     ]);
+    await castInternals<{ ensureThreadLoaded(): Promise<void> }>(session).ensureThreadLoaded();
+    expect(threadRequests).toEqual([
+      { method: "thread/read", params: { threadId: "archived-thread-id", includeTurns: true } },
+      {
+        method: "thread/resume",
+        params: expect.objectContaining({
+          threadId: "archived-thread-id",
+          developerInstructions: expect.stringContaining("Bound Lead instructions"),
+          config: expect.objectContaining({
+            mcp_servers: expect.objectContaining({
+              paseo: expect.objectContaining({ required: true }),
+            }),
+          }),
+        }),
+      },
+    ]);
     await session.close();
     appServer.assertNoErrors();
+  });
+
+  test("coalesces runtime config apply and retries for a replacement thread", async () => {
+    const firstResume = Promise.withResolvers<void>();
+    const resumeParams: unknown[] = [];
+    const session = createSession({
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+      },
+    });
+    session.currentThreadId = "thread-a";
+    session.client = createStub<CodexClientLike>({
+      request: vi.fn(async (method: string, params: unknown) => {
+        if (method === "thread/loaded/list") return { data: ["thread-a", "thread-b"] };
+        if (method === "thread/resume") {
+          resumeParams.push(params);
+          if ((params as { threadId: string }).threadId === "thread-a") {
+            await firstResume.promise;
+          }
+          return { thread: { id: (params as { threadId: string }).threadId } };
+        }
+        throw new Error(`Unexpected request: ${method}`);
+      }),
+    });
+
+    const first = asInternals(session).ensureThreadLoaded();
+    const concurrent = asInternals(session).ensureThreadLoaded();
+    await vi.waitFor(() => expect(resumeParams).toHaveLength(1));
+    session.currentThreadId = "thread-b";
+    firstResume.resolve();
+    await Promise.all([first, concurrent]);
+
+    expect(resumeParams).toEqual([
+      expect.objectContaining({ threadId: "thread-a" }),
+      expect.objectContaining({ threadId: "thread-b" }),
+    ]);
   });
 
   test("reapplies runtime config after the Codex app-server client reconnects", async () => {
