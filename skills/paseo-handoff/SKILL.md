@@ -104,7 +104,8 @@ changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predec
 release does not detach, archive, or change role binding, and revalidates both identities under
 stable-ordered locks. It joins an existing close, remembers any close failure until daemon restart, and
 bounds the close wait so a stuck provider cannot hold the successor lock indefinitely. Audit timeline
-reads must use durable state without resuming the released provider runtime. Never reactivate a released
-predecessor identity as a later successor; create a fresh role-bound Lead identity instead. If the
-first-class handoff tools are unavailable, stop with a manual frozen packet and report the mechanism as
-unsupported; do not fake transition receipts with chat prose.
+reads must use durable state without resuming the released provider runtime. Final release must drain and
+retry pending predecessor timeline writes and fail closed if durability remains unresolved. Never
+reactivate a released predecessor identity as a later successor; create a fresh role-bound Lead identity
+instead. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
+the mechanism as unsupported; do not fake transition receipts with chat prose.

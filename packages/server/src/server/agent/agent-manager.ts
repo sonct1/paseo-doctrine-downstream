@@ -681,6 +681,8 @@ export class AgentManager {
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
   private readonly backgroundTasks = new Set<Promise<void>>();
+  private readonly durableTimelineTasksByAgent = new Map<string, Set<Promise<void>>>();
+  private readonly durableTimelineRepairs = new Map<string, Array<() => Promise<void>>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
   private readonly agentCloseFailures = new Map<string, unknown>();
@@ -1089,6 +1091,7 @@ export class AgentManager {
   }
 
   async closeAgentForLeadHandoff(agentId: string): Promise<void> {
+    await this.flushDurableTimelineForLeadHandoff(agentId);
     const priorFailure = this.agentCloseFailures.get(agentId);
     if (priorFailure !== undefined) {
       throw new Error(`predecessor_runtime_close_failed: ${agentId}`, { cause: priorFailure });
@@ -1096,11 +1099,15 @@ export class AgentManager {
 
     const inFlight = this.inFlightAgentCloses.get(agentId);
     if (inFlight) {
-      return inFlight;
+      await inFlight;
+      await this.flushDurableTimelineForLeadHandoff(agentId);
+      return;
     }
 
     if (this.getAgent(agentId)) {
-      return this.closeAgent(agentId);
+      await this.closeAgent(agentId);
+      await this.flushDurableTimelineForLeadHandoff(agentId);
+      return;
     }
 
     const record = this.registry?.getCached(agentId) ?? null;
@@ -1108,6 +1115,31 @@ export class AgentManager {
       return;
     }
     throw new Error(`predecessor_runtime_close_state_unavailable: ${agentId}`);
+  }
+
+  async flushDurableTimelineForLeadHandoff(agentId: string): Promise<void> {
+    if (!this.durableTimelineStore) return;
+    for (;;) {
+      const pending = [...(this.durableTimelineTasksByAgent.get(agentId) ?? [])];
+      if (pending.length > 0) {
+        await Promise.allSettled(pending);
+        continue;
+      }
+      const repairs = this.durableTimelineRepairs.get(agentId) ?? [];
+      if (repairs.length === 0) break;
+      while (repairs.length > 0) {
+        try {
+          await repairs[0]();
+        } catch (error) {
+          throw new Error(`predecessor_timeline_durability_failed: ${agentId}`, {
+            cause: error,
+          });
+        }
+        repairs.shift();
+      }
+      this.durableTimelineRepairs.delete(agentId);
+    }
+    await this.durableTimelineStore.fetchCommitted(agentId, { direction: "tail", limit: 1 });
   }
 
   getTimeline(id: string): AgentTimelineItem[] {
@@ -4407,16 +4439,16 @@ export class AgentManager {
     if (!this.durableTimelineStore) {
       return;
     }
-    const task = this.durableTimelineStore
-      .bulkInsert(agentId, [row])
-      .then(() => undefined)
-      .catch((err) => {
+    this.trackDurableTimelineTask(
+      agentId,
+      () => this.durableTimelineStore!.bulkInsert(agentId, [row]),
+      (err) => {
         this.logger.error(
           { err, agentId, seq: row.seq, itemType: row.item.type },
           "Failed to append timeline row to durable store",
         );
-      });
-    this.trackBackgroundTask(task);
+      },
+    );
   }
 
   private enqueueDurableTimelineBulkInsert(
@@ -4426,22 +4458,49 @@ export class AgentManager {
     if (!this.durableTimelineStore || rows.length === 0) {
       return;
     }
-    const task = this.durableTimelineStore.bulkInsert(agentId, rows).catch((err) => {
-      this.logger.error(
-        { err, agentId, rowCount: rows.length },
-        "Failed to seed durable timeline store",
-      );
-    });
-    this.trackBackgroundTask(task);
+    this.trackDurableTimelineTask(
+      agentId,
+      () => this.durableTimelineStore!.bulkInsert(agentId, rows),
+      (err) => {
+        this.logger.error(
+          { err, agentId, rowCount: rows.length },
+          "Failed to seed durable timeline store",
+        );
+      },
+    );
   }
 
   private enqueueDurableTimelineUpdate(agentId: string, row: AgentTimelineRow): void {
     if (!this.durableTimelineStore) return;
-    const task = this.durableTimelineStore.updateCommittedRow(agentId, row).catch((err) => {
-      this.logger.error(
-        { err, agentId, seq: row.seq, itemType: row.item.type },
-        "Failed to enrich durable timeline row",
-      );
+    this.trackDurableTimelineTask(
+      agentId,
+      () => this.durableTimelineStore!.updateCommittedRow(agentId, row),
+      (err) => {
+        this.logger.error(
+          { err, agentId, seq: row.seq, itemType: row.item.type },
+          "Failed to enrich durable timeline row",
+        );
+      },
+    );
+  }
+
+  private trackDurableTimelineTask(
+    agentId: string,
+    operation: () => Promise<void>,
+    onError: (error: unknown) => void,
+  ): void {
+    const task = operation().catch((error: unknown) => {
+      const repairs = this.durableTimelineRepairs.get(agentId) ?? [];
+      repairs.push(operation);
+      this.durableTimelineRepairs.set(agentId, repairs);
+      onError(error);
+    });
+    const tasks = this.durableTimelineTasksByAgent.get(agentId) ?? new Set<Promise<void>>();
+    tasks.add(task);
+    this.durableTimelineTasksByAgent.set(agentId, tasks);
+    void task.finally(() => {
+      tasks.delete(task);
+      if (tasks.size === 0) this.durableTimelineTasksByAgent.delete(agentId);
     });
     this.trackBackgroundTask(task);
   }

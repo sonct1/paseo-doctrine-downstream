@@ -42,6 +42,7 @@ import type {
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
+import { writeJsonFileAtomic } from "../atomic-file.js";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 function leadAssignment(
@@ -4330,6 +4331,96 @@ test("seeds live timeline rows and epoch from the file store after manager resta
     await firstManager.closeAgent(agentId).catch(() => undefined);
     await firstManager.flush().catch(() => undefined);
     await firstStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("repairs transient durable timeline failures before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let failRowWrite = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (failRowWrite && filePath.includes(`${join("rows", "1.json")}`)) {
+        failRowWrite = false;
+        throw new Error("transient durable write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000142";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "must survive release",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    const restartedStore = new FileAgentTimelineStore(join(workdir, "timelines"));
+    await expect(restartedStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "must survive release" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("fails Lead handoff closure while durable timeline repair is unresolved", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-failure-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${join("rows", "1.json")}`)) {
+        throw new Error("persistent durable write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000143";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "cannot be lost",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).rejects.toThrow(
+      `predecessor_timeline_durability_failed: ${agentId}`,
+    );
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
     rmSync(workdir, { recursive: true, force: true });
   }
 });

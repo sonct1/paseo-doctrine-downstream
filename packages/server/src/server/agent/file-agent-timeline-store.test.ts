@@ -1,8 +1,9 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 
+import { writeJsonFileAtomic } from "../atomic-file.js";
 import { FileAgentTimelineStore } from "./file-agent-timeline-store.js";
 
 test("retains canonical timeline rows and epoch across store restarts", async () => {
@@ -56,6 +57,40 @@ test("retains canonical timeline rows and epoch across store restarts", async ()
     await secondRestart.deleteAgent(agentId);
     const afterDelete = new FileAgentTimelineStore(root);
     await expect(afterDelete.getCommittedRows(agentId)).resolves.toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("does not commit memory before disk and retries the same row after a transient failure", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-agent-timeline-retry-"));
+  const agentId = "agent-retry";
+  let failRowWrite = true;
+  const store = new FileAgentTimelineStore(root, async (filePath, value) => {
+    if (failRowWrite && filePath.endsWith(`${path.sep}rows${path.sep}1.json`)) {
+      failRowWrite = false;
+      throw new Error("injected row write failure");
+    }
+    await writeJsonFileAtomic(filePath, value);
+  });
+  const row = {
+    seq: 1,
+    timestamp: "2026-08-08T00:00:00.000Z",
+    item: { type: "assistant_message" as const, text: "repair me" },
+  };
+
+  try {
+    await expect(store.bulkInsert(agentId, [row])).rejects.toThrow("injected row write failure");
+    await expect(store.getCommittedRows(agentId)).resolves.toEqual([]);
+
+    await expect(store.bulkInsert(agentId, [row])).resolves.toBeUndefined();
+    await writeFile(
+      path.join(root, encodeURIComponent(agentId), "rows", ".1.json.partial.tmp"),
+      '{"seq":',
+      "utf8",
+    );
+    const restarted = new FileAgentTimelineStore(root);
+    await expect(restarted.getCommittedRows(agentId)).resolves.toEqual([row]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
