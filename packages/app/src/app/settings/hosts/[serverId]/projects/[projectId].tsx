@@ -8,12 +8,19 @@ export default function SettingsHostProjectDetailRoute() {
   const params = useLocalSearchParams<{
     serverId?: string | string[];
     projectId?: string | string[];
+    protocolRoot?: string | string[];
   }>();
   const serverId = normalizeProjectSettingsRouteId(params.serverId);
   const projectId = normalizeProjectSettingsRouteId(params.projectId);
+  const protocolRoot = normalizeProjectSettingsRouteId(params.protocolRoot);
   const view = useMemo(
-    () => ({ kind: "project" as const, serverId, projectId }),
-    [projectId, serverId],
+    () => ({
+      kind: "project" as const,
+      serverId,
+      projectId,
+      ...(protocolRoot ? { protocolRoot } : {}),
+    }),
+    [projectId, protocolRoot, serverId],
   );
 
   return (

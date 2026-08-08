@@ -94,9 +94,14 @@ type ReadProjectConfigData = Awaited<ReturnType<DaemonClient["readProjectConfig"
 export interface ProjectSettingsScreenProps {
   serverId: string;
   projectId: string;
+  protocolRoot?: string;
 }
 
-export default function ProjectSettingsScreen({ serverId, projectId }: ProjectSettingsScreenProps) {
+export default function ProjectSettingsScreen({
+  serverId,
+  projectId,
+  protocolRoot,
+}: ProjectSettingsScreenProps) {
   const { projects } = useProjects();
   const project = useMemo(
     () => getProjectSummaryForHostProject(projects, serverId, projectId),
@@ -125,6 +130,7 @@ export default function ProjectSettingsScreen({ serverId, projectId }: ProjectSe
       selectedHost={selectedHost}
       client={client}
       isHostGone={isHostGone}
+      protocolRoot={protocolRoot}
     />
   );
 }
@@ -175,6 +181,7 @@ interface ProjectSettingsBodyProps {
   selectedHost: ProjectHostEntry;
   client: DaemonClient;
   isHostGone: boolean;
+  protocolRoot?: string;
 }
 
 function ProjectSettingsBody({
@@ -182,6 +189,7 @@ function ProjectSettingsBody({
   selectedHost,
   client,
   isHostGone,
+  protocolRoot,
 }: ProjectSettingsBodyProps) {
   const { t } = useTranslation();
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -294,7 +302,7 @@ function ProjectSettingsBody({
       <WorkspaceProtocolSettings
         client={client}
         serverId={selectedHost.serverId}
-        repoRoot={selectedHost.repoRoot}
+        repoRoot={protocolRoot || selectedHost.repoRoot}
         supported={supportsWorkspaceProtocol}
       />
 

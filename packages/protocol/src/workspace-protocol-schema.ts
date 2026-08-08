@@ -10,6 +10,7 @@ export const WorkspaceProtocolIssueSchema = z.enum([
   "empty",
   "missing_title",
   "missing_version_marker",
+  "duplicate_version_marker",
   "unsupported_version",
   "unresolved_placeholder",
   "conflict_marker",

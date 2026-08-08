@@ -108,6 +108,11 @@ preview một baseline repository-specific khi thiếu, rồi chỉ bootstrap sa
 dùng revision gồm digest để không overwrite thay đổi ngoài Paseo; content invalid, stale hoặc unreadable
 đều fail closed và giữ current bytes. CLI/MCP không phải setup path dành cho Human.
 
+Admission kiểm exact active project/workspace root, kể cả Paseo-owned worktree. Role-bound create
+preflight trên WebUI và daemon kiểm lại trước provider launch hoặc state mutation. Trạng thái
+`missing|invalid|unreadable` đưa Human tới đúng Project Settings target; loose/v1 protocol hợp lệ vẫn
+được nhận để không khóa repository cũ, còn bootstrap mới luôn sinh v2.
+
 Lead được bind full protocol trước orchestration. Peer không đọc full protocol và chỉ nhận relevant constraints trong assignment. Supervisor chỉ được bind full protocol khi governance assignment yêu cầu create/audit/update.
 
 ## UX
@@ -121,9 +126,8 @@ Create flow đi theo thứ tự:
 5. chọn model/mode và preview binding receipt;
 6. nhập assignment rồi spawn.
 
-Nếu protocol thiếu hoặc invalid, create flow phải đưa Human về Project Settings để bootstrap/correct
-trên WebUI; không yêu cầu copy/paste command. Redirect/gate này là bước admission tiếp theo sau lát cắt
-Project Settings hiện tại.
+Nếu protocol thiếu hoặc invalid, create flow đưa Human về Project Settings để bootstrap/correct trên
+WebUI; không yêu cầu copy/paste command.
 
 Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
@@ -154,6 +158,8 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Custom Codex thiếu model/URL/key hoặc launch lỗi không fallback sang built-in subscription.
 - Snapshot, MCP create result và `paseo agent inspect` hiển thị effective `roleId`, `providerId`, `model` và
   `credentialConfigured` nhưng không expose instruction hoặc secret-bearing route bytes.
+- Agent role control trên WebUI mở redacted binding receipt gồm contract version, binding digest,
+  protocol digest/readership, injection method và creation time; không hiển thị instruction bytes.
 - Incompatible provider bị reject trước session launch.
 - Cursor capsule phải giữ exact role marker qua ACP create/resume mà không ghi `.cursor/rules` vào target repository.
 - Antigravity wrapper phải pin exact materialized agent trên discovery/prompt/resume, reject caller `--agent`, cleanup only exact owned profile, và hiện third-party auth notice.

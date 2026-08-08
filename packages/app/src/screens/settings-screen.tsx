@@ -131,7 +131,7 @@ export type SettingsView =
   | { kind: "root" }
   | { kind: "section"; section: SettingsSectionSlug }
   | { kind: "host"; serverId: string; section: HostSectionSlug }
-  | { kind: "project"; serverId: string; projectId: string };
+  | { kind: "project"; serverId: string; projectId: string; protocolRoot?: string };
 
 interface SidebarSectionItem {
   id: SettingsSectionSlug;
@@ -1393,7 +1393,13 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
       return renderHostSettingsContent(view, handleHostRemoved);
     }
     if (view.kind === "project") {
-      return <ProjectSettingsScreen serverId={view.serverId} projectId={view.projectId} />;
+      return (
+        <ProjectSettingsScreen
+          serverId={view.serverId}
+          projectId={view.projectId}
+          protocolRoot={view.protocolRoot}
+        />
+      );
     }
     if (view.kind === "section") {
       switch (view.section) {

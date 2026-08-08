@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -10,6 +10,7 @@ import {
   toLaunchContractReceipt,
 } from "./launch-contract.js";
 import { materializeRoleBinding } from "./role-binding.js";
+import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -24,6 +25,7 @@ afterEach(async () => {
 async function createRoleBinding() {
   const cwd = await mkdtemp(join(tmpdir(), "paseo-launch-contract-"));
   temporaryDirectories.push(cwd);
+  await writeFile(join(cwd, "WORKSPACE_PROTOCOL.md"), buildWorkspaceProtocolTemplate(cwd), "utf8");
   return await materializeRoleBinding({
     roleId: "lead",
     provider: "codex-proxy",

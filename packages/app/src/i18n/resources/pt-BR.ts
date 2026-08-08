@@ -1338,6 +1338,12 @@ export const ptBR: TranslationResources = {
       hostDisconnected: "Host não está conectado",
       pendingRequired: "Nenhuma configuração de workspace está pendente",
       composerStateRequired: "O estado do composer da configuração do workspace é obrigatório",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {

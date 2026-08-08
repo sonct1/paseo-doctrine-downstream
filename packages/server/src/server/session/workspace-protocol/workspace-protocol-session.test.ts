@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import pino from "pino";
 import type { SessionOutboundMessage } from "../../messages.js";
-import type { PersistedProjectRecord } from "../../workspace-registry.js";
+import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import { WorkspaceProtocolSession } from "./workspace-protocol-session.js";
 
 const tempDirs: string[] = [];
@@ -31,11 +31,36 @@ function projectRecord(rootPath: string, archivedAt: string | null = null): Pers
   };
 }
 
-function makeSession(records: PersistedProjectRecord[]) {
+function workspaceRecord(cwd: string, archivedAt: string | null = null): PersistedWorkspaceRecord {
+  return {
+    workspaceId: `workspace:${cwd}`,
+    projectId: "project:root",
+    cwd,
+    kind: "worktree",
+    displayName: "Workspace",
+    title: null,
+    branch: "feature",
+    worktreeRoot: cwd,
+    baseBranch: "main",
+    isPaseoOwnedWorktree: true,
+    mainRepoRoot: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    archivedAt,
+    autoArchivedChangeRequestUrl: null,
+    pinnedAt: null,
+  };
+}
+
+function makeSession(
+  records: PersistedProjectRecord[],
+  workspaceRecords: PersistedWorkspaceRecord[] = [],
+) {
   const emitted: SessionOutboundMessage[] = [];
   const session = new WorkspaceProtocolSession({
     host: { emit: (message) => emitted.push(message) },
     projectRegistry: { list: async () => records },
+    workspaceRegistry: { list: async () => workspaceRecords },
     logger: pino({ level: "silent" }),
   });
   return { session, emitted };
@@ -104,10 +129,43 @@ describe("WorkspaceProtocolSession", () => {
     });
   });
 
+  test("bootstraps the exact active worktree root without opening arbitrary paths", async () => {
+    const worktreeRoot = makeRoot();
+    const unknown = makeRoot();
+    const { session, emitted } = makeSession([], [workspaceRecord(worktreeRoot)]);
+
+    await session.handleInspectRequest({
+      type: "foundation.workspaceProtocol.inspect.request",
+      requestId: "worktree-1",
+      repoRoot: worktreeRoot,
+    });
+    await session.handleInspectRequest({
+      type: "foundation.workspaceProtocol.inspect.request",
+      requestId: "unknown-1",
+      repoRoot: unknown,
+    });
+
+    expect(emitted[0]).toMatchObject({
+      type: "foundation.workspaceProtocol.inspect.response",
+      payload: { ok: true, snapshot: { status: "missing", repoRoot: worktreeRoot } },
+    });
+    expect(emitted[1]).toEqual({
+      type: "foundation.workspaceProtocol.inspect.response",
+      payload: {
+        requestId: "unknown-1",
+        ok: false,
+        error: { code: "project_not_found" },
+      },
+    });
+  });
+
   test("rejects unknown and archived project roots without touching them", async () => {
     const archived = makeRoot();
     const unknown = makeRoot();
-    const { session, emitted } = makeSession([projectRecord(archived, "2026-01-02T00:00:00.000Z")]);
+    const { session, emitted } = makeSession(
+      [projectRecord(archived, "2026-01-02T00:00:00.000Z")],
+      [workspaceRecord(archived, "2026-01-02T00:00:00.000Z")],
+    );
 
     await session.handleInspectRequest({
       type: "foundation.workspaceProtocol.inspect.request",

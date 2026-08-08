@@ -40,7 +40,7 @@ describe("workspace protocol file", () => {
     expect(validateWorkspaceProtocol(snapshot.suggestedContent)).toEqual([]);
   });
 
-  test("classifies placeholders, conflict markers, unsupported versions, and missing clauses", () => {
+  test("classifies placeholders, conflict markers, unsupported versions, and missing identity", () => {
     const content = `# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 99 -->\n\n{{REQUIRED: owner}}\n<<<<<<< ours\n`;
     expect(validateWorkspaceProtocol(content)).toEqual(
       expect.arrayContaining([
@@ -48,16 +48,22 @@ describe("workspace protocol file", () => {
         "unresolved_placeholder",
         "conflict_marker",
         "missing_identity",
-        "missing_risk",
-        "missing_topology",
-        "missing_ownership",
-        "missing_routing",
-        "missing_project_policy",
-        "missing_review_evidence",
-        "missing_escalation",
-        "missing_exceptions",
       ]),
     );
+  });
+
+  test("accepts canonical legacy v1 and loose protocols during mandatory admission", () => {
+    const loose =
+      "# Quy ước làm việc\nowner: project owner\napplies_to: repository root\nversion: 1\n";
+    expect(validateWorkspaceProtocol(loose)).toEqual([]);
+    expect(
+      validateWorkspaceProtocol(`${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->\n`),
+    ).toEqual([]);
+    expect(
+      validateWorkspaceProtocol(
+        `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n`,
+      ),
+    ).toContain("duplicate_version_marker");
   });
 
   test("bootstraps only from the missing revision and returns a digest receipt", () => {

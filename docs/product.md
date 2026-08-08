@@ -78,6 +78,7 @@ Anyone who builds software:
 - MCP server exposes the daemon to other agents (workspaces, create/detach agent, schedules, heartbeats, terminals, workspace renaming)
 - Scheduled agents (cron-style triggers) via app, CLI, and MCP
 - Project Settings can inspect, preview, bootstrap, correct, and save a repository-owned `WORKSPACE_PROTOCOL.md` without asking the user to run a command.
+- Role-bound agent creation verifies that protocol in WebUI and again in the daemon before launch; recovery opens the exact active project or worktree target in Project Settings.
 - Frequent releases (multiple per week)
 - Community contributions across packaging, providers, and bug fixes
 - Key UX: split panes, keybinding customization, workspace model, in-app browser

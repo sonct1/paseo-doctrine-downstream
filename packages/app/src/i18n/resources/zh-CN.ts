@@ -1294,6 +1294,12 @@ export const zhCN: TranslationResources = {
       hostDisconnected: "Host 未连接",
       pendingRequired: "没有待处理的 workspace setup",
       composerStateRequired: "Workspace setup composer 状态必填",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {

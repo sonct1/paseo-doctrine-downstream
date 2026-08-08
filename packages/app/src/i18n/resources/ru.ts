@@ -1343,6 +1343,12 @@ export const ru: TranslationResources = {
       hostDisconnected: "Host не подключен",
       pendingRequired: "Никакой настройки рабочей области не ожидается.",
       composerStateRequired: "Требуется состояние композитора настройки Workspace.",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {

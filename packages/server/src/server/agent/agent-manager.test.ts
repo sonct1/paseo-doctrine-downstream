@@ -40,6 +40,7 @@ import type {
 } from "./agent-sdk-types.js";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
+import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -9248,7 +9249,11 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
 
 test("role-bound create persists immutable binding and passes only launch instructions", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
-  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
   const storage = new AgentStorage(join(workdir, "agents"), logger);
 
   class RoleCaptureClient extends TestAgentClient {
@@ -9386,6 +9391,28 @@ test("role-bound create rejects caller systemPrompt before provider launch", asy
     ).rejects.toThrow("Cannot set systemPrompt on a role-bound agent");
     expect(deleteAgentState).not.toHaveBeenCalled();
     expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects missing protocol before provider or state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-missing-protocol-"));
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir },
+        "00000000-0000-4000-8000-000000000119",
+        { workspaceId: undefined, roleId: "lead" },
+      ),
+    ).rejects.toThrow("workspace_protocol_admission_required: missing");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+    expect(manager.getAgent("00000000-0000-4000-8000-000000000119")).toBeNull();
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

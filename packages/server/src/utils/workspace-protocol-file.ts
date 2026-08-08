@@ -20,22 +20,14 @@ export const WORKSPACE_PROTOCOL_FILE_NAME = "WORKSPACE_PROTOCOL.md";
 export const WORKSPACE_PROTOCOL_VERSION = 2;
 const MAX_WORKSPACE_PROTOCOL_BYTES = 64 * 1024;
 
-const REQUIRED_CLAUSES: ReadonlyArray<{
-  issue: WorkspaceProtocolIssue;
-  pattern: RegExp;
-}> = [
-  { issue: "missing_identity", pattern: /^- identity:/mu },
-  { issue: "missing_risk", pattern: /^- project risk\/protected areas:/mu },
-  { issue: "missing_topology", pattern: /^- default topology:/mu },
-  { issue: "missing_ownership", pattern: /^- ownership\/hotspots:/mu },
-  { issue: "missing_routing", pattern: /^- routing defaults:/mu },
-  { issue: "missing_project_policy", pattern: /^- project policy:/mu },
-  { issue: "missing_review_evidence", pattern: /^- review\/evidence:/mu },
-  { issue: "missing_escalation", pattern: /^- escalation\/Human decisions:/mu },
-  {
-    issue: "missing_exceptions",
-    pattern: /^- repository exceptions\/anti-patterns:/mu,
-  },
+const SUPPORTED_MARKERS = new Set([
+  "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->",
+  "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->",
+]);
+const IDENTITY_CATEGORIES: readonly (readonly RegExp[])[] = [
+  [/\bowner\b/iu, /chủ sở hữu/iu, /\bauthority\b/iu, /thẩm quyền/iu],
+  [/\bapplies_to\b/iu, /áp dụng/iu, /phạm vi/iu, /\brepository\b/iu, /\bproject\b/iu],
+  [/\bversion\b/iu, /\blast_reviewed\b/iu, /trạng thái/iu, /\bstatus\b/iu, /\breview/iu],
 ];
 
 export type WriteWorkspaceProtocolResult =
@@ -71,20 +63,18 @@ export function validateWorkspaceProtocol(content: string): WorkspaceProtocolIss
   const byteLength = Buffer.byteLength(content, "utf8");
   if (byteLength === 0 || content.trim().length === 0) issues.push("empty");
   if (byteLength > MAX_WORKSPACE_PROTOCOL_BYTES) issues.push("too_large");
-  if (!/^# Workspace Protocol(?:\s|—|-)/u.test(content)) issues.push("missing_title");
-
-  const marker = content.match(/<!--\s*PASEO_WORKSPACE_PROTOCOL_VERSION:\s*(\d+)\s*-->/u);
-  if (!marker) {
-    issues.push("missing_version_marker");
-  } else if (Number(marker[1]) !== WORKSPACE_PROTOCOL_VERSION) {
+  const markerMentions = content.match(/<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu) ?? [];
+  if (markerMentions.length > 1) issues.push("duplicate_version_marker");
+  if (markerMentions.some((marker) => !SUPPORTED_MARKERS.has(marker.trim()))) {
     issues.push("unsupported_version");
   }
-  if (/\{\{\s*REQUIRED(?::|_)/u.test(content)) issues.push("unresolved_placeholder");
+  if (/\{\{REQUIRED:[^{}]+\}\}/u.test(content)) issues.push("unresolved_placeholder");
   if (/^(?:<{7}|={7}|>{7})(?:\s|$)/mu.test(content)) issues.push("conflict_marker");
 
-  for (const clause of REQUIRED_CLAUSES) {
-    if (!clause.pattern.test(content)) issues.push(clause.issue);
-  }
+  const identityCategoryCount = IDENTITY_CATEGORIES.filter((patterns) =>
+    patterns.some((pattern) => pattern.test(content)),
+  ).length;
+  if (identityCategoryCount < 2) issues.push("missing_identity");
   return issues;
 }
 

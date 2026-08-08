@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   PaseoRoleIdSchema,
   RoleBindingReceiptSchema,
@@ -15,6 +13,9 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 import { z } from "zod";
 
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
+import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
+
+export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
@@ -225,29 +226,26 @@ function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceip
   return "assignment-only";
 }
 
-async function inspectWorkspaceProtocol(
+function requireWorkspaceProtocol(
   cwd: string,
   roleId: PaseoRoleId,
-): Promise<WorkspaceProtocolBindingReceipt> {
-  const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
-  try {
-    const bytes = await readFile(protocolPath, "utf8");
-    return {
-      status: "bound",
-      readership: protocolReadership(roleId),
-      path: protocolPath,
-      digest: sha256(bytes),
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return {
-        status: "missing",
-        readership: protocolReadership(roleId),
-        path: protocolPath,
-      };
-    }
-    throw error;
+): WorkspaceProtocolBindingReceipt {
+  const snapshot = inspectWorkspaceProtocol(cwd);
+  if (snapshot.status !== "valid") {
+    const details =
+      snapshot.status === "invalid" && snapshot.issues.length > 0
+        ? `; issues=${snapshot.issues.join(",")}`
+        : "";
+    throw new Error(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: ${snapshot.status}: ${snapshot.path}${details}`,
+    );
   }
+  return {
+    status: "bound",
+    readership: protocolReadership(roleId),
+    path: snapshot.path,
+    digest: snapshot.revision.sha256,
+  };
 }
 
 function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): string {
@@ -276,7 +274,7 @@ export async function materializeRoleBinding(
   }
 
   const definition = getFoundationRoleDefinition(input.roleId);
-  const workspaceProtocol = await inspectWorkspaceProtocol(input.cwd, input.roleId);
+  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId);
   const instructions = `${definition.instructions}\n\n${buildProtocolInstruction(workspaceProtocol)}`;
 
   return {

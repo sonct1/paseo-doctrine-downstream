@@ -1311,6 +1311,12 @@ export const ar: TranslationResources = {
       hostDisconnected: "Host غير متصل",
       pendingRequired: "لا يوجد إعداد معلق لمساحة العمل",
       composerStateRequired: "مطلوب حالة مؤلف إعداد Workspace",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {

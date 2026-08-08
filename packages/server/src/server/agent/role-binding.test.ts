@@ -9,7 +9,9 @@ import {
   materializeRoleBinding,
   resolveProviderRoleBindingSupport,
   toRoleBindingReceipt,
+  WORKSPACE_PROTOCOL_ADMISSION_ERROR,
 } from "./role-binding.js";
+import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -37,7 +39,11 @@ describe("native Foundation role materialization", () => {
 
   test("binds Lead to Codex with protocol provenance and a redacted receipt", async () => {
     const cwd = await createWorkspace();
-    await writeFile(join(cwd, "WORKSPACE_PROTOCOL.md"), "# Protocol\n\nOwner: Human\n", "utf8");
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
 
     const binding = await materializeRoleBinding({
       roleId: "lead",
@@ -65,6 +71,11 @@ describe("native Foundation role materialization", () => {
 
   test("keeps Peer protocol readership assignment-only", async () => {
     const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
     const binding = await materializeRoleBinding({
       roleId: "peer",
       provider: "claude",
@@ -72,16 +83,34 @@ describe("native Foundation role materialization", () => {
     });
 
     expect(binding.injectionMethod).toBe("claude-system-prompt");
-    expect(binding.workspaceProtocol).toEqual({
-      status: "missing",
+    expect(binding.workspaceProtocol).toMatchObject({
+      status: "bound",
       readership: "assignment-only",
       path: join(cwd, "WORKSPACE_PROTOCOL.md"),
     });
     expect(binding.instructions).toContain("Do not load");
   });
 
+  test("blocks every role when the mandatory protocol is missing or invalid", async () => {
+    const missing = await createWorkspace();
+    const invalid = await createWorkspace();
+    await writeFile(join(invalid, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+
+    await expect(
+      materializeRoleBinding({ roleId: "lead", provider: "codex", cwd: missing }),
+    ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing`);
+    await expect(
+      materializeRoleBinding({ roleId: "peer", provider: "claude", cwd: invalid }),
+    ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: invalid`);
+  });
+
   test("fails closed for a provider without a native durable role channel", async () => {
     const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
 
     expect(resolveProviderRoleBindingSupport("generic-acp")).toMatchObject({
       status: "unsupported",

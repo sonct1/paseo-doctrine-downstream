@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type pino from "pino";
 import type { SessionInboundMessage, SessionOutboundMessage } from "../../messages.js";
-import type { ProjectRegistry } from "../../workspace-registry.js";
+import type { ProjectRegistry, WorkspaceRegistry } from "../../workspace-registry.js";
 import {
   inspectWorkspaceProtocol,
   writeWorkspaceProtocol,
@@ -17,6 +17,7 @@ export class WorkspaceProtocolSession {
     private readonly options: {
       host: WorkspaceProtocolSessionHost;
       projectRegistry: Pick<ProjectRegistry, "list">;
+      workspaceRegistry: Pick<WorkspaceRegistry, "list">;
       logger: pino.Logger;
     },
   ) {}
@@ -79,11 +80,24 @@ export class WorkspaceProtocolSession {
 
   private async resolveKnownProjectRoot(repoRoot: string): Promise<string | null> {
     const requestedRoot = canonicalizeRoot(repoRoot);
-    const projects = await this.options.projectRegistry.list();
+    const [projects, workspaces] = await Promise.all([
+      this.options.projectRegistry.list(),
+      this.options.workspaceRegistry.list(),
+    ]);
     for (const project of projects) {
       if (project.archivedAt !== null) continue;
       const projectRoot = canonicalizeRoot(project.rootPath);
       if (requestedRoot === projectRoot) return projectRoot;
+    }
+    for (const workspace of workspaces) {
+      if (workspace.archivedAt !== null) continue;
+      const candidateRoots = [workspace.cwd, workspace.worktreeRoot].filter(
+        (candidate): candidate is string => Boolean(candidate),
+      );
+      for (const candidate of candidateRoots) {
+        const workspaceRoot = canonicalizeRoot(candidate);
+        if (requestedRoot === workspaceRoot) return workspaceRoot;
+      }
     }
     return null;
   }

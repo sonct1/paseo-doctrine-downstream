@@ -589,11 +589,17 @@ export function buildProjectsSettingsRoute(serverId: string) {
   return `/settings/hosts/${encodeSegment(normalized)}/projects` as const;
 }
 
-export function buildProjectSettingsRoute(serverId: string, projectId: string) {
+export function buildProjectSettingsRoute(
+  serverId: string,
+  projectId: string,
+  options?: { protocolRoot?: string | null },
+) {
   if (!serverId.trim() || !projectId.trim()) {
     throw new Error("buildProjectSettingsRoute requires a serverId and projectId");
   }
-  return `/settings/hosts/${encodeSegment(serverId)}/projects/${encodeSegment(projectId)}` as const;
+  const base = `/settings/hosts/${encodeSegment(serverId)}/projects/${encodeSegment(projectId)}`;
+  const protocolRoot = options?.protocolRoot?.trim();
+  return protocolRoot ? `${base}?protocolRoot=${encodeURIComponent(protocolRoot)}` : base;
 }
 
 export function normalizeProjectSettingsRouteId(value: string | string[] | undefined): string {
