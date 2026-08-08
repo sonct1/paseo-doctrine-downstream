@@ -11,6 +11,7 @@ import { withAgentAuthorityLocks } from "./agent-authority-lock.js";
 export interface LeadHandoffDependencies {
   agentStorage: Pick<AgentStorage, "get" | "upsert">;
   hasInFlightRun?: (agentId: string) => boolean;
+  closePredecessorRuntime?: (agentId: string) => Promise<void>;
 }
 
 const recordUpdates = new Map<string, Promise<unknown>>();
@@ -244,6 +245,10 @@ export async function transitionLeadHandoff(
   if (!dependencies.hasInFlightRun) {
     throw new Error("predecessor_released requires runtime safe-boundary enforcement");
   }
+  if (!dependencies.closePredecessorRuntime) {
+    throw new Error("predecessor_released requires predecessor runtime closure");
+  }
+  const closePredecessorRuntime = dependencies.closePredecessorRuntime;
   const predecessor = await requirePredecessorLead(dependencies, input.predecessorAgentId);
   const packet = predecessor.leadHandoffs?.find((candidate) => candidate.id === input.handoffId);
   const successorAgentId = packet?.successorAgentId;
@@ -255,6 +260,7 @@ export async function transitionLeadHandoff(
       throw new Error("Cannot release predecessor while it has an in-flight run");
     }
     await requireAdjacentLeads(dependencies, input.predecessorAgentId, successorAgentId);
+    await closePredecessorRuntime(input.predecessorAgentId);
     return transition();
   });
 }

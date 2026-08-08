@@ -39,6 +39,7 @@ function scenario() {
     records,
     dependencies: {
       hasInFlightRun: vi.fn(() => false),
+      closePredecessorRuntime: vi.fn(async () => undefined),
       agentStorage: {
         get: vi.fn(async (id: string) => records.get(id) ?? null),
         upsert: vi.fn(async (record: StoredAgentRecord) => {
@@ -125,6 +126,7 @@ describe("Lead handoff packets", () => {
 
     expect(packet.status).toBe("predecessor_released");
     expect(packet.currentWriteOwnerAgentId).toBe("lead-new");
+    expect(testCase.dependencies.closePredecessorRuntime).toHaveBeenCalledWith("lead-old");
     expect(packet.receipts.map((receipt) => receipt.transition)).toEqual([
       "successor_authorized",
       "successor_acknowledged",
@@ -163,6 +165,45 @@ describe("Lead handoff packets", () => {
         note: "Unsafe release attempt",
       }),
     ).rejects.toThrow("in-flight run");
+
+    expect(testCase.records.get("lead-old")?.leadHandoffs?.[0]).toMatchObject({
+      status: "successor_acknowledged",
+      currentWriteOwnerAgentId: "lead-old",
+    });
+    expect(testCase.dependencies.closePredecessorRuntime).not.toHaveBeenCalled();
+  });
+
+  test("does not transfer ownership when predecessor runtime closure fails", async () => {
+    const testCase = scenario();
+    let packet = await prepareLeadHandoff(testCase.dependencies, completePacketInput());
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_authorized",
+      actorAgentId: null,
+      successorAgentId: "lead-new",
+      note: "Human authorization",
+    });
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_acknowledged",
+      actorAgentId: "lead-new",
+      note: "Packet accepted",
+    });
+    testCase.dependencies.closePredecessorRuntime.mockRejectedValueOnce(
+      new Error("runtime close failed"),
+    );
+
+    await expect(
+      transitionLeadHandoff(testCase.dependencies, {
+        predecessorAgentId: "lead-old",
+        handoffId: packet.id,
+        transition: "predecessor_released",
+        actorAgentId: null,
+        note: "Unsafe partial release attempt",
+      }),
+    ).rejects.toThrow("runtime close failed");
 
     expect(testCase.records.get("lead-old")?.leadHandoffs?.[0]).toMatchObject({
       status: "successor_acknowledged",

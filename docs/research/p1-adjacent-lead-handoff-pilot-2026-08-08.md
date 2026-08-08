@@ -108,6 +108,22 @@ Successor vẫn nhận và hoàn tất post-release prompt; Git vẫn clean. Wor
 archive sau readback. Canary qualify paid-provider final release, owner transfer và predecessor prompt
 revocation trên candidate bytes; nó không qualify production release hoặc multi-day effect.
 
+## Doctrine closure sau canary
+
+Ba policy decision được Human chốt sau canary:
+
+- explicit Human authorize/release không có elapsed-time cooling window; ordered receipts và safe idle
+  boundary là các gate;
+- automated signal đơn là advisory, không tự trigger authority change. Repeated failure cần ba lần liên
+  tiếp; context/compaction có thể tạo một attention sớm nhưng replacement/handoff chỉ được đề xuất khi có
+  repeated hoặc independently corroborated evidence;
+- final release đóng predecessor runtime nhưng giữ durable unarchived record. Không auto-detach hoặc
+  auto-archive, và released agent ID không được reactivate làm Lead; lần quay lại dùng fresh role-bound
+  identity.
+
+Candidate implementation fail closed: runtime closure xảy ra trước khi final transition được persist;
+nếu closure lỗi thì packet giữ `successor_acknowledged` và current Owner không đổi.
+
 ## Residual unknowns
 
 - Chưa có multi-day evidence về continuity improvement.
@@ -119,4 +135,5 @@ revocation trên candidate bytes; nó không qualify production release hoặc m
   được tái authorize làm successor; successor được revalidate dưới dual-identity stable locks ngay tại
   final release. Paid-provider end-to-end release canary đã pass trên integrated daemon, chưa
   production-qualified.
-- Cooling, corroboration và predecessor retention policy vẫn là open doctrine decisions.
+- Runtime closure và durable predecessor retention trên exact post-doctrine candidate cần một fresh
+  activation canary; paid-provider canary phía trên chạy revision trước thay đổi closure này.

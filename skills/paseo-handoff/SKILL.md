@@ -92,10 +92,17 @@ Require an exact Human handoff/replacement mandate and a role-bound predecessor 
    transition_lead_handoff with successor_acknowledged, or rejects the packet with discrepancies.
 6. Only after successor ACK may Human record predecessor_released.
 
+Human authorization and release have no elapsed-time cooling delay. The packet, successor ACK, and safe
+idle boundary are the gates. Automated coordination signals remain advisory: do not turn one signal into
+replacement or authority transfer, and require repeated or independently corroborated evidence before
+proposing an authority-changing correction.
+
 The first transitions are durable receipts, not lifecycle mutations. Final `predecessor_released`
-requires an idle predecessor, transfers `currentWriteOwnerAgentId` to the successor, and blocks later
-prompt dispatch or unarchive-and-prompt for the predecessor. It does not detach, archive, or change role
-binding. Final release revalidates both identities under stable-ordered locks. Never reactivate a
-released predecessor identity as a later successor; create a fresh role-bound Lead identity instead. If
-the first-class handoff tools are unavailable, stop with a manual frozen packet and report the mechanism
-as unsupported; do not fake transition receipts with chat prose.
+requires an idle predecessor, closes its runtime while retaining its durable record, then transfers
+`currentWriteOwnerAgentId` to the successor. Runtime-closure failure aborts the transition without
+changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked. Final
+release does not detach, archive, or change role binding, and revalidates both identities under
+stable-ordered locks. Never reactivate a released predecessor identity as a later successor; create a
+fresh role-bound Lead identity instead. If the first-class handoff tools are unavailable, stop with a
+manual frozen packet and report the mechanism as unsupported; do not fake transition receipts with chat
+prose.

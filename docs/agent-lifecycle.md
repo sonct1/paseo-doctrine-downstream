@@ -22,7 +22,13 @@ same Paseo agent ID. Provider history is not appended again when the canonical t
 primed.
 
 Idle agents remain resident indefinitely. Runtime closure happens only through an explicit lifecycle
-action such as archive, replacement, reload, workspace teardown, or daemon shutdown.
+action such as archive, final adjacent-Lead release, replacement, reload, workspace teardown, or daemon
+shutdown.
+
+Final adjacent-Lead release deliberately creates a narrower closed state: Paseo closes the predecessor
+runtime and retains its unarchived durable record for audit, but its released write lease prevents normal
+resume or prompt dispatch under that agent ID. Returning the same person or role to Lead creates a fresh
+role-bound identity; it does not reactivate the released predecessor.
 
 ### Cancellation
 
@@ -49,8 +55,10 @@ authority, detach hoặc archive agent. Native attention dùng context telemetry
 repeated terminal failure; missing telemetry fail closed.
 
 Adjacent-Lead handoff là workflow riêng. Frozen packet phải tồn tại trước Human authorization; designated
-successor phải ACK trước Human predecessor release. Receipts chỉ ghi nhận transition và không mutate role
-binding hoặc lifecycle. Xem docs/slp-coordination-handoff.md cho maturity, role routing và usage.
+successor phải ACK trước Human predecessor release. Các receipt trước final release không mutate role
+binding hoặc lifecycle. Final release đóng predecessor runtime nhưng giữ durable record, rồi chuyển write
+ownership; nó không detach hoặc archive. Xem docs/slp-coordination-handoff.md cho maturity, role routing
+và usage.
 
 ## Provider-managed child agents
 

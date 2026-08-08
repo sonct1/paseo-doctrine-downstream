@@ -5,11 +5,11 @@ Nó không thay thế role contracts, Human lease hoặc repository protocol.
 
 ## Mức trưởng thành hiện tại
 
-| Slice                  | Trạng thái                              | Đã có                                                                                                                    | Chưa được chứng minh                                      |
-| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| P0 coordination signal | Candidate, integrated-runtime-qualified | protocol, persistence, idle-boundary delivery, native paid-provider resolution, CLI/client/tool, native attention policy | release activation, multi-day operational effect          |
-| P1 manual handoff      | Pilot đã chạy                           | predecessor packet, independent successor review, rejection evidence                                                     | multi-day operational effect                              |
-| P2 handoff artifact    | Candidate, isolated-runtime-qualified   | immutable packet core, explicit ordered receipts, role/Human gates, restart readback                                     | release activation, multi-day effect và lease enforcement |
+| Slice                  | Trạng thái                              | Đã có                                                                                                                     | Chưa được chứng minh                             |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| P0 coordination signal | Candidate, integrated-runtime-qualified | protocol, persistence, idle-boundary delivery, native paid-provider resolution, CLI/client/tool, native attention policy  | release activation, multi-day operational effect |
+| P1 manual handoff      | Pilot đã chạy                           | predecessor packet, independent successor review, rejection evidence                                                      | multi-day operational effect                     |
+| P2 handoff artifact    | Candidate, integrated-runtime-qualified | immutable packet core, explicit ordered receipts, role/Human gates, write-lease enforcement, paid-provider release canary | release activation, multi-day operational effect |
 
 Không được gọi ba slice này là shipped production capability chỉ vì focused tests xanh.
 
@@ -40,12 +40,26 @@ Human-facing lifecycle action.
 - Peer failure lặp lại ba lần liên tiếp route attention tới owning Lead hoặc unique workspace Lead.
 - Lead failure lặp lại ba lần liên tiếp chỉ route tới unique workspace Supervisor.
 - Context pressure và provider compaction route về chính Lead để Lead tự đánh giá continuity.
+- Một context-pressure hoặc compaction event có thể tạo một advisory attention để tránh bỏ lỡ tín hiệu
+  quan trọng, nhưng riêng signal đó không đủ để trigger replacement, handoff hay authority change.
 - Supervisor quan sát và khuyến nghị; không seize implementation ownership.
 - Lead giữ routing, integration và engineering acceptance trong Human lease.
 - Peer không signal, transition hoặc tạo handoff; Peer chỉ handback evidence cho Lead.
 
 Completed hoặc canceled turn reset repeated-failure sequence. Canceled turn không được tính là failure.
 Unresolved native attention coalesce để tránh prompt storm.
+
+### Cooling và corroboration
+
+- Human explicit action không có elapsed-time cooling window. Khi frozen packet đầy đủ, successor đã
+  ACK và predecessor ở safe idle boundary, Human có thể authorize hoặc release ngay.
+- Automated heuristic không được đổi authority. Một signal đơn chỉ là advisory; authority-changing
+  correction chỉ được đề xuất sau repeated evidence hoặc corroboration từ independent runtime state,
+  durable receipt, current bytes hay một episode khác.
+- Repeated terminal failure hiện dùng ngưỡng ba lần liên tiếp. Context pressure và automatic compaction
+  có thể cảnh báo ngay một lần, nhưng vẫn để Lead/Human quyết định có cần handoff hay không.
+- Dù evidence đã corroborated, adjacent-Lead transfer vẫn cần exact Human authorization và final Human
+  release; corroboration không tự cấp lease.
 
 ## Adjacent-Lead handoff
 
@@ -81,10 +95,12 @@ Authority:
 - Chỉ Human-facing caller được record predecessor_released.
 
 Các receipt trước final release không đổi authority. `predecessor_released` chỉ được ghi ở idle boundary;
-transition này atomically chuyển `currentWriteOwnerAgentId` sang successor và daemon từ chối mọi prompt
-mới hoặc unarchive-and-prompt cho predecessor bằng `agent_write_lease_released`. Nó không detach,
-archive hoặc đổi role binding. Final release lock cả predecessor lẫn successor theo stable identity order
-và revalidate successor ngay trước transfer. Released predecessor identity không được tái dùng làm
+transition này đóng predecessor runtime, giữ durable record, rồi chuyển `currentWriteOwnerAgentId` sang
+successor. Nếu runtime closure lỗi thì transition không được persist và Owner không đổi. Sau release,
+daemon từ chối mọi prompt mới hoặc unarchive-and-prompt cho predecessor bằng
+`agent_write_lease_released`. Nó không detach, archive hoặc đổi role binding; durable packet, receipts và
+timeline vẫn được giữ để audit. Final release lock cả predecessor lẫn successor theo stable identity
+order và revalidate successor ngay trước transfer. Released predecessor identity không được tái dùng làm
 successor; một handoff quay lại cùng người/vai trò phải tạo fresh role-bound Lead identity để historical
 revocation không nhập nhằng. Nếu runtime tools chưa available, dừng ở manual frozen packet và báo
 UNKNOWN; không dùng chat prose giả làm receipt.
@@ -103,9 +119,9 @@ workspace, agent và runtime status.
 
 ## Evidence
 
-P1 rejection, rationale, isolated P2 runtime qualification và integrated P0 callable-surface canary được giữ tại
-docs/research/p1-adjacent-lead-handoff-pilot-2026-08-08.md. Candidate P2 trực tiếp bắt buộc các field mà
-successor đã chỉ ra là thiếu. P0 canary chứng minh native tool invocation và durable state readback trên
-paid Codex Lead; P2 qualification chứng minh ordered workflow và durable readback trong dev daemon cô
-lập. Runtime lease gate đã có focused race/boundary tests trên candidate branch, nhưng chưa có
-paid-provider end-to-end release canary hoặc production qualification.
+P1 rejection, rationale, isolated P2 runtime qualification và integrated P0 callable-surface canary được
+giữ tại docs/research/p1-adjacent-lead-handoff-pilot-2026-08-08.md. Candidate P2 trực tiếp bắt buộc các
+field mà successor đã chỉ ra là thiếu. P0 canary chứng minh native tool invocation và durable state
+readback trên paid Codex Lead; P2 qualification chứng minh ordered workflow và durable readback trong dev
+daemon cô lập. Runtime lease gate đã có focused race/boundary tests và paid-provider end-to-end release
+canary trên candidate branch, nhưng chưa có release activation hoặc production qualification.

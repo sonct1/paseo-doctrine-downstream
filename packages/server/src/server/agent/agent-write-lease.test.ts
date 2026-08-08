@@ -60,7 +60,11 @@ function scenario() {
       return (async function* noop() {})();
     }),
   );
-  const dependencies = { agentStorage: storage, hasInFlightRun: () => inFlight };
+  const dependencies = {
+    agentStorage: storage,
+    hasInFlightRun: () => inFlight,
+    closePredecessorRuntime: vi.fn(async () => undefined),
+  };
   return { records, manager, dependencies, setInFlight: (value: boolean) => (inFlight = value) };
 }
 

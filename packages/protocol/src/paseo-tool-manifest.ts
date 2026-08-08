@@ -99,7 +99,7 @@ export const PASEO_TOOL_MANIFEST = [
     id: "transition_lead_handoff",
     label: "Transition Lead handoff",
     description:
-      "Record explicit authorization, successor acknowledgement, rejection, or predecessor release.",
+      "Record explicit authorization, successor acknowledgement, rejection, or predecessor release; final release closes the predecessor runtime but retains its durable record.",
     group: "Agents",
   },
   {
