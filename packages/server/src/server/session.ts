@@ -3234,6 +3234,7 @@ export class Session {
       attachments,
       env,
       roleId,
+      assignment,
     } = msg;
     this.sessionLogger.info(
       { cwd: config.cwd, provider: config.provider, worktreeName },
@@ -3293,6 +3294,10 @@ export class Session {
           config: resolvedIntent.config,
           workspaceId: resolvedIntent.intent.workspaceId,
           roleId,
+          assignment,
+          assignmentAssigner: msg.callerAgentId
+            ? { kind: "agent", agentId: msg.callerAgentId }
+            : { kind: "human-session" },
           worktreeName,
           initialPrompt,
           clientMessageId,

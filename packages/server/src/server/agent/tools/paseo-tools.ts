@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssignmentEnvelopeSchema } from "@getpaseo/protocol/assignment-contract";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -1020,6 +1021,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     role: PaseoRoleIdSchema.optional().describe(
       "Paseo Foundation role to bind through the provider-native durable instruction channel.",
     ),
+    assignment: AssignmentEnvelopeSchema.optional().describe(
+      "Required immutable one-task authority envelope when role is set.",
+    ),
     labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
     settings: CreateAgentSettingsInputSchema.optional().describe(
       "Initial runtime settings for the new agent.",
@@ -1553,6 +1557,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           kind: "mcp",
           provider: parsedArgs.provider,
           roleId: parsedArgs.role,
+          assignment: parsedArgs.assignment,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
           cwd: resolvedArgs.cwd,

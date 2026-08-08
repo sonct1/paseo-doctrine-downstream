@@ -1,5 +1,9 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type {
+  AssignmentEffectClass,
+  AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import { buildProjectSettingsRoute } from "@/utils/host-routes";
 
 export type WorkspaceProtocolCreateAdmissionFailureKind =
@@ -47,9 +51,11 @@ export async function requireWorkspaceProtocolForRole(input: {
   projectId: string;
   repoRoot: string;
   roleId: PaseoRoleId | null | undefined;
+  effectClass: AssignmentEffectClass;
   supported: boolean;
-}): Promise<void> {
-  if (!input.roleId) return;
+  now?: Date;
+}): Promise<AssignmentEnvelope["protocolException"] | undefined> {
+  if (!input.roleId) return undefined;
 
   if (!input.supported) {
     throw new WorkspaceProtocolCreateAdmissionError({
@@ -80,7 +86,18 @@ export async function requireWorkspaceProtocolForRole(input: {
       repoRoot: input.repoRoot,
     });
   }
-  if (result.snapshot.status === "valid") return;
+  if (result.snapshot.status === "valid") return undefined;
+  if (
+    result.snapshot.status === "missing" &&
+    new Set<AssignmentEffectClass>(["read-only", "bootstrap", "recovery"]).has(input.effectClass)
+  ) {
+    const expiresAt = new Date((input.now ?? new Date()).getTime() + 30 * 60 * 1_000).toISOString();
+    return {
+      reason: `${input.effectClass} work while the repository protocol is being bootstrapped`,
+      scope: input.repoRoot,
+      expiresAt,
+    };
+  }
 
   throw new WorkspaceProtocolCreateAdmissionError({
     kind: result.snapshot.status,

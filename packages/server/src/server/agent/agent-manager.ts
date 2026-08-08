@@ -72,6 +72,10 @@ import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import type { PaseoRoleId, ProviderRoleBindingSupport } from "@getpaseo/protocol/role-binding";
+import type {
+  AssignmentAssignerReceipt,
+  AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -266,6 +270,8 @@ export interface CreateAgentOptions {
   workspaceId: string | undefined;
   owner?: AgentOwner;
   roleId?: PaseoRoleId;
+  assignment?: AssignmentEnvelope;
+  assignmentAssigner?: AssignmentAssignerReceipt;
   /** Internal storage reload path; callers must not materialize bindings. */
   roleBinding?: PersistedRoleBinding;
   /** Internal storage reload path for an exact role plus provider route. */
@@ -274,6 +280,9 @@ export interface CreateAgentOptions {
 
 interface RoleSessionInput {
   roleId?: PaseoRoleId;
+  assignment?: AssignmentEnvelope;
+  assignmentAssigner?: AssignmentAssignerReceipt;
+  workspaceId?: string;
   roleBinding?: PersistedRoleBinding;
   launchContract?: PersistedLaunchContract;
 }
@@ -1140,6 +1149,9 @@ export class AgentManager {
     const { storedConfig, launchConfig, paseoToolPolicy, roleBinding, launchContract } =
       await this.prepareSessionConfig(config, resolvedAgentId, options?.env, {
         roleId: options.roleId,
+        assignment: options.assignment,
+        assignmentAssigner: options.assignmentAssigner,
+        workspaceId: options.workspaceId,
         roleBinding: options.roleBinding,
         launchContract: options.launchContract,
       });
@@ -4577,6 +4589,9 @@ export class AgentManager {
         providerBaseId,
         providerSupport: this.providerRoleBindingSupport.get(storedConfig.provider),
         cwd: storedConfig.cwd,
+        workspaceId: role.workspaceId ?? "",
+        assignment: role.assignment,
+        assignmentAssigner: role.assignmentAssigner ?? { kind: "human-session" },
       });
       const providerBinding = await this.materializeProviderLaunchBinding({
         config: storedConfig,

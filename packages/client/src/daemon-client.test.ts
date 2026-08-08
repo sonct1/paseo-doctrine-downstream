@@ -2183,6 +2183,16 @@ test("sends create_agent_request with workspace and caller identity", async () =
     callerAgentId: "parent-agent",
     title: "Compat agent",
     modeId: "default",
+    assignment: {
+      version: 1,
+      disposition: "lead-direct",
+      objective: "Inspect compatibility bytes.",
+      effectClass: "read-only",
+      mutationBoundary: { mode: "no-write" },
+      externalEffectBoundary: { mode: "denied" },
+      evidence: "Return exact request evidence.",
+      handbackAndStop: "Stop after handback.",
+    },
   });
 
   expect(mock.sent).toHaveLength(1);
@@ -2192,6 +2202,7 @@ test("sends create_agent_request with workspace and caller identity", async () =
       type: "create_agent_request",
       workspaceId: "ws-feature-a",
       callerAgentId: "parent-agent",
+      assignment: expect.objectContaining({ effectClass: "read-only" }),
     }),
   );
 

@@ -41,6 +41,25 @@ import type {
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
+
+function leadAssignment(
+  effectClass: AssignmentEnvelope["effectClass"] = "read-only",
+): AssignmentEnvelope {
+  return {
+    version: 1,
+    disposition: "lead-direct",
+    objective: "Complete the bounded test assignment.",
+    effectClass,
+    mutationBoundary:
+      effectClass === "mutating"
+        ? { mode: "bounded-write", scope: "src/**" }
+        : { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return exact focused test evidence.",
+    handbackAndStop: "Stop after evidence handback or a material blocker.",
+  };
+}
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -9304,8 +9323,9 @@ test("role-bound create persists immutable binding and passes only launch instru
 
   try {
     const created = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
-      workspaceId: undefined,
+      workspaceId: "workspace-role-binding",
       roleId: "lead",
+      assignment: leadAssignment(),
     });
 
     expect(client.launchContexts[0]?.roleBinding).toMatchObject({
@@ -9407,12 +9427,92 @@ test("role-bound create rejects missing protocol before provider or state mutati
       manager.createAgent(
         { provider: "codex", cwd: workdir },
         "00000000-0000-4000-8000-000000000119",
-        { workspaceId: undefined, roleId: "lead" },
+        {
+          workspaceId: "workspace-missing-protocol",
+          roleId: "lead",
+          assignment: leadAssignment("mutating"),
+        },
       ),
     ).rejects.toThrow("workspace_protocol_admission_required: missing");
     expect(deleteAgentState).not.toHaveBeenCalled();
     expect(client.createdConfigs).toHaveLength(0);
     expect(manager.getAgent("00000000-0000-4000-8000-000000000119")).toBeNull();
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create admits an exact Human read-only exception for a missing protocol", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-missing-protocol-exception-"));
+  class ExactRoleTestClient extends TestAgentClient {
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      return {
+        providerId: input.config.provider,
+        providerFamily: "codex",
+        model: input.config.model ?? "test-model",
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+  }
+  const client = new ExactRoleTestClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    const created = await manager.createAgent(
+      { provider: "codex", cwd: workdir },
+      "00000000-0000-4000-8000-000000000120",
+      {
+        workspaceId: "workspace-missing-protocol-exception",
+        roleId: "lead",
+        assignment: {
+          ...leadAssignment(),
+          protocolException: {
+            reason: "Inspect exact current bytes before protocol bootstrap.",
+            scope: workdir,
+            expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          },
+        },
+      },
+    );
+
+    expect(created.roleBinding?.workspaceProtocol.status).toBe("missing");
+    expect(created.roleBinding?.assignment?.mutationBoundary).toEqual({ mode: "no-write" });
+    expect(client.createdConfigs).toHaveLength(1);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects invalid protocol despite a Human read-only exception", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-exception-"));
+  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir },
+        "00000000-0000-4000-8000-000000000121",
+        {
+          workspaceId: "workspace-invalid-protocol-exception",
+          roleId: "lead",
+          assignment: {
+            ...leadAssignment(),
+            protocolException: {
+              reason: "Inspect exact current bytes before protocol correction.",
+              scope: workdir,
+              expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("workspace_protocol_admission_required: invalid");
+    expect(client.createdConfigs).toHaveLength(0);
+    expect(manager.getAgent("00000000-0000-4000-8000-000000000121")).toBeNull();
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

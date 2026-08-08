@@ -56,6 +56,8 @@ import {
   workspaceProtocolAdmissionMessageKey,
   WorkspaceProtocolCreateAdmissionError,
 } from "@/workspace-protocol/create-admission";
+import { buildAssignmentEnvelope } from "@/workspace-protocol/assignment-envelope";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const EMPTY_ONLINE_SERVER_IDS: string[] = [];
@@ -139,6 +141,29 @@ function resolveDraftModeId(input: {
   return null;
 }
 
+function buildRoleCreateFields(input: {
+  roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId | null | undefined;
+  effectClass: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+  objective: string;
+  cwd: string;
+  protocolException?: AssignmentEnvelope["protocolException"];
+}): {
+  roleId?: import("@getpaseo/protocol/role-binding").PaseoRoleId;
+  assignment?: AssignmentEnvelope;
+} {
+  if (!input.roleId) return {};
+  return {
+    roleId: input.roleId,
+    assignment: buildAssignmentEnvelope({
+      roleId: input.roleId,
+      effectClass: input.effectClass,
+      objective: input.objective,
+      cwd: input.cwd,
+      protocolException: input.protocolException,
+    }),
+  };
+}
+
 async function submitDraftCreateRequest(input: {
   attempt: { clientMessageId: string };
   text: string;
@@ -151,6 +176,7 @@ async function submitDraftCreateRequest(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    selectedAssignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
     selectedProvider: string | null;
     selectedMode: string;
     modeOptions: readonly { id: string }[];
@@ -160,6 +186,7 @@ async function submitDraftCreateRequest(input: {
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
+  protocolException?: AssignmentEnvelope["protocolException"];
 }): Promise<{ agentId: string | null; result: AgentSnapshotPayload }> {
   const {
     attempt,
@@ -204,7 +231,13 @@ async function submitDraftCreateRequest(input: {
   const result = await client.createAgent({
     config,
     workspaceId,
-    ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
+    ...buildRoleCreateFields({
+      roleId: composerState.selectedRole,
+      effectClass: composerState.selectedAssignmentEffect,
+      objective: text,
+      cwd: workspaceDirectory,
+      protocolException: input.protocolException,
+    }),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
@@ -522,16 +555,18 @@ export function WorkspaceDraftAgentTab({
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
     createRequest: async ({ attempt, text, images, attachments, cwd }) => {
+      let protocolException: AssignmentEnvelope["protocolException"] | undefined;
       try {
         if (composerState.selectedRole) {
           invariant(client, "Connected daemon client is required for role admission");
           invariant(workspaceFields?.projectId, "Project id is required for role admission");
-          await requireWorkspaceProtocolForRole({
+          protocolException = await requireWorkspaceProtocolForRole({
             client,
             serverId,
             projectId: workspaceFields.projectId,
             repoRoot: draftWorkingDirectory ?? cwd,
             roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
             supported: supportsWorkspaceProtocol,
           });
         }
@@ -555,6 +590,7 @@ export function WorkspaceDraftAgentTab({
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
+        protocolException,
       });
     },
     onCreateSuccess: ({ result }) => {

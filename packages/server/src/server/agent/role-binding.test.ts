@@ -12,6 +12,7 @@ import {
   WORKSPACE_PROTOCOL_ADMISSION_ERROR,
 } from "./role-binding.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 const temporaryDirectories: string[] = [];
 
@@ -27,6 +28,36 @@ async function createWorkspace(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "paseo-role-binding-"));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function assignmentFor(
+  roleId: "lead" | "peer" | "supervisor",
+  effectClass: AssignmentEnvelope["effectClass"] = "read-only",
+): AssignmentEnvelope {
+  let disposition: AssignmentEnvelope["disposition"] = "supervision";
+  if (roleId === "lead") disposition = "lead-direct";
+  if (roleId === "peer") disposition = "peer-execution";
+  return {
+    version: 1,
+    disposition,
+    objective: "Inspect the bounded target and hand back evidence.",
+    effectClass,
+    mutationBoundary:
+      effectClass === "mutating"
+        ? { mode: "bounded-write", scope: "src/**" }
+        : { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Report exact inspected paths and observed checks.",
+    handbackAndStop: "Stop after evidence handback or a material blocker.",
+  };
+}
+
+function assignmentBinding(roleId: "lead" | "peer" | "supervisor", cwd: string) {
+  return {
+    workspaceId: `workspace:${cwd}`,
+    assignment: assignmentFor(roleId),
+    assignmentAssigner: { kind: "human-session" as const },
+  };
 }
 
 describe("native Foundation role materialization", () => {
@@ -50,6 +81,7 @@ describe("native Foundation role materialization", () => {
       provider: "codex-custom",
       providerBaseId: "codex",
       cwd,
+      ...assignmentBinding("lead", cwd),
       createdAt: new Date("2026-08-05T00:00:00.000Z"),
     });
 
@@ -66,6 +98,8 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("runtime-issued PASEO_AGENT_ID");
     expect(binding.instructions).toContain("Broad agent lists may omit internal loop workers");
     expect(binding.instructions).toContain(binding.workspaceProtocol.digest);
+    expect(binding.instructions).toContain("Mutation boundary: no-write");
+    expect(binding.assignment).toMatchObject({ effectClass: "read-only" });
     expect(toRoleBindingReceipt(binding)).not.toHaveProperty("instructions");
   });
 
@@ -80,6 +114,7 @@ describe("native Foundation role materialization", () => {
       roleId: "peer",
       provider: "claude",
       cwd,
+      ...assignmentBinding("peer", cwd),
     });
 
     expect(binding.injectionMethod).toBe("claude-system-prompt");
@@ -91,17 +126,51 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("Do not load");
   });
 
-  test("blocks every role when the mandatory protocol is missing or invalid", async () => {
+  test("blocks material work when protocol is missing and every role when it is invalid", async () => {
     const missing = await createWorkspace();
     const invalid = await createWorkspace();
     await writeFile(join(invalid, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
 
     await expect(
-      materializeRoleBinding({ roleId: "lead", provider: "codex", cwd: missing }),
+      materializeRoleBinding({
+        roleId: "lead",
+        provider: "codex",
+        cwd: missing,
+        ...assignmentBinding("lead", missing),
+        assignment: assignmentFor("lead", "mutating"),
+      }),
     ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing`);
     await expect(
-      materializeRoleBinding({ roleId: "peer", provider: "claude", cwd: invalid }),
+      materializeRoleBinding({
+        roleId: "peer",
+        provider: "claude",
+        cwd: invalid,
+        ...assignmentBinding("peer", invalid),
+      }),
     ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: invalid`);
+  });
+
+  test("allows a Human-bound read-only exception for a missing protocol", async () => {
+    const cwd = await createWorkspace();
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+      workspaceId: `workspace:${cwd}`,
+      assignmentAssigner: { kind: "human-session" },
+      assignment: {
+        ...assignmentFor("lead"),
+        protocolException: {
+          reason: "Inspect repository facts needed for bootstrap.",
+          scope: cwd,
+          expiresAt: "2026-08-05T01:00:00.000Z",
+        },
+      },
+      createdAt: new Date("2026-08-05T00:00:00.000Z"),
+    });
+
+    expect(binding.workspaceProtocol.status).toBe("missing");
+    expect(binding.assignment?.protocolExceptionExpiresAt).toBe("2026-08-05T01:00:00.000Z");
   });
 
   test("fails closed for a provider without a native durable role channel", async () => {
@@ -116,7 +185,12 @@ describe("native Foundation role materialization", () => {
       status: "unsupported",
     });
     await expect(
-      materializeRoleBinding({ roleId: "lead", provider: "generic-acp", cwd }),
+      materializeRoleBinding({
+        roleId: "lead",
+        provider: "generic-acp",
+        cwd,
+        ...assignmentBinding("lead", cwd),
+      }),
     ).rejects.toThrow("no qualified native durable role-instruction channel");
   });
 

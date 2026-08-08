@@ -23,6 +23,14 @@ import {
 import { useDraftStore } from "@/stores/draft-store";
 import { toDraftInputIfReady } from "@/stores/draft-store/state";
 import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import {
+  isAssignmentEffectAllowedForRole,
+  PASEO_ASSIGNMENT_EFFECT_SUMMARIES,
+  type AssignmentEffectClass,
+} from "@getpaseo/protocol/assignment-contract";
+import type { AgentFeature } from "@getpaseo/protocol/agent-types";
+
+const ASSIGNMENT_EFFECT_FEATURE_ID = "foundation_assignment_effect";
 
 type AttachmentUpdater =
   | UserComposerAttachment[]
@@ -51,6 +59,7 @@ type DraftComposerState = UseAgentFormStateResult & {
   commandDraftConfig: DraftCommandConfig | undefined;
   selectedRole: PaseoRoleId | null;
   setRoleFromUser: (roleId: PaseoRoleId) => void;
+  selectedAssignmentEffect: AssignmentEffectClass;
 };
 
 export interface AgentInputDraft {
@@ -88,6 +97,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   );
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<PaseoRoleId>("lead");
+  const [selectedAssignmentEffect, setSelectedAssignmentEffect] =
+    useState<AssignmentEffectClass>("read-only");
   const text = draft?.text ?? "";
   const attachments = draft?.attachments ?? [];
   const isHydrated = hydratedDraftKey === draftKey;
@@ -226,6 +237,41 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     thinkingOptionId: effectiveThinkingOptionId,
     initialFeatureValues: composerOptions?.initialFeatureValues,
   });
+  const assignmentEffectFeature = useMemo<AgentFeature>(
+    () => ({
+      type: "select",
+      id: ASSIGNMENT_EFFECT_FEATURE_ID,
+      label: "Assignment authority",
+      description: "Explicit mutation/delegation class for the immutable assignment contract.",
+      value: selectedAssignmentEffect,
+      options: PASEO_ASSIGNMENT_EFFECT_SUMMARIES.filter((option) =>
+        isAssignmentEffectAllowedForRole(selectedRole, option.id),
+      ),
+    }),
+    [selectedAssignmentEffect, selectedRole],
+  );
+  const setRoleAndNormalizeEffect = useCallback(
+    (roleId: PaseoRoleId) => {
+      setSelectedRole(roleId);
+      if (!isAssignmentEffectAllowedForRole(roleId, selectedAssignmentEffect)) {
+        setSelectedAssignmentEffect("read-only");
+      }
+    },
+    [selectedAssignmentEffect],
+  );
+  const setAgentControlFeature = useCallback(
+    (featureId: string, value: unknown) => {
+      if (featureId === ASSIGNMENT_EFFECT_FEATURE_ID) {
+        const selected = PASEO_ASSIGNMENT_EFFECT_SUMMARIES.find((option) => option.id === value);
+        if (selected && isAssignmentEffectAllowedForRole(selectedRole, selected.id)) {
+          setSelectedAssignmentEffect(selected.id);
+        }
+        return;
+      }
+      setDraftFeatureValue(featureId, value);
+    },
+    [selectedRole, setDraftFeatureValue],
+  );
 
   const commandDraftConfig = useMemo(
     () =>
@@ -283,13 +329,16 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         formState: roleAwareFormState,
         roleOptions: roleBindingAvailable ? PASEO_ROLE_SUMMARIES : [],
         selectedRole: roleBindingAvailable ? selectedRole : null,
-        onSelectRole: setSelectedRole,
-        features: draftFeatures,
-        onSetFeature: setDraftFeatureValue,
+        onSelectRole: setRoleAndNormalizeEffect,
+        features: roleBindingAvailable
+          ? [...(draftFeatures ?? []), assignmentEffectFeature]
+          : draftFeatures,
+        onSetFeature: setAgentControlFeature,
       }),
       commandDraftConfig,
       selectedRole: roleBindingAvailable ? selectedRole : null,
-      setRoleFromUser: setSelectedRole,
+      setRoleFromUser: setRoleAndNormalizeEffect,
+      selectedAssignmentEffect,
     };
   }, [
     commandDraftConfig,
@@ -297,10 +346,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     effectiveModelId,
     effectiveThinkingOptionId,
     draftFeatures,
+    assignmentEffectFeature,
     draftFeatureValues,
     formState,
     selectedRole,
-    setDraftFeatureValue,
+    selectedAssignmentEffect,
+    setAgentControlFeature,
+    setRoleAndNormalizeEffect,
     workingDir,
   ]);
 

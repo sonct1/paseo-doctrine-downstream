@@ -1,6 +1,6 @@
 # Canonical Role Contracts
 
-Version: `3.2.0-topology-recovery`
+Version: `3.3.0-mandatory-protocol-webui`
 Trạng thái: normative current role contract
 Doctrine: [`../references/demonthorn-agent-orchestration-deep-dive.md`](../references/demonthorn-agent-orchestration-deep-dive.md)
 
@@ -8,7 +8,7 @@ Doctrine: [`../references/demonthorn-agent-orchestration-deep-dive.md`](../refer
 
 ```text
 standing role profile
-  + optional WORKSPACE_PROTOCOL.md for Lead when repo tactics differ materially
+  + mandatory thin WORKSPACE_PROTOCOL.md for repository tactics or explicit zero-delta baseline
   + exact role/disposition/lease
   + bounded objective, scope, routing/effort override, evidence, handback, stop condition
 ```
@@ -36,7 +36,7 @@ Lead phải:
 - bind own Paseo identity và workspace từ runtime-authenticated self context trước broad discovery;
   absence trong broad agent inventory không phải counterevidence vì internal workers có thể bị ẩn;
 - resolve Human objective và exact Lead-of-record lease;
-- đọc full `WORKSPACE_PROTOCOL.md` khi file hiện diện và trích relevant constraints cho Peer;
+- fail closed với `bootstrap-required`, invalid hoặc unreadable protocol; sau khi Human bootstrap/correct trên WebUI, đọc full `WORKSPACE_PROTOCOL.md` và trích relevant constraints cho Peer;
 - sửa title generic của workspace mình trước first delegation;
 - giao neutral outcome brief thay vì pre-solve rồi yêu cầu Peer confirm;
 - giữ một Owner cho mỗi moving/coupled scope;

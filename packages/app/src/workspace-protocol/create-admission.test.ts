@@ -29,6 +29,7 @@ const baseInput = {
   projectId: "project-a",
   repoRoot: "/repo/worktree",
   roleId: "lead" as const,
+  effectClass: "mutating" as const,
   supported: true,
 };
 
@@ -73,6 +74,29 @@ describe("role create Workspace Protocol admission", () => {
       });
     },
   );
+
+  test("returns a bounded Human exception for explicit read-only work on a missing protocol", async () => {
+    const client = {
+      inspectWorkspaceProtocol: vi.fn(async () => ({
+        requestId: "inspect-1",
+        ok: true as const,
+        snapshot: snapshot("missing"),
+      })),
+    };
+
+    await expect(
+      requireWorkspaceProtocolForRole({
+        ...baseInput,
+        client,
+        effectClass: "read-only",
+        now: new Date("2026-08-08T00:00:00.000Z"),
+      }),
+    ).resolves.toEqual({
+      reason: "read-only work while the repository protocol is being bootstrapped",
+      scope: "/repo/worktree",
+      expiresAt: "2026-08-08T00:30:00.000Z",
+    });
+  });
 
   test("fails closed when the host capability or inspection is unavailable", async () => {
     const client = {

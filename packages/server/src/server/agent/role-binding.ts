@@ -10,15 +10,26 @@ import {
   type WorkspaceProtocolBindingReceipt,
 } from "@getpaseo/protocol/role-binding";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import type {
+  AssignmentAssignerReceipt,
+  AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import { z } from "zod";
 
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
+import {
+  buildAssignmentInstruction,
+  materializeAssignmentContract,
+  PersistedAssignmentContractSchema,
+  type PersistedAssignmentContract,
+} from "./assignment-contract.js";
 
 export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
+  assignmentContract: PersistedAssignmentContractSchema.optional(),
 });
 
 export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
@@ -29,6 +40,9 @@ export interface MaterializeRoleBindingInput {
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
   cwd: string;
+  workspaceId: string;
+  assignment?: AssignmentEnvelope;
+  assignmentAssigner: AssignmentAssignerReceipt;
   createdAt?: Date;
 }
 
@@ -231,8 +245,16 @@ function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceip
 function requireWorkspaceProtocol(
   cwd: string,
   roleId: PaseoRoleId,
+  assignment: PersistedAssignmentContract,
 ): WorkspaceProtocolBindingReceipt {
   const snapshot = inspectWorkspaceProtocol(cwd);
+  if (snapshot.status === "missing" && assignment.envelope.protocolException) {
+    return {
+      status: "missing",
+      readership: protocolReadership(roleId),
+      path: snapshot.path,
+    };
+  }
   if (snapshot.status !== "valid") {
     const details =
       snapshot.status === "invalid" && snapshot.issues.length > 0
@@ -276,8 +298,21 @@ export async function materializeRoleBinding(
   }
 
   const definition = getFoundationRoleDefinition(input.roleId);
-  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId);
-  const instructions = `${definition.instructions}\n\n${buildProtocolInstruction(workspaceProtocol)}`;
+  const createdAt = input.createdAt ?? new Date();
+  const assignmentContract = materializeAssignmentContract({
+    roleId: input.roleId,
+    assigner: input.assignmentAssigner,
+    workspaceId: input.workspaceId,
+    cwd: input.cwd,
+    envelope: input.assignment,
+    createdAt,
+  });
+  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId, assignmentContract);
+  const instructions = [
+    definition.instructions,
+    buildProtocolInstruction(workspaceProtocol),
+    buildAssignmentInstruction(assignmentContract),
+  ].join("\n\n");
 
   return {
     roleId: input.roleId,
@@ -288,7 +323,9 @@ export async function materializeRoleBinding(
     injectionMethod: support.injectionMethod,
     qualification: "implementation-supported",
     workspaceProtocol,
-    createdAt: (input.createdAt ?? new Date()).toISOString(),
+    assignment: assignmentContract.receipt,
+    assignmentContract,
+    createdAt: createdAt.toISOString(),
     instructions,
   };
 }

@@ -31,6 +31,18 @@ async function createRoleBinding() {
     provider: "codex-proxy",
     providerBaseId: "codex",
     cwd,
+    workspaceId: `workspace:${cwd}`,
+    assignmentAssigner: { kind: "human-session" },
+    assignment: {
+      version: 1,
+      disposition: "lead-direct",
+      objective: "Inspect the exact launch binding.",
+      effectClass: "read-only",
+      mutationBoundary: { mode: "no-write" },
+      externalEffectBoundary: { mode: "denied" },
+      evidence: "Return the immutable receipt.",
+      handbackAndStop: "Stop after receipt verification.",
+    },
     createdAt: new Date("2026-08-06T00:00:00.000Z"),
   });
 }

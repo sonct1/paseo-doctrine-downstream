@@ -9,7 +9,10 @@ const foundationProduct = readFileSync(new URL("docs/foundation-product.md", rep
 test("Foundation canaries use daemon readback for route identity", () => {
   for (const source of [devPilot, foundationProduct]) {
     assert.match(source, /paseo agent inspect <agent-id> --json/);
-    assert.match(source, /Agent tự mô tả\s+provider\/model không phải route evidence/);
+    assert.match(
+      source,
+      /(?:agent tự mô tả\s+provider\/model\s+không\s+phải route evidence|agent tự mô tả route\s+không\s+phải evidence)/i,
+    );
   }
   assert.doesNotMatch(devPilot, /trả role marker và provider\/model/);
 });

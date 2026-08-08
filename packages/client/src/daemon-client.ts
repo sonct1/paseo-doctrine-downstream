@@ -351,6 +351,7 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   env?: CreateAgentRequestMessage["env"];
   workspaceId?: string;
   roleId?: CreateAgentRequestMessage["roleId"];
+  assignment?: CreateAgentRequestMessage["assignment"];
   callerAgentId?: string;
   initialPrompt?: string;
   clientMessageId?: string;
@@ -2472,6 +2473,7 @@ export class DaemonClient {
       ...(options.env ? { env: options.env } : {}),
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
       ...(options.roleId !== undefined ? { roleId: options.roleId } : {}),
+      ...(options.assignment !== undefined ? { assignment: options.assignment } : {}),
       ...(options.callerAgentId !== undefined ? { callerAgentId: options.callerAgentId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
       ...(options.clientMessageId ? { clientMessageId: options.clientMessageId } : {}),

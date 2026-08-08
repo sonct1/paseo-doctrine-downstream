@@ -16,6 +16,12 @@ import { collectMultiple } from "../../utils/command-options.js";
 import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { buildWorkspaceSource } from "../workspace/create.js";
 import { PaseoRoleIdSchema, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import {
+  AssignmentEffectClassSchema,
+  PASEO_ASSIGNMENT_CONTRACT_VERSION,
+  type AssignmentEffectClass,
+  type AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 
 export { resolveProviderAndModel } from "../../utils/provider-model.js";
 
@@ -30,6 +36,11 @@ export function addRunOptions(cmd: Command): Command {
       .addOption(new Option("--detach", "Legacy alias for --background").hideHelp())
       .option("--title <title>", "Assign a title to the agent")
       .option("--role <role>", "Paseo Foundation role: lead, peer, or supervisor")
+      .option(
+        "--assignment-effect <effect>",
+        "Role assignment effect: read-only, mutating, delegation, bootstrap, or recovery",
+      )
+      .option("--write-scope <scope>", "Narrow write scope for a mutating role assignment")
       .addOption(new Option("--name <name>", "Hidden alias for --title").hideHelp())
       .option(
         "--provider <provider>",
@@ -113,6 +124,8 @@ export interface AgentRunOptions extends CommandOptions {
   detach?: boolean;
   title?: string;
   role?: string;
+  assignmentEffect?: string;
+  writeScope?: string;
   name?: string;
   provider?: string;
   model?: string;
@@ -386,7 +399,36 @@ function validateRunOptions(prompt: string, options: AgentRunOptions, outputSche
   }
 
   validateRunWorkspaceOptions(options);
-  parseRoleOption(options.role);
+  const roleId = parseRoleOption(options.role);
+  const assignmentEffect = parseAssignmentEffectOption(options.assignmentEffect);
+  if (roleId && !assignmentEffect) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "--assignment-effect is required with --role",
+    } satisfies CommandError;
+  }
+  if (!roleId && assignmentEffect) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "--assignment-effect requires --role",
+    } satisfies CommandError;
+  }
+  if (options.writeScope && !assignmentEffect) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "--write-scope requires --role and --assignment-effect",
+    } satisfies CommandError;
+  }
+  if (
+    options.writeScope &&
+    assignmentEffect &&
+    !new Set<AssignmentEffectClass>(["mutating", "bootstrap", "recovery"]).has(assignmentEffect)
+  ) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: `--write-scope is not allowed for ${assignmentEffect}`,
+    } satisfies CommandError;
+  }
 
   if (outputSchema && runsInBackground(options)) {
     throw {
@@ -408,6 +450,66 @@ function parseRoleOption(role: string | undefined): PaseoRoleId | undefined {
     } satisfies CommandError;
   }
   return parsed.data;
+}
+
+function parseAssignmentEffectOption(
+  effect: string | undefined,
+): AssignmentEffectClass | undefined {
+  if (!effect) return undefined;
+  const parsed = AssignmentEffectClassSchema.safeParse(effect.trim().toLowerCase());
+  if (!parsed.success) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: `Unsupported assignment effect: ${effect}`,
+      details: "Use read-only, mutating, delegation, bootstrap, or recovery",
+    } satisfies CommandError;
+  }
+  return parsed.data;
+}
+
+function buildCliAssignment(input: {
+  roleId: PaseoRoleId;
+  effectClass: AssignmentEffectClass;
+  objective: string;
+  cwd: string;
+  writeScope?: string;
+}): AssignmentEnvelope {
+  let disposition: AssignmentEnvelope["disposition"] = "supervision";
+  if (input.roleId === "lead") disposition = "lead-direct";
+  if (input.roleId === "peer") disposition = "peer-execution";
+  return {
+    version: PASEO_ASSIGNMENT_CONTRACT_VERSION,
+    disposition,
+    objective: input.objective.trim(),
+    effectClass: input.effectClass,
+    mutationBoundary:
+      input.effectClass === "mutating" ||
+      ((input.effectClass === "bootstrap" || input.effectClass === "recovery") &&
+        Boolean(input.writeScope?.trim()))
+        ? { mode: "bounded-write", scope: input.writeScope?.trim() || input.cwd }
+        : { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return exact changed or inspected scope and proportional verification.",
+    handbackAndStop:
+      "Stop at completion or a material blocker; hand back evidence, unknowns, residual risk, and lease state.",
+  };
+}
+
+function buildOptionalCliAssignment(input: {
+  roleId: PaseoRoleId | undefined;
+  effectClass: AssignmentEffectClass | undefined;
+  objective: string;
+  cwd: string;
+  writeScope?: string;
+}): AssignmentEnvelope | undefined {
+  if (!input.roleId || !input.effectClass) return undefined;
+  return buildCliAssignment({
+    roleId: input.roleId,
+    effectClass: input.effectClass,
+    objective: input.objective,
+    cwd: input.cwd,
+    writeScope: input.writeScope,
+  });
 }
 
 function runsInBackground(options: Pick<AgentRunOptions, "background" | "detach">): boolean {
@@ -611,6 +713,7 @@ export async function runRunCommand(
 
   const resolvedProviderModel = resolveProviderAndModel(options);
   const roleId = parseRoleOption(options.role);
+  const assignmentEffect = parseAssignmentEffectOption(options.assignmentEffect);
   const resolvedTitle = options.title ?? options.name;
 
   const client = await connectToDaemonOrThrow(options.host, host);
@@ -639,6 +742,13 @@ export async function runRunCommand(
     const workspaceId = workspace.id;
     const callerAgentId = resolveRunCallerAgentId();
     const runCwd = workspace.cwd;
+    const assignment = buildOptionalCliAssignment({
+      roleId,
+      effectClass: assignmentEffect,
+      objective: prompt,
+      cwd: runCwd,
+      writeScope: options.writeScope,
+    });
 
     if (outputSchema) {
       let structuredAgent: AgentSnapshotPayload | null = null;
@@ -650,6 +760,7 @@ export async function runRunCommand(
             cwd: runCwd,
             workspaceId,
             roleId,
+            assignment,
             callerAgentId,
             title: resolvedTitle,
             modeId: options.mode,
@@ -722,6 +833,7 @@ export async function runRunCommand(
       cwd: runCwd,
       workspaceId,
       roleId,
+      assignment,
       callerAgentId,
       title: resolvedTitle,
       modeId: options.mode,

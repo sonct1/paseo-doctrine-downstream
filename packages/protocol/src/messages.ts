@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssignmentEnvelopeSchema } from "./assignment-contract.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
@@ -1408,6 +1409,8 @@ export const CreateAgentRequestMessageSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   workspaceId: z.string().optional(),
   roleId: PaseoRoleIdSchema.optional(),
+  // COMPAT(assignmentContracts): added in v0.3.0-beta.1.paseo.2; old clients omit it.
+  assignment: AssignmentEnvelopeSchema.optional(),
   // Optional caller context lets managed CLI invocations use the same daemon-owned
   // workspace and parentage policy as agent-scoped MCP creation.
   callerAgentId: z.string().optional(),

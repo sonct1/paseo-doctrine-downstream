@@ -32,3 +32,7 @@ Ownership/lease: <released | retained with reason>
 ```
 
 Status hoặc “tests pass” không tự là acceptance. Lead inspect stable artifact và issue engineering verdict; Human giữ decision ngoài Lead lease.
+
+Paseo product materialize role-bound assignment thành immutable contract và redacted receipt theo
+[Assignment Receipt và Supervisor Portfolio Binding](ASSIGNMENT_RECEIPT_AND_SUPERVISOR_PORTFOLIO.md).
+Receipt bind exact bytes/boundaries nhưng không thay assignment, handback hoặc acceptance authority.

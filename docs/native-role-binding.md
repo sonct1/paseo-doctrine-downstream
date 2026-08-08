@@ -2,7 +2,7 @@
 
 Trạng thái: accepted by Human; Codex/Claude/Pi/OMP/Cursor/Antigravity implementation và focused qualification gates hoàn tất trong current branch
 Ngày: `2026-08-06`
-Foundation contract: `ROLE_CONTRACTS 3.2.0-topology-recovery`
+Foundation contract: `ROLE_CONTRACTS 3.3.0-mandatory-protocol-webui`
 
 ## Quyết định
 
@@ -36,7 +36,12 @@ qualification (`implementation-supported`; runtime acceptance evidence được 
 createdAt
 ```
 
-Client chỉ gửi `roleId`; client không gửi hoặc sửa materialized instruction. Resume/reload phải dùng exact persisted binding, không resolve lại từ catalog hiện tại và không nhận role/system-prompt override.
+Client gửi `roleId` cùng một caller-authored `AssignmentEnvelope`; client không gửi hoặc sửa
+materialized instruction. Daemon validate chéo role/disposition, effect/write boundary, issuer,
+workspace, expiry và protocol exception rồi tạo immutable `AssignmentContract` có digest. Receipt
+secret-safe được persist cùng `RoleBinding`; exact objective, evidence, handback và stop condition được
+chèn vào durable role instruction. Resume/reload dùng exact persisted binding, không resolve lại từ
+catalog hiện tại và không nhận role/system-prompt override.
 
 Ngay trước launch, daemon compose `RoleBinding` với exact provider route thành một immutable
 `LaunchContract`. Contract pin `roleId`, logical `providerId`, provider family, model,
@@ -109,9 +114,13 @@ dùng revision gồm digest để không overwrite thay đổi ngoài Paseo; con
 đều fail closed và giữ current bytes. CLI/MCP không phải setup path dành cho Human.
 
 Admission kiểm exact active project/workspace root, kể cả Paseo-owned worktree. Role-bound create
-preflight trên WebUI và daemon kiểm lại trước provider launch hoặc state mutation. Trạng thái
-`missing|invalid|unreadable` đưa Human tới đúng Project Settings target; loose/v1 protocol hợp lệ vẫn
-được nhận để không khóa repository cũ, còn bootstrap mới luôn sinh v2.
+preflight trên WebUI và daemon kiểm lại trước provider launch hoặc state mutation. `invalid|unreadable`
+luôn fail closed. `missing` mặc định fail closed cho `mutating|delegation`; chỉ exact Human-issued
+`read-only|bootstrap|recovery` assignment mới được mang exception có reason, exact cwd scope và expiry.
+Bootstrap từ WebUI chỉ nhận bounded write scope tại root `WORKSPACE_PROTOCOL.md`; recovery chỉ có write
+khi caller nêu exact scope. Exception không hợp thức hóa protocol invalid, không mở external effects và
+không biến runtime `full-access` thành authority. Loose/v1 protocol hợp lệ vẫn được nhận để không khóa
+repository cũ; bootstrap mới sinh v2.
 
 Lead được bind full protocol trước orchestration. Peer không đọc full protocol và chỉ nhận relevant constraints trong assignment. Supervisor chỉ được bind full protocol khi governance assignment yêu cầu create/audit/update.
 
@@ -121,13 +130,16 @@ Create flow đi theo thứ tự:
 
 1. tạo/chọn workspace;
 2. chọn role;
-3. hiển thị authority summary và protocol requirement;
+3. chọn explicit assignment effect (`read-only|mutating|delegation|bootstrap|recovery`) và hiển thị
+   authority summary/protocol requirement;
 4. chọn một provider tương thích;
 5. chọn model/mode và preview binding receipt;
 6. nhập assignment rồi spawn.
 
-Nếu protocol thiếu hoặc invalid, create flow đưa Human về Project Settings để bootstrap/correct trên
-WebUI; không yêu cầu copy/paste command.
+Nếu protocol invalid/unreadable, create flow đưa Human về Project Settings để correct trên WebUI. Nếu
+protocol thiếu, material work cũng đi theo đường này; bounded Human read-only/bootstrap/recovery có thể
+tiếp tục với immutable expiring exception. CLI role create bắt buộc `--assignment-effect`; write scope
+chỉ hợp lệ cho `mutating|bootstrap|recovery`.
 
 Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
@@ -150,6 +162,10 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 ## Acceptance gates
 
 - Raw create request không thể materialize hoặc override role instruction.
+- Role-bound create thiếu assignment contract bị reject; effect/write contradiction, agent-issued
+  protocol exception, scope mismatch và expired exception đều fail closed.
+- Missing protocol chặn material assignment trước provider launch/state mutation; Human read-only
+  exception được admit với persisted `no-write`; invalid protocol vẫn chặn dù có exception.
 - Role-bound session không nhận `systemPrompt` từ caller.
 - Resume/reload giữ exact role bytes và digest đã persist.
 - Resume/reload giữ exact provider route và model; model mutation trên role-bound agent bị reject.

@@ -109,4 +109,15 @@ describe("runRunCommand option validation", () => {
   it("rejects an unknown Paseo role before connecting", async () => {
     await expectInvalidOptions({ role: "architect" }, /Unsupported Paseo role/);
   });
+
+  it("requires an explicit assignment effect for a role", async () => {
+    await expectInvalidOptions({ role: "lead" }, /--assignment-effect is required with --role/);
+  });
+
+  it("rejects write scope for a no-write effect", async () => {
+    await expectInvalidOptions(
+      { role: "lead", assignmentEffect: "read-only", writeScope: "src/**" },
+      /--write-scope is not allowed for read-only/,
+    );
+  });
 });

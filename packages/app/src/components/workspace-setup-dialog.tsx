@@ -37,6 +37,8 @@ import {
   workspaceProtocolAdmissionMessageKey,
   WorkspaceProtocolCreateAdmissionError,
 } from "@/workspace-protocol/create-admission";
+import { buildAssignmentEnvelope } from "@/workspace-protocol/assignment-envelope";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 function toProjectIconDataUri(icon: { mimeType: string; data: string } | null): string | null {
   if (!icon) {
@@ -127,9 +129,11 @@ function buildCreateAgentOptions({
   workspaceDirectory,
   workspaceId,
   provider,
+  protocolException,
 }: {
   composerState: {
     selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    selectedAssignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
     modeOptions: { id: string }[];
     selectedMode: string;
     effectiveModelId: string | null;
@@ -141,6 +145,7 @@ function buildCreateAgentOptions({
   workspaceDirectory: string;
   workspaceId: string;
   provider: CreateAgentRequestOptions["provider"];
+  protocolException?: AssignmentEnvelope["protocolException"];
 }): CreateAgentRequestOptions {
   // Reconcile the selected mode against the discovered modes. The mode picker
   // shows modeOptions[0] when the stored mode isn't in the list (e.g. a stale
@@ -156,6 +161,17 @@ function buildCreateAgentOptions({
     cwd: workspaceDirectory,
     workspaceId,
     ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
+    ...(composerState.selectedRole
+      ? {
+          assignment: buildAssignmentEnvelope({
+            roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
+            objective: text,
+            cwd: workspaceDirectory,
+            protocolException,
+          }),
+        }
+      : {}),
     ...(reconciledMode !== "" ? { modeId: reconciledMode } : {}),
     ...(composerState.effectiveModelId ? { model: composerState.effectiveModelId } : {}),
     ...(composerState.effectiveThinkingOptionId
@@ -334,13 +350,15 @@ export function WorkspaceSetupDialog() {
           workspaceId: ensuredWorkspace.id,
           workspaceDirectory: ensuredWorkspace.workspaceDirectory,
         });
+        let protocolException: AssignmentEnvelope["protocolException"] | undefined;
         try {
-          await requireWorkspaceProtocolForRole({
+          protocolException = await requireWorkspaceProtocolForRole({
             client: connectedClient,
             serverId,
             projectId: ensuredWorkspace.projectId,
             repoRoot: workspaceDirectory,
             roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
             supported: supportsWorkspaceProtocol,
           });
         } catch (error) {
@@ -359,6 +377,7 @@ export function WorkspaceSetupDialog() {
             workspaceDirectory,
             workspaceId: ensuredWorkspace.id,
             provider: composerState.selectedProvider,
+            protocolException,
           }),
         );
 
