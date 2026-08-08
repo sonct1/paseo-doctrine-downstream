@@ -12,9 +12,28 @@ export interface LeadHandoffDependencies {
   agentStorage: Pick<AgentStorage, "get" | "upsert">;
   hasInFlightRun?: (agentId: string) => boolean;
   closePredecessorRuntime?: (agentId: string) => Promise<void>;
+  predecessorRuntimeCloseTimeoutMs?: number;
 }
 
 const recordUpdates = new Map<string, Promise<unknown>>();
+const DEFAULT_PREDECESSOR_RUNTIME_CLOSE_TIMEOUT_MS = 10_000;
+
+async function closePredecessorWithinBoundary(
+  close: Promise<void>,
+  timeoutMs: number,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      close,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("predecessor_runtime_close_timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function updatePredecessorRecord<T>(
   dependencies: LeadHandoffDependencies,
@@ -260,9 +279,22 @@ export async function transitionLeadHandoff(
       throw new Error("Cannot release predecessor while it has an in-flight run");
     }
     await requireAdjacentLeads(dependencies, input.predecessorAgentId, successorAgentId);
-    await closePredecessorRuntime(input.predecessorAgentId);
+    await closePredecessorWithinBoundary(
+      closePredecessorRuntime(input.predecessorAgentId),
+      dependencies.predecessorRuntimeCloseTimeoutMs ?? DEFAULT_PREDECESSOR_RUNTIME_CLOSE_TIMEOUT_MS,
+    );
     return transition();
   });
+}
+
+export function hasReleasedAgentWriteLease(record: StoredAgentRecord | null): boolean {
+  if (!record) return false;
+  return Boolean(
+    record.leadHandoffs?.some(
+      (packet) =>
+        packet.status === "predecessor_released" && packet.currentWriteOwnerAgentId !== record.id,
+    ),
+  );
 }
 
 export function assertAgentPromptLease(record: StoredAgentRecord | null): void {

@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import type { StoredAgentRecord } from "./agent-storage.js";
+import { withAgentAuthorityLock } from "./agent-authority-lock.js";
 import { prepareLeadHandoff, transitionLeadHandoff } from "./lead-handoffs.js";
 
 function lead(id: string): StoredAgentRecord {
@@ -205,6 +206,50 @@ describe("Lead handoff packets", () => {
       }),
     ).rejects.toThrow("runtime close failed");
 
+    expect(testCase.records.get("lead-old")?.leadHandoffs?.[0]).toMatchObject({
+      status: "successor_acknowledged",
+      currentWriteOwnerAgentId: "lead-old",
+    });
+  });
+
+  test("bounds a hanging close and releases the successor authority lock", async () => {
+    const testCase = scenario();
+    let packet = await prepareLeadHandoff(testCase.dependencies, completePacketInput());
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_authorized",
+      actorAgentId: null,
+      successorAgentId: "lead-new",
+      note: "Human authorization",
+    });
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_acknowledged",
+      actorAgentId: "lead-new",
+      note: "Packet accepted",
+    });
+    testCase.dependencies.closePredecessorRuntime.mockImplementationOnce(
+      async () => new Promise<void>(() => undefined),
+    );
+
+    await expect(
+      transitionLeadHandoff(
+        { ...testCase.dependencies, predecessorRuntimeCloseTimeoutMs: 5 },
+        {
+          predecessorAgentId: "lead-old",
+          handoffId: packet.id,
+          transition: "predecessor_released",
+          actorAgentId: null,
+          note: "Bounded hanging release attempt",
+        },
+      ),
+    ).rejects.toThrow("predecessor_runtime_close_timeout");
+
+    await expect(withAgentAuthorityLock("lead-new", async () => "successor-live")).resolves.toBe(
+      "successor-live",
+    );
     expect(testCase.records.get("lead-old")?.leadHandoffs?.[0]).toMatchObject({
       status: "successor_acknowledged",
       currentWriteOwnerAgentId: "lead-old",

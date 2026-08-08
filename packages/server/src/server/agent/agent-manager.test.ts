@@ -8329,7 +8329,7 @@ test("concurrent explicit closes tear down the runtime once", async () => {
     });
     const firstClose = manager.closeAgent(agent.id);
     await closeStarted.promise;
-    const secondClose = manager.closeAgent(agent.id);
+    const secondClose = manager.closeAgentForLeadHandoff(agent.id);
 
     closeAllowed.resolve();
     await Promise.all([firstClose, secondClose]);
@@ -8365,6 +8365,9 @@ test("provider close failure still persists and emits a resumable closed agent",
 
     await expect(manager.closeAgent(created.id)).rejects.toThrow("provider cleanup failed");
     await closed;
+    await expect(manager.closeAgentForLeadHandoff(created.id)).rejects.toThrow(
+      `predecessor_runtime_close_failed: ${created.id}`,
+    );
     const stored = await storage.get(created.id);
     expect(stored).toMatchObject({ lastStatus: "closed" });
     expect(stored?.archivedAt).toBeFalsy();
@@ -8372,6 +8375,10 @@ test("provider close failure still persists and emits a resumable closed agent",
     await expect(
       ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
     ).resolves.toMatchObject({ id: created.id, lifecycle: "idle" });
+    await manager.closeAgent(created.id);
+    await expect(manager.closeAgentForLeadHandoff(created.id)).rejects.toThrow(
+      `predecessor_runtime_close_failed: ${created.id}`,
+    );
   } finally {
     await manager.closeAgent("00000000-0000-4000-8000-000000000217").catch(() => undefined);
     await storage.flush().catch(() => undefined);

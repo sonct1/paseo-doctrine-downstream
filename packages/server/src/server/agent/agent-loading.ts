@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import type { AgentProvider } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
+import { hasReleasedAgentWriteLease } from "./lead-handoffs.js";
 import {
   buildConfigOverrides,
   buildSessionConfig,
@@ -64,6 +65,11 @@ export async function ensureAgentLoaded(
   deps: EnsureAgentLoadedDeps,
 ): Promise<ManagedAgent> {
   await deps.agentManager.waitForAgentClose?.(agentId);
+
+  const authoritativeRecord = await deps.agentStorage.get(agentId);
+  if (hasReleasedAgentWriteLease(authoritativeRecord)) {
+    throw new Error(`agent_write_lease_released_runtime_closed: ${agentId}`);
+  }
 
   const inflight = pendingAgentInitializations.get(agentId);
   if (inflight) {

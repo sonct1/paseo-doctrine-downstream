@@ -100,10 +100,13 @@ successor. Nếu runtime closure lỗi thì transition không được persist v
 daemon từ chối mọi prompt mới hoặc unarchive-and-prompt cho predecessor bằng
 `agent_write_lease_released`. Nó không detach, archive hoặc đổi role binding; durable packet, receipts và
 timeline vẫn được giữ để audit. Final release lock cả predecessor lẫn successor theo stable identity
-order và revalidate successor ngay trước transfer. Released predecessor identity không được tái dùng làm
-successor; một handoff quay lại cùng người/vai trò phải tạo fresh role-bound Lead identity để historical
-revocation không nhập nhằng. Nếu runtime tools chưa available, dừng ở manual frozen packet và báo
-UNKNOWN; không dùng chat prose giả làm receipt.
+order và revalidate successor ngay trước transfer. Existing close được join thay vì bỏ qua; close failure
+được nhớ tới daemon restart và không thể biến thành success bằng retry. Close wait bị bound ở 10 giây để
+không giữ successor authority lock vô hạn. Timeline audit đọc durable store mà không resume provider
+runtime. Released predecessor identity không được tái dùng làm successor; một handoff quay lại cùng
+người/vai trò phải tạo fresh role-bound Lead identity để historical revocation không nhập nhằng. Nếu
+runtime tools chưa available, dừng ở manual frozen packet và báo UNKNOWN; không dùng chat prose giả làm
+receipt.
 
 ## Skill usage
 

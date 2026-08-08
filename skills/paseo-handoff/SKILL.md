@@ -102,7 +102,9 @@ requires an idle predecessor, closes its runtime while retaining its durable rec
 `currentWriteOwnerAgentId` to the successor. Runtime-closure failure aborts the transition without
 changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked. Final
 release does not detach, archive, or change role binding, and revalidates both identities under
-stable-ordered locks. Never reactivate a released predecessor identity as a later successor; create a
-fresh role-bound Lead identity instead. If the first-class handoff tools are unavailable, stop with a
-manual frozen packet and report the mechanism as unsupported; do not fake transition receipts with chat
-prose.
+stable-ordered locks. It joins an existing close, remembers any close failure until daemon restart, and
+bounds the close wait so a stuck provider cannot hold the successor lock indefinitely. Audit timeline
+reads must use durable state without resuming the released provider runtime. Never reactivate a released
+predecessor identity as a later successor; create a fresh role-bound Lead identity instead. If the
+first-class handoff tools are unavailable, stop with a manual frozen packet and report the mechanism as
+unsupported; do not fake transition receipts with chat prose.

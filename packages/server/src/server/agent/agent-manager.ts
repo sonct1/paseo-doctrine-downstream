@@ -683,6 +683,7 @@ export class AgentManager {
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
+  private readonly agentCloseFailures = new Map<string, unknown>();
   private readonly agentStreamCoalescer: AgentStreamCoalescer;
   private mcpBaseUrl: string | null;
   private readonly mcpAuthToken: string | null;
@@ -1081,6 +1082,28 @@ export class AgentManager {
 
   async waitForAgentClose(agentId: string): Promise<void> {
     await this.inFlightAgentCloses?.get(agentId)?.catch(() => undefined);
+  }
+
+  async closeAgentForLeadHandoff(agentId: string): Promise<void> {
+    const priorFailure = this.agentCloseFailures.get(agentId);
+    if (priorFailure !== undefined) {
+      throw new Error(`predecessor_runtime_close_failed: ${agentId}`, { cause: priorFailure });
+    }
+
+    const inFlight = this.inFlightAgentCloses.get(agentId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    if (this.getAgent(agentId)) {
+      return this.closeAgent(agentId);
+    }
+
+    const record = this.registry?.getCached(agentId) ?? null;
+    if (record?.lastStatus === "closed") {
+      return;
+    }
+    throw new Error(`predecessor_runtime_close_state_unavailable: ${agentId}`);
   }
 
   getTimeline(id: string): AgentTimelineItem[] {
@@ -1545,8 +1568,35 @@ export class AgentManager {
         this.inFlightAgentCloses.delete(agentId);
       }
     };
-    void close.then(clearClose, clearClose);
+    void close.then(
+      () => {
+        clearClose();
+        return undefined;
+      },
+      (error: unknown) => {
+        this.agentCloseFailures.set(agentId, error);
+        clearClose();
+        return undefined;
+      },
+    );
     return close;
+  }
+
+  async fetchDurableTimeline(
+    agentId: string,
+    options?: AgentTimelineFetchOptions,
+  ): Promise<AgentTimelineFetchResult> {
+    if (this.durableTimelineStore) {
+      return this.durableTimelineStore.fetchCommitted(agentId, options);
+    }
+    return this.timelineStore.fetch(agentId, options);
+  }
+
+  async getDurableTimelineRows(agentId: string): Promise<AgentTimelineRow[]> {
+    if (this.durableTimelineStore) {
+      return this.durableTimelineStore.getCommittedRows(agentId);
+    }
+    return this.timelineStore.getRows(agentId);
   }
 
   private async closeAgentRuntime(agentId: string): Promise<void> {

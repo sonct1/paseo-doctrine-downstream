@@ -122,7 +122,10 @@ Ba policy decision được Human chốt sau canary:
   identity.
 
 Candidate implementation fail closed: runtime closure xảy ra trước khi final transition được persist;
-nếu closure lỗi thì packet giữ `successor_acknowledged` và current Owner không đổi.
+nếu closure lỗi thì packet giữ `successor_acknowledged` và current Owner không đổi. Follow-up adversarial
+review yêu cầu join in-flight close, sticky failure tới daemon restart, bounded close wait để giải phóng
+successor lock, và durable timeline read không resume released runtime; candidate đã implement các gate
+này nhưng vẫn cần activation canary.
 
 ## Residual unknowns
 

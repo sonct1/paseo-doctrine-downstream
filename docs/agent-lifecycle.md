@@ -28,7 +28,8 @@ shutdown.
 Final adjacent-Lead release deliberately creates a narrower closed state: Paseo closes the predecessor
 runtime and retains its unarchived durable record for audit, but its released write lease prevents normal
 resume or prompt dispatch under that agent ID. Returning the same person or role to Lead creates a fresh
-role-bound identity; it does not reactivate the released predecessor.
+role-bound identity; it does not reactivate the released predecessor. Timeline and prompt-index reads use
+the durable timeline store for a released predecessor and do not initialize a provider session.
 
 ### Cancellation
 

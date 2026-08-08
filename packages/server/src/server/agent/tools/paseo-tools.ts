@@ -2015,11 +2015,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           agentStorage,
           hasInFlightRun: (agentId) => agentManager.hasInFlightRun(agentId),
-          closePredecessorRuntime: async (agentId) => {
-            if (agentManager.getAgent(agentId)) {
-              await agentManager.closeAgent(agentId);
-            }
-          },
+          closePredecessorRuntime: async (agentId) =>
+            agentManager.closeAgentForLeadHandoff(agentId),
         },
         {
           predecessorAgentId,
