@@ -132,6 +132,8 @@ workspace, agent và runtime status.
 P1 rejection, rationale, isolated P2 runtime qualification và integrated P0 callable-surface canary được
 giữ tại docs/research/p1-adjacent-lead-handoff-pilot-2026-08-08.md. Candidate P2 trực tiếp bắt buộc các
 field mà successor đã chỉ ra là thiếu. P0 canary chứng minh native tool invocation và durable state
-readback trên paid Codex Lead; P2 qualification chứng minh ordered workflow và durable readback trong dev
-daemon cô lập. Runtime lease gate đã có focused race/boundary tests và paid-provider end-to-end release
-canary trên candidate branch, nhưng chưa có release activation hoặc production qualification.
+readback trên paid Codex Lead; fresh post-doctrine canary chứng minh successor ACK qua deferred native
+tool discovery, final runtime closure, predecessor prompt revocation và durable timeline readback sau
+daemon restart. P2 qualification chứng minh ordered workflow và durable readback trong dev daemon cô
+lập. Runtime lease gate đã có focused race/boundary tests và paid-provider end-to-end release canary trên
+candidate branch, nhưng chưa có production qualification hoặc multi-day evidence.
