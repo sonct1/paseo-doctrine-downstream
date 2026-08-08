@@ -1198,6 +1198,51 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
+  test("reapplies runtime MCP and role config when a resumed thread is already loaded", async () => {
+    let resumeParams: unknown;
+    const appServer = createFakeCodexAppServer({
+      "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
+      "thread/resume": (params) => {
+        resumeParams = params;
+        return { thread: { id: "archived-thread-id" } };
+      },
+      "thread/read": () => ({ thread: { turns: [] } }),
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+
+    const session = await provider.resumeSession(
+      archivedThreadHandle(),
+      {
+        mcpServers: {
+          paseo: {
+            type: "http",
+            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            headers: { Authorization: "Bearer test-token" },
+          },
+        },
+      },
+      {
+        agentId: "agent-1",
+        roleBinding: { roleId: "lead", instructions: "Bound Lead instructions" },
+      },
+    );
+
+    expect(resumeParams).toMatchObject({
+      threadId: "archived-thread-id",
+      developerInstructions: expect.stringContaining("Bound Lead instructions"),
+      config: {
+        mcp_servers: {
+          paseo: {
+            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
+            http_headers: { Authorization: "Bearer test-token" },
+          },
+        },
+      },
+    });
+    await session.close();
+    appServer.assertNoErrors();
+  });
+
   test("closes Codex app-server when an interactive resume fails", async () => {
     const appServer = createFakeCodexAppServer({
       "thread/resume": () =>

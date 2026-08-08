@@ -3254,6 +3254,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   private readonly config: AgentSessionConfig;
   private currentMode: string;
   private currentThreadId: string | null = null;
+  private runtimeThreadConfigApplied = false;
   private currentTurnId: string | null = null;
   private pendingForegroundTurnIdentification: {
     foregroundTurnId: string;
@@ -3795,9 +3796,6 @@ export class CodexAppServerAgentSession implements AgentSession {
     try {
       const loaded = toObjectRecord(await this.client.request("thread/loaded/list", {}));
       const ids = Array.isArray(loaded?.data) ? loaded.data : [];
-      if (ids.includes(this.currentThreadId)) {
-        return;
-      }
       const params: Record<string, unknown> = { threadId: this.currentThreadId };
       const developerInstructions = composeSystemPromptParts(
         this.config.systemPrompt,
@@ -3811,7 +3809,15 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (codexConfig) {
         params.config = codexConfig;
       }
+      const hasRuntimeOverrides = Boolean(developerInstructions) || codexConfig !== null;
+      if (
+        ids.includes(this.currentThreadId) &&
+        (!hasRuntimeOverrides || this.runtimeThreadConfigApplied)
+      ) {
+        return;
+      }
       await this.client.request("thread/resume", params);
+      this.runtimeThreadConfigApplied = true;
     } catch (error) {
       const threadId = this.currentThreadId;
       const message = error instanceof Error ? error.message : String(error);
@@ -4824,6 +4830,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.cachedRuntimeInfo = null;
     }
     this.currentThreadId = threadId;
+    this.runtimeThreadConfigApplied = true;
   }
 
   private buildCodexInnerConfig(): Record<string, unknown> | null {
