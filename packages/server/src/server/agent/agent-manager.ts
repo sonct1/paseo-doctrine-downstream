@@ -1085,7 +1085,7 @@ export class AgentManager {
   }
 
   isAgentCloseInFlight(agentId: string): boolean {
-    return this.inFlightAgentCloses.has(agentId);
+    return this.inFlightAgentCloses?.has(agentId) === true;
   }
 
   async closeAgentForLeadHandoff(agentId: string): Promise<void> {
