@@ -100,7 +100,12 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain(binding.workspaceProtocol.digest);
     expect(binding.instructions).toContain("Mutation boundary: no-write");
     expect(binding.assignment).toMatchObject({ effectClass: "read-only" });
-    expect(toRoleBindingReceipt(binding)).not.toHaveProperty("instructions");
+    const receipt = toRoleBindingReceipt(binding);
+    expect(receipt).not.toHaveProperty("instructions");
+    expect(receipt).not.toHaveProperty("assignmentContract");
+    expect(JSON.stringify(receipt)).not.toContain("Inspect the bounded target");
+    expect(JSON.stringify(receipt)).not.toContain("Report exact inspected paths");
+    expect(JSON.stringify(receipt)).not.toContain("Stop after evidence handback");
   });
 
   test("keeps Peer protocol readership assignment-only", async () => {
@@ -171,6 +176,9 @@ describe("native Foundation role materialization", () => {
 
     expect(binding.workspaceProtocol.status).toBe("missing");
     expect(binding.assignment?.protocolExceptionExpiresAt).toBe("2026-08-05T01:00:00.000Z");
+    const receiptJson = JSON.stringify(toRoleBindingReceipt(binding));
+    expect(receiptJson).not.toContain("Inspect repository facts needed for bootstrap");
+    expect(receiptJson).not.toContain("assignmentContract");
   });
 
   test("fails closed for a provider without a native durable role channel", async () => {

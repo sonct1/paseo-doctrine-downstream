@@ -331,8 +331,7 @@ export async function materializeRoleBinding(
 }
 
 export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBindingReceipt {
-  const { instructions: _instructions, ...receipt } = binding;
-  return receipt;
+  return RoleBindingReceiptSchema.parse(binding);
 }
 
 function intersectSupervisorTools(providerPolicy: ProviderPaseoToolsPolicy | undefined): string[] {

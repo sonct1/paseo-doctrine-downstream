@@ -14,7 +14,7 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
-import { toAgentPayload } from "./agent-projections.js";
+import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
@@ -9353,6 +9353,10 @@ test("role-bound create persists immutable binding and passes only launch instru
       workspaceProtocol: { status: "bound", readership: "full" },
     });
     expect(toAgentPayload(created).roleBinding).not.toHaveProperty("instructions");
+    expect(toAgentPayload(created).roleBinding).not.toHaveProperty("assignmentContract");
+    expect(JSON.stringify(toAgentPayload(created).roleBinding)).not.toContain(
+      "Complete the bounded test assignment",
+    );
     expect(toAgentPayload(created).launchContract).toMatchObject({
       roleId: "lead",
       providerId: "codex",
@@ -9368,6 +9372,13 @@ test("role-bound create persists immutable binding and passes only launch instru
       modelProviderId: "openai",
     });
     expect(stored?.config?.systemPrompt).toBeUndefined();
+    expect(stored).not.toBeNull();
+    const storedWirePayload = buildStoredAgentPayload(stored as StoredAgentRecord, ["codex"]);
+    expect(storedWirePayload.roleBinding).not.toHaveProperty("assignmentContract");
+    const rawStoredWire = JSON.stringify(storedWirePayload);
+    expect(rawStoredWire).not.toContain("Complete the bounded test assignment");
+    expect(rawStoredWire).not.toContain("Return exact focused test evidence");
+    expect(rawStoredWire).not.toContain("Stop after evidence handback");
 
     const exactInstructions = created.roleBinding?.instructions;
     await manager.reloadAgentSession(created.id);
