@@ -59,9 +59,33 @@ Hai activation finding có giá trị:
 - live status ban đầu bỏ sót persisted handoff metadata; merge projection được sửa và restart readback
   xác nhận packet cùng receipts hiện diện.
 
+## P0 callable-surface canary trên integrated daemon
+
+Canary tiếp theo dùng main daemon đang chạy candidate tích hợp, role-bound Codex Lead
+`2e0ba1a1-db16-4026-b65a-372f88c755f3` với assignment `read-only`. Human-facing CLI persist signal
+`edadc1fe-9563-4b39-aff1-a98d21f62c5b` ở trạng thái `pending` rồi daemon giao signal tại idle
+boundary.
+
+Lead đã gọi native tool `resolve_agent_signal` với resolution `acknowledged`. Runtime readback trả đúng
+`targetAgentId`, workspace `wks_35c288102246b035`, status `acknowledged` và `resolvedAt`
+`2026-08-08T10:00:00.809Z`. Canary không dùng shell fallback, không sửa file, không delegate và không
+thực hiện handoff transition. Agent được archive sau readback.
+
+Canary này sửa một lỗi trong phương pháp qualification trước đó: hỏi model tự liệt kê tool đang thấy,
+đặc biệt khi prompt cấm tool call, không chứng minh callable surface có hay không. Provider có thể defer
+tool discovery dù MCP server đã mount. Từ đây, qualification MCP phải có cả hai bằng chứng:
+
+- timeline ghi nhận invocation của exact native tool;
+- daemon readback xác nhận exact durable state mà invocation tạo hoặc thay đổi.
+
+Self-report kiểu “có tool” hoặc “không thấy tool”, `tools/list` riêng lẻ và MCP startup status chỉ là
+diagnostic evidence; không thay thế end-to-end callable proof.
+
 ## Residual unknowns
 
 - Chưa có multi-day evidence về continuity improvement.
+- Candidate P0 đã có paid-provider callable proof trên integrated daemon, nhưng chưa release-activated
+  hoặc production-qualified.
 - Candidate P2 đã qualified trên isolated runtime, chưa release-activated hoặc production-qualified.
 - Receipt ghi nhận authority decision nhưng chưa enforce runtime write lease.
 - Cooling, corroboration và predecessor retention policy vẫn là open doctrine decisions.
