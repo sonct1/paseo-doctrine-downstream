@@ -62,13 +62,12 @@ test("retains canonical timeline rows and epoch across store restarts", async ()
   }
 });
 
-test("does not commit memory before disk and retries the same row after a transient failure", async () => {
+test("recovers a pending row after a write failure and store restart", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-agent-timeline-retry-"));
   const agentId = "agent-retry";
-  let failRowWrite = true;
+  let allowRowWrite = false;
   const store = new FileAgentTimelineStore(root, async (filePath, value) => {
-    if (failRowWrite && filePath.endsWith(`${path.sep}rows${path.sep}1.json`)) {
-      failRowWrite = false;
+    if (!allowRowWrite && filePath.endsWith(`${path.sep}rows${path.sep}1.json`)) {
       throw new Error("injected row write failure");
     }
     await writeJsonFileAtomic(filePath, value);
@@ -81,9 +80,8 @@ test("does not commit memory before disk and retries the same row after a transi
 
   try {
     await expect(store.bulkInsert(agentId, [row])).rejects.toThrow("injected row write failure");
-    await expect(store.getCommittedRows(agentId)).resolves.toEqual([]);
-
-    await expect(store.bulkInsert(agentId, [row])).resolves.toBeUndefined();
+    await expect(store.getCommittedRows(agentId)).rejects.toThrow("injected row write failure");
+    allowRowWrite = true;
     await writeFile(
       path.join(root, encodeURIComponent(agentId), "rows", ".1.json.partial.tmp"),
       '{"seq":',
@@ -91,6 +89,44 @@ test("does not commit memory before disk and retries the same row after a transi
     );
     const restarted = new FileAgentTimelineStore(root);
     await expect(restarted.getCommittedRows(agentId)).resolves.toEqual([row]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("repairs a partially committed batch and deduplicates duplicate seq rows", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-agent-timeline-batch-repair-"));
+  const agentId = "agent-batch-repair";
+  let allowSecondRow = false;
+  const store = new FileAgentTimelineStore(root, async (filePath, value) => {
+    if (!allowSecondRow && filePath.endsWith(`${path.sep}rows${path.sep}2.json`)) {
+      throw new Error("injected second-row write failure");
+    }
+    await writeJsonFileAtomic(filePath, value);
+  });
+  const first = {
+    seq: 1,
+    timestamp: "2026-08-08T00:00:00.000Z",
+    item: { type: "assistant_message" as const, text: "first" },
+  };
+  const staleSecond = {
+    seq: 2,
+    timestamp: "2026-08-08T00:00:01.000Z",
+    item: { type: "assistant_message" as const, text: "stale" },
+  };
+  const finalSecond = {
+    ...staleSecond,
+    item: { type: "assistant_message" as const, text: "final" },
+  };
+
+  try {
+    await expect(store.bulkInsert(agentId, [first, staleSecond, finalSecond])).rejects.toThrow(
+      "injected second-row write failure",
+    );
+    allowSecondRow = true;
+
+    const restarted = new FileAgentTimelineStore(root);
+    await expect(restarted.getCommittedRows(agentId)).resolves.toEqual([first, finalSecond]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

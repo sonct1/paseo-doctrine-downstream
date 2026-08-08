@@ -125,8 +125,9 @@ Candidate implementation fail closed: runtime closure xảy ra trước khi fina
 nếu closure lỗi thì packet giữ `successor_acknowledged` và current Owner không đổi. Follow-up adversarial
 review yêu cầu join in-flight close, sticky failure tới daemon restart, bounded close wait để giải phóng
 successor lock, và durable timeline read không resume released runtime; candidate đã implement các gate
-này. Follow-up durability review thay JSONL append bằng atomic per-row files và bắt final release
-drain/retry exact predecessor timeline writes; unresolved repair chặn transfer. Guarantee này không
+này. Follow-up durability review thay JSONL append bằng atomic per-row files và durable pending batch
+manifests. Store reconcile manifest sau process restart; final release fail closed khi repair chưa commit,
+và timeout abort continuation trước khi nó có thể bắt đầu một runtime close muộn. Guarantee này không
 backfill timeline cho candidate `predecessor_released` records có trước lúc file-backed store activate và
 vẫn cần activation canary.
 

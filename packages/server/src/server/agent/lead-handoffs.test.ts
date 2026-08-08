@@ -40,7 +40,7 @@ function scenario() {
     records,
     dependencies: {
       hasInFlightRun: vi.fn(() => false),
-      closePredecessorRuntime: vi.fn(async () => undefined),
+      closePredecessorRuntime: vi.fn(async (_agentId: string, _signal: AbortSignal) => undefined),
       agentStorage: {
         get: vi.fn(async (id: string) => records.get(id) ?? null),
         upsert: vi.fn(async (record: StoredAgentRecord) => {
@@ -127,7 +127,10 @@ describe("Lead handoff packets", () => {
 
     expect(packet.status).toBe("predecessor_released");
     expect(packet.currentWriteOwnerAgentId).toBe("lead-new");
-    expect(testCase.dependencies.closePredecessorRuntime).toHaveBeenCalledWith("lead-old");
+    expect(testCase.dependencies.closePredecessorRuntime).toHaveBeenCalledWith(
+      "lead-old",
+      expect.any(AbortSignal),
+    );
     expect(packet.receipts.map((receipt) => receipt.transition)).toEqual([
       "successor_authorized",
       "successor_acknowledged",
@@ -230,8 +233,17 @@ describe("Lead handoff packets", () => {
       actorAgentId: "lead-new",
       note: "Packet accepted",
     });
+    let continueClose: (() => void) | undefined;
+    let closeSideEffect = false;
+    const closeBlocked = new Promise<void>((resolve) => {
+      continueClose = resolve;
+    });
     testCase.dependencies.closePredecessorRuntime.mockImplementationOnce(
-      async () => new Promise<void>(() => undefined),
+      async (_agentId, signal) => {
+        await closeBlocked;
+        signal.throwIfAborted();
+        closeSideEffect = true;
+      },
     );
 
     await expect(
@@ -246,6 +258,10 @@ describe("Lead handoff packets", () => {
         },
       ),
     ).rejects.toThrow("predecessor_runtime_close_timeout");
+
+    continueClose?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(closeSideEffect).toBe(false);
 
     await expect(withAgentAuthorityLock("lead-new", async () => "successor-live")).resolves.toBe(
       "successor-live",

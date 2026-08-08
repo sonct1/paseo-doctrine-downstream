@@ -15,6 +15,7 @@ import type {
 interface TimelinePaths {
   root: string;
   rows: string;
+  pending: string;
   metadata: string;
 }
 
@@ -49,7 +50,7 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
     options?: { timestamp?: string },
   ): Promise<AgentTimelineRow> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       const fetched = this.memory.fetch(agentId, { direction: "tail", limit: 0 });
       const row: AgentTimelineRow = {
         seq: fetched.window.nextSeq,
@@ -67,35 +68,35 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
     options?: AgentTimelineFetchOptions,
   ): Promise<AgentTimelineFetchResult> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       return this.memory.fetch(agentId, options);
     });
   }
 
   async getLatestCommittedSeq(agentId: string): Promise<number> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       return this.memory.fetch(agentId, { direction: "tail", limit: 0 }).window.maxSeq;
     });
   }
 
   async getCommittedRows(agentId: string): Promise<AgentTimelineRow[]> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       return this.memory.getRows(agentId);
     });
   }
 
   async getLastItem(agentId: string): Promise<AgentTimelineItem | null> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       return this.memory.getLastItem(agentId);
     });
   }
 
   async getLastAssistantMessage(agentId: string): Promise<string | null> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       return this.memory.getLastAssistantMessage(agentId);
     });
   }
@@ -111,10 +112,11 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
   async bulkInsert(agentId: string, rows: readonly AgentTimelineRow[]): Promise<void> {
     if (rows.length === 0) return;
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       const fetched = this.memory.fetch(agentId, { direction: "tail", limit: 0 });
       const existingSeqs = new Set(fetched.rows.map((row) => row.seq));
-      const additions = rows
+      const uniqueRows = [...new Map(rows.map((row) => [row.seq, row])).values()];
+      const additions = uniqueRows
         .filter((row) => !existingSeqs.has(row.seq))
         .toSorted((left, right) => left.seq - right.seq);
       if (additions.length === 0) return;
@@ -125,7 +127,7 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
 
   async updateCommittedRow(agentId: string, row: AgentTimelineRow): Promise<void> {
     return this.withAgent(agentId, async () => {
-      await this.ensureLoaded(agentId);
+      await this.prepare(agentId);
       const fetched = this.memory.fetch(agentId, { direction: "tail", limit: 0 });
       const index = fetched.rows.findIndex((candidate) => candidate.seq === row.seq);
       if (index < 0) {
@@ -179,7 +181,7 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
       });
     const rowFiles = entries
       .filter((entry) => entry.isFile() && /^\d+\.json$/.test(entry.name))
-      .toSorted((left, right) => Number.parseInt(left.name) - Number.parseInt(right.name));
+      .toSorted((left, right) => Number.parseInt(left.name, 10) - Number.parseInt(right.name, 10));
     const rows = await Promise.all(
       rowFiles.map(async (entry) => {
         const value: unknown = JSON.parse(
@@ -192,17 +194,61 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
     this.loaded.add(agentId);
   }
 
+  private async prepare(agentId: string): Promise<void> {
+    await this.ensureLoaded(agentId);
+    await this.reconcilePending(agentId);
+  }
+
+  private async reconcilePending(agentId: string): Promise<void> {
+    const paths = this.paths(agentId);
+    const entries = await fs
+      .readdir(paths.pending, { withFileTypes: true })
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return [];
+        throw error;
+      });
+    const manifests = entries
+      .filter((entry) => entry.isFile() && /^[0-9a-f-]+\.json$/.test(entry.name))
+      .toSorted((left, right) => left.name.localeCompare(right.name));
+    for (const entry of manifests) {
+      const manifestPath = path.join(paths.pending, entry.name);
+      const value: unknown = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+      const rawRows = value && typeof value === "object" ? Reflect.get(value, "rows") : undefined;
+      const epoch = value && typeof value === "object" ? Reflect.get(value, "epoch") : undefined;
+      if (!Array.isArray(rawRows) || typeof epoch !== "string" || !epoch) {
+        throw new Error(`Invalid durable timeline manifest for agent ${agentId}`);
+      }
+      const rows = rawRows.map((row) => parseRow(agentId, row));
+      await this.persistMetadataValue(agentId, epoch);
+      await this.commitRows(agentId, rows);
+      const fetched = this.memory.fetch(agentId, { direction: "tail", limit: 0 });
+      this.replaceMemory(agentId, epoch, [...fetched.rows, ...rows]);
+      await fs.rm(manifestPath, { force: true });
+    }
+  }
+
   private async persistRows(agentId: string, rows: readonly AgentTimelineRow[]): Promise<void> {
     const paths = this.paths(agentId);
+    const normalized = [...new Map(rows.map((row) => [row.seq, row])).values()];
+    if (normalized.length === 0) return;
+    await fs.mkdir(paths.pending, { recursive: true });
+    const epoch = this.memory.fetch(agentId, { direction: "tail", limit: 0 }).epoch;
+    const manifestPath = path.join(paths.pending, `${randomUUID()}.json`);
+    await this.writeJson(manifestPath, { version: 1, epoch, rows: normalized });
+    await this.persistMetadataValue(agentId, epoch);
+    await this.commitRows(agentId, normalized);
+    await fs.rm(manifestPath, { force: true });
+  }
+
+  private async commitRows(agentId: string, rows: readonly AgentTimelineRow[]): Promise<void> {
+    const paths = this.paths(agentId);
     await fs.mkdir(paths.rows, { recursive: true });
-    await this.persistMetadata(agentId);
     await Promise.all(
       rows.map((row) => this.writeJson(path.join(paths.rows, `${row.seq}.json`), row)),
     );
   }
 
-  private async persistMetadata(agentId: string): Promise<void> {
-    const epoch = this.memory.fetch(agentId, { direction: "tail", limit: 0 }).epoch;
+  private async persistMetadataValue(agentId: string, epoch: string): Promise<void> {
     await this.writeJson(this.paths(agentId).metadata, { version: 1, epoch });
   }
 
@@ -222,6 +268,7 @@ export class FileAgentTimelineStore implements AgentTimelineStore {
     return {
       root,
       rows: path.join(root, "rows"),
+      pending: path.join(root, "pending"),
       metadata: path.join(root, "metadata.json"),
     };
   }

@@ -103,7 +103,9 @@ timeline vẫn được giữ để audit. Final release lock cả predecessor l
 order và revalidate successor ngay trước transfer. Existing close được join thay vì bỏ qua; close failure
 được nhớ tới daemon restart và không thể biến thành success bằng retry. Close wait bị bound ở 10 giây để
 không giữ successor authority lock vô hạn. Timeline audit đọc durable store mà không resume provider
-runtime; final release drain và retry pending timeline writes, rồi fail closed nếu durability vẫn lỗi.
+runtime; mỗi timeline batch ghi durable pending manifest trước các row files. Final release reconcile
+pending manifests — kể cả sau daemon restart — rồi fail closed nếu durability vẫn lỗi. Nếu boundary 10
+giây timeout trước khi close bắt đầu, abort signal ngăn continuation cũ đóng predecessor về sau.
 Released predecessor identity không được tái dùng làm successor; một handoff quay lại cùng người/vai trò
 phải tạo fresh role-bound Lead identity để historical revocation không nhập nhằng. Durable timeline
 retention áp dụng cho handoff chạy sau khi file-backed store được activate; candidate receipts cũ hơn vẫn

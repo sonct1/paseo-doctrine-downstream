@@ -11,7 +11,7 @@ import { withAgentAuthorityLocks } from "./agent-authority-lock.js";
 export interface LeadHandoffDependencies {
   agentStorage: Pick<AgentStorage, "get" | "upsert">;
   hasInFlightRun?: (agentId: string) => boolean;
-  closePredecessorRuntime?: (agentId: string) => Promise<void>;
+  closePredecessorRuntime?: (agentId: string, signal: AbortSignal) => Promise<void>;
   predecessorRuntimeCloseTimeoutMs?: number;
 }
 
@@ -19,15 +19,19 @@ const recordUpdates = new Map<string, Promise<unknown>>();
 const DEFAULT_PREDECESSOR_RUNTIME_CLOSE_TIMEOUT_MS = 10_000;
 
 async function closePredecessorWithinBoundary(
-  close: Promise<void>,
+  close: (signal: AbortSignal) => Promise<void>,
   timeoutMs: number,
 ): Promise<void> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      close,
+      close(controller.signal),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("predecessor_runtime_close_timeout")), timeoutMs);
+        timer = setTimeout(() => {
+          controller.abort("predecessor_runtime_close_timeout");
+          reject(new Error("predecessor_runtime_close_timeout"));
+        }, timeoutMs);
       }),
     ]);
   } finally {
@@ -280,7 +284,7 @@ export async function transitionLeadHandoff(
     }
     await requireAdjacentLeads(dependencies, input.predecessorAgentId, successorAgentId);
     await closePredecessorWithinBoundary(
-      closePredecessorRuntime(input.predecessorAgentId),
+      (signal) => closePredecessorRuntime(input.predecessorAgentId, signal),
       dependencies.predecessorRuntimeCloseTimeoutMs ?? DEFAULT_PREDECESSOR_RUNTIME_CLOSE_TIMEOUT_MS,
     );
     return transition();

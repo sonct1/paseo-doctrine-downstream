@@ -4383,6 +4383,62 @@ test("repairs transient durable timeline failures before Lead handoff closure", 
   }
 });
 
+test("repairs durable timeline intent after manager restart before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-restart-repair-"));
+  const storagePath = join(workdir, "agents");
+  const timelinePath = join(workdir, "timelines");
+  const firstStorage = new AgentStorage(storagePath, logger);
+  const firstStore = new FileAgentTimelineStore(timelinePath, async (filePath, value) => {
+    if (filePath.includes(`${join("rows", "1.json")}`)) {
+      throw new Error("durable write unavailable before restart");
+    }
+    await writeJsonFileAtomic(filePath, value);
+  });
+  const firstManager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: firstStorage,
+    durableTimelineStore: firstStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000145";
+
+  try {
+    await firstManager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await firstManager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "repair after restart",
+    });
+    await firstManager.flush();
+    await firstManager.closeAgent(agentId);
+    await firstStorage.flush();
+
+    const restartedStorage = new AgentStorage(storagePath, logger);
+    await restartedStorage.initialize();
+    const restartedStore = new FileAgentTimelineStore(timelinePath);
+    const restartedManager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: restartedStorage,
+      durableTimelineStore: restartedStore,
+      logger,
+    });
+    await expect(restartedManager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    await expect(restartedStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "repair after restart" },
+      }),
+    ]);
+    await restartedManager.flush();
+  } finally {
+    await firstManager.closeAgent(agentId).catch(() => undefined);
+    await firstManager.flush().catch(() => undefined);
+    await firstStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("fails Lead handoff closure while durable timeline repair is unresolved", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-failure-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);
@@ -4418,6 +4474,56 @@ test("fails Lead handoff closure while durable timeline repair is unresolved", a
     );
     expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
   } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("does not close a predecessor after an aborted durability wait", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-abort-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const rowWriteStarted = deferred<void>();
+  const rowWriteAllowed = deferred<void>();
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${join("rows", "1.json")}`)) {
+        rowWriteStarted.resolve();
+        await rowWriteAllowed.promise;
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000144";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "wait for durability",
+    });
+    await rowWriteStarted.promise;
+
+    const controller = new AbortController();
+    const closing = manager.closeAgentForLeadHandoff(agentId, controller.signal);
+    controller.abort(new Error("handoff timeout"));
+    rowWriteAllowed.resolve();
+
+    await expect(closing).rejects.toThrow("handoff timeout");
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+    await manager.flush();
+  } finally {
+    rowWriteAllowed.resolve();
     await manager.closeAgent(agentId).catch(() => undefined);
     await manager.flush().catch(() => undefined);
     await storage.flush().catch(() => undefined);
