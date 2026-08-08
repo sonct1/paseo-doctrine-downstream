@@ -16,3 +16,16 @@ export async function withAgentAuthorityLock<T>(
     }
   }
 }
+
+/** Acquire multiple identities in stable order so adjacent handoffs cannot deadlock. */
+export async function withAgentAuthorityLocks<T>(
+  agentIds: readonly string[],
+  action: () => Promise<T>,
+): Promise<T> {
+  const ordered = [...new Set(agentIds)].sort();
+  const acquire = (index: number): Promise<T> =>
+    index >= ordered.length
+      ? action()
+      : withAgentAuthorityLock(ordered[index], () => acquire(index + 1));
+  return acquire(0);
+}

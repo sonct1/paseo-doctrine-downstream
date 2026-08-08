@@ -90,5 +90,6 @@ diagnostic evidence; không thay thế end-to-end callable proof.
 - Candidate P2 đã qualified trên isolated runtime, chưa release-activated hoặc production-qualified.
 - Candidate hiện enforce final release ở core daemon dispatch boundary, bao gồm existing-agent schedule
   và permission follow-up; release bị reject khi predecessor còn in-flight. Released identity không thể
-  được tái authorize làm successor. Paid-provider end-to-end release canary vẫn chưa hoàn tất.
+  được tái authorize làm successor; successor được revalidate dưới dual-identity stable locks ngay tại
+  final release. Paid-provider end-to-end release canary vẫn chưa hoàn tất.
 - Cooling, corroboration và predecessor retention policy vẫn là open doctrine decisions.

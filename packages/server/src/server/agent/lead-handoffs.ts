@@ -6,7 +6,7 @@ import type {
 } from "@getpaseo/protocol/lead-handoff";
 
 import type { AgentStorage, StoredAgentRecord } from "./agent-storage.js";
-import { withAgentAuthorityLock } from "./agent-authority-lock.js";
+import { withAgentAuthorityLocks } from "./agent-authority-lock.js";
 
 export interface LeadHandoffDependencies {
   agentStorage: Pick<AgentStorage, "get" | "upsert">;
@@ -244,10 +244,17 @@ export async function transitionLeadHandoff(
   if (!dependencies.hasInFlightRun) {
     throw new Error("predecessor_released requires runtime safe-boundary enforcement");
   }
-  return withAgentAuthorityLock(input.predecessorAgentId, async () => {
+  const predecessor = await requirePredecessorLead(dependencies, input.predecessorAgentId);
+  const packet = predecessor.leadHandoffs?.find((candidate) => candidate.id === input.handoffId);
+  const successorAgentId = packet?.successorAgentId;
+  if (!successorAgentId) {
+    throw new Error("predecessor_released requires a designated successor Lead");
+  }
+  return withAgentAuthorityLocks([input.predecessorAgentId, successorAgentId], async () => {
     if (dependencies.hasInFlightRun?.(input.predecessorAgentId)) {
       throw new Error("Cannot release predecessor while it has an in-flight run");
     }
+    await requireAdjacentLeads(dependencies, input.predecessorAgentId, successorAgentId);
     return transition();
   });
 }

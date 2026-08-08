@@ -2108,7 +2108,11 @@ export class AgentManager {
    * emitted by the handler flow through dispatchStream so they persist and
    * broadcast like normal timeline events.
    */
-  tryRunOutOfBand(agentId: string, prompt: AgentPromptInput, options?: AgentRunOptions): boolean {
+  private tryRunOutOfBand(
+    agentId: string,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): boolean {
     const agent = this.requireSessionAgent(agentId);
     const handler = agent.session.tryHandleOutOfBand?.(prompt);
     if (!handler) {
@@ -2182,7 +2186,7 @@ export class AgentManager {
     });
   }
 
-  streamAgent(
+  private streamAgent(
     agentId: string,
     prompt: AgentPromptInput,
     options?: AgentRunOptions,

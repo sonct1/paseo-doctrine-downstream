@@ -234,4 +234,51 @@ describe("Lead handoff packets", () => {
       }),
     ).rejects.toThrow("fresh role-bound Lead");
   });
+
+  test("revalidates successor eligibility at final release", async () => {
+    const testCase = scenario();
+    let packet = await prepareLeadHandoff(testCase.dependencies, completePacketInput());
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_authorized",
+      actorAgentId: null,
+      successorAgentId: "lead-new",
+      note: "Authorized",
+    });
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_acknowledged",
+      actorAgentId: "lead-new",
+      note: "Acknowledged",
+    });
+    const successor = testCase.records.get("lead-new") as StoredAgentRecord;
+    testCase.records.set("lead-new", {
+      ...successor,
+      leadHandoffs: [
+        {
+          ...packet,
+          id: "later-handoff",
+          predecessorAgentId: "lead-new",
+          successorAgentId: "lead-third",
+          currentWriteOwnerAgentId: "lead-third",
+          status: "predecessor_released",
+        },
+      ],
+    });
+
+    await expect(
+      transitionLeadHandoff(testCase.dependencies, {
+        predecessorAgentId: "lead-old",
+        handoffId: packet.id,
+        transition: "predecessor_released",
+        actorAgentId: null,
+        note: "Stale release attempt",
+      }),
+    ).rejects.toThrow("fresh role-bound Lead");
+    expect(testCase.records.get("lead-old")?.leadHandoffs?.[0].status).toBe(
+      "successor_acknowledged",
+    );
+  });
 });
