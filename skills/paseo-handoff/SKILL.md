@@ -107,7 +107,9 @@ bounds the close wait so a stuck provider cannot hold the successor lock indefin
 reads must use durable state without resuming the released provider runtime. Timeline batches must record
 durable pending intent before row commits so restart can reconcile partial writes. Final release must
 reconcile that intent and fail closed if durability remains unresolved; timeout must abort any
-continuation before it can start a later runtime close. Never
+continuation before it can start a later runtime close. Treat a pre-manifest failure as a current-daemon
+release and graceful-shutdown blocker; do not claim recovery from hard process loss in that exact
+unqualified interval. Never
 reactivate a released predecessor identity as a later successor; create a fresh role-bound Lead identity
 instead. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
 the mechanism as unsupported; do not fake transition receipts with chat prose.

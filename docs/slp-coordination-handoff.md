@@ -105,7 +105,9 @@ order và revalidate successor ngay trước transfer. Existing close được j
 không giữ successor authority lock vô hạn. Timeline audit đọc durable store mà không resume provider
 runtime; mỗi timeline batch ghi durable pending manifest trước các row files. Final release reconcile
 pending manifests — kể cả sau daemon restart — rồi fail closed nếu durability vẫn lỗi. Nếu boundary 10
-giây timeout trước khi close bắt đầu, abort signal ngăn continuation cũ đóng predecessor về sau.
+giây timeout trước khi close bắt đầu, abort signal ngăn continuation cũ đóng predecessor về sau. Lỗi xảy
+ra trước lúc manifest được tạo vẫn nằm trong daemon repair ledger và chặn release/graceful shutdown;
+hard process loss đúng interval đó là storage-failure boundary chưa qualified, không được claim recover.
 Released predecessor identity không được tái dùng làm successor; một handoff quay lại cùng người/vai trò
 phải tạo fresh role-bound Lead identity để historical revocation không nhập nhằng. Durable timeline
 retention áp dụng cho handoff chạy sau khi file-backed store được activate; candidate receipts cũ hơn vẫn

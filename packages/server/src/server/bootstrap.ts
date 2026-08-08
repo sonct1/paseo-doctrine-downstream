@@ -1707,6 +1707,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    let durabilityError: unknown;
     stopNativeCoordinationPolicy();
     stopPendingCoordinationSignalDeliveries();
     await hubRelationships.stop();
@@ -1716,7 +1717,12 @@ export async function createPaseoDaemon(
     wsServer?.prepareForShutdown();
     agentManager.prepareForShutdown();
     await closeAllAgents(logger, agentManager);
-    await agentManager.flushForShutdown().catch(() => undefined);
+    try {
+      await agentManager.flushForShutdown();
+    } catch (error) {
+      durabilityError = error;
+      logger.error({ err: error }, "Failed to reconcile durable agent timeline during shutdown");
+    }
     detachAgentStoragePersistence();
     await agentStorage.flush().catch(() => undefined);
     await providerSnapshotManager.shutdown();
@@ -1742,6 +1748,9 @@ export async function createPaseoDaemon(
     // Clean up socket files
     if (listenTarget.type === "socket" && existsSync(listenTarget.path)) {
       unlinkSync(listenTarget.path);
+    }
+    if (durabilityError !== undefined) {
+      throw durabilityError;
     }
   };
 

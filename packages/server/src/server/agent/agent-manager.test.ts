@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -4375,6 +4375,98 @@ test("repairs transient durable timeline failures before Lead handoff closure", 
         item: { type: "assistant_message", text: "must survive release" },
       }),
     ]);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("retries a pre-manifest timeline failure before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-manifest-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let failManifestWrite = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (failManifestWrite && filePath.includes(`${sep}pending${sep}`)) {
+        failManifestWrite = false;
+        throw new Error("transient manifest write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000146";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "manifest must exist before release",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    await expect(durableStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "manifest must exist before release" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("surfaces an unresolved pre-manifest failure at release and graceful shutdown", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-manifest-failure-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        throw new Error("persistent manifest write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000147";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "do not release without intent",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).rejects.toThrow(
+      `predecessor_timeline_durability_failed: ${agentId}`,
+    );
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+    await expect(manager.flushForShutdown()).rejects.toThrow(
+      `predecessor_timeline_durability_failed: ${agentId}`,
+    );
   } finally {
     await manager.closeAgent(agentId).catch(() => undefined);
     await manager.flush().catch(() => undefined);

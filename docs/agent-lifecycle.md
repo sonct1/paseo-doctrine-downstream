@@ -32,9 +32,11 @@ role-bound identity; it does not reactivate the released predecessor. Timeline a
 the durable timeline store for a released predecessor and do not initialize a provider session. Final
 release reconciles that agent's durable pending-write manifests before runtime closure and fails closed
 while any batch cannot commit. Pending batches survive daemon restart; a timed-out reconciliation is
-aborted before it may start a later runtime close. This retention guarantee starts when the file-backed
-store is activated; older candidate release records keep their packet and receipts but have no automatic
-timeline backfill.
+aborted before it may start a later runtime close. A failure before manifest creation remains in the
+current daemon's repair ledger, blocks release, and is retried during graceful shutdown. A hard process
+loss in that pre-manifest interval is an explicitly unqualified storage-failure boundary, not a claimed
+restart-recovery guarantee. This retention guarantee starts when the file-backed store is activated;
+older candidate release records keep their packet and receipts but have no automatic timeline backfill.
 
 ### Cancellation
 

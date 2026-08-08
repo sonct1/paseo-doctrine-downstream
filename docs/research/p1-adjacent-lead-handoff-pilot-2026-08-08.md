@@ -128,8 +128,10 @@ successor lock, và durable timeline read không resume released runtime; candid
 này. Follow-up durability review thay JSONL append bằng atomic per-row files và durable pending batch
 manifests. Store reconcile manifest sau process restart; final release fail closed khi repair chưa commit,
 và timeout abort continuation trước khi nó có thể bắt đầu một runtime close muộn. Guarantee này không
-backfill timeline cho candidate `predecessor_released` records có trước lúc file-backed store activate và
-vẫn cần activation canary.
+backfill timeline cho candidate `predecessor_released` records có trước lúc file-backed store activate.
+Pre-manifest failure được giữ trong current-daemon repair ledger và chặn release/graceful shutdown, nhưng
+hard process loss đúng interval đó vẫn là unqualified storage-failure boundary. Candidate vẫn cần
+activation canary.
 
 ## Residual unknowns
 
