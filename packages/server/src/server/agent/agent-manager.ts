@@ -1084,6 +1084,10 @@ export class AgentManager {
     await this.inFlightAgentCloses?.get(agentId)?.catch(() => undefined);
   }
 
+  isAgentCloseInFlight(agentId: string): boolean {
+    return this.inFlightAgentCloses.has(agentId);
+  }
+
   async closeAgentForLeadHandoff(agentId: string): Promise<void> {
     const priorFailure = this.agentCloseFailures.get(agentId);
     if (priorFailure !== undefined) {

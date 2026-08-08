@@ -22,7 +22,7 @@ import {
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
-import { ensureAgentLoaded } from "../agent-loading.js";
+import { ensureAgentLoaded, hasPendingAgentInitialization } from "../agent-loading.js";
 import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
 import {
   archiveByScope,
@@ -2014,7 +2014,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const handoff = await transitionLeadHandoff(
         {
           agentStorage,
-          hasInFlightRun: (agentId) => agentManager.hasInFlightRun(agentId),
+          hasInFlightRun: (agentId) =>
+            agentManager.hasInFlightRun(agentId) || hasPendingAgentInitialization(agentId),
           closePredecessorRuntime: async (agentId) =>
             agentManager.closeAgentForLeadHandoff(agentId),
         },
