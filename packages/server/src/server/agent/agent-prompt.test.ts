@@ -194,6 +194,42 @@ test("sendPromptToAgent forwards the client message id as run options", async ()
   });
 });
 
+test("safe-boundary prompt delivery never replaces an in-flight run", async () => {
+  const agent: ManagedAgent = Object.create(null);
+  Reflect.set(agent, "id", "lead-agent");
+  Reflect.set(agent, "provider", "codex");
+  const streamAgent = vi.fn(() => (async function* noop() {})());
+  const replaceAgentRun = vi.fn(() => (async function* noop() {})());
+  const agentManager: AgentManager = Object.create(AgentManager.prototype);
+  Reflect.set(
+    agentManager,
+    "getAgent",
+    vi.fn(() => agent),
+  );
+  Reflect.set(agentManager, "tryRunOutOfBand", vi.fn().mockReturnValue(false));
+  Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(true));
+  Reflect.set(agentManager, "streamAgent", streamAgent);
+  Reflect.set(agentManager, "replaceAgentRun", replaceAgentRun);
+  const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
+  Reflect.set(
+    agentStorage,
+    "get",
+    vi.fn(async () => null),
+  );
+
+  await sendPromptToAgent({
+    agentManager,
+    agentStorage,
+    agentId: "lead-agent",
+    prompt: formatSystemNotificationPrompt("handoff recommended"),
+    replaceRunning: false,
+    logger: createTestLogger(),
+  });
+
+  expect(replaceAgentRun).not.toHaveBeenCalled();
+  expect(streamAgent).toHaveBeenCalledOnce();
+});
+
 test("finish notifications tell the parent the child's last assistant message", async () => {
   const scenario = createFinishNotificationScenario({
     childLastAssistantMessage: "Implemented the cleanup and all checks pass.",

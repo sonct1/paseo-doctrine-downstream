@@ -14,6 +14,11 @@ import {
 } from "./role-binding.js";
 import { LaunchContractReceiptSchema } from "./launch-contract.js";
 import {
+  CoordinationSignalSchema,
+  ManualCoordinationSignalKindSchema,
+} from "./coordination-signal.js";
+import { LeadHandoffPacketSchema } from "./lead-handoff.js";
+import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
   ChatInspectRequestSchema,
@@ -808,6 +813,8 @@ export const AgentSnapshotPayloadSchema = z.object({
   providerUnavailable: z.boolean().optional(),
   roleBinding: RoleBindingReceiptSchema.optional(),
   launchContract: LaunchContractReceiptSchema.optional(),
+  coordinationSignals: z.array(CoordinationSignalSchema).optional(),
+  leadHandoffs: z.array(LeadHandoffPacketSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1630,6 +1637,26 @@ export const AgentDetachRequestMessageSchema = z.object({
 export const AgentDetachResponseMessageSchema = z.object({
   type: z.literal("agent.detach.response"),
   payload: AgentActionResponsePayloadSchema,
+});
+
+export const AgentCoordinationSignalRequestMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  kind: ManualCoordinationSignalKindSchema,
+  reason: CoordinationSignalSchema.shape.reason,
+  relatedAgentId: z.string().min(1).optional(),
+  evidenceRefs: CoordinationSignalSchema.shape.evidenceRefs.optional(),
+});
+
+export const AgentCoordinationSignalResponseMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    signal: CoordinationSignalSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
@@ -2689,6 +2716,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentCoordinationSignalRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -5573,6 +5601,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentCoordinationSignalResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -5762,6 +5791,9 @@ export type SetAgentModelResponseMessage = z.infer<typeof SetAgentModelResponseM
 export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentCoordinationSignalResponseMessage = z.infer<
+  typeof AgentCoordinationSignalResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -5925,6 +5957,9 @@ export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMes
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentCoordinationSignalRequestMessage = z.infer<
+  typeof AgentCoordinationSignalRequestMessageSchema
+>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;
