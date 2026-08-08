@@ -82,14 +82,41 @@ tool discovery dù MCP server đã mount. Từ đây, qualification MCP phải c
 Self-report kiểu “có tool” hoặc “không thấy tool”, `tools/list` riêng lẻ và MCP startup status chỉ là
 diagnostic evidence; không thay thế end-to-end callable proof.
 
+## Paid-provider final-release canary
+
+Main daemon chạy exact candidate `83f35e8b6d41dd2afb953161f6c801f29014c9b4` từ integration
+worktree, PID worker `25011`, listen `127.0.0.1:6767`, relay disabled. Disposable workspace
+`wks_86b4dbef90e91198` giữ repository clean và valid protocol digest
+`50d7b56a713d27f35581e4d3d905a9bdccf462e88d7fdd87e07c222b54b3e85a`.
+
+Paid `codex/gpt-5.4` predecessor `881dbefc-911e-41c3-a3c2-90b908426ae7` prepare handoff
+`acb2a367-4cbe-4c2f-8051-20343126b3a6` cho successor
+`9a70ac41-7fed-412b-9f5b-de717ba39b7e`. Human-facing unscoped native tool authorize exact
+successor; successor independently verify packet/repository rồi gọi native
+`successor_acknowledged`; Human-facing tool chỉ ghi `predecessor_released` sau ACK.
+
+Final durable readback có ba ordered receipts, `currentWriteOwnerAgentId` đổi sang exact successor.
+Post-release CLI prompt vào predecessor fail closed:
+
+```text
+agent_write_lease_released: 881dbefc-911e-41c3-a3c2-90b908426ae7;
+successor=9a70ac41-7fed-412b-9f5b-de717ba39b7e;
+handoff=acb2a367-4cbe-4c2f-8051-20343126b3a6
+```
+
+Successor vẫn nhận và hoàn tất post-release prompt; Git vẫn clean. Workspace và cả hai agents được
+archive sau readback. Canary qualify paid-provider final release, owner transfer và predecessor prompt
+revocation trên candidate bytes; nó không qualify production release hoặc multi-day effect.
+
 ## Residual unknowns
 
 - Chưa có multi-day evidence về continuity improvement.
 - Candidate P0 đã có paid-provider callable proof trên integrated daemon, nhưng chưa release-activated
   hoặc production-qualified.
 - Candidate P2 đã qualified trên isolated runtime, chưa release-activated hoặc production-qualified.
-- Candidate hiện enforce final release ở core daemon dispatch boundary, bao gồm existing-agent schedule
+- Candidate enforce final release ở core daemon dispatch boundary, bao gồm existing-agent schedule
   và permission follow-up; release bị reject khi predecessor còn in-flight. Released identity không thể
   được tái authorize làm successor; successor được revalidate dưới dual-identity stable locks ngay tại
-  final release. Paid-provider end-to-end release canary vẫn chưa hoàn tất.
+  final release. Paid-provider end-to-end release canary đã pass trên integrated daemon, chưa
+  production-qualified.
 - Cooling, corroboration và predecessor retention policy vẫn là open doctrine decisions.
