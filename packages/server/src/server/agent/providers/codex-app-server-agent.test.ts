@@ -1243,6 +1243,82 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
+  test("does not apply runtime MCP or role config while loading already-loaded history", async () => {
+    const threadRequests: Array<{ method: string; params: unknown }> = [];
+    const appServer = createFakeCodexAppServer({
+      "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
+      "thread/resume": (params) => {
+        threadRequests.push({ method: "thread/resume", params });
+        return { thread: { id: "archived-thread-id" } };
+      },
+      "thread/read": (params) => {
+        threadRequests.push({ method: "thread/read", params });
+        return { thread: { turns: [] } };
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+
+    const session = await provider.resumeSession(
+      archivedThreadHandle(),
+      {
+        mcpServers: {
+          paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+        },
+      },
+      {
+        agentId: "agent-1",
+        roleBinding: { roleId: "lead", instructions: "Bound Lead instructions" },
+      },
+      { purpose: "history" },
+    );
+
+    expect(threadRequests).toEqual([
+      { method: "thread/read", params: { threadId: "archived-thread-id", includeTurns: true } },
+    ]);
+    await session.close();
+    appServer.assertNoErrors();
+  });
+
+  test("reapplies runtime config after the Codex app-server client reconnects", async () => {
+    let resumeCount = 0;
+    const appServers = [0, 1].map(() =>
+      createFakeCodexAppServer({
+        "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
+        "thread/resume": () => {
+          resumeCount += 1;
+          return { thread: { id: "archived-thread-id" } };
+        },
+        "thread/read": () => ({ thread: { turns: [] } }),
+      }),
+    );
+    const provider = new CodexAppServerAgentClient(createTestLogger());
+    const providerInternals = castInternals<{
+      goalsEnabledPromise: Promise<boolean> | null;
+      autoReviewEnabledPromise: Promise<boolean> | null;
+      spawnAppServer: () => Promise<ChildProcessWithoutNullStreams>;
+    }>(provider);
+    providerInternals.goalsEnabledPromise = Promise.resolve(false);
+    providerInternals.autoReviewEnabledPromise = Promise.resolve(false);
+    let nextServer = 0;
+    providerInternals.spawnAppServer = async () => appServers[nextServer++].child;
+
+    const session = await provider.resumeSession(archivedThreadHandle(), {
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+      },
+    });
+    const sessionInternals = castInternals<{
+      connect: () => Promise<void>;
+      handleUnexpectedTermination: (error: Error) => void;
+    }>(session);
+    sessionInternals.handleUnexpectedTermination(new Error("app-server exited"));
+    await sessionInternals.connect();
+
+    expect(resumeCount).toBe(2);
+    await session.close();
+    for (const appServer of appServers) appServer.assertNoErrors();
+  });
+
   test("closes Codex app-server when an interactive resume fails", async () => {
     const appServer = createFakeCodexAppServer({
       "thread/resume": () =>
@@ -1394,9 +1470,21 @@ describe("Codex app-server provider", () => {
   });
 
   test("rewinds the conversation to a freshly emitted Codex user message id", async () => {
-    const appServer = createFakeCodexAppServer();
+    const resumeParams: unknown[] = [];
+    const appServer = createFakeCodexAppServer({
+      "thread/loaded/list": () => ({ data: ["thread-1", "forked-thread"] }),
+      "thread/resume": (params) => {
+        resumeParams.push(params);
+        return { thread: { id: "forked-thread" } };
+      },
+    });
     const session = new CodexAppServerAgentSession(
-      createConfig({ cwd: "/workspace/project" }),
+      createConfig({
+        cwd: "/workspace/project",
+        mcpServers: {
+          paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+        },
+      }),
       null,
       createTestLogger(),
       async () => appServer.child,
@@ -1410,8 +1498,16 @@ describe("Codex app-server provider", () => {
     appServer.completeTurn();
 
     await session.revertConversation({ messageId: "codex-first" });
+    await session.startTurn("after rewind");
+    appServer.completeTurn();
 
     expect(appServer.recordedRollbacks).toEqual([{ threadId: "forked-thread", numTurns: 2 }]);
+    expect(resumeParams).toEqual([
+      expect.objectContaining({
+        threadId: "forked-thread",
+        config: expect.objectContaining({ mcp_servers: expect.any(Object) }),
+      }),
+    ]);
     await expect(session.getRuntimeInfo()).resolves.toMatchObject({
       sessionId: "forked-thread",
     });
