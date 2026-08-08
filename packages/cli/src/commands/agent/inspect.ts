@@ -25,6 +25,21 @@ interface AgentInspect {
     ProtocolStatus: string;
     ProtocolDigest: string | null;
   } | null;
+  Assignment: {
+    Version: number;
+    Digest: string;
+    Role: string;
+    Disposition: string;
+    Assigner: string;
+    WorkspaceId: string;
+    Cwd: string;
+    EffectClass: string;
+    MutationBoundary: string;
+    ExternalEffectBoundary: string;
+    ProtocolExceptionExpiresAt: string | null;
+    CreatedAt: string;
+    ExpiresAt: string | null;
+  } | null;
   LaunchContract: {
     Version: number;
     ContractDigest: string;
@@ -160,6 +175,35 @@ function buildRoleBinding(snapshot: AgentSnapshotPayload): AgentInspect["RoleBin
   };
 }
 
+function formatBoundary(
+  boundary: { mode: "no-write" | "denied" } | { mode: "bounded-write" | "bounded"; scope: string },
+): string {
+  return "scope" in boundary ? `${boundary.mode}: ${boundary.scope}` : boundary.mode;
+}
+
+function buildAssignment(snapshot: AgentSnapshotPayload): AgentInspect["Assignment"] {
+  const assignment = snapshot.roleBinding?.assignment;
+  if (!assignment) return null;
+  return {
+    Version: assignment.version,
+    Digest: assignment.assignmentDigest,
+    Role: assignment.roleId,
+    Disposition: assignment.disposition,
+    Assigner:
+      assignment.assigner.kind === "agent"
+        ? `agent:${assignment.assigner.agentId}`
+        : "human-session",
+    WorkspaceId: assignment.workspaceId,
+    Cwd: assignment.cwd,
+    EffectClass: assignment.effectClass,
+    MutationBoundary: formatBoundary(assignment.mutationBoundary),
+    ExternalEffectBoundary: formatBoundary(assignment.externalEffectBoundary),
+    ProtocolExceptionExpiresAt: assignment.protocolExceptionExpiresAt ?? null,
+    CreatedAt: assignment.createdAt,
+    ExpiresAt: assignment.expiresAt ?? null,
+  };
+}
+
 function buildLaunchContract(snapshot: AgentSnapshotPayload): AgentInspect["LaunchContract"] {
   if (!snapshot.launchContract) return null;
   return {
@@ -175,14 +219,15 @@ function buildLaunchContract(snapshot: AgentSnapshotPayload): AgentInspect["Laun
   };
 }
 
-/** Convert agent snapshot to inspection data */
-function toInspectData(snapshot: AgentSnapshotPayload): AgentInspect {
+/** Convert agent snapshot to inspection data. Exported for focused receipt projection tests. */
+export function toInspectData(snapshot: AgentSnapshotPayload): AgentInspect {
   return {
     Id: snapshot.id,
     Name: snapshot.title ?? "-",
     Provider: snapshot.provider,
     Role: snapshot.launchContract?.roleId ?? snapshot.roleBinding?.roleId ?? null,
     RoleBinding: buildRoleBinding(snapshot),
+    Assignment: buildAssignment(snapshot),
     LaunchContract: buildLaunchContract(snapshot),
     CredentialConfigured: snapshot.launchContract?.credentialConfigured ?? null,
     Model: snapshot.launchContract?.model ?? resolveModel(snapshot) ?? "-",
@@ -234,6 +279,13 @@ function toInspectRows(agent: AgentInspect): InspectRow[] {
     rows.push({
       key: "RoleBinding",
       value: `Version: ${agent.RoleBinding.DefinitionVersion}, Definition: ${agent.RoleBinding.DefinitionDigest}, Binding: ${agent.RoleBinding.BindingDigest}, Injection: ${agent.RoleBinding.InjectionMethod}, Qualification: ${agent.RoleBinding.Qualification}, Protocol: ${agent.RoleBinding.ProtocolStatus}${agent.RoleBinding.ProtocolDigest ? ` (${agent.RoleBinding.ProtocolDigest})` : ""}`,
+    });
+  }
+
+  if (agent.Assignment) {
+    rows.push({
+      key: "Assignment",
+      value: `Version: ${agent.Assignment.Version}, Digest: ${agent.Assignment.Digest}, Role: ${agent.Assignment.Role}, Disposition: ${agent.Assignment.Disposition}, Assigner: ${agent.Assignment.Assigner}, WorkspaceId: ${agent.Assignment.WorkspaceId}, Cwd: ${agent.Assignment.Cwd}, Effect: ${agent.Assignment.EffectClass}, Mutation: ${agent.Assignment.MutationBoundary}, External: ${agent.Assignment.ExternalEffectBoundary}, ProtocolExceptionExpiresAt: ${agent.Assignment.ProtocolExceptionExpiresAt ?? "null"}, CreatedAt: ${agent.Assignment.CreatedAt}, ExpiresAt: ${agent.Assignment.ExpiresAt ?? "null"}`,
     });
   }
 

@@ -1,7 +1,7 @@
 # Workspace Protocol graduated admission — bounded pilot
 
-Trạng thái: `LOCAL BEHAVIORAL PILOT`; daemon activation readback pass; role runtime canary và production
-acceptance chưa được qualify.
+Trạng thái: `LOCAL BEHAVIORAL PILOT`; daemon activation và bounded paid-provider role/resume canary
+pass; production acceptance chưa được qualify.
 
 ## Câu hỏi
 
@@ -59,11 +59,48 @@ script đều `stopped`. Main daemon được restart từ đúng candidate work
 - `cliVersion=daemonVersion=0.3.0-beta.1.paseo.1`;
 - process cwd là exact `workspace-protocol-graduated-admission` worktree.
 
-Readback này qualify activation identity của candidate bytes, không qualify provider-native durable
+Readback này qualify activation identity của candidate bytes, không tự qualify provider-native durable
 instruction, assignment persistence qua resume hoặc paid-provider behavior.
+
+## Bounded role/resume canary
+
+Một disposable Git workspace có valid `WORKSPACE_PROTOCOL.md` được register thành
+`wks_debed435d45f6ef9`. Daemon tạo paid `codex/gpt-5.4` Lead
+`ab595116-3f7a-47a9-abf0-2dfd1a6b1ad0` với Human-issued `read-only` assignment, mutation
+`no-write` và external effect `denied`.
+
+Lead đọc protocol và report đúng role/boundary; workspace giữ clean. `paseo agent reload` sau đó giữ
+nguyên daemon-owned `RoleBinding`, `LaunchContract` và assignment receipt. Post-reload response report
+đúng các durable values mà không đọc lại file:
+
+- protocol digest `8866e4e90a7d39260b09bd2189a532f1f8d21d9baa4fdce716cee316abdb0a9f`;
+- assignment digest `357ecc40e03caea60d1334e0eb2e83e5416698437757d285efada3b388f9dfe2`;
+- effect `read-only`, mutation `no-write`.
+
+Canary cũng phát hiện một observability gap: daemon đã persist receipt nhưng `agent inspect` chưa project
+nó. CLI nay expose `Assignment` trong JSON/YAML và table output; focused projection test giữ legacy
+snapshot compatibility. Built CLI readback trên archived canary trả đúng full receipt và
+`Status=closed`, `Archived=true`.
+
+Focused evidence bổ sung:
+
+```text
+npx vitest run packages/cli/src/commands/agent/inspect.test.ts --bail=1
+1 file passed; 2 tests passed
+
+npm run typecheck --workspace=@getpaseo/cli
+PASS
+
+npm run build --workspace=@getpaseo/cli
+PASS
+```
+
+Canary này qualify paid-provider role binding, durable assignment values qua một explicit reload và
+inspectability của receipt. Nó không chứng minh multi-day continuity effect, runtime write-lease
+enforcement hoặc production acceptance.
 
 ## Gate tiếp theo
 
-Chỉ promote khi release candidate có: fresh daemon activation readback; một valid-protocol material
-create; một missing-protocol Human bootstrap; receipt inspect sau resume; và record false-block,
-exception-use, correction/handback outcome. Không dùng test count hay notification làm acceptance.
+Trước production promotion vẫn cần: một missing-protocol Human bootstrap canary; runtime write-lease
+decision/enforcement; multi-day continuity evidence; và record false-block, exception-use,
+correction/handback outcome. Không dùng test count hay notification làm acceptance.
