@@ -96,7 +96,11 @@ async function reserveAgentInitialization(
   if (hasReleasedAgentWriteLease(authoritativeRecord)) {
     throw new Error(`agent_write_lease_released_runtime_closed: ${agentId}`);
   }
+  const existing = deps.agentManager.getAgent(agentId);
   if (!authoritativeRecord) {
+    if (existing) {
+      return { kind: "load", promise: Promise.resolve(existing) };
+    }
     throw new Error(`Agent not found: ${agentId}`);
   }
 
@@ -106,7 +110,6 @@ async function reserveAgentInitialization(
     return { kind: "load", promise: inflight.promise };
   }
 
-  const existing = deps.agentManager.getAgent(agentId);
   if (existing) {
     return { kind: "load", promise: Promise.resolve(existing) };
   }
