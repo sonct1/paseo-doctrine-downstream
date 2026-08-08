@@ -7,6 +7,7 @@ import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { AgentStorage } from "./agent-storage.js";
+import { withAgentAuthorityLock } from "./agent-authority-lock.js";
 import type {
   AgentClient,
   AgentLaunchContext,
@@ -109,35 +110,55 @@ test("does not resume a predecessor with a released write lease", async () => {
     await manager.closeAgent(created.id);
     const record = await storage.get(agentId);
     if (!record) throw new Error("expected stored agent");
-    await storage.upsert({
-      ...record,
-      leadHandoffs: [
-        {
-          id: "handoff-released",
-          workspaceId: "workspace-released",
-          predecessorAgentId: agentId,
-          successorAgentId: "lead-new",
-          currentWriteOwnerAgentId: "lead-new",
-          objective: "Preserve released runtime closure",
-          scope: ["runtime"],
-          currentState: "Released",
-          decisions: [],
-          failedApproaches: [],
-          successfulPatterns: [],
-          evidenceIndex: [{ ref: "test", claim: "Released receipt exists" }],
-          activeRisksAndBlockers: [],
-          exactResumePoint: "Use fresh Lead identity",
-          stopCondition: "Do not resume predecessor",
-          status: "predecessor_released",
-          createdAt: new Date().toISOString(),
-          receipts: [],
-        },
-      ],
+    let releaseAuthority!: () => void;
+    const authorityHeld = new Promise<void>((resolve) => {
+      releaseAuthority = resolve;
     });
+    let receiptPersisted!: () => void;
+    const receiptReady = new Promise<void>((resolve) => {
+      receiptPersisted = resolve;
+    });
+    const release = withAgentAuthorityLock(agentId, async () => {
+      await storage.upsert({
+        ...record,
+        leadHandoffs: [
+          {
+            id: "handoff-released",
+            workspaceId: "workspace-released",
+            predecessorAgentId: agentId,
+            successorAgentId: "lead-new",
+            currentWriteOwnerAgentId: "lead-new",
+            objective: "Preserve released runtime closure",
+            scope: ["runtime"],
+            currentState: "Released",
+            decisions: [],
+            failedApproaches: [],
+            successfulPatterns: [],
+            evidenceIndex: [{ ref: "test", claim: "Released receipt exists" }],
+            activeRisksAndBlockers: [],
+            exactResumePoint: "Use fresh Lead identity",
+            stopCondition: "Do not resume predecessor",
+            status: "predecessor_released",
+            createdAt: new Date().toISOString(),
+            receipts: [],
+          },
+        ],
+      });
+      receiptPersisted();
+      await authorityHeld;
+    });
+    await receiptReady;
+    const load = ensureAgentLoaded(agentId, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+    });
+    await Promise.resolve();
+    expect(resumeCount).toBe(0);
+    releaseAuthority();
+    await release;
 
-    await expect(
-      ensureAgentLoaded(agentId, { agentManager: manager, agentStorage: storage, logger }),
-    ).rejects.toThrow(`agent_write_lease_released_runtime_closed: ${agentId}`);
+    await expect(load).rejects.toThrow(`agent_write_lease_released_runtime_closed: ${agentId}`);
     expect(resumeCount).toBe(0);
     expect(manager.getAgent(agentId)).toBeNull();
   } finally {
