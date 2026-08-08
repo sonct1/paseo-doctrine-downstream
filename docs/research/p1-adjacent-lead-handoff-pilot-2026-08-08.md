@@ -130,8 +130,9 @@ manifests. Store reconcile manifest sau process restart; final release fail clos
 và timeout abort continuation trước khi nó có thể bắt đầu một runtime close muộn. Guarantee này không
 backfill timeline cho candidate `predecessor_released` records có trước lúc file-backed store activate.
 Pre-manifest failure được giữ trong current-daemon repair ledger và chặn release/graceful shutdown, nhưng
-hard process loss đúng interval đó vẫn là unqualified storage-failure boundary. Candidate vẫn cần
-activation canary.
+per-agent drain được serialize và shutdown attempt mọi known repair trước khi aggregate failure. Hard
+process loss đúng interval đó vẫn là unqualified storage-failure boundary. Candidate vẫn cần activation
+canary.
 
 ## Residual unknowns
 

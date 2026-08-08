@@ -683,6 +683,7 @@ export class AgentManager {
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly durableTimelineTasksByAgent = new Map<string, Set<Promise<void>>>();
   private readonly durableTimelineRepairs = new Map<string, Array<() => Promise<void>>>();
+  private readonly durableTimelineFlushesByAgent = new Map<string, Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
   private readonly agentCloseFailures = new Map<string, unknown>();
@@ -1092,6 +1093,7 @@ export class AgentManager {
 
   async closeAgentForLeadHandoff(agentId: string, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
+    const observedInFlightClose = this.inFlightAgentCloses.get(agentId);
     await this.flushDurableTimelineForLeadHandoff(agentId);
     signal?.throwIfAborted();
     const priorFailure = this.agentCloseFailures.get(agentId);
@@ -1099,7 +1101,7 @@ export class AgentManager {
       throw new Error(`predecessor_runtime_close_failed: ${agentId}`, { cause: priorFailure });
     }
 
-    const inFlight = this.inFlightAgentCloses.get(agentId);
+    const inFlight = this.inFlightAgentCloses.get(agentId) ?? observedInFlightClose;
     if (inFlight) {
       await inFlight;
       await this.flushDurableTimelineForLeadHandoff(agentId);
@@ -1123,6 +1125,24 @@ export class AgentManager {
   }
 
   async flushDurableTimelineForLeadHandoff(agentId: string): Promise<void> {
+    const previous = this.durableTimelineFlushesByAgent.get(agentId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.flushDurableTimelineForLeadHandoffInternal(agentId));
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.durableTimelineFlushesByAgent.set(agentId, tail);
+    void tail.finally(() => {
+      if (this.durableTimelineFlushesByAgent.get(agentId) === tail) {
+        this.durableTimelineFlushesByAgent.delete(agentId);
+      }
+    });
+    return run;
+  }
+
+  private async flushDurableTimelineForLeadHandoffInternal(agentId: string): Promise<void> {
     if (!this.durableTimelineStore) return;
     try {
       for (;;) {
@@ -4544,8 +4564,15 @@ export class AgentManager {
    */
   async flushForShutdown(): Promise<void> {
     await this.flushTasks({ includeAgentRegistrations: true });
-    for (const agentId of this.durableTimelineRepairs.keys()) {
-      await this.flushDurableTimelineForLeadHandoff(agentId);
+    const agentIds = [...this.durableTimelineRepairs.keys()];
+    const results = await Promise.allSettled(
+      agentIds.map((agentId) => this.flushDurableTimelineForLeadHandoff(agentId)),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "Failed to reconcile durable agent timelines");
     }
   }
 

@@ -4465,10 +4465,128 @@ test("surfaces an unresolved pre-manifest failure at release and graceful shutdo
     );
     expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
     await expect(manager.flushForShutdown()).rejects.toThrow(
-      `predecessor_timeline_durability_failed: ${agentId}`,
+      "Failed to reconcile durable agent timelines",
     );
   } finally {
     await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("serializes concurrent durability flushes for one agent", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-concurrent-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const firstRepairStarted = deferred<void>();
+  const firstRepairAllowed = deferred<void>();
+  let initialFailures = true;
+  let secondRepairFailures = 0;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        if (initialFailures) throw new Error("initial manifest failure");
+        const rows = Reflect.get(value as object, "rows") as Array<{ seq: number }> | undefined;
+        if (rows?.[0]?.seq === 1) {
+          firstRepairStarted.resolve();
+          await firstRepairAllowed.promise;
+        }
+        if (rows?.[0]?.seq === 2 && secondRepairFailures++ === 0) {
+          throw new Error("first second-row repair failure");
+        }
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000148";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "row one" });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "row two" });
+    await manager.flush();
+    initialFailures = false;
+
+    const firstFlush = manager.flushDurableTimelineForLeadHandoff(agentId);
+    await firstRepairStarted.promise;
+    const secondFlush = manager.flushDurableTimelineForLeadHandoff(agentId);
+    firstRepairAllowed.resolve();
+
+    await expect(Promise.allSettled([firstFlush, secondFlush])).resolves.toEqual([
+      expect.objectContaining({ status: "rejected" }),
+      expect.objectContaining({ status: "fulfilled" }),
+    ]);
+    await expect(durableStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({ seq: 1 }),
+      expect.objectContaining({ seq: 2 }),
+    ]);
+  } finally {
+    firstRepairAllowed.resolve();
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful shutdown attempts durable repairs for every failed agent", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-shutdown-all-repairs-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const firstAgentId = "00000000-0000-4000-8000-000000000149";
+  const secondAgentId = "00000000-0000-4000-8000-000000000150";
+  let initialFailures = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        if (initialFailures || filePath.includes(encodeURIComponent(firstAgentId))) {
+          throw new Error("agent-specific manifest failure");
+        }
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+
+  try {
+    for (const [agentId, text] of [
+      [firstAgentId, "persistent failure"],
+      [secondAgentId, "transient failure"],
+    ] as const) {
+      await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+        workspaceId: undefined,
+      });
+      await manager.appendTimelineItem(agentId, { type: "assistant_message", text });
+    }
+    await manager.flush();
+    initialFailures = false;
+
+    await expect(manager.flushForShutdown()).rejects.toThrow(
+      "Failed to reconcile durable agent timelines",
+    );
+    await expect(durableStore.getCommittedRows(secondAgentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "transient failure" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(firstAgentId).catch(() => undefined);
+    await manager.closeAgent(secondAgentId).catch(() => undefined);
     await manager.flush().catch(() => undefined);
     await storage.flush().catch(() => undefined);
     rmSync(workdir, { recursive: true, force: true });

@@ -35,7 +35,9 @@ while any batch cannot commit. Pending batches survive daemon restart; a timed-o
 aborted before it may start a later runtime close. A failure before manifest creation remains in the
 current daemon's repair ledger, blocks release, and is retried during graceful shutdown. A hard process
 loss in that pre-manifest interval is an explicitly unqualified storage-failure boundary, not a claimed
-restart-recovery guarantee. This retention guarantee starts when the file-backed store is activated;
+restart-recovery guarantee. Per-agent repair drains are serialized; graceful shutdown attempts every
+known repair before reporting an aggregate failure. This retention guarantee starts when the file-backed
+store is activated;
 older candidate release records keep their packet and receipts but have no automatic timeline backfill.
 
 ### Cancellation
