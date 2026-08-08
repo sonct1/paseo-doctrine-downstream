@@ -2495,7 +2495,7 @@ test("resumeAgentFromPersistence drops stored internal paseo MCP when runtime in
   expect(snapshot.config.mcpServers).toBeUndefined();
 });
 
-test("createAgent preserves a user-provided paseo MCP config", async () => {
+test("createAgent rejects a user-provided collision with the reserved paseo MCP name", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
@@ -2520,28 +2520,23 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
 
-  const snapshot = await manager.createAgent(
-    {
-      provider: "codex",
-      cwd: workdir,
-      mcpServers: {
-        paseo: {
-          type: "http",
-          url: "https://example.com/custom-paseo",
+  await expect(
+    manager.createAgent(
+      {
+        provider: "codex",
+        cwd: workdir,
+        mcpServers: {
+          paseo: {
+            type: "http",
+            url: "https://example.com/custom-paseo",
+          },
         },
       },
-    },
-    undefined,
-    { workspaceId: undefined },
-  );
-
-  expect(snapshot.config.mcpServers).toEqual({
-    paseo: {
-      type: "http",
-      url: "https://example.com/custom-paseo",
-    },
-  });
-  expect(client.lastConfig?.mcpServers).toEqual(snapshot.config.mcpServers);
+      undefined,
+      { workspaceId: undefined },
+    ),
+  ).rejects.toThrow("MCP server name paseo is reserved for Paseo runtime");
+  expect(client.lastConfig).toBeNull();
 });
 
 test("createAgent fails when cwd does not exist", async () => {

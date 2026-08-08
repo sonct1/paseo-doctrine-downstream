@@ -1,16 +1,10 @@
 import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
 
 const PASEO_MCP_SERVER_NAME = "paseo";
-const RUNTIME_PASEO_MCP_SERVER = Symbol("runtime-paseo-mcp-server");
+const runtimePaseoMcpServers = new WeakSet<object>();
 
-type RuntimePaseoMcpServerConfig = McpServerConfig & {
-  [RUNTIME_PASEO_MCP_SERVER]: true;
-};
-
-export function isRuntimePaseoMcpServer(
-  config: McpServerConfig,
-): config is RuntimePaseoMcpServerConfig {
-  return (config as Partial<RuntimePaseoMcpServerConfig>)[RUNTIME_PASEO_MCP_SERVER] === true;
+export function isRuntimePaseoMcpServer(config: McpServerConfig): boolean {
+  return runtimePaseoMcpServers.has(config);
 }
 
 export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSessionConfig {
@@ -20,7 +14,10 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
   }
 
   const paseoServer = mcpServers[PASEO_MCP_SERVER_NAME];
-  if (!paseoServer || !isRuntimePaseoMcpServer(paseoServer)) {
+  if (
+    !paseoServer ||
+    (!isRuntimePaseoMcpServer(paseoServer) && !isLegacyLocalPaseoMcpServer(paseoServer))
+  ) {
     return config;
   }
 
@@ -55,12 +52,12 @@ export function withRuntimePaseoMcpServer(params: {
     throw new Error(`MCP server name ${PASEO_MCP_SERVER_NAME} is reserved for Paseo runtime`);
   }
 
-  const runtimeServer: RuntimePaseoMcpServerConfig = {
+  const runtimeServer: McpServerConfig = {
     type: "http",
     url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
     ...(params.mcpAuthToken ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } } : {}),
-    [RUNTIME_PASEO_MCP_SERVER]: true,
   };
+  runtimePaseoMcpServers.add(runtimeServer);
 
   return {
     ...storedConfig,
@@ -69,4 +66,18 @@ export function withRuntimePaseoMcpServer(params: {
       ...storedConfig.mcpServers,
     },
   };
+}
+
+function isLegacyLocalPaseoMcpServer(config: McpServerConfig): boolean {
+  if (config.type !== "http" && config.type !== "sse") return false;
+  try {
+    const url = new URL(config.url);
+    const isLoopback =
+      url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
+    return (
+      isLoopback && url.pathname === "/mcp/agents" && Boolean(url.searchParams.get("callerAgentId"))
+    );
+  } catch {
+    return false;
+  }
 }
