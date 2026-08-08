@@ -45,6 +45,7 @@ import {
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
 } from "./agent/agent-prompt.js";
+import { requestCoordinationSignal } from "./agent/coordination-signals.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -1906,6 +1907,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.coordination_signal.request":
+        return this.handleAgentCoordinationSignalRequest(msg);
       default:
         return undefined;
     }
@@ -2525,6 +2528,64 @@ export class Session {
           accepted: false,
           error: message,
         },
+      });
+    }
+  }
+
+  private async handleAgentCoordinationSignalRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.coordination_signal.request" }>,
+  ): Promise<void> {
+    try {
+      const target = await this.agentStorage.get(msg.agentId);
+      if (!target || target.internal || target.archivedAt) {
+        throw new Error(`Agent ${msg.agentId} is not available`);
+      }
+      if (target.roleBinding?.roleId !== "lead") {
+        throw new Error(
+          `Coordination signals require a role-bound Lead target; ${msg.agentId} is not one`,
+        );
+      }
+      if (msg.kind === "detach_recommended" && !msg.relatedAgentId) {
+        throw new Error("detach_recommended requires relatedAgentId");
+      }
+      const signal = await requestCoordinationSignal(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          sendAtSafeBoundary: async (agentId, text) => {
+            if (this.agentManager.hasInFlightRun(agentId)) {
+              throw new Error(`Agent ${agentId} is still running`);
+            }
+            await sendPromptToAgent({
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              agentId,
+              prompt: formatSystemNotificationPrompt(text),
+              unarchive: false,
+              replaceRunning: false,
+              logger: this.sessionLogger,
+            });
+          },
+          logger: this.sessionLogger,
+        },
+        {
+          targetAgentId: msg.agentId,
+          requestedByAgentId: null,
+          kind: msg.kind,
+          reason: msg.reason,
+          relatedAgentId: msg.relatedAgentId,
+          evidenceRefs: msg.evidenceRefs,
+        },
+      );
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal, error: null },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to signal agent");
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal: null, error: message },
       });
     }
   }

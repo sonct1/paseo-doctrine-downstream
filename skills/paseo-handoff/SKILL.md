@@ -1,6 +1,6 @@
 ---
 name: paseo-handoff
-description: Hand off the current task to another agent with full context. Use when the user says "handoff", "hand off", "hand this to", or wants to pass work to another agent.
+description: Hand off a bounded task or transfer Lead continuity with complete context and explicit authority receipts. Use when the user says "handoff", "hand off", "hand this to", wants to pass work to another agent, or asks to replace an active Lead without losing decisions and evidence.
 user-invocable: true
 ---
 
@@ -19,6 +19,12 @@ Read the **paseo** skill. Before choosing a provider, read `~/.paseo/orchestrati
 1. **Provider** — explicit user request first; otherwise resolve from `impl` preference (or `ui` if the task is styling-only).
 2. **Isolation** — "in a worktree" / "worktree" → create a workspace with `isolation: "worktree"`, using a short branch name derived from the task.
 3. **Task description** — anything else the user said.
+
+First classify the request:
+
+- **Ordinary task transfer** — create a receiving agent with a self-contained briefing; no authority transfer.
+- **Adjacent-Lead continuity handoff** — use the gated packet workflow below. Do not represent ordinary
+  subagent creation or detach as Lead promotion.
 
 ## The handoff prompt
 
@@ -54,6 +60,8 @@ The receiving agent has zero context. Include:
 
 ## Launch
 
+### Ordinary task transfer
+
 Prepare the handoff in a dedicated workspace:
 
 1. Select the current workspace or call `create_workspace` with the requested isolation.
@@ -65,3 +73,26 @@ Do not encode independence as a create mode and do not invoke CLI or wire-level 
 Leave `notifyOnFinish` omitted unless the user explicitly wants no callback.
 
 Don't wait by default — the user decides whether to follow along or move on. Tell them the agent ID and how to follow along (the paseo skill explains).
+
+### Adjacent-Lead continuity handoff
+
+Require an exact Human handoff/replacement mandate and a role-bound predecessor Lead. Then:
+
+1. Bring the predecessor to a bounded stop point. Freeze new writes; do not stop it mid-scope merely
+   because a recommendation exists.
+2. Call prepare_lead_handoff from the predecessor Lead. Include objective, scope, current state,
+   current write Owner, decisions, failed approaches, successful patterns, concrete evidence index,
+   active risks/blockers, exact resume point, and stop condition. The packet may omit a successor until
+   Human chooses one.
+3. Only after packet_ready, let Human select or create a role-bound successor Lead in the same
+   workspace. A newly created successor initially verifies the packet and remains non-mutating.
+4. From a Human-facing session, call transition_lead_handoff with
+   transition=successor_authorized and the exact successorAgentId.
+5. Give the frozen packet to that successor. It independently verifies current bytes and either calls
+   transition_lead_handoff with successor_acknowledged, or rejects the packet with discrepancies.
+6. Only after successor ACK may Human record predecessor_released.
+
+These transitions are durable receipts, not lifecycle mutations. They never call detach, archive an
+agent, change role binding, or enforce a write lease. Keep one actual write Owner throughout. If the
+first-class handoff tools are unavailable, stop with a manual frozen packet and report the mechanism as
+unsupported; do not fake transition receipts with chat prose.

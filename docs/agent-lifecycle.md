@@ -41,6 +41,17 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and background prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` only for truly fire-and-forget agents or prompts.
 
+### Coordination signal và Lead handoff candidate
+
+Current branch có candidate implementation cho durable coordination signal. Signal là advisory, persist
+trên target record và chờ idle boundary nếu agent đang chạy. Nó không replace active run, chuyển
+authority, detach hoặc archive agent. Native attention dùng context telemetry, compaction event và
+repeated terminal failure; missing telemetry fail closed.
+
+Adjacent-Lead handoff là workflow riêng. Frozen packet phải tồn tại trước Human authorization; designated
+successor phải ACK trước Human predecessor release. Receipts chỉ ghi nhận transition và không mutate role
+binding hoặc lifecycle. Xem docs/slp-coordination-handoff.md cho maturity, role routing và usage.
+
 ## Provider-managed child agents
 
 Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.

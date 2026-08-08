@@ -83,6 +83,33 @@ export const PASEO_TOOL_MANIFEST = [
     group: "Agents",
   },
   {
+    id: "signal_agent",
+    label: "Signal Lead",
+    description:
+      "Send a durable advisory handoff or detach recommendation without interrupting the Lead's active run.",
+    group: "Agents",
+  },
+  {
+    id: "prepare_lead_handoff",
+    label: "Prepare Lead handoff",
+    description: "Persist a complete adjacent-Lead handoff packet without transferring authority.",
+    group: "Agents",
+  },
+  {
+    id: "transition_lead_handoff",
+    label: "Transition Lead handoff",
+    description:
+      "Record explicit authorization, successor acknowledgement, rejection, or predecessor release.",
+    group: "Agents",
+  },
+  {
+    id: "resolve_agent_signal",
+    label: "Resolve agent signal",
+    description:
+      "Acknowledge, defer, decline, or complete one of your coordination signals or native attention receipts.",
+    group: "Agents",
+  },
+  {
     id: "get_agent_status",
     label: "Get agent status",
     description:

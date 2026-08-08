@@ -2559,6 +2559,26 @@ export class DaemonClient {
     }
   }
 
+  async signalAgent(input: {
+    agentId: string;
+    kind: "handoff_recommended" | "detach_recommended";
+    reason: string;
+    relatedAgentId?: string;
+    evidenceRefs?: string[];
+  }) {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.coordination_signal.response">({
+        message: {
+          type: "agent.coordination_signal.request",
+          ...input,
+        },
+      });
+    if (!payload.signal) {
+      throw new Error(payload.error ?? "signalAgent rejected");
+    }
+    return payload.signal;
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string> },

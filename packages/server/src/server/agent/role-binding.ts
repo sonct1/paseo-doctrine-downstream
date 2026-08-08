@@ -46,6 +46,8 @@ const SUPERVISOR_PASEO_TOOLS = [
   "list_providers",
   "list_models",
   "inspect_provider",
+  "signal_agent",
+  "resolve_agent_signal",
 ] as const;
 
 function sha256(value: string): string {

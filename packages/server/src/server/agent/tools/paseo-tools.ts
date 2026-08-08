@@ -99,6 +99,18 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 import { toRoleBindingReceipt } from "../role-binding.js";
 import { toLaunchContractReceipt } from "../launch-contract.js";
 import { PaseoRoleIdSchema, RoleBindingReceiptSchema } from "@getpaseo/protocol/role-binding";
+import {
+  ManualCoordinationSignalKindSchema,
+  CoordinationSignalResolutionSchema,
+  CoordinationSignalSchema,
+} from "@getpaseo/protocol/coordination-signal";
+import { requestCoordinationSignal, resolveCoordinationSignal } from "../coordination-signals.js";
+import {
+  LeadHandoffPacketSchema,
+  LeadHandoffTransitionSchema,
+  PrepareLeadHandoffInputSchema,
+} from "@getpaseo/protocol/lead-handoff";
+import { prepareLeadHandoff, transitionLeadHandoff } from "../lead-handoffs.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -111,6 +123,7 @@ export interface PaseoToolHostDependencies {
     identifier: string,
   ) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
   sendAgentMessage?: (agentId: string, text: string) => Promise<void>;
+  sendAgentMessageAtSafeBoundary?: (agentId: string, text: string) => Promise<void>;
   providerSnapshotManager: ProviderSnapshotManager;
   github?: ForgeService;
   workspaceGitService?: Pick<
@@ -1947,6 +1960,160 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         throw new Error("unreachable");
     }
   }
+
+  registerTool(
+    "prepare_lead_handoff",
+    {
+      title: "Prepare Lead handoff",
+      description:
+        "Persist an immutable adjacent-Lead handoff packet. The predecessor remains write Owner; this does not authorize or release either Lead.",
+      inputSchema: PrepareLeadHandoffInputSchema.omit({ predecessorAgentId: true }).shape,
+      outputSchema: { handoff: LeadHandoffPacketSchema },
+    },
+    async (input) => {
+      if (!callerAgentId) {
+        throw new Error("prepare_lead_handoff requires an agent-scoped predecessor Lead");
+      }
+      const caller = await agentStorage.get(callerAgentId);
+      if (caller?.roleBinding?.roleId !== "lead") {
+        throw new Error("prepare_lead_handoff requires a role-bound predecessor Lead");
+      }
+      const handoff = await prepareLeadHandoff(
+        { agentStorage },
+        { ...input, predecessorAgentId: callerAgentId },
+      );
+      agentManager.notifyAgentState(callerAgentId);
+      return { content: [], structuredContent: ensureValidJson({ handoff }) };
+    },
+  );
+
+  registerTool(
+    "transition_lead_handoff",
+    {
+      title: "Transition Lead handoff",
+      description:
+        "Record explicit Human authorization/release or the designated successor's acknowledgement/rejection. This records receipts only; it never detaches, archives, or changes role binding.",
+      inputSchema: {
+        predecessorAgentId: z.string().min(1),
+        handoffId: z.string().min(1),
+        transition: LeadHandoffTransitionSchema,
+        successorAgentId: z.string().min(1).optional(),
+        note: z.string().trim().min(1).max(1_000),
+      },
+      outputSchema: { handoff: LeadHandoffPacketSchema },
+    },
+    async ({ predecessorAgentId, handoffId, transition, successorAgentId, note }) => {
+      if (callerAgentId && transition !== "successor_acknowledged" && transition !== "rejected") {
+        throw new Error("Only a Human-facing caller can authorize or release a Lead handoff");
+      }
+      const handoff = await transitionLeadHandoff(
+        { agentStorage },
+        {
+          predecessorAgentId,
+          handoffId,
+          transition,
+          actorAgentId: callerAgentId ?? null,
+          successorAgentId,
+          note,
+        },
+      );
+      agentManager.notifyAgentState(predecessorAgentId);
+      return { content: [], structuredContent: ensureValidJson({ handoff }) };
+    },
+  );
+
+  registerTool(
+    "signal_agent",
+    {
+      title: "Signal agent",
+      description:
+        "Send a durable advisory handoff or detach recommendation to a role-bound Lead. Delivery waits for an idle boundary and never replaces an active run.",
+      inputSchema: {
+        agentId: z.string().min(1),
+        kind: ManualCoordinationSignalKindSchema,
+        reason: z.string().trim().min(1).max(1_000),
+        relatedAgentId: z.string().min(1).optional(),
+        evidenceRefs: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
+      },
+      outputSchema: { signal: CoordinationSignalSchema },
+    },
+    async ({ agentId, kind, reason, relatedAgentId, evidenceRefs }) => {
+      if (!options.sendAgentMessageAtSafeBoundary) {
+        throw new Error("Coordination signal delivery is unavailable");
+      }
+      const target = await agentStorage.get(agentId);
+      if (!target || target.internal || target.archivedAt) {
+        throw new Error(`Agent ${agentId} is not available`);
+      }
+      if (target.roleBinding?.roleId !== "lead") {
+        throw new Error(
+          `Coordination signals require a role-bound Lead target; ${agentId} is not one`,
+        );
+      }
+      if (kind === "detach_recommended" && !relatedAgentId) {
+        throw new Error("detach_recommended requires relatedAgentId");
+      }
+      if (callerAgentId) {
+        const caller = await agentStorage.get(callerAgentId);
+        const callerRole = caller?.roleBinding?.roleId;
+        if (callerRole !== "lead" && callerRole !== "supervisor") {
+          throw new Error("Only a role-bound Lead or Supervisor can signal another Lead");
+        }
+      }
+      const signal = await requestCoordinationSignal(
+        {
+          agentManager,
+          agentStorage,
+          sendAtSafeBoundary: options.sendAgentMessageAtSafeBoundary,
+          logger: childLogger,
+        },
+        {
+          targetAgentId: agentId,
+          requestedByAgentId: callerAgentId ?? null,
+          kind,
+          reason,
+          relatedAgentId,
+          evidenceRefs,
+        },
+      );
+      return { content: [], structuredContent: ensureValidJson({ signal }) };
+    },
+  );
+
+  registerTool(
+    "resolve_agent_signal",
+    {
+      title: "Resolve agent signal",
+      description:
+        "Record the receiving role's autonomous disposition of a coordination signal. This does not report to or transfer authority to the sender.",
+      inputSchema: {
+        agentId: z.string().min(1).optional(),
+        signalId: z.string().min(1),
+        resolution: CoordinationSignalResolutionSchema,
+        note: z.string().trim().max(1_000).optional(),
+      },
+      outputSchema: { signal: CoordinationSignalSchema },
+    },
+    async ({ agentId, signalId, resolution, note }) => {
+      const targetAgentId = callerAgentId ?? agentId;
+      if (!targetAgentId) {
+        throw new Error("agentId is required outside an agent-scoped session");
+      }
+      if (callerAgentId && agentId && agentId !== callerAgentId) {
+        throw new Error("An agent may resolve only its own coordination signals");
+      }
+      const signal = await resolveCoordinationSignal(
+        {
+          agentManager,
+          agentStorage,
+          sendAtSafeBoundary: options.sendAgentMessageAtSafeBoundary ?? (async () => undefined),
+          logger: childLogger,
+        },
+        { targetAgentId, signalId, resolution, note },
+      );
+      return { content: [], structuredContent: ensureValidJson({ signal }) };
+    },
+  );
 
   registerTool(
     "send_agent_prompt",

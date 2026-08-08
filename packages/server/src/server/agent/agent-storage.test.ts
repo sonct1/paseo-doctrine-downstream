@@ -296,6 +296,72 @@ describe("AgentStorage", () => {
     expect(recordAfterSnapshot?.archivedAt).toBe(archivedAt);
   });
 
+  test("applySnapshot preserves durable coordination and handoff metadata", async () => {
+    const agentId = "lead-predecessor";
+    await storage.applySnapshot(createManagedAgent({ id: agentId, lifecycle: "idle" }));
+    const record = await storage.get(agentId);
+    expect(record).not.toBeNull();
+    await storage.upsert({
+      ...record!,
+      coordinationSignals: [
+        {
+          id: "signal-1",
+          targetAgentId: agentId,
+          requestedByAgentId: null,
+          kind: "handoff_recommended",
+          reason: "Continuity review",
+          evidenceRefs: [],
+          status: "pending",
+          createdAt: "2026-08-08T00:00:00.000Z",
+          deliveredAt: null,
+          resolvedAt: null,
+        },
+      ],
+      leadHandoffs: [
+        {
+          id: "handoff-1",
+          workspaceId: "workspace-1",
+          predecessorAgentId: agentId,
+          successorAgentId: null,
+          currentWriteOwnerAgentId: agentId,
+          objective: "Continue bounded work",
+          scope: ["packages/server"],
+          currentState: "Packet ready",
+          decisions: [],
+          failedApproaches: [],
+          successfulPatterns: [],
+          evidenceIndex: [{ ref: "test", claim: "Snapshot preservation" }],
+          activeRisksAndBlockers: [],
+          exactResumePoint: "Await Human authorization",
+          stopCondition: "Do not mutate lifecycle",
+          status: "packet_ready",
+          createdAt: "2026-08-08T00:00:00.000Z",
+          receipts: [],
+        },
+      ],
+      coordinationPolicyState: {
+        consecutiveTurnFailures: 2,
+        failureAttentionSent: false,
+        automaticCompactionCount: 0,
+        automaticCompactionAttentionSent: false,
+        contextPressureAttentionSent: false,
+      },
+    });
+
+    await storage.applySnapshot(
+      createManagedAgent({
+        id: agentId,
+        lifecycle: "running",
+        updatedAt: new Date("2026-08-08T00:01:00.000Z"),
+      }),
+    );
+
+    const afterSnapshot = await storage.get(agentId);
+    expect(afterSnapshot?.coordinationSignals?.[0]?.id).toBe("signal-1");
+    expect(afterSnapshot?.leadHandoffs?.[0]?.id).toBe("handoff-1");
+    expect(afterSnapshot?.coordinationPolicyState?.consecutiveTurnFailures).toBe(2);
+  });
+
   test("stores titles independently of snapshots", async () => {
     await storage.applySnapshot(
       createManagedAgent({
