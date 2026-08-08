@@ -5,11 +5,11 @@ Nó không thay thế role contracts, Human lease hoặc repository protocol.
 
 ## Mức trưởng thành hiện tại
 
-| Slice                  | Trạng thái                            | Đã có                                                                                               | Chưa được chứng minh                                      |
-| ---------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| P0 coordination signal | Candidate, code-qualified             | protocol, persistence, idle-boundary delivery, resolution, CLI/client/tool, native attention policy | release activation và paid-provider runtime canary        |
-| P1 manual handoff      | Pilot đã chạy                         | predecessor packet, independent successor review, rejection evidence                                | multi-day operational effect                              |
-| P2 handoff artifact    | Candidate, isolated-runtime-qualified | immutable packet core, explicit ordered receipts, role/Human gates, restart readback                | release activation, multi-day effect và lease enforcement |
+| Slice                  | Trạng thái                              | Đã có                                                                                                                    | Chưa được chứng minh                                      |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| P0 coordination signal | Candidate, integrated-runtime-qualified | protocol, persistence, idle-boundary delivery, native paid-provider resolution, CLI/client/tool, native attention policy | release activation, multi-day operational effect          |
+| P1 manual handoff      | Pilot đã chạy                           | predecessor packet, independent successor review, rejection evidence                                                     | multi-day operational effect                              |
+| P2 handoff artifact    | Candidate, isolated-runtime-qualified   | immutable packet core, explicit ordered receipts, role/Human gates, restart readback                                     | release activation, multi-day effect và lease enforcement |
 
 Không được gọi ba slice này là shipped production capability chỉ vì focused tests xanh.
 
@@ -98,7 +98,9 @@ workspace, agent và runtime status.
 
 ## Evidence
 
-P1 rejection, rationale và isolated P2 runtime qualification được giữ tại
+P1 rejection, rationale, isolated P2 runtime qualification và integrated P0 callable-surface canary được giữ tại
 docs/research/p1-adjacent-lead-handoff-pilot-2026-08-08.md. Candidate P2 trực tiếp bắt buộc các field mà
-successor đã chỉ ra là thiếu. Qualification chứng minh ordered workflow và durable readback trong dev
-daemon cô lập; nó chưa chứng minh release activation, production operation hoặc write-lease enforcement.
+successor đã chỉ ra là thiếu. P0 canary chứng minh native tool invocation và durable state readback trên
+paid Codex Lead; P2 qualification chứng minh ordered workflow và durable readback trong dev daemon cô
+lập. Hai bằng chứng chưa chứng minh release activation, production operation hoặc write-lease
+enforcement.
