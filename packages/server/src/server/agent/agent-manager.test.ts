@@ -14,6 +14,7 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
+import { FileAgentTimelineStore } from "./file-agent-timeline-store.js";
 import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js";
@@ -4271,6 +4272,66 @@ test("getTimelineRows falls back to the in-memory timeline when no durable store
       },
     },
   ]);
+});
+
+test("seeds live timeline rows and epoch from the file store after manager restart", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-durable-timeline-restart-"));
+  const storagePath = join(workdir, "agents");
+  const timelinePath = join(workdir, "timelines");
+  const agentId = "00000000-0000-4000-8000-000000000141";
+  const firstStorage = new AgentStorage(storagePath, logger);
+  const firstManager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: firstStorage,
+    durableTimelineStore: new FileAgentTimelineStore(timelinePath),
+    logger,
+  });
+  let secondManager: AgentManager | null = null;
+
+  try {
+    const created = await firstManager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await firstManager.appendTimelineItem(created.id, {
+      type: "assistant_message",
+      text: "durable answer",
+    });
+    const beforeRestart = firstManager.fetchTimeline(agentId, { direction: "tail", limit: 0 });
+    await firstManager.flush();
+    await firstManager.closeAgent(agentId);
+    await firstStorage.flush();
+
+    const secondStorage = new AgentStorage(storagePath, logger);
+    await secondStorage.initialize();
+    secondManager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: secondStorage,
+      durableTimelineStore: new FileAgentTimelineStore(timelinePath),
+      logger,
+    });
+    await ensureAgentLoaded(agentId, {
+      agentManager: secondManager,
+      agentStorage: secondStorage,
+      logger,
+    });
+    const afterRestart = secondManager.fetchTimeline(agentId, {
+      direction: "tail",
+      limit: 0,
+    });
+
+    expect(afterRestart.epoch).toBe(beforeRestart.epoch);
+    expect(afterRestart.rows.map((row) => row.item)).toContainEqual({
+      type: "assistant_message",
+      text: "durable answer",
+    });
+  } finally {
+    await secondManager?.closeAgent(agentId).catch(() => undefined);
+    await secondManager?.flush().catch(() => undefined);
+    await firstManager.closeAgent(agentId).catch(() => undefined);
+    await firstManager.flush().catch(() => undefined);
+    await firstStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("getAgent does not expose committed history internals once manager owns the seam", async () => {
