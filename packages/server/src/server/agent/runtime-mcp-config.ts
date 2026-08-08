@@ -1,7 +1,17 @@
 import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
 
 const PASEO_MCP_SERVER_NAME = "paseo";
-const PASEO_MCP_PATHNAME = "/mcp/agents";
+const RUNTIME_PASEO_MCP_SERVER = Symbol("runtime-paseo-mcp-server");
+
+type RuntimePaseoMcpServerConfig = McpServerConfig & {
+  [RUNTIME_PASEO_MCP_SERVER]: true;
+};
+
+export function isRuntimePaseoMcpServer(
+  config: McpServerConfig,
+): config is RuntimePaseoMcpServerConfig {
+  return (config as Partial<RuntimePaseoMcpServerConfig>)[RUNTIME_PASEO_MCP_SERVER] === true;
+}
 
 export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSessionConfig {
   const mcpServers = config.mcpServers;
@@ -10,7 +20,7 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
   }
 
   const paseoServer = mcpServers[PASEO_MCP_SERVER_NAME];
-  if (!paseoServer || !isInternalPaseoMcpServer(paseoServer)) {
+  if (!paseoServer || !isRuntimePaseoMcpServer(paseoServer)) {
     return config;
   }
 
@@ -38,33 +48,25 @@ export function withRuntimePaseoMcpServer(params: {
   mcpAuthToken: string | null;
 }): AgentSessionConfig {
   const storedConfig = stripInternalPaseoMcpServer(params.config);
-  if (!params.mcpBaseUrl || storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
+  if (!params.mcpBaseUrl) {
     return storedConfig;
   }
+  if (storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
+    throw new Error(`MCP server name ${PASEO_MCP_SERVER_NAME} is reserved for Paseo runtime`);
+  }
+
+  const runtimeServer: RuntimePaseoMcpServerConfig = {
+    type: "http",
+    url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
+    ...(params.mcpAuthToken ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } } : {}),
+    [RUNTIME_PASEO_MCP_SERVER]: true,
+  };
 
   return {
     ...storedConfig,
     mcpServers: {
-      [PASEO_MCP_SERVER_NAME]: {
-        type: "http",
-        url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
-        ...(params.mcpAuthToken
-          ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } }
-          : {}),
-      },
+      [PASEO_MCP_SERVER_NAME]: runtimeServer,
       ...storedConfig.mcpServers,
     },
   };
-}
-
-function isInternalPaseoMcpServer(config: McpServerConfig): boolean {
-  if (config.type !== "http" && config.type !== "sse") {
-    return false;
-  }
-
-  try {
-    return new URL(config.url).pathname === PASEO_MCP_PATHNAME;
-  } catch {
-    return false;
-  }
 }

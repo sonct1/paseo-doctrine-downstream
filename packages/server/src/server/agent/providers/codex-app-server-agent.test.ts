@@ -38,6 +38,7 @@ import {
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 import { asInternals as castInternals, createStub } from "../../test-utils/class-mocks.js";
 import { buildProviderRegistry } from "../provider-registry.js";
+import { withRuntimePaseoMcpServer } from "../runtime-mcp-config.js";
 
 interface CollaborationModeRecord {
   name: string;
@@ -1210,28 +1211,32 @@ describe("Codex app-server provider", () => {
     });
     const provider = createProviderWithFakeAppServer(appServer);
 
-    const session = await provider.resumeSession(
-      archivedThreadHandle(),
-      {
-        mcpServers: {
-          paseo: {
-            type: "http",
-            url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
-            headers: { Authorization: "Bearer test-token" },
+    const runtimeConfig = withRuntimePaseoMcpServer({
+      config: createConfig({
+        extra: {
+          codex: {
+            mcp_servers: {
+              paseo: { url: "https://other-host/mcp/agents" },
+              custom: { command: "custom-mcp" },
+            },
           },
         },
-      },
-      {
-        agentId: "agent-1",
-        roleBinding: { roleId: "lead", instructions: "Bound Lead instructions" },
-      },
-    );
+      }),
+      agentId: "agent-1",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "test-token",
+    });
+    const session = await provider.resumeSession(archivedThreadHandle(), runtimeConfig, {
+      agentId: "agent-1",
+      roleBinding: { roleId: "lead", instructions: "Bound Lead instructions" },
+    });
 
     expect(resumeParams).toMatchObject({
       threadId: "archived-thread-id",
       developerInstructions: expect.stringContaining("Bound Lead instructions"),
       config: {
         mcp_servers: {
+          custom: { command: "custom-mcp" },
           paseo: {
             url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
             http_headers: { Authorization: "Bearer test-token" },
@@ -1258,14 +1263,16 @@ describe("Codex app-server provider", () => {
       },
     });
     const provider = createProviderWithFakeAppServer(appServer);
+    const runtimeConfig = withRuntimePaseoMcpServer({
+      config: createConfig(),
+      agentId: "agent-1",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "test-token",
+    });
 
     const session = await provider.resumeSession(
       archivedThreadHandle(),
-      {
-        mcpServers: {
-          paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
-        },
-      },
+      runtimeConfig,
       {
         agentId: "agent-1",
         roleBinding: { roleId: "lead", instructions: "Bound Lead instructions" },
@@ -1276,7 +1283,8 @@ describe("Codex app-server provider", () => {
     expect(threadRequests).toEqual([
       { method: "thread/read", params: { threadId: "archived-thread-id", includeTurns: true } },
     ]);
-    await castInternals<{ ensureThreadLoaded(): Promise<void> }>(session).ensureThreadLoaded();
+    await session.startTurn("interactive after history read");
+    appServer.completeTurn();
     expect(threadRequests).toEqual([
       { method: "thread/read", params: { threadId: "archived-thread-id", includeTurns: true } },
       {
@@ -1325,6 +1333,42 @@ describe("Codex app-server provider", () => {
     session.currentThreadId = "thread-b";
     firstResume.resolve();
     await Promise.all([first, concurrent]);
+
+    expect(resumeParams).toEqual([
+      expect.objectContaining({ threadId: "thread-a" }),
+      expect.objectContaining({ threadId: "thread-b" }),
+    ]);
+  });
+
+  test("retries runtime config for a replacement thread after the stale apply rejects", async () => {
+    const firstResume = Promise.withResolvers<void>();
+    const resumeParams: unknown[] = [];
+    const session = createSession({
+      mcpServers: {
+        paseo: { type: "http", url: "http://127.0.0.1:6767/mcp/agents" },
+      },
+    });
+    session.currentThreadId = "thread-a";
+    session.client = createStub<CodexClientLike>({
+      request: vi.fn(async (method: string, params: unknown) => {
+        if (method === "thread/loaded/list") return { data: ["thread-a", "thread-b"] };
+        if (method === "thread/resume") {
+          resumeParams.push(params);
+          if ((params as { threadId: string }).threadId === "thread-a") {
+            await firstResume.promise;
+            throw new Error("stale thread resume failed");
+          }
+          return { thread: { id: "thread-b" } };
+        }
+        throw new Error(`Unexpected request: ${method}`);
+      }),
+    });
+
+    const apply = asInternals(session).ensureThreadLoaded();
+    await vi.waitFor(() => expect(resumeParams).toHaveLength(1));
+    session.currentThreadId = "thread-b";
+    firstResume.resolve();
+    await apply;
 
     expect(resumeParams).toEqual([
       expect.objectContaining({ threadId: "thread-a" }),

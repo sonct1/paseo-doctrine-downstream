@@ -107,6 +107,7 @@ import {
   THINKING_APPLIES_NEXT_TURN_NOTICE,
 } from "../provider-notices.js";
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
+import { isRuntimePaseoMcpServer } from "../runtime-mcp-config.js";
 
 function assertChildWithPipes(
   child: ChildProcess,
@@ -810,15 +811,6 @@ interface CodexMcpServerConfig {
   env?: Record<string, string>;
   tool_timeout_sec?: number;
   required?: boolean;
-}
-
-function isInternalPaseoMcpConfig(name: string, config: McpServerConfig): boolean {
-  if (name !== "paseo" || (config.type !== "http" && config.type !== "sse")) return false;
-  try {
-    return new URL(config.url).pathname === "/mcp/agents";
-  } catch {
-    return false;
-  }
 }
 
 function toCodexMcpConfig(config: McpServerConfig): CodexMcpServerConfig {
@@ -3814,19 +3806,14 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (!client || !threadId) return;
     const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
     if (applyRuntimeOverrides) {
-      const pending = this.pendingRuntimeThreadConfigApply;
-      if (pending?.client === client && pending.threadId === threadId) {
-        await pending.promise;
-      } else {
-        const promise = this.ensureThreadLoadedFor(client, threadId, options);
-        this.pendingRuntimeThreadConfigApply = { client, threadId, promise };
-        try {
-          await promise;
-        } finally {
-          if (this.pendingRuntimeThreadConfigApply?.promise === promise) {
-            this.pendingRuntimeThreadConfigApply = null;
-          }
+      try {
+        await this.applyRuntimeThreadConfigOnce(client, threadId, options);
+      } catch (error) {
+        if (this.client !== client || this.currentThreadId !== threadId) {
+          await this.ensureThreadLoaded(options);
+          return;
         }
+        throw error;
       }
       if (this.client !== client || this.currentThreadId !== threadId) {
         await this.ensureThreadLoaded(options);
@@ -3834,6 +3821,27 @@ export class CodexAppServerAgentSession implements AgentSession {
       return;
     }
     await this.ensureThreadLoadedFor(client, threadId, options);
+  }
+
+  private async applyRuntimeThreadConfigOnce(
+    client: CodexAppServerClient,
+    threadId: string,
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean },
+  ): Promise<void> {
+    const pending = this.pendingRuntimeThreadConfigApply;
+    if (pending?.client === client && pending.threadId === threadId) {
+      await pending.promise;
+      return;
+    }
+    const promise = this.ensureThreadLoadedFor(client, threadId, options);
+    this.pendingRuntimeThreadConfigApply = { client, threadId, promise };
+    try {
+      await promise;
+    } finally {
+      if (this.pendingRuntimeThreadConfigApply?.promise === promise) {
+        this.pendingRuntimeThreadConfigApply = null;
+      }
+    }
   }
 
   private async ensureThreadLoadedFor(
@@ -4885,16 +4893,6 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private buildCodexInnerConfig(): Record<string, unknown> | null {
     const innerConfig: Record<string, unknown> = {};
-    if (this.config.mcpServers) {
-      const mcpServers: Record<string, CodexMcpServerConfig> = {};
-      for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
-        mcpServers[name] = {
-          ...toCodexMcpConfig(serverConfig),
-          ...(isInternalPaseoMcpConfig(name, serverConfig) ? { required: true } : {}),
-        };
-      }
-      innerConfig.mcp_servers = mcpServers;
-    }
     if (this.config.extra?.codex) {
       Object.assign(innerConfig, this.config.extra.codex);
     }
@@ -4904,6 +4902,17 @@ export class CodexAppServerAgentSession implements AgentSession {
     const boundProviderConfig = buildCodexBoundProviderConfig(this.providerLaunchBinding);
     if (boundProviderConfig) {
       Object.assign(innerConfig, boundProviderConfig);
+    }
+    if (this.config.mcpServers) {
+      const configuredMcpServers = toObjectRecord(innerConfig.mcp_servers) ?? {};
+      const mcpServers: Record<string, unknown> = { ...configuredMcpServers };
+      for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
+        mcpServers[name] = {
+          ...toCodexMcpConfig(serverConfig),
+          ...(isRuntimePaseoMcpServer(serverConfig) ? { required: true } : {}),
+        };
+      }
+      innerConfig.mcp_servers = mcpServers;
     }
     if (this.roleInstructions) {
       const features = toObjectRecord(innerConfig.features) ?? {};
