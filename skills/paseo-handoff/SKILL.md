@@ -95,5 +95,6 @@ Require an exact Human handoff/replacement mandate and a role-bound predecessor 
 The first transitions are durable receipts, not lifecycle mutations. Final `predecessor_released`
 requires an idle predecessor, transfers `currentWriteOwnerAgentId` to the successor, and blocks later
 prompt dispatch or unarchive-and-prompt for the predecessor. It does not detach, archive, or change role
-binding. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
-the mechanism as unsupported; do not fake transition receipts with chat prose.
+binding. Never reactivate a released predecessor identity as a later successor; create a fresh
+role-bound Lead identity instead. If the first-class handoff tools are unavailable, stop with a manual
+frozen packet and report the mechanism as unsupported; do not fake transition receipts with chat prose.

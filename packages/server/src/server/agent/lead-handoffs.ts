@@ -61,6 +61,11 @@ async function requireAdjacentLeads(
   if (predecessor.roleBinding?.roleId !== "lead" || successor.roleBinding?.roleId !== "lead") {
     throw new Error("Adjacent-Lead handoff requires two role-bound Leads");
   }
+  if (successor.leadHandoffs?.some((packet) => packet.status === "predecessor_released")) {
+    throw new Error(
+      "A released predecessor identity cannot become a successor; create a fresh role-bound Lead",
+    );
+  }
   if (!predecessor.workspaceId || predecessor.workspaceId !== successor.workspaceId) {
     throw new Error("Adjacent-Lead handoff requires both Leads in the same workspace");
   }

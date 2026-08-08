@@ -5,8 +5,8 @@ export async function withAgentAuthorityLock<T>(
   agentId: string,
   action: () => Promise<T>,
 ): Promise<T> {
-  const previous = authorityUpdates.get(agentId) ?? Promise.resolve();
-  const current = previous.then(action, action);
+  const previous = authorityUpdates.get(agentId);
+  const current = previous ? previous.then(action, action) : action();
   authorityUpdates.set(agentId, current);
   try {
     return await current;

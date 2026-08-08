@@ -123,6 +123,11 @@ export class AgentStorage {
   private pathsById: Map<string, Set<string>> = new Map();
   private pendingWrites: Map<string, Promise<void>> = new Map();
   private deleting: Set<string> = new Set();
+
+  /** Current daemon-owned cache entry; callers must fail closed when a required receipt is absent. */
+  getCached(agentId: string): StoredAgentRecord | null {
+    return this.cache.get(agentId) ?? null;
+  }
   private daemonAgentIdsByExecution: Map<string, string> = new Map();
   private daemonExecutionKeysByAgentId: Map<string, string> = new Map();
   private loaded = false;

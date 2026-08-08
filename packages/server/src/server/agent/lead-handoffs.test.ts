@@ -198,4 +198,40 @@ describe("Lead handoff packets", () => {
       }),
     ).rejects.toThrow("designated successor");
   });
+
+  test("forbids reactivating a released predecessor identity as a successor", async () => {
+    const testCase = scenario();
+    let packet = await prepareLeadHandoff(testCase.dependencies, completePacketInput());
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_authorized",
+      actorAgentId: null,
+      successorAgentId: "lead-new",
+      note: "Authorized",
+    });
+    packet = await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "successor_acknowledged",
+      actorAgentId: "lead-new",
+      note: "Acknowledged",
+    });
+    await transitionLeadHandoff(testCase.dependencies, {
+      predecessorAgentId: "lead-old",
+      handoffId: packet.id,
+      transition: "predecessor_released",
+      actorAgentId: null,
+      note: "Released",
+    });
+
+    await expect(
+      prepareLeadHandoff(testCase.dependencies, {
+        ...completePacketInput(),
+        predecessorAgentId: "lead-new",
+        proposedSuccessorAgentId: "lead-old",
+        currentWriteOwnerAgentId: "lead-new",
+      }),
+    ).rejects.toThrow("fresh role-bound Lead");
+  });
 });

@@ -87,13 +87,17 @@ function createFinishNotificationScenario(
   Reflect.set(agentManager, "getLastAssistantMessage", async () => {
     return options?.childLastAssistantMessage ?? null;
   });
-  Reflect.set(agentManager, "tryRunOutOfBand", () => false);
+  Reflect.set(agentManager, "tryRunOutOfBandAuthorized", async () => false);
   Reflect.set(agentManager, "hasInFlightRun", () => Boolean(options?.parentPromptError));
-  Reflect.set(agentManager, "streamAgent", (_agentId: string, prompt: string) => {
-    parentPrompted = true;
-    resolveParentPrompt?.(prompt);
-    return (async function* noop() {})();
-  });
+  Reflect.set(
+    agentManager,
+    "startAuthorizedAgentStream",
+    async (_agentId: string, prompt: string) => {
+      parentPrompted = true;
+      resolveParentPrompt?.(prompt);
+      return (async function* noop() {})();
+    },
+  );
   Reflect.set(agentManager, "replaceAgentRun", async (_agentId: string, prompt: string) => {
     resolveParentPrompt?.(prompt);
     throw options?.parentPromptError;
@@ -167,9 +171,11 @@ test("sendPromptToAgent forwards the client message id as run options", async ()
     "getAgent",
     vi.fn(() => agent),
   );
-  Reflect.set(agentManager, "tryRunOutOfBand", vi.fn().mockReturnValue(false));
+  Reflect.set(agentManager, "tryRunOutOfBandAuthorized", vi.fn().mockResolvedValue(false));
   Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(false));
-  Reflect.set(agentManager, "streamAgent", streamAgentSpy);
+  Reflect.set(agentManager, "startAuthorizedAgentStream", async (...args: unknown[]) => {
+    return streamAgentSpy(...args);
+  });
 
   const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
   Reflect.set(
@@ -206,9 +212,11 @@ test("safe-boundary prompt delivery never replaces an in-flight run", async () =
     "getAgent",
     vi.fn(() => agent),
   );
-  Reflect.set(agentManager, "tryRunOutOfBand", vi.fn().mockReturnValue(false));
+  Reflect.set(agentManager, "tryRunOutOfBandAuthorized", vi.fn().mockResolvedValue(false));
   Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(true));
-  Reflect.set(agentManager, "streamAgent", streamAgent);
+  Reflect.set(agentManager, "startAuthorizedAgentStream", async (...args: unknown[]) => {
+    return streamAgent(...args);
+  });
   Reflect.set(agentManager, "replaceAgentRun", replaceAgentRun);
   const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
   Reflect.set(
@@ -238,7 +246,9 @@ test("released predecessor cannot be prompted or unarchived", async () => {
     "getAgent",
     vi.fn(() => null),
   );
-  Reflect.set(agentManager, "streamAgent", streamAgent);
+  Reflect.set(agentManager, "startAuthorizedAgentStream", async (...args: unknown[]) => {
+    return streamAgent(...args);
+  });
 
   const agentStorage: AgentStorage = Object.create(AgentStorage.prototype);
   const upsert = vi.fn();
@@ -367,7 +377,9 @@ it("does not notify archived callers", async () => {
     }),
   );
   Reflect.set(agentManager, "hasInFlightRun", vi.fn().mockReturnValue(false));
-  Reflect.set(agentManager, "streamAgent", streamAgentSpy);
+  Reflect.set(agentManager, "startAuthorizedAgentStream", async (...args: unknown[]) => {
+    return streamAgentSpy(...args);
+  });
   Reflect.set(agentManager, "replaceAgentRun", replaceAgentRunSpy);
 
   const agentStorageGetSpy = vi.fn(async (agentId: string) =>

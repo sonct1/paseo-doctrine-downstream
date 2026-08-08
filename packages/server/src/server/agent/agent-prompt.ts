@@ -4,7 +4,6 @@ import type { AgentPromptInput, AgentRunOptions } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
-import { withAgentAuthorityLock } from "./agent-authority-lock.js";
 import { assertAgentPromptLease } from "./lead-handoffs.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 
@@ -12,7 +11,11 @@ export type AgentUnarchiveController = Pick<AgentManager, "notifyAgentState" | "
 
 export type AgentRunController = Pick<
   AgentManager,
-  "getAgent" | "tryRunOutOfBand" | "hasInFlightRun" | "replaceAgentRun" | "streamAgent"
+  | "getAgent"
+  | "tryRunOutOfBandAuthorized"
+  | "hasInFlightRun"
+  | "replaceAgentRun"
+  | "startAuthorizedAgentStream"
 >;
 
 export interface StartAgentRunOptions {
@@ -43,14 +46,14 @@ export async function startAgentRun(
   // Out-of-band commands (e.g. /goal pause) must run WITHOUT canceling an
   // in-flight turn — replaceAgentRun would interrupt the running turn. The
   // intercept lives at this layer so it covers every prompt entrypoint.
-  if (agentManager.tryRunOutOfBand(agentId, prompt, options?.runOptions)) {
+  if (await agentManager.tryRunOutOfBandAuthorized(agentId, prompt, options?.runOptions)) {
     return { outOfBand: true };
   }
   const shouldReplace = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
   const runOptions = options?.runOptions;
   const iterator = shouldReplace
     ? await agentManager.replaceAgentRun(agentId, prompt, runOptions)
-    : agentManager.streamAgent(agentId, prompt, runOptions);
+    : await agentManager.startAuthorizedAgentStream(agentId, prompt, runOptions);
   logger.trace(
     {
       agentId,
@@ -181,36 +184,34 @@ export async function waitForAgentRunStartWithTimeout(
 export async function sendPromptToAgent(
   params: SendPromptToAgentParams,
 ): Promise<{ outOfBand: boolean }> {
-  return withAgentAuthorityLock(params.agentId, async () => {
-    const unarchive = params.unarchive ?? true;
+  const unarchive = params.unarchive ?? true;
 
-    const record = await params.agentStorage.get(params.agentId);
-    assertAgentPromptLease(record);
-    if (record?.archivedAt) {
-      if (!unarchive) {
-        return { outOfBand: false };
-      }
-      await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
+  const record = await params.agentStorage.get(params.agentId);
+  assertAgentPromptLease(record);
+  if (record?.archivedAt) {
+    if (!unarchive) {
+      return { outOfBand: false };
     }
+    await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
+  }
 
-    await ensureAgentLoaded(params.agentId, {
-      agentManager: params.agentManager,
-      agentStorage: params.agentStorage,
-      logger: params.logger,
-    });
+  await ensureAgentLoaded(params.agentId, {
+    agentManager: params.agentManager,
+    agentStorage: params.agentStorage,
+    logger: params.logger,
+  });
 
-    if (params.sessionMode) {
-      await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
-    }
+  if (params.sessionMode) {
+    await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
+  }
 
-    const runOptions = params.messageId
-      ? { ...params.runOptions, clientMessageId: params.messageId }
-      : params.runOptions;
+  const runOptions = params.messageId
+    ? { ...params.runOptions, clientMessageId: params.messageId }
+    : params.runOptions;
 
-    return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
-      replaceRunning: params.replaceRunning ?? true,
-      runOptions,
-    });
+  return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
+    replaceRunning: params.replaceRunning ?? true,
+    runOptions,
   });
 }
 

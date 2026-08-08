@@ -83,8 +83,10 @@ Authority:
 Các receipt trước final release không đổi authority. `predecessor_released` chỉ được ghi ở idle boundary;
 transition này atomically chuyển `currentWriteOwnerAgentId` sang successor và daemon từ chối mọi prompt
 mới hoặc unarchive-and-prompt cho predecessor bằng `agent_write_lease_released`. Nó không detach,
-archive hoặc đổi role binding. Nếu runtime tools chưa available, dừng ở manual frozen packet và báo
-UNKNOWN; không dùng chat prose giả làm receipt.
+archive hoặc đổi role binding. Released predecessor identity không được tái dùng làm successor; một
+handoff quay lại cùng người/vai trò phải tạo fresh role-bound Lead identity để historical revocation
+không nhập nhằng. Nếu runtime tools chưa available, dừng ở manual frozen packet và báo UNKNOWN; không
+dùng chat prose giả làm receipt.
 
 ## Skill usage
 

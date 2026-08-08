@@ -46,6 +46,8 @@ import {
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import { withAgentAuthorityLock } from "./agent-authority-lock.js";
+import { assertAgentPromptLease } from "./lead-handoffs.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -672,6 +674,7 @@ export class AgentManager {
   private readonly agentsAwaitingInitialSnapshotPersist = new Set<string>();
   private readonly sessionEventTails = new Map<string, Promise<void>>();
   private readonly runs = new AgentRunState();
+  private readonly outOfBandRuns = new Set<string>();
   private readonly subscribers = new Set<SubscriptionRecord>();
   private readonly idFactory: () => string;
   private readonly registry?: AgentStorage;
@@ -868,7 +871,8 @@ export class AgentManager {
     return (
       agent.lifecycle === "running" ||
       Boolean(agent.activeForegroundTurnId) ||
-      this.runs.hasRun(agentId)
+      this.runs.hasRun(agentId) ||
+      this.outOfBandRuns.has(agentId)
     );
   }
 
@@ -2031,7 +2035,7 @@ export class AgentManager {
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
   ): Promise<AgentRunResult> {
-    const events = this.streamAgent(agentId, prompt, options);
+    const events = await this.startAuthorizedAgentStream(agentId, prompt, options);
     const timeline: AgentTimelineItem[] = [];
     let finalText = "";
     let usage: AgentUsage | undefined;
@@ -2065,6 +2069,38 @@ export class AgentManager {
     };
   }
 
+  async startAuthorizedAgentStream(
+    agentId: string,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<AsyncGenerator<AgentStreamEvent>> {
+    return withAgentAuthorityLock(agentId, async () => {
+      const agent = this.requireAgent(agentId);
+      const record = this.registry?.getCached(agentId) ?? null;
+      if (this.registry && agent.roleBinding && !record) {
+        throw new Error(`agent_write_lease_state_unavailable: ${agentId}`);
+      }
+      assertAgentPromptLease(record);
+      return this.streamAgent(agentId, prompt, options);
+    });
+  }
+
+  async tryRunOutOfBandAuthorized(
+    agentId: string,
+    prompt: AgentPromptInput,
+    options?: AgentRunOptions,
+  ): Promise<boolean> {
+    return withAgentAuthorityLock(agentId, async () => {
+      const agent = this.requireAgent(agentId);
+      const record = this.registry?.getCached(agentId) ?? null;
+      if (this.registry && agent.roleBinding && !record) {
+        throw new Error(`agent_write_lease_state_unavailable: ${agentId}`);
+      }
+      assertAgentPromptLease(record);
+      return this.tryRunOutOfBand(agentId, prompt, options);
+    });
+  }
+
   /**
    * Try to run a prompt out-of-band — i.e. without allocating a foreground turn
    * and without canceling any active turn. Returns true when the session
@@ -2082,6 +2118,7 @@ export class AgentManager {
       this.recordSubmittedPrompt(agent, prompt, options.clientMessageId);
       this.emitState(agent);
     }
+    this.outOfBandRuns.add(agentId);
     const dispatch = (event: AgentStreamEvent): void => {
       // Persist timeline items so they show up in fetchAgentTimeline; broadcast
       // for live subscribers. Other event types are broadcast only.
@@ -2107,6 +2144,8 @@ export class AgentManager {
           provider: agent.provider,
           item: { type: "assistant_message", text: `[Error] ${text}` },
         });
+      } finally {
+        this.outOfBandRuns.delete(agentId);
       }
     })();
     return true;
@@ -2359,7 +2398,7 @@ export class AgentManager {
       !snapshot.activeForegroundTurnId &&
       !this.runs.hasRun(agentId)
     ) {
-      return this.streamAgent(agentId, prompt, options);
+      return this.startAuthorizedAgentStream(agentId, prompt, options);
     }
 
     const agent = this.requireSessionAgent(agentId);
@@ -2370,7 +2409,7 @@ export class AgentManager {
 
     try {
       await this.cancelAgentRunBefore(agentId, "replace");
-      return this.streamAgent(agentId, prompt, options);
+      return this.startAuthorizedAgentStream(agentId, prompt, options);
     } catch (error) {
       const latest = this.agents.get(agentId);
       if (latest) {
