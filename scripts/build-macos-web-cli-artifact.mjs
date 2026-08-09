@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
@@ -212,7 +212,7 @@ exec "$ROOT/runtime/bin/node" "$ROOT/app/node_modules/@getpaseo/foundation-cli/d
   );
 }
 
-function installerScript() {
+export function installerScript() {
   return `#!/bin/sh
 set -eu
 
@@ -274,6 +274,62 @@ RELEASE_DIR="$RELEASES_DIR/$VERSION"
 CURRENT_LINK="$PREFIX/current"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 USER_ID=$(id -u)
+
+EXISTING_PASEO=$(command -v paseo 2>/dev/null || true)
+if [ -z "$EXISTING_PASEO" ]; then
+  for candidate in "$HOME/.local/bin/paseo" "$PREFIX/current/bin/paseo" /opt/homebrew/bin/paseo /usr/local/bin/paseo; do
+    if [ -x "$candidate" ]; then
+      EXISTING_PASEO="$candidate"
+      break
+    fi
+  done
+fi
+if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
+  PREFLIGHT_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/paseo-downstream-preflight.XXXXXX")
+  trap 'rm -rf "$PREFLIGHT_ROOT"' EXIT INT TERM
+  if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/status.json"; then
+    echo "Refusing to replace the existing Paseo installation because daemon status could not be read." >&2
+    exit 1
+  fi
+  if grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"(running|unresponsive)"' "$PREFLIGHT_ROOT/status.json"; then
+    if ! PASEO_HOST= "$EXISTING_PASEO" ls --global --json > "$PREFLIGHT_ROOT/agents.json"; then
+      echo "Refusing to stop the existing daemon because agent state could not be read." >&2
+      exit 1
+    fi
+    if grep -Eq '"status"[[:space:]]*:[[:space:]]*"(running|starting|initializing)"' "$PREFLIGHT_ROOT/agents.json"; then
+      echo "Refusing to replace Paseo while an agent is running or starting." >&2
+      exit 1
+    fi
+
+    if ! PASEO_HOST= "$EXISTING_PASEO" workspace ls --json > "$PREFLIGHT_ROOT/workspaces.json"; then
+      echo "Refusing to stop the existing daemon because workspace state could not be read." >&2
+      exit 1
+    fi
+    awk -F '"' '/"workspaceId"[[:space:]]*:/ { print $4 }' "$PREFLIGHT_ROOT/workspaces.json" |
+      while IFS= read -r workspace_id; do
+        [ -n "$workspace_id" ] || continue
+        scripts_file="$PREFLIGHT_ROOT/scripts-$workspace_id.json"
+        if ! PASEO_HOST= "$EXISTING_PASEO" script ls --workspace "$workspace_id" --json > "$scripts_file"; then
+          echo "Refusing to stop the existing daemon because scripts for workspace $workspace_id could not be read." >&2
+          exit 1
+        fi
+        if grep -Eq '"lifecycle"[[:space:]]*:[[:space:]]*"(running|starting)"' "$scripts_file"; then
+          echo "Refusing to replace Paseo while workspace $workspace_id has a running script." >&2
+          exit 1
+        fi
+      done
+
+    printf 'Existing idle Paseo detected at %s; stopping it before activation.\n' "$EXISTING_PASEO"
+    PASEO_HOST= "$EXISTING_PASEO" daemon stop --json >/dev/null
+    if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/stopped.json" ||
+       ! grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"stopped"' "$PREFLIGHT_ROOT/stopped.json"; then
+      echo "Existing Paseo daemon did not report a stopped readback; installation aborted." >&2
+      exit 1
+    fi
+  fi
+  rm -rf "$PREFLIGHT_ROOT"
+  trap - EXIT INT TERM
+fi
 
 mkdir -p "$RELEASES_DIR" "$BIN_DIR" "$HOME/Library/LaunchAgents"
 STAGING="$RELEASES_DIR/.install-$VERSION-$$"
@@ -339,6 +395,22 @@ if [ "$START" -eq 1 ]; then
   launchctl bootout "gui/$USER_ID/$LABEL" >/dev/null 2>&1 || true
   launchctl bootstrap "gui/$USER_ID" "$PLIST"
   launchctl kickstart -k "gui/$USER_ID/$LABEL"
+  READY=0
+  for _attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    if PASEO_HOST= "$CURRENT_LINK/bin/paseo" daemon status --json > "$PREFIX/daemon-readback.json" 2>/dev/null &&
+       grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"running"' "$PREFIX/daemon-readback.json" &&
+       grep -Eq '"connectedDaemon"[[:space:]]*:[[:space:]]*"reachable"' "$PREFIX/daemon-readback.json"; then
+      READY=1
+      break
+    fi
+    sleep 1
+  done
+  rm -f "$PREFIX/daemon-readback.json"
+  if [ "$READY" -ne 1 ]; then
+    echo "Installed the release, but the downstream daemon failed authoritative startup readback." >&2
+    echo "Inspect $LOG_DIR/daemon.log before retrying." >&2
+    exit 1
+  fi
 fi
 
 cp "$RELEASE_DIR/uninstall.sh" "$PREFIX/uninstall.sh"
@@ -346,6 +418,10 @@ chmod 755 "$PREFIX/uninstall.sh"
 printf 'Installed Paseo WebUI + CLI %s at %s\\n' "$VERSION" "$RELEASE_DIR"
 printf 'CLI: %s\\n' "$BIN_DIR/paseo"
 printf 'WebUI: http://%s\\n' "$LISTEN"
+ACTIVE_PASEO=$(command -v paseo 2>/dev/null || true)
+if [ "$ACTIVE_PASEO" != "$BIN_DIR/paseo" ]; then
+  printf 'PATH notice: add %s to PATH before any other Paseo installation.\\n' "$BIN_DIR" >&2
+fi
 `;
 }
 
@@ -529,4 +605,6 @@ function main() {
   emitArtifact();
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
