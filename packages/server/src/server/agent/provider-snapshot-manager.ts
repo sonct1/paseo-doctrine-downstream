@@ -153,11 +153,10 @@ export interface AgentManagerProviderState {
   providerDefinitions: Partial<
     Record<
       AgentProvider,
-      {
-        enabled: boolean;
-        derivedFromProviderId: string | null;
-        roleBindingSupport: ProviderRoleBindingSupport;
-      }
+      Pick<
+        ProviderDefinition,
+        "enabled" | "derivedFromProviderId" | "validateOptions" | "applyOptions" | "applyToolPolicy"
+      > & { roleBindingSupport: ProviderRoleBindingSupport }
     >
   >;
   clients: Partial<Record<AgentProvider, AgentClient>>;
@@ -283,6 +282,9 @@ export class ProviderSnapshotManager {
         enabled: definition.enabled,
         derivedFromProviderId: definition.derivedFromProviderId,
         roleBindingSupport: this.getRoleBindingSupport(provider),
+        validateOptions: definition.validateOptions,
+        applyOptions: definition.applyOptions,
+        applyToolPolicy: definition.applyToolPolicy,
       };
       if (definition.enabled) {
         clients[provider] = this.ensureClient(provider, definition);

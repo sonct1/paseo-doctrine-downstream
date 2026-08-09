@@ -1,4 +1,6 @@
 import type { Logger } from "pino";
+import type { ProviderOptions, ToolPolicy } from "@getpaseo/protocol/agent-types";
+import { z } from "zod";
 
 import type {
   AgentClient,
@@ -15,6 +17,7 @@ import type {
   ResolveAgentCreateConfigInput,
   ResolveAgentCreateConfigResult,
   ResolveAgentDefaultModeInput,
+  AgentSessionConfig,
 } from "./agent-sdk-types.js";
 import {
   isDefaultAgentCreateConfigUnattended,
@@ -35,6 +38,7 @@ import { CodexAppServerAgentClient } from "./providers/codex-app-server-agent.js
 import { CopilotACPAgentClient } from "./providers/copilot-acp-agent.js";
 import { CursorACPAgentClient } from "./providers/cursor-acp-agent.js";
 import { GenericACPAgentClient } from "./providers/generic-acp-agent.js";
+import { KimiACPAgentClient } from "./providers/kimi-acp-agent.js";
 import { KiroACPAgentClient } from "./providers/kiro-acp-agent.js";
 import { OpenCodeAgentClient } from "./providers/opencode-agent.js";
 import { OmpAgentClient } from "./providers/omp/agent.js";
@@ -43,6 +47,10 @@ import { PiRpcAgentClient } from "./providers/pi/agent.js";
 import { TraeACPAgentClient } from "./providers/trae-acp-agent.js";
 import { MockLoadTestAgentClient } from "./providers/mock-load-test-agent.js";
 import { MockSlowProviderClient } from "./providers/mock-slow-provider.js";
+import { ClaudeProviderOptionsSchema } from "./providers/claude/options.js";
+import { CodexProviderOptionsSchema } from "./providers/codex/options.js";
+import { OpenCodeProviderOptionsSchema } from "./providers/opencode/options.js";
+import { ToolPolicyUnsupportedError, validateProviderOptions } from "./provider-options.js";
 import {
   AGENT_PROVIDER_DEFINITIONS,
   BUILTIN_PROVIDER_IDS,
@@ -59,6 +67,59 @@ function commandBasename(command: string): string {
   return command.split(/[\\/]/u).at(-1) ?? command;
 }
 
+function isAntigravityAcpProvider(override: ProviderOverride, executable: string): boolean {
+  return (
+    override.roleBinding?.driver === "antigravity-custom-agent" ||
+    executable === "agy-acp" ||
+    executable === "agy-acp.exe"
+  );
+}
+
+function createDerivedAcpClient(
+  logger: Logger,
+  command: [string, ...string[]],
+  override: ProviderOverride,
+  providerId: string,
+): AgentClient {
+  const acpOptions = {
+    logger,
+    command,
+    env: override.env,
+    providerId,
+    label: override.label ?? providerId,
+    providerParams: override.params,
+  };
+  const executable = commandBasename(command[0]);
+  if (
+    override.roleBinding?.driver === "cursor-workspace-rule" ||
+    override.roleBinding?.driver === "cursor-plugin" ||
+    executable === "cursor-agent" ||
+    executable === "cursor-agent.exe"
+  ) {
+    return new CursorACPAgentClient(acpOptions);
+  }
+  if (isAntigravityAcpProvider(override, executable)) {
+    return new AntigravityACPAgentClient(acpOptions);
+  }
+  if (providerId === "kimi") {
+    return new KimiACPAgentClient(acpOptions);
+  }
+  if (providerId === "kiro") {
+    return new KiroACPAgentClient(acpOptions);
+  }
+  if (providerId === "traecli") {
+    return new TraeACPAgentClient(acpOptions);
+  }
+  return new GenericACPAgentClient(acpOptions);
+}
+
+function requireExtendedProviderId(providerId: string, override: ProviderOverride): string {
+  if (!override.extends) {
+    throw new Error(`Custom provider '${providerId}' requires an extends value`);
+  }
+  return override.extends;
+}
+
 export type { AgentProviderDefinition };
 
 export { AGENT_PROVIDER_DEFINITIONS, getAgentProviderDefinition };
@@ -71,6 +132,17 @@ export interface ProviderDefinition extends AgentProviderDefinition {
    * generic ACP providers (which only extend the literal "acp" sentinel).
    */
   derivedFromProviderId: string | null;
+  optionsSchema: z.ZodType<ProviderOptions>;
+  supportsExactMcpPreapproval: boolean;
+  validateOptions: (options: ProviderOptions | undefined) => ProviderOptions | undefined;
+  applyOptions: (
+    config: AgentSessionConfig,
+    options: ProviderOptions | undefined,
+  ) => AgentSessionConfig;
+  applyToolPolicy: (
+    config: AgentSessionConfig,
+    toolPolicy: ToolPolicy | undefined,
+  ) => AgentSessionConfig;
   createClient: (logger: Logger) => AgentClient;
   resolveCreateConfig: (input: ResolveAgentCreateConfigInput) => ResolveAgentCreateConfigResult;
   isCreateConfigUnattended: (input: AgentCreateConfigUnattendedInput) => boolean;
@@ -120,7 +192,54 @@ interface ResolvedProvider {
   derivedFromProviderId: string | null;
   providerParams?: unknown;
   createBaseClient: (logger: Logger) => AgentClient;
+  contract: ProviderContract;
 }
+
+interface ProviderContract {
+  optionsSchema: z.ZodType<ProviderOptions>;
+  supportsExactMcpPreapproval: boolean;
+  applyToolPolicy?: (provider: string, toolPolicy: ToolPolicy) => ToolPolicy;
+}
+
+const EmptyProviderOptionsSchema: z.ZodType<ProviderOptions> = z.object({}).strict();
+
+const PROVIDER_CONTRACTS: Record<string, ProviderContract> = {
+  claude: { optionsSchema: ClaudeProviderOptionsSchema, supportsExactMcpPreapproval: true },
+  codex: { optionsSchema: CodexProviderOptionsSchema, supportsExactMcpPreapproval: true },
+  opencode: { optionsSchema: OpenCodeProviderOptionsSchema, supportsExactMcpPreapproval: true },
+};
+
+const UNSUPPORTED_PROVIDER_CONTRACT: ProviderContract = {
+  optionsSchema: EmptyProviderOptionsSchema,
+  supportsExactMcpPreapproval: false,
+};
+
+const HUB_E2E_PROVIDER_ID = "hub-e2e";
+const HUB_E2E_MCP_SERVER = "hub";
+const HUB_E2E_TOOL_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/u;
+// The cross-repository Hub harness owns this synthetic provider ID. It exercises the production
+// registry path without extending exact-preapproval support to user-defined ACP providers.
+const HUB_E2E_PROVIDER_CONTRACT: ProviderContract = {
+  optionsSchema: EmptyProviderOptionsSchema,
+  supportsExactMcpPreapproval: true,
+  applyToolPolicy: (provider, toolPolicy) => {
+    for (const grant of toolPolicy.preapproved) {
+      if (
+        grant.kind !== "mcp" ||
+        grant.server !== HUB_E2E_MCP_SERVER ||
+        !HUB_E2E_TOOL_NAME.test(grant.tool)
+      ) {
+        throw new ToolPolicyUnsupportedError(
+          provider,
+          `Provider '${provider}' accepts only exact MCP tool grants for the injected '${HUB_E2E_MCP_SERVER}' server`,
+        );
+      }
+    }
+    return {
+      preapproved: toolPolicy.preapproved.map((grant) => ({ ...grant })),
+    };
+  },
+};
 
 const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
   claude: (logger, runtimeSettings) =>
@@ -579,6 +698,22 @@ function createRegistryEntry(
     ...resolved.definition,
     enabled: resolved.enabled,
     derivedFromProviderId: resolved.derivedFromProviderId,
+    optionsSchema: resolved.contract.optionsSchema,
+    supportsExactMcpPreapproval: resolved.contract.supportsExactMcpPreapproval,
+    validateOptions: (options) =>
+      validateProviderOptions(provider, resolved.contract.optionsSchema, options),
+    applyOptions: (config, options) => ({ ...config, providerOptions: options }),
+    applyToolPolicy: (config, toolPolicy) => {
+      if (toolPolicy && !resolved.contract.supportsExactMcpPreapproval) {
+        throw new ToolPolicyUnsupportedError(provider);
+      }
+      return {
+        ...config,
+        toolPolicy: toolPolicy
+          ? (resolved.contract.applyToolPolicy?.(provider, toolPolicy) ?? toolPolicy)
+          : undefined,
+      };
+    },
     createClient: (providerLogger: Logger) =>
       createResolvedProviderClient(providerLogger, provider, resolved),
     resolveCreateConfig: modelClient.resolveCreateConfig ?? resolveDefaultAgentCreateConfig,
@@ -690,6 +825,7 @@ function buildResolvedBuiltinProviders(
           ompRuntime: options.ompRuntime,
           providerParams: override?.params,
         }),
+      contract: PROVIDER_CONTRACTS[definition.id] ?? UNSUPPORTED_PROVIDER_CONTRACT,
     });
   }
 
@@ -706,11 +842,9 @@ function addDerivedProviders(
       continue;
     }
 
-    if (!override.extends) {
-      throw new Error(`Custom provider '${providerId}' requires an extends value`);
-    }
+    const extendedProviderId = requireExtendedProviderId(providerId, override);
 
-    if (override.extends === "acp") {
+    if (extendedProviderId === "acp") {
       if (!override.command || !isNonEmptyStringArray(override.command)) {
         throw new Error(`ACP provider '${providerId}' requires a command`);
       }
@@ -737,44 +871,16 @@ function addDerivedProviders(
         enabled: override.enabled !== false,
         derivedFromProviderId: null,
         providerParams: override.params,
-        createBaseClient: (logger) => {
-          const acpOptions = {
-            logger,
-            command,
-            env: override.env,
-            providerId,
-            label: override.label ?? providerId,
-            providerParams: override.params,
-          };
-          const executable = commandBasename(command[0]);
-          if (
-            override.roleBinding?.driver === "cursor-workspace-rule" ||
-            override.roleBinding?.driver === "cursor-plugin" ||
-            executable === "cursor-agent" ||
-            executable === "cursor-agent.exe"
-          ) {
-            return new CursorACPAgentClient(acpOptions);
-          }
-          if (
-            override.roleBinding?.driver === "antigravity-custom-agent" ||
-            executable === "agy-acp" ||
-            executable === "agy-acp.exe"
-          ) {
-            return new AntigravityACPAgentClient(acpOptions);
-          }
-          if (providerId === "kiro") {
-            return new KiroACPAgentClient(acpOptions);
-          }
-          if (providerId === "traecli") {
-            return new TraeACPAgentClient(acpOptions);
-          }
-          return new GenericACPAgentClient(acpOptions);
-        },
+        createBaseClient: (logger) => createDerivedAcpClient(logger, command, override, providerId),
+        contract:
+          providerId === HUB_E2E_PROVIDER_ID
+            ? HUB_E2E_PROVIDER_CONTRACT
+            : UNSUPPORTED_PROVIDER_CONTRACT,
       });
       continue;
     }
 
-    const baseProviderId = override.extends;
+    const baseProviderId = extendedProviderId;
     const baseProvider = resolvedProviders.get(baseProviderId);
     if (!baseProvider) {
       throw new Error(
@@ -814,6 +920,7 @@ function addDerivedProviders(
             credentialRef: override.credentialRef,
           },
         }),
+      contract: baseProvider.contract,
     });
   }
 }
