@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.1-paseo.1 - 2026-08-10
+
+This downstream release is based on upstream Paseo 0.3.1.
+
+### Added
+
+- Run a role-governed Council from any workspace, with independent seats, sealed review rounds, material-proposition verification, and a binding Lead verdict.
+- Inspect Council progress and reports through a dedicated WebUI experience.
+- Admit repositories through graduated Workspace Protocol checks in the WebUI and record the effective assignment contract.
+- Hand work between agents through durable SLP handoffs and native coordination signals.
+- Install and update the downstream macOS Web/CLI distribution with architecture-specific, checksum-verified release artifacts.
+
+### Improved
+
+- Foundation role profiles, topology, provider routing, and execution receipts now stay aligned across WebUI, CLI, MCP, and runtime admission.
+- Release builds preserve the downstream Foundation overlay while incorporating upstream Paseo 0.3.1.
+
 ## 0.3.1 - 2026-08-09
 
 ### Added
