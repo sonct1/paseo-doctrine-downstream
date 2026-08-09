@@ -1,0 +1,98 @@
+name: Downstream macOS Release
+
+on:
+  push:
+    tags:
+      - "paseo-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing paseo-v* tag to build and publish"
+        required: true
+        type: string
+
+concurrency:
+  group: downstream-macos-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.0"
+          cache: npm
+
+      - name: Validate downstream tag
+        shell: bash
+        run: |
+          case "$RELEASE_TAG" in
+            paseo-v*) ;;
+            *) echo "Expected paseo-v* tag, got $RELEASE_TAG" >&2; exit 1 ;;
+          esac
+          package_version=$(node -p "require('./package.json').version")
+          test "${RELEASE_TAG#paseo-v}" = "$package_version"
+          test "$(node -p process.arch)" = "${{ matrix.arch }}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test downstream bootstrap installer
+        run: npm run test:install-macos
+
+      - name: Build downstream WebUI + CLI artifact
+        run: npm run build:macos-web-cli-artifact
+
+      - name: Smoke artifact
+        run: npm run test:macos-web-cli-artifact
+
+      - name: Create release if needed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Paseo Foundation Downstream ${RELEASE_TAG#paseo-v}" \
+              --prerelease \
+              --notes "macOS WebUI + CLI distribution with the bundled Paseo Foundation." || \
+              gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          fi
+
+      - name: Upload verified release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          base="artifacts/paseo-web-cli-$version-macos-${{ matrix.arch }}.tar.gz"
+          gh release upload "$RELEASE_TAG" "$base" "$base.sha256" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paseo-web-cli-macos-${{ matrix.arch }}
+          path: |
+            artifacts/paseo-web-cli-*-macos-${{ matrix.arch }}.tar.gz
+            artifacts/paseo-web-cli-*-macos-${{ matrix.arch }}.tar.gz.sha256

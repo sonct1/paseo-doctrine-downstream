@@ -1,174 +1,114 @@
-<p align="center">
-  <img src="packages/website/public/logo.svg" width="64" height="64" alt="Paseo logo">
-</p>
+# Paseo Foundation Downstream
 
-<h1 align="center">Paseo</h1>
+Đây là bản phân phối downstream của Paseo dành cho workflow có role và skill của Paseo Foundation.
+Nó đóng gói WebUI, CLI, Node runtime và Foundation thành một artifact macOS tự chứa. Đây **không phải**
+installer chính chủ từ `getpaseo/paseo`; mọi artifact cài đặt đều được phát hành từ
+[`webplode/paseo-doctrine-downstream`](https://github.com/webplode/paseo-doctrine-downstream).
 
-<p align="center">
-  <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">简体中文</a> ·
-  <a href="README.ja.md">日本語</a>
-</p>
+## Cài trên macOS
 
-<p align="center">
-  <a href="https://github.com/getpaseo/paseo/stargazers">
-    <img src="https://img.shields.io/github/stars/getpaseo/paseo?style=flat&logo=github" alt="GitHub stars">
-  </a>
-  <a href="https://github.com/getpaseo/paseo/releases">
-    <img src="https://img.shields.io/github/v/release/getpaseo/paseo?style=flat&logo=github" alt="GitHub release">
-  </a>
-  <a href="https://x.com/moboudra">
-    <img src="https://img.shields.io/badge/%40moboudra-555?logo=x" alt="X">
-  </a>
-  <a href="https://discord.gg/jz8T2uahpH">
-    <img src="https://img.shields.io/badge/Discord-555?logo=discord" alt="Discord">
-  </a>
-  <a href="https://www.reddit.com/r/PaseoAI/">
-    <img src="https://img.shields.io/badge/Reddit-555?logo=reddit" alt="Reddit">
-  </a>
-</p>
+Yêu cầu:
 
-<p align="center">One interface for Claude Code, Codex, Copilot, OpenCode, and Pi agents.</p>
+- macOS Apple Silicon (`arm64`) hoặc Intel (`x64`);
+- `curl`, `tar` và `shasum` có sẵn trong hệ thống;
+- ít nhất một provider CLI đã được cài và đăng nhập, ví dụ Claude Code hoặc Codex.
 
-<p align="center">
-  <img src="https://paseo.sh/hero-mockup.png" alt="Paseo app screenshot" width="100%">
-</p>
-
-<p align="center">
-  <img src="https://paseo.sh/mobile-mockup.png" alt="Paseo mobile app" width="100%">
-</p>
-
-Run agents in parallel on your own machines. Ship from your phone or your desk.
-
-- **Self-hosted:** Agents run on your machine with your full dev environment. Use your tools, your configs, and your skills.
-- **Multi-provider:** Claude Code, Codex, Copilot, OpenCode, and Pi through the same interface. Pick the right model for each job.
-- **Voice control:** Dictate tasks or talk through problems in voice mode. Hands-free when you need it.
-- **Cross-device:** iOS, Android, desktop, web, and CLI. Start work at your desk, check in from your phone, script it from the terminal.
-- **Privacy-first:** Paseo doesn't have any telemetry, tracking, or forced log-ins.
-
-## Getting Started
-
-Paseo runs a local server called the daemon that manages your coding agents. Clients like the desktop app, mobile app, web app, and CLI connect to it.
-
-### Prerequisites
-
-You need at least one agent CLI installed and configured with your credentials:
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [Codex](https://github.com/openai/codex)
-- [GitHub Copilot](https://github.com/features/copilot/cli/)
-- [OpenCode](https://github.com/anomalyco/opencode)
-- [Pi](https://pi.dev)
-
-### Desktop app (recommended)
-
-Download it from [paseo.sh/download](https://paseo.sh/download) or the [GitHub releases page](https://github.com/getpaseo/paseo/releases). Open the app and the daemon starts automatically. Nothing else to install.
-
-To connect from your phone, open **Settings → your host → Pair Device**.
-
-### CLI / headless
-
-Install the CLI and start Paseo:
+Cài release downstream mới nhất bằng một lệnh:
 
 ```bash
-npm install -g @getpaseo/cli
-paseo
+curl -fsSL https://raw.githubusercontent.com/webplode/paseo-doctrine-downstream/main/scripts/install-macos.sh | sh
 ```
 
-Paseo starts locally, then asks whether to enable the end-to-end encrypted relay for device pairing. If you decline, connect directly over TCP, Tailscale, or another VPN. This path is useful for servers and remote machines.
-
-For full setup and configuration, see:
-
-- [Docs](https://paseo.sh/docs)
-- [Connectivity guide](https://paseo.sh/docs/connectivity)
-- [Configuration reference](https://paseo.sh/docs/configuration)
-- [Paseo Foundation product guide](docs/foundation-product.md)
-
-### Docker
-
-Run the Paseo daemon and self-hosted web UI in Docker:
+Muốn đọc script trước khi chạy:
 
 ```bash
-docker run -d --name paseo \
-  -p 6767:6767 \
-  -e PASEO_PASSWORD=change-me \
-  -v "$PWD/paseo-home:/home/paseo" \
-  -v "$PWD:/workspace" \
-  ghcr.io/getpaseo/paseo:latest
+curl -fsSL https://raw.githubusercontent.com/webplode/paseo-doctrine-downstream/main/scripts/install-macos.sh -o /tmp/paseo-install-macos.sh
+less /tmp/paseo-install-macos.sh
+sh /tmp/paseo-install-macos.sh
 ```
 
-Open `http://localhost:6767` after it starts. Extend the base image with the agent CLIs you use, then provide credentials through environment variables or the persistent `/home/paseo` volume. See the [Docker documentation](docs/docker.md) for full setup details.
+Installer sẽ:
 
-## CLI
+1. chọn release downstream được publish mới nhất, kể cả prerelease, và đúng kiến trúc máy;
+2. tải artifact cùng file SHA-256 rồi xác minh trước khi giải nén;
+3. phát hiện Paseo đang có trên `PATH`;
+4. từ chối thay thế nếu có agent hoặc workspace script đang chạy/khởi động;
+5. dừng daemon cũ khi nó đang chạy nhưng đã idle, cài bản mới theo version, rồi đọc lại trạng thái;
+6. giữ nguyên dữ liệu và cấu hình người dùng trong `~/.paseo`.
 
-Everything you can do in the app, you can do from the terminal.
+Mặc định, bản cài nằm ở:
 
-```bash
-paseo run --provider claude/opus-4.6 "implement user authentication"
-paseo run --provider codex/gpt-5.4 --worktree feature-x "implement feature X"
-
-paseo ls                           # list running agents
-paseo attach abc123                # stream live output
-paseo send abc123 "also add tests" # follow-up task
-
-# run on a remote daemon
-paseo --host workstation.local:6767 run "run the full test suite"
+```text
+~/.local/share/paseo-web-cli/releases/<version>
+~/.local/share/paseo-web-cli/current
+~/.local/bin/paseo
+~/.local/bin/paseo-foundation
+~/.local/share/paseo-foundation
+~/Library/LaunchAgents/com.paseo.web-cli.plist
 ```
 
-See the [full CLI reference](https://paseo.sh/docs/cli) for more.
-
-## Skills
-
-Skills teach your agent to use Paseo to orchestrate other agents.
+Nếu `~/.local/bin` chưa có trong `PATH`, thêm dòng này vào `~/.zprofile` rồi mở terminal mới:
 
 ```bash
-npx skills add getpaseo/paseo
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then use them in any agent conversation:
-
-- `/paseo-handoff` — hand off work between agents. I use this to plan with Claude and then handoff to Codex to implement.
-- `/paseo-loop` — loop an agent against clear acceptance criteria (aka Ralph loops), optionally with a verifier.
-- `/paseo-advisor` — spin up a single agent as an advisor for a second opinion, without delegating the work itself.
-- `/paseo-committee` — form a committee of two contrasting agents to step back, do root cause analysis, and produce a plan.
-
-## Development
-
-Quick monorepo package map:
-
-- `packages/server`: Paseo daemon (agent process orchestration, WebSocket API, MCP server)
-- `packages/app`: Expo client (iOS, Android, web)
-- `packages/cli`: `paseo` CLI for daemon and agent workflows
-- `packages/foundation-cli`: macOS Foundation inspection, install, upgrade, doctor, rollback, and uninstall
-- `packages/desktop`: Electron desktop app
-- `packages/relay`: Relay transport and encryption used by the daemon and clients
-- `packages/website`: Marketing site and documentation (`paseo.sh`)
-
-Common commands:
+Kiểm tra sau khi cài:
 
 ```bash
-# run all local dev services
-npm run dev
+~/.local/bin/paseo --version
+~/.local/bin/paseo daemon status
+~/.local/bin/paseo-foundation doctor
+open http://127.0.0.1:6767
+```
 
-# run individual surfaces
-npm run dev:server
-npm run dev:app
-npm run dev:desktop
-npm run dev:website
+Chỉ cài file, không dừng hoặc khởi động daemon:
 
-# build the server stack
+```bash
+curl -fsSL https://raw.githubusercontent.com/webplode/paseo-doctrine-downstream/main/scripts/install-macos.sh | sh -s -- --no-start
+```
+
+Chạy lại one-liner để nâng cấp. Installer ghi release mới vào thư mục version riêng và cập nhật symlink
+`current`; nó không cài đè dữ liệu trong `~/.paseo`.
+
+> Release phải có đủ artifact `arm64` và `x64`. Nếu release mới nhất chưa publish artifact tương ứng,
+> installer sẽ fail closed thay vì chuyển sang installer chính chủ hoặc âm thầm chọn build khác.
+
+## Foundation đi kèm
+
+Artifact cài Foundation distribution và project role bindings vào các provider được hỗ trợ. Bundle mặc định:
+
+- Lead: không có standing audit skill; `repo-refresh` chỉ được cấp explicit khi cần.
+- Peer: `frontend-design`.
+- Supervisor: `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit`.
+- `ultra-review` được đóng gói nhưng không bật mặc định cho role nào.
+
+Đọc [Foundation product guide](docs/foundation-product.md) để xem role contract, provider projection và
+các lệnh `inspect`, `plan`, `install`, `doctor`, `rollback`.
+
+## Gỡ cài đặt
+
+```bash
+~/.local/share/paseo-web-cli/uninstall.sh
+```
+
+Lệnh trên giữ `~/.paseo`, workspace và Foundation distribution. Chỉ xóa cả Foundation khi chủ động yêu cầu:
+
+```bash
+~/.local/share/paseo-web-cli/uninstall.sh --purge-foundation
+```
+
+## Phát triển và phát hành
+
+```bash
+npm ci
 npm run build:server
-
-# repo-wide checks
-npm run typecheck
+npm run build:macos-web-cli-artifact
+npm run test:macos-web-cli-artifact
 ```
 
-## Related projects
+Tag dạng `paseo-v<package-version>` kích hoạt workflow build artifact macOS cho `arm64` và `x64`, smoke
+test, rồi upload tarball cùng checksum vào GitHub Release của downstream.
 
-- [getpaseo/paseo-relay](https://github.com/getpaseo/paseo-relay) — official distributed relay, written in Elixir
-- [paseo-skins](https://github.com/huangguang1999/paseo-skins) — community themes and a zero-patch desktop theme loader with an Agent Skill
-- [paseo-vscode](https://marketplace.visualstudio.com/items?itemName=hinnes.paseo-vscode) — VS Code extension
-
-## License
-
-AGPL-3.0
+Paseo Foundation Downstream kế thừa mã nguồn từ
+[`getpaseo/paseo`](https://github.com/getpaseo/paseo). License: AGPL-3.0.

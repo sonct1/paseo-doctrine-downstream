@@ -24,6 +24,9 @@ cd "$(dirname "$ARTIFACT")"
 /usr/bin/tar -xzf "$ARTIFACT" -C "$SMOKE_ROOT"
 BUNDLE="$SMOKE_ROOT/$BUNDLE_NAME"
 
+rg -q 'Refusing to replace Paseo while an agent is running or starting' "$BUNDLE/install.sh"
+rg -q 'failed authoritative startup readback' "$BUNDLE/install.sh"
+
 mkdir -p "$SMOKE_ROOT/help-home"
 HOME="$SMOKE_ROOT/help-home" "$BUNDLE/install.sh" --help >/dev/null
 HELP_FILES=$(find "$SMOKE_ROOT/help-home" -mindepth 1 -print | wc -l | tr -d ' ')
