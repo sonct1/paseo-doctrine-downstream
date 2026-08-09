@@ -3,7 +3,11 @@ set -eu
 
 REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 VERSION=$(node -p "require('$REPO_ROOT/package.json').version")
-ARCH=$(uname -m)
+case "$(uname -m)" in
+  arm64) ARCH="arm64" ;;
+  x86_64) ARCH="x64" ;;
+  *) echo "Unsupported macOS architecture: $(uname -m)" >&2; exit 1 ;;
+esac
 BUNDLE_NAME="paseo-web-cli-$VERSION-macos-$ARCH"
 ARTIFACT="$REPO_ROOT/artifacts/$BUNDLE_NAME.tar.gz"
 CHECKSUM="$ARTIFACT.sha256"

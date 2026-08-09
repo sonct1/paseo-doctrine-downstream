@@ -183,6 +183,12 @@ test("artifact smoke uses stock macOS inspection commands", () => {
   assert.match(source, /\/usr\/bin\/grep -Fq/);
 });
 
+test("artifact smoke normalizes Intel uname output to the x64 artifact name", () => {
+  const source = readFileSync(artifactSmoke, "utf8");
+  assert.match(source, /x86_64\) ARCH="x64"/);
+  assert.match(source, /macos-\$ARCH/);
+});
+
 test("release lock retains Lightning CSS binaries for both macOS architectures", () => {
   const lock = JSON.parse(readFileSync(packageLock, "utf8"));
   for (const arch of ["arm64", "x64"]) {
