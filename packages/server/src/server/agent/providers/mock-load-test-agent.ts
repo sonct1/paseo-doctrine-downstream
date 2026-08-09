@@ -53,6 +53,13 @@ const CAPABILITIES: AgentCapabilityFlags = {
   supportsRewindBoth: true,
 };
 
+function validateMockLaunchContext(launchContext: AgentLaunchContext | undefined): void {
+  const roleBinding = launchContext?.roleBinding;
+  if (roleBinding && roleBinding.instructions.trim().length === 0) {
+    throw new Error("Mock role binding requires non-empty launch instructions");
+  }
+}
+
 const MODELS: AgentModelDefinition[] = [
   {
     provider: MOCK_LOAD_TEST_PROVIDER_ID,
@@ -573,8 +580,9 @@ export class MockLoadTestAgentClient implements AgentClient {
 
   async createSession(
     config: AgentSessionConfig,
-    _launchContext?: AgentLaunchContext,
+    launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
+    validateMockLaunchContext(launchContext);
     return new MockLoadTestAgentSession({
       config,
       sessionId: randomUUID(),
@@ -585,8 +593,9 @@ export class MockLoadTestAgentClient implements AgentClient {
   async resumeSession(
     handle: AgentPersistenceHandle,
     overrides?: Partial<AgentSessionConfig>,
-    _launchContext?: AgentLaunchContext,
+    launchContext?: AgentLaunchContext,
   ): Promise<AgentSession> {
+    validateMockLaunchContext(launchContext);
     const metadata = (handle.metadata ?? {}) as Partial<AgentSessionConfig>;
     return new MockLoadTestAgentSession({
       config: {

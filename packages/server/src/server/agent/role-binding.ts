@@ -92,6 +92,13 @@ function commandBasename(command: string): string {
 }
 
 function resolveBuiltInRoleBindingSupport(family: string): ProviderRoleBindingSupport | null {
+  if (family === "mock") {
+    return {
+      status: "supported",
+      injectionMethod: "mock-launch-context",
+      notice: "Development-only synthetic provider; role instructions are bound at session launch.",
+    };
+  }
   const injectionMethods: Partial<Record<string, RoleBindingInjectionMethod>> = {
     codex: "codex-developer-instructions",
     claude: "claude-system-prompt",

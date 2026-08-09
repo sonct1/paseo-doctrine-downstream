@@ -49,6 +49,26 @@ describe("MockLoadTestAgentClient", () => {
     });
   });
 
+  test("accepts role instructions through its development-only launch context", async () => {
+    const client = new MockLoadTestAgentClient();
+    const config = {
+      provider: "mock" as const,
+      cwd: process.cwd(),
+      model: "ten-second-stream",
+    };
+
+    await expect(
+      client.createSession(config, {
+        roleBinding: { roleId: "lead", instructions: "Role: Lead" },
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      client.createSession(config, {
+        roleBinding: { roleId: "lead", instructions: "   " },
+      }),
+    ).rejects.toThrow("Mock role binding requires non-empty launch instructions");
+  });
+
   test("rejects the configured number of prompts before starting a retry", async () => {
     const client = new MockLoadTestAgentClient();
     const session = await client.createSession({

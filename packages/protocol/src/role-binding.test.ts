@@ -10,7 +10,7 @@ import {
 describe("Paseo role binding protocol", () => {
   test("publishes the three Foundation roles under one contract version", () => {
     expect(PASEO_ROLE_IDS).toEqual(["lead", "peer", "supervisor"]);
-    expect(PASEO_ROLE_CONTRACT_VERSION).toBe("3.2.0-topology-recovery");
+    expect(PASEO_ROLE_CONTRACT_VERSION).toBe("3.3.0-mandatory-protocol-webui");
   });
 
   test("keeps supported and unsupported provider capability explicit", () => {
@@ -22,6 +22,15 @@ describe("Paseo role binding protocol", () => {
     ).toEqual({
       status: "supported",
       injectionMethod: "codex-developer-instructions",
+    });
+    expect(
+      ProviderRoleBindingSupportSchema.parse({
+        status: "supported",
+        injectionMethod: "mock-launch-context",
+      }),
+    ).toEqual({
+      status: "supported",
+      injectionMethod: "mock-launch-context",
     });
     expect(() => ProviderRoleBindingSupportSchema.parse({ status: "unsupported" })).toThrow();
     expect(() =>

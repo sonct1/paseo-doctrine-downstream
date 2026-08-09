@@ -17,6 +17,10 @@ This downstream release is based on upstream Paseo 0.3.1.
 - Foundation role profiles, topology, provider routing, and execution receipts now stay aligned across WebUI, CLI, MCP, and runtime admission.
 - Release builds preserve the downstream Foundation overlay while incorporating upstream Paseo 0.3.1.
 
+### Fixed
+
+- New-agent drafts wait for model defaults to finish loading before accepting a submission.
+
 ## 0.3.1 - 2026-08-09
 
 ### Added

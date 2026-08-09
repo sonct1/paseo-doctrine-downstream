@@ -289,6 +289,11 @@ describe("native Foundation role materialization", () => {
   });
 
   test("supports Pi and OMP through their native durable instruction channels", () => {
+    expect(resolveProviderRoleBindingSupport("mock")).toEqual({
+      status: "supported",
+      injectionMethod: "mock-launch-context",
+      notice: "Development-only synthetic provider; role instructions are bound at session launch.",
+    });
     expect(resolveProviderRoleBindingSupport("pi")).toEqual({
       status: "supported",
       injectionMethod: "pi-before-agent-start",

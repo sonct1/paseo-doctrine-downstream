@@ -765,6 +765,7 @@ export function WorkspaceDraftAgentTab({
           isPaneFocused={isPaneFocused}
           onSubmitMessage={handleCreateFromInput}
           isSubmitLoading={isSubmitting}
+          isSubmitDisabled={composerState.isModelLoading}
           blurOnSubmit={true}
           value={draftInput.text}
           onChangeText={draftInput.setText}

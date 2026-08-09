@@ -1,5 +1,5 @@
 import { test, expect } from "../support/fixtures";
-import { expectComposerVisible, submitMessage } from "../support/helpers/composer";
+import { expectComposerVisible } from "../support/helpers/composer";
 import { delayCreatedAgentInitialTailResponse } from "../support/helpers/agent-timeline-gate";
 import { delayBrowserAgentCreatedStatus } from "../support/helpers/new-workspace";
 import { seedWorkspace, type SeedDaemonClient } from "../support/helpers/seed-client";
@@ -60,7 +60,12 @@ test.describe("Workspace agent title handoff", () => {
       await expectComposerVisible(page);
 
       const prompt = "Keep the optimistic agent pane visible during handoff";
-      await submitMessage(page, prompt);
+      const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
+      await composer.fill(prompt);
+      await expect(page.getByRole("button", { name: "Send message" }).first()).toBeEnabled({
+        timeout: 30_000,
+      });
+      await composer.press("Enter");
       const agentId = await timelineGate.waitForCreatedAgent();
       await timelineGate.waitForDelayedResponse();
 
@@ -104,7 +109,12 @@ test.describe("Workspace agent title handoff", () => {
 
       const promptTitle = "Investigate optimistic tab title handoff";
       const generatedTitle = "Generated Handoff Title";
-      await submitMessage(page, `${promptTitle}\n\nMake the UI state deterministic.`);
+      const composer = page.getByRole("textbox", { name: "Message agent..." }).first();
+      await composer.fill(`${promptTitle}\n\nMake the UI state deterministic.`);
+      await expect(page.getByRole("button", { name: "Send message" }).first()).toBeEnabled({
+        timeout: 30_000,
+      });
+      await composer.press("Enter");
       await agentCreatedDelay.waitForCreateRequest();
       await agentCreatedDelay.waitForDelayedCreatedStatus();
 
