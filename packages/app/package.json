@@ -63,6 +63,7 @@
     "@xterm/addon-web-links": "^0.13.0-beta.213",
     "@xterm/addon-webgl": "^0.20.0-beta.212",
     "@xterm/xterm": "^6.1.0-beta.213",
+    "@xyflow/react": "12.11.2",
     "buffer": "^6.0.3",
     "expo": "^54.0.18",
     "expo-asset": "~12.0.12",

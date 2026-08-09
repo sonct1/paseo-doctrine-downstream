@@ -49,6 +49,8 @@ function normalizeSimpleWorkspaceTabTarget(value: WorkspaceTabTarget): Workspace
       const browserId = trimNonEmpty(value.browserId);
       return browserId ? { kind: "browser", browserId } : null;
     }
+    case "topology":
+      return { kind: "topology" };
     case "setup": {
       const workspaceId = trimNonEmpty(value.workspaceId);
       return workspaceId ? { kind: "setup", workspaceId } : null;
@@ -104,6 +106,9 @@ export function workspaceTabTargetsEqual(
   }
   if (left.kind === "terminal" && right.kind === "terminal") {
     return left.terminalId === right.terminalId;
+  }
+  if (left.kind === "topology" && right.kind === "topology") {
+    return true;
   }
   return secondaryWorkspaceTabTargetsEqual(left, right);
 }
@@ -178,6 +183,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   }
   if (target.kind === "browser") {
     return `browser_${target.browserId}`;
+  }
+  if (target.kind === "topology") {
+    return "topology";
   }
   if (target.kind === "setup") {
     return `setup_${target.workspaceId}`;

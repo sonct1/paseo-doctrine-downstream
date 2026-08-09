@@ -28,6 +28,7 @@ import {
   Ellipsis,
   Globe,
   Import as ImportIcon,
+  Network,
   PanelRight,
   Pencil,
   RotateCw,
@@ -259,6 +260,7 @@ const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
+const ThemedNetwork = withUnistyles(Network);
 const ThemedSettings = withUnistyles(Settings);
 const ThemedPanelRight = withUnistyles(PanelRight);
 const ThemedSourceControlPanelIcon = withUnistyles(SourceControlPanelIcon);
@@ -288,6 +290,7 @@ const MENU_NEW_AGENT_ICON = <ThemedSquarePen size={16} uniProps={mutedColorMappi
 const MENU_NEW_TERMINAL_ICON = <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
+const MENU_TOPOLOGY_ICON = <ThemedNetwork size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
 const GATED_WORKSPACE_HEADER_LEFT = <SidebarMenuToggle />;
@@ -350,6 +353,7 @@ function getFallbackTabOptionLabel(
     setup: string;
     terminal: string;
     browser: string;
+    topology: string;
     agent: string;
     changes: string;
   },
@@ -365,6 +369,9 @@ function getFallbackTabOptionLabel(
   }
   if (tab.target.kind === "browser") {
     return labels.browser;
+  }
+  if (tab.target.kind === "topology") {
+    return labels.topology;
   }
   if (tab.target.kind === "file") {
     return tab.target.path.split("/").findLast(Boolean) ?? tab.target.path;
@@ -386,6 +393,7 @@ function getFallbackTabOptionDescription(
     agent: string;
     terminal: string;
     browser: string;
+    topology: string;
     changes: string;
   },
 ): string {
@@ -403,6 +411,9 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "browser") {
     return labels.browser;
+  }
+  if (tab.target.kind === "topology") {
+    return labels.topology;
   }
   if (tab.target.kind === "provider_subagent") {
     return labels.agent;
@@ -689,6 +700,7 @@ function MobileWorkspaceTabOption({
       setup: t("workspace.tabs.fallback.setup"),
       terminal: t("workspace.tabs.fallback.terminal"),
       browser: t("workspace.tabs.fallback.browser"),
+      topology: "Topology",
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
     }),
@@ -997,6 +1009,7 @@ interface WorkspaceHeaderMenuProps {
   menuNewTerminalIcon: ReactElement;
   menuNewBrowserIcon: ReactElement;
   menuImportIcon: ReactElement;
+  menuTopologyIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
   onCreateDraftTab: () => void;
@@ -1004,6 +1017,7 @@ interface WorkspaceHeaderMenuProps {
   onCreateTerminalWithProfile: (profile: TerminalProfileInput) => void;
   onCreateBrowser: () => void;
   onOpenImportSheet: () => void;
+  onOpenTopologyTab: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
   onOpenSetupTab: () => void;
@@ -1072,6 +1086,7 @@ function WorkspaceHeaderMenu({
   menuNewTerminalIcon,
   menuNewBrowserIcon,
   menuImportIcon,
+  menuTopologyIcon,
   menuCopyIcon,
   menuSettingsIcon,
   onCreateDraftTab,
@@ -1079,6 +1094,7 @@ function WorkspaceHeaderMenu({
   onCreateTerminalWithProfile,
   onCreateBrowser,
   onOpenImportSheet,
+  onOpenTopologyTab,
   onCopyWorkspacePath,
   onCopyBranchName,
   onOpenSetupTab,
@@ -1135,6 +1151,13 @@ function WorkspaceHeaderMenu({
             {t("workspace.header.actions.newBrowser")}
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem
+          testID="workspace-header-show-topology"
+          leading={menuTopologyIcon}
+          onSelect={onOpenTopologyTab}
+        >
+          Topology
+        </DropdownMenuItem>
         <DropdownMenuItem
           testID="workspace-header-import-agent"
           leading={menuImportIcon}
@@ -1263,6 +1286,7 @@ interface WorkspaceHeaderTitleBarProps {
   menuNewTerminalIcon: ReactElement;
   menuNewBrowserIcon: ReactElement;
   menuImportIcon: ReactElement;
+  menuTopologyIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
   onCreateDraftTab: () => void;
@@ -1270,6 +1294,7 @@ interface WorkspaceHeaderTitleBarProps {
   onCreateTerminalWithProfile: (profile: TerminalProfileInput) => void;
   onCreateBrowser: () => void;
   onOpenImportSheet: () => void;
+  onOpenTopologyTab: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
   onOpenSetupTab: () => void;
@@ -1298,6 +1323,7 @@ function WorkspaceHeaderTitleBar({
   menuNewTerminalIcon,
   menuNewBrowserIcon,
   menuImportIcon,
+  menuTopologyIcon,
   menuCopyIcon,
   menuSettingsIcon,
   onCreateDraftTab,
@@ -1305,6 +1331,7 @@ function WorkspaceHeaderTitleBar({
   onCreateTerminalWithProfile,
   onCreateBrowser,
   onOpenImportSheet,
+  onOpenTopologyTab,
   onCopyWorkspacePath,
   onCopyBranchName,
   onOpenSetupTab,
@@ -1344,6 +1371,7 @@ function WorkspaceHeaderTitleBar({
           menuNewTerminalIcon={menuNewTerminalIcon}
           menuNewBrowserIcon={menuNewBrowserIcon}
           menuImportIcon={menuImportIcon}
+          menuTopologyIcon={menuTopologyIcon}
           menuCopyIcon={menuCopyIcon}
           menuSettingsIcon={menuSettingsIcon}
           onCreateDraftTab={onCreateDraftTab}
@@ -1351,6 +1379,7 @@ function WorkspaceHeaderTitleBar({
           onCreateTerminalWithProfile={onCreateTerminalWithProfile}
           onCreateBrowser={onCreateBrowser}
           onOpenImportSheet={onOpenImportSheet}
+          onOpenTopologyTab={onOpenTopologyTab}
           onCopyWorkspacePath={onCopyWorkspacePath}
           onCopyBranchName={onCopyBranchName}
           onOpenSetupTab={onOpenSetupTab}
@@ -2598,6 +2627,7 @@ function WorkspaceScreenContent({
       workspaceSetup: t("workspace.tabs.fallback.workspaceSetup"),
       terminal: t("workspace.tabs.fallback.terminal"),
       browser: t("workspace.tabs.fallback.browser"),
+      topology: "Topology",
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
     }),
@@ -2977,6 +3007,16 @@ function WorkspaceScreenContent({
     }
     openWorkspaceTabFocused(persistenceKey, target);
   }, [normalizedWorkspaceId, openWorkspaceTabFocused, persistenceKey]);
+
+  const handleOpenTopologyTab = useCallback(() => {
+    if (!persistenceKey) {
+      return;
+    }
+    const tabId = openWorkspaceTabFocused(persistenceKey, { kind: "topology" });
+    if (tabId) {
+      navigateToTabId(tabId);
+    }
+  }, [navigateToTabId, openWorkspaceTabFocused, persistenceKey]);
 
   const handleBulkCloseTabs = useCallback(
     async (input: { tabsToClose: WorkspaceTabDescriptor[]; title: string; logLabel: string }) => {
@@ -3823,6 +3863,7 @@ function WorkspaceScreenContent({
                 menuNewTerminalIcon={menuNewTerminalIcon}
                 menuNewBrowserIcon={MENU_NEW_BROWSER_ICON}
                 menuImportIcon={MENU_IMPORT_ICON}
+                menuTopologyIcon={MENU_TOPOLOGY_ICON}
                 menuCopyIcon={menuCopyIcon}
                 menuSettingsIcon={menuSettingsIcon}
                 onCreateDraftTab={handleCreateDraftTab}
@@ -3830,6 +3871,7 @@ function WorkspaceScreenContent({
                 onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
                 onCreateBrowser={handleCreateBrowserTab}
                 onOpenImportSheet={openImportSheet}
+                onOpenTopologyTab={handleOpenTopologyTab}
                 onCopyWorkspacePath={handleCopyWorkspacePath}
                 onCopyBranchName={handleCopyBranchName}
                 onOpenSetupTab={handleOpenSetupTab}

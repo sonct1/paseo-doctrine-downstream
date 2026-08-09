@@ -24,6 +24,7 @@ export type WorkspaceTabTarget =
   | { kind: "browser"; browserId: string }
   | WorkspaceFileTabTarget
   | WorkspaceWorkingDiffTabTarget
+  | { kind: "topology" }
   | { kind: "setup"; workspaceId: string }
   | { kind: "commit_diff"; sha: string };
 

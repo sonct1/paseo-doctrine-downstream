@@ -6,6 +6,7 @@ import { filePanelRegistration } from "@/panels/file-panel";
 import { registerPanel } from "@/panels/panel-registry";
 import { setupPanelRegistration } from "@/panels/setup-panel";
 import { terminalPanelRegistration } from "@/panels/terminal-panel";
+import { topologyPanelRegistration } from "@/panels/topology-panel";
 import { providerSubagentPanelRegistration } from "@/panels/provider-subagent-panel";
 
 let panelsRegistered = false;
@@ -23,5 +24,6 @@ export function ensurePanelsRegistered(): void {
   registerPanel(filePanelRegistration);
   registerPanel(commitDiffPanelRegistration);
   registerPanel(workingDiffPanelRegistration);
+  registerPanel(topologyPanelRegistration);
   panelsRegistered = true;
 }

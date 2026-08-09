@@ -151,6 +151,9 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "working_diff") {
     return `workspace-working-diff-close-${encodeFilePathForPathSegment(buildDeterministicWorkspaceTabId(tab.target))}`;
   }
+  if (tab.target.kind === "topology") {
+    return "workspace-topology-close";
+  }
   return `workspace-file-close-${encodeFilePathForPathSegment(tab.target.path)}`;
 }
 

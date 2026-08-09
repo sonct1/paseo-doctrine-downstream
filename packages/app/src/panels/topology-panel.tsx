@@ -1,0 +1,181 @@
+import { Network } from "lucide-react-native";
+import { useCallback } from "react";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import type { PanelRegistration } from "@/panels/panel-registry";
+import type { TopologyNode, TopologyRole } from "@/panels/topology-model";
+import { useTopologyPanelDescriptor, useTopologyPanelState } from "@/panels/use-topology-panel";
+import type { Theme } from "@/styles/theme";
+
+const ROLE_ORDER: TopologyRole[] = ["supervisor", "lead", "peer", "unbound"];
+const ROLE_LABELS: Record<TopologyRole, string> = {
+  supervisor: "Supervisors",
+  lead: "Leads",
+  peer: "Peers",
+  unbound: "Unbound agents",
+};
+const ThemedNetwork = withUnistyles(Network);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
+const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+
+function nodeStyle({ hovered, pressed }: PressableStateCallbackType) {
+  return [styles.node, (hovered || pressed) && styles.nodeHovered];
+}
+
+function TopologyNodeRow({
+  node,
+  openAgent,
+}: {
+  node: TopologyNode;
+  openAgent: (agentId: string) => void;
+}) {
+  const handleOpen = useCallback(() => openAgent(node.id), [node.id, openAgent]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${node.title}, ${node.role}, ${node.status}`}
+      onPress={handleOpen}
+      style={nodeStyle}
+    >
+      <View style={styles.nodeHeading}>
+        <Text style={styles.roleLabel}>{node.role.toUpperCase()}</Text>
+        <View style={[styles.statusDot, styles[`status_${node.status}`]]} />
+      </View>
+      <Text style={styles.nodeTitle} numberOfLines={1}>
+        {node.title}
+      </Text>
+      <Text style={styles.nodeMeta} numberOfLines={1}>
+        {node.status} · {node.provider}
+        {node.model ? ` · ${node.model}` : ""}
+      </Text>
+    </Pressable>
+  );
+}
+
+function TopologyPanel() {
+  const { topology, hydrated, openAgent } = useTopologyPanelState();
+  if (!hydrated) {
+    return (
+      <View style={styles.centered} testID="workspace-topology-loading">
+        <ThemedLoadingSpinner size="large" uniProps={mutedColorMapping} />
+      </View>
+    );
+  }
+  if (topology.nodes.length === 0) {
+    return (
+      <View style={styles.centered} testID="workspace-topology-empty">
+        <ThemedNetwork size={24} uniProps={mutedColorMapping} />
+        <Text style={styles.emptyTitle}>No active agents</Text>
+        <Text style={styles.emptyText}>Create role-bound agents to populate this topology.</Text>
+      </View>
+    );
+  }
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      testID="workspace-topology-panel"
+    >
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryTitle}>Workspace topology</Text>
+        <Text style={styles.summaryMeta}>
+          {topology.nodes.length} agents · {topology.edges.length} relationships
+        </Text>
+      </View>
+      {topology.warnings.length > 0 ? (
+        <View style={styles.warning}>
+          <Text style={styles.warningText}>
+            {topology.warnings.length} relationship{topology.warnings.length === 1 ? "" : "s"} need
+            review. Ambiguous or missing bindings are not drawn as authority.
+          </Text>
+        </View>
+      ) : null}
+      {ROLE_ORDER.map((role) => {
+        const nodes = topology.nodes.filter((node) => node.role === role);
+        if (nodes.length === 0) return null;
+        return (
+          <View key={role} style={styles.section}>
+            <Text style={styles.sectionLabel}>{ROLE_LABELS[role]}</Text>
+            <View style={styles.nodeList}>
+              {nodes.map((node) => (
+                <TopologyNodeRow key={node.id} node={node} openAgent={openAgent} />
+              ))}
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+export const topologyPanelRegistration: PanelRegistration<"topology"> = {
+  kind: "topology",
+  component: TopologyPanel,
+  useDescriptor: useTopologyPanelDescriptor,
+};
+
+const styles = StyleSheet.create((theme) => ({
+  container: { flex: 1, backgroundColor: theme.colors.surface0 },
+  content: { padding: theme.spacing[4], gap: theme.spacing[4] },
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing[2],
+    padding: theme.spacing[4],
+    backgroundColor: theme.colors.surface0,
+  },
+  emptyTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  emptyText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    textAlign: "center",
+  },
+  summaryRow: { gap: theme.spacing[1] },
+  summaryTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.medium,
+  },
+  summaryMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  warning: {
+    borderWidth: 1,
+    borderColor: `${theme.colors.statusWarning}33`,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing[3],
+    backgroundColor: `${theme.colors.statusWarning}1a`,
+  },
+  warningText: { color: theme.colors.statusWarning, fontSize: theme.fontSize.xs },
+  section: { gap: theme.spacing[2] },
+  sectionLabel: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  nodeList: { gap: theme.spacing[2] },
+  node: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    padding: theme.spacing[3],
+    gap: theme.spacing[1],
+  },
+  nodeHovered: { backgroundColor: theme.colors.surface2 },
+  nodeHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  roleLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    letterSpacing: 0.8,
+  },
+  nodeTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
+  nodeMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  statusDot: { width: 8, height: 8, borderRadius: theme.borderRadius.full },
+  status_initializing: { backgroundColor: theme.colors.statusDotWarning },
+  status_idle: { backgroundColor: theme.colors.statusDotSuccess },
+  status_running: { backgroundColor: theme.colors.statusDotRunning },
+  status_error: { backgroundColor: theme.colors.statusDotDanger },
+  status_closed: { backgroundColor: theme.colors.foregroundExtraMuted },
+}));
