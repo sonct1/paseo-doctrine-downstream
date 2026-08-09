@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type { FoundationExecutionProfileId } from "./foundation-execution-profiles.js";
 
 const KNOWN_FOUNDATION_SKILLS = [
   "architecture-premise-audit",
@@ -10,6 +11,8 @@ const KNOWN_FOUNDATION_SKILLS = [
   "paseo-supervisor",
   "repo-refresh",
   "test-proof-debt-audit",
+  "triple-review",
+  // Legacy package name from already-imported immutable Foundation releases.
   "ultra-review",
 ] as const;
 
@@ -71,6 +74,7 @@ function parseManifest(filePath: string): RoleBundleManifest | null {
 export function loadFoundationSkillPolicy(
   roleId: PaseoRoleId,
   manifestPath = defaultManifestPath(),
+  executionProfileId?: FoundationExecutionProfileId,
 ): FoundationSkillPolicy {
   const manifest = existsSync(manifestPath) ? parseManifest(manifestPath) : null;
   if (!manifest) {
@@ -84,7 +88,10 @@ export function loadFoundationSkillPolicy(
 
   const packageNames = new Set(Object.keys(manifest.packages));
   const bundle = manifest.roles[roleId];
-  const enabledNames = new Set([...bundle.active, ...bundle.explicitOnly]);
+  const enabledNames =
+    executionProfileId === "review"
+      ? new Set<string>()
+      : new Set([...bundle.active, ...bundle.explicitOnly]);
   if ([...enabledNames].some((name) => !packageNames.has(name))) {
     return {
       packageNames: new Set([...KNOWN_FOUNDATION_SKILLS, ...packageNames]),

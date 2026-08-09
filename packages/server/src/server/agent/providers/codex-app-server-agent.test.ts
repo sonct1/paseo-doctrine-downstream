@@ -333,10 +333,15 @@ describe("Codex app-server provider", () => {
   test("injects a Paseo role through native developer instructions and disables native agents", async () => {
     vi.stubEnv("PASEO_FOUNDATION_CURRENT", "/missing/foundation-release");
     let threadStartParams: Record<string, unknown> | undefined;
+    let turnStartParams: Record<string, unknown> | undefined;
     const appServer = createFakeCodexAppServer({
       "thread/start": (params) => {
         threadStartParams = params as Record<string, unknown>;
         return { thread: { id: "role-thread" } };
+      },
+      "turn/start": (params) => {
+        turnStartParams = params as Record<string, unknown>;
+        return {};
       },
     });
     const client = createProviderWithFakeAppServer(appServer);
@@ -369,7 +374,7 @@ describe("Codex app-server provider", () => {
     );
 
     try {
-      await session.startTurn("start role-bound work");
+      await session.startTurn("/council review this decision");
 
       expect(threadStartParams?.developerInstructions).toBe("GLOBAL APPEND\n\nPASEO ROLE LEAD");
       expect(threadStartParams?.config).toMatchObject({
@@ -378,10 +383,29 @@ describe("Codex app-server provider", () => {
         agents: { enabled: false },
       });
       const threadConfig = threadStartParams?.config as
-        | { skills?: { config?: Array<{ enabled: boolean }> } }
+        | { skills?: { config?: Array<{ path: string; enabled: boolean }> } }
         | undefined;
-      expect((threadConfig?.skills?.config ?? []).every((entry) => entry.enabled === false)).toBe(
-        true,
+      const skillConfig = threadConfig?.skills?.config ?? [];
+      expect(skillConfig).toContainEqual(
+        expect.objectContaining({
+          path: expect.stringMatching(/[\\/]skills[\\/]council[\\/]SKILL\.md$/u),
+          enabled: true,
+        }),
+      );
+      expect(
+        skillConfig
+          .filter((entry) => !/[\\/]council[\\/]SKILL\.md$/u.test(entry.path))
+          .every((entry) => entry.enabled === false),
+      ).toBe(true);
+      expect(turnStartParams?.input).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "text",
+            text: expect.stringMatching(
+              /Paseo role-admitted skill invocation: \/council review this decision[\s\S]+# Paseo Council — instructions for Lead/u,
+            ),
+          }),
+        ]),
       );
       expect(threadStartParams?.config).not.toHaveProperty("developer_instructions");
       appServer.assertNoErrors();

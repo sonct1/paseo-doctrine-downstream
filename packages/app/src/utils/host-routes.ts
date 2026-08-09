@@ -437,6 +437,23 @@ export function buildHostRoomRoute(serverId: string, roomId: string) {
   return `${base}/${encodeSegment(normalizedRoomId)}` as const;
 }
 
+export function buildHostCouncilsRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") {
+    return "/" as const;
+  }
+  return `${base}/councils` as const;
+}
+
+export function buildHostCouncilRoute(serverId: string, caseId: string) {
+  const base = buildHostCouncilsRoute(serverId);
+  const normalizedCaseId = trimNonEmpty(caseId);
+  if (base === "/" || !normalizedCaseId) {
+    return base;
+  }
+  return `${base}/${encodeSegment(normalizedCaseId)}` as const;
+}
+
 export function buildSessionsRoute() {
   return "/sessions" as const;
 }

@@ -1,0 +1,113 @@
+import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { buildHostCouncilRoute } from "@/utils/host-routes";
+import { expect, test } from "../support/fixtures";
+import { seedWorkspace } from "../support/helpers/seed-client";
+import { getServerId } from "../support/helpers/server-id";
+
+const CASE_ID = "phase6-dirty-review";
+const CASE_TITLE = "Phase 6 dirty implementation review";
+
+async function seedCouncilScenario() {
+  const workspace = await seedWorkspace({ repoPrefix: "council-ui-" });
+  try {
+    const lead = await workspace.client.createAgent({
+      provider: "mock",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      title: "Council Lead",
+      modeId: "load-test",
+      model: "ten-second-stream",
+    });
+    const createSeat = (
+      title: string,
+      role: "independent" | "challenger" | "verifier" | "auditor",
+      round: string,
+    ) =>
+      workspace.client.createAgent({
+        provider: "mock",
+        cwd: workspace.repoPath,
+        workspaceId: workspace.workspaceId,
+        title,
+        modeId: "load-test",
+        model: "ten-second-stream",
+        labels: {
+          [PARENT_AGENT_ID_LABEL]: lead.id,
+          "council.case_id": CASE_ID,
+          "council.title": CASE_TITLE,
+          "council.tier": "high-risk",
+          "council.phase": "verdict",
+          "council.role": role,
+          "council.round": round,
+        },
+      });
+
+    const seats = await Promise.all([
+      createSeat("Independent", "independent", "1"),
+      createSeat("Premise Challenger", "challenger", "1"),
+      createSeat("Verifier", "verifier", "verify"),
+      createSeat("Auditor", "auditor", "audit"),
+    ]);
+    return {
+      leadId: lead.id,
+      seatIds: seats.map((seat) => seat.id),
+      cleanup: workspace.cleanup,
+    };
+  } catch (error) {
+    await workspace.cleanup();
+    throw error;
+  }
+}
+
+test.describe("Council case surface", () => {
+  test("projects labeled seats at desktop and compact viewports", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const scenario = await seedCouncilScenario();
+    try {
+      await page.emulateMedia({ colorScheme: "dark" });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID));
+
+      const detail = page.getByTestId(`council-detail-${CASE_ID}`);
+      await expect(detail).toBeVisible({ timeout: 30_000 });
+      await expect(detail.getByText(CASE_TITLE, { exact: true })).toBeVisible();
+      await expect(
+        page.getByText("One accountable Lead. Independent seats. No vote."),
+      ).toBeVisible();
+      await expect(page.getByTestId(`council-row-phase-${CASE_ID}`)).toContainText(
+        "Unverified verdict marker",
+      );
+      await expect(page.getByTestId("council-phase-rail")).toContainText(
+        "Unverified verdict marker",
+      );
+      await expect(
+        page
+          .getByTestId("council-verdict-summary")
+          .getByText("Unverified verdict marker", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "Seat labels indicate verdict, but their linked owner does not have a daemon-issued Lead role binding. Do not treat this marker as a binding decision.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(page.locator('[data-testid^="council-open-agent-"]')).toHaveCount(4);
+      await expect(page.getByTestId("councils-list")).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("council-desktop.png"),
+        animations: "disabled",
+      });
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      await expect(detail).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("councils-list")).toHaveCount(0);
+      await expect(page.getByText("Seats", { exact: true })).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("council-compact.png"),
+        animations: "disabled",
+      });
+    } finally {
+      await scenario.cleanup();
+    }
+  });
+});

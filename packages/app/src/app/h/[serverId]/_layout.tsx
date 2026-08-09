@@ -41,6 +41,8 @@ function KnownHostRoute() {
       <Stack.Screen name="sessions" />
       <Stack.Screen name="rooms/index" />
       <Stack.Screen name="rooms/[roomId]" />
+      <Stack.Screen name="councils/index" />
+      <Stack.Screen name="councils/[caseId]" />
       <Stack.Screen name="open-project" />
       <Stack.Screen name="settings" />
     </ThemedStack>

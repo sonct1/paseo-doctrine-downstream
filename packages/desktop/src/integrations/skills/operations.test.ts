@@ -127,6 +127,27 @@ describe("getSkillsStatus", () => {
     expect(status.available).toEqual(["paseo", "paseo-advisor", "paseo-loop"]);
   });
 
+  it("keeps role-scoped Council out of global install and removes a stale copy", async () => {
+    await writeCurrentBundle(sandbox.targets.sourceDir);
+    await writeBundleSkill(sandbox.targets.sourceDir, "council", {
+      "SKILL.md": "council-v1",
+    });
+    await fs.writeFile(
+      path.join(sandbox.targets.sourceDir, "role-admission.json"),
+      JSON.stringify({ schemaVersion: 1, packages: { council: {} }, roles: {} }),
+    );
+    await writeOnDiskSkill(sandbox.targets.codexDir, "council", {
+      "SKILL.md": "stale-global-council",
+    });
+
+    const status = await getSkillsStatus(sandbox.targets, ALL_SKILLS);
+
+    expect(status.available).toEqual(["paseo", "paseo-loop"]);
+    expect(status.installed).toEqual(["council"]);
+    expect(status.ops).toContainEqual({ kind: "delete", name: "council" });
+    expect(status.ops).not.toContainEqual({ kind: "add", name: "council" });
+  });
+
   it("reports a skill present in only one target as installed", async () => {
     await writeCurrentBundle(sandbox.targets.sourceDir);
     await writeOnDiskSkill(sandbox.targets.claudeDir, "paseo", { "SKILL.md": "paseo-v1" });

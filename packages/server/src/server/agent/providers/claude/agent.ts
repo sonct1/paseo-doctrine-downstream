@@ -19,6 +19,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Logger } from "pino";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import {
   mapClaudeCanceledToolCall,
   mapClaudeCompletedToolCall,
@@ -131,6 +132,13 @@ import { withTimeout } from "../../../../utils/promise-timeout.js";
 import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
 import { execCommand } from "../../../../utils/spawn.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
+import {
+  claudeProductSkillDenyRules,
+  filterProductSkills,
+  loadProductSkillPolicy,
+  mergeClaudeProductPlugins,
+  type ProductSkillPolicy,
+} from "../../product-skill-policy.js";
 
 const fsPromises = promises;
 const CLAUDE_SETTING_SOURCES: NonNullable<ClaudeOptions["settingSources"]> = [
@@ -386,6 +394,7 @@ interface ClaudeAgentClientOptions {
   resolveBinary?: () => Promise<string>;
   resolveVersion?: () => Promise<string>;
   configDir?: string;
+  productSkillBundleRoot?: string;
 }
 
 interface ClaudeAgentSessionOptions {
@@ -395,6 +404,8 @@ interface ClaudeAgentSessionOptions {
   agentId?: string;
   launchEnv?: Record<string, string>;
   roleInstructions?: string;
+  roleId?: PaseoRoleId;
+  productSkillBundleRoot?: string;
   persistSession?: boolean;
   logger: Logger;
   queryFactory?: ClaudeQueryFactory;
@@ -1464,6 +1475,7 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly resolveBinary: () => Promise<string>;
   private readonly resolveVersion: () => Promise<string>;
   private readonly configDir?: string;
+  private readonly productSkillBundleRoot?: string;
 
   constructor(options: ClaudeAgentClientOptions) {
     this.defaults = options.defaults;
@@ -1474,6 +1486,7 @@ export class ClaudeAgentClient implements AgentClient {
     this.resolveVersion =
       options.resolveVersion ?? (() => resolveClaudeCodeVersion(this.runtimeSettings));
     this.configDir = options.configDir;
+    this.productSkillBundleRoot = options.productSkillBundleRoot;
   }
 
   resolveConfiguredModel(model: AgentModelDefinition): AgentModelDefinition {
@@ -1492,6 +1505,8 @@ export class ClaudeAgentClient implements AgentClient {
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       roleInstructions: launchContext?.roleBinding?.instructions,
+      roleId: launchContext?.roleBinding?.roleId,
+      productSkillBundleRoot: this.productSkillBundleRoot,
       persistSession: options?.persistSession,
       logger: this.logger,
       queryFactory: this.queryFactory,
@@ -1522,6 +1537,8 @@ export class ClaudeAgentClient implements AgentClient {
       agentId: launchContext?.agentId,
       launchEnv: launchContext?.env,
       roleInstructions: launchContext?.roleBinding?.instructions,
+      roleId: launchContext?.roleBinding?.roleId,
+      productSkillBundleRoot: this.productSkillBundleRoot,
       logger: this.logger,
       queryFactory: this.queryFactory,
       resolveBinary: this.resolveBinary,
@@ -1994,6 +2011,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly launchEnv?: Record<string, string>;
   private readonly agentId?: string;
   private readonly roleInstructions?: string;
+  private readonly productSkillPolicy: ProductSkillPolicy | null;
   private readonly defaults?: { agents?: Record<string, AgentDefinition> };
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly persistSession?: boolean;
@@ -2061,6 +2079,9 @@ class ClaudeAgentSession implements AgentSession {
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
     this.roleInstructions = options.roleInstructions;
+    this.productSkillPolicy = options.roleId
+      ? loadProductSkillPolicy(options.roleId, options.productSkillBundleRoot)
+      : null;
     this.defaults = options.defaults;
     this.runtimeSettings = options.runtimeSettings;
     this.persistSession = options.persistSession;
@@ -2569,19 +2590,31 @@ class ClaudeAgentSession implements AgentSession {
     const commands = await q.supportedCommands();
     const commandMap = new Map<string, AgentSlashCommand>();
     for (const cmd of commands) {
-      if (!commandMap.has(cmd.name)) {
-        commandMap.set(cmd.name, {
-          name: cmd.name,
+      const aliases = (cmd as typeof cmd & { aliases?: unknown }).aliases;
+      const productAlias = Array.isArray(aliases)
+        ? aliases.find(
+            (alias): alias is string =>
+              typeof alias === "string" &&
+              this.productSkillPolicy?.enabledNames.has(alias) === true &&
+              (cmd.name === alias || cmd.name.endsWith(`:${alias}`)),
+          )
+        : undefined;
+      const commandName = productAlias ?? cmd.name;
+      if (!commandMap.has(commandName)) {
+        commandMap.set(commandName, {
+          name: commandName,
           description: cmd.description,
           argumentHint: cmd.argumentHint,
-          kind: classifyClaudeSlashCommand(cmd.name),
+          kind: classifyClaudeSlashCommand(commandName),
         });
       }
     }
     if (!commandMap.has(REWIND_COMMAND_NAME)) {
       commandMap.set(REWIND_COMMAND_NAME, REWIND_COMMAND);
     }
-    return Array.from(commandMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return filterProductSkills(Array.from(commandMap.values()), this.productSkillPolicy).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
   }
 
   async revertConversation(input: { messageId: string }): Promise<void> {
@@ -3177,9 +3210,13 @@ class ClaudeAgentSession implements AgentSession {
       append: appendedSystemPrompt,
     };
     base.agents = {};
+    if (this.productSkillPolicy) {
+      base.plugins = mergeClaudeProductPlugins(base.plugins, this.productSkillPolicy);
+    }
     base.disallowedTools = Array.from(
       new Set([
         ...(base.disallowedTools ?? []),
+        ...(this.productSkillPolicy ? claudeProductSkillDenyRules(this.productSkillPolicy) : []),
         "Agent",
         "Task",
         "TeamCreate",

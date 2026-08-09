@@ -42,6 +42,11 @@ export const LEGACY_SKILL_NAMES = [
   "paseo-orchestrator",
 ] as const;
 
+// Role-scoped product skills are bundled for daemon session projection, not for
+// installation into shared agent homes. Keep the known set as a fail-closed
+// fallback so a missing manifest cannot accidentally make Council global.
+const KNOWN_ROLE_SCOPED_SKILL_NAMES = ["council"] as const;
+
 type SkillFiles = Map<string, string>;
 type TargetSkills = Map<string, SkillFiles>;
 
@@ -49,22 +54,62 @@ type TargetSkills = Map<string, SkillFiles>;
  * The bundle directory is the catalog. Reading it instead of a hardcoded list is
  * what makes `all` pick up skills added in a later release with no code change.
  */
-async function listBundledSkills(sourceDir: string): Promise<string[]> {
+async function listRoleScopedSkillNames(sourceDir: string): Promise<string[]> {
+  const manifestPath = path.join(sourceDir, "role-admission.json");
+  let bytes: string;
+  try {
+    bytes = await fs.readFile(manifestPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [...KNOWN_ROLE_SCOPED_SKILL_NAMES];
+    }
+    throw error;
+  }
+
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(bytes);
+  } catch (error) {
+    throw new Error(`Invalid product role-skill admission at '${manifestPath}'`, { cause: error });
+  }
+  const packages =
+    manifest && typeof manifest === "object" ? (manifest as { packages?: unknown }).packages : null;
+  if (!packages || typeof packages !== "object" || Array.isArray(packages)) {
+    throw new Error(`Invalid product role-skill admission at '${manifestPath}'`);
+  }
+  const admitted = Object.keys(packages);
+  if (admitted.some((name) => !/^[a-z0-9-]+$/u.test(name))) {
+    throw new Error(`Invalid product role-skill admission at '${manifestPath}'`);
+  }
+  return [...new Set([...KNOWN_ROLE_SCOPED_SKILL_NAMES, ...admitted])].sort(compareStrings);
+}
+
+async function listBundledSkills(
+  sourceDir: string,
+  roleScopedNames: readonly string[],
+): Promise<string[]> {
+  const roleScoped = new Set(roleScopedNames);
   const entries = await fs.readdir(sourceDir, { withFileTypes: true }).catch(() => []);
   return entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && !roleScoped.has(entry.name))
     .map((entry) => entry.name)
     .sort(compareStrings);
 }
 
 /** Every name Paseo owns on disk: what it ships now plus what it used to ship. */
-function managedSkillNames(available: readonly string[]): string[] {
-  return [...new Set([...available, ...LEGACY_SKILL_NAMES])].sort(compareStrings);
+function managedSkillNames(
+  available: readonly string[],
+  roleScopedNames: readonly string[],
+): string[] {
+  return [...new Set([...available, ...roleScopedNames, ...LEGACY_SKILL_NAMES])].sort(
+    compareStrings,
+  );
 }
 
 /** The names a convergence may create, replace, or delete. */
 export async function listManagedSkillNames(sourceDir: string): Promise<string[]> {
-  return managedSkillNames(await listBundledSkills(sourceDir));
+  const roleScopedNames = await listRoleScopedSkillNames(sourceDir);
+  return managedSkillNames(await listBundledSkills(sourceDir, roleScopedNames), roleScopedNames);
 }
 
 function resolveDesiredSkills(
@@ -154,8 +199,9 @@ export async function getSkillsStatus(
   targets: SkillTargets,
   selection: SkillSelection,
 ): Promise<SkillsStatus> {
-  const available = await listBundledSkills(targets.sourceDir);
-  const names = managedSkillNames(available);
+  const roleScopedNames = await listRoleScopedSkillNames(targets.sourceDir);
+  const available = await listBundledSkills(targets.sourceDir, roleScopedNames);
+  const names = managedSkillNames(available, roleScopedNames);
   const [bundle, agentsDisk, claudeDisk, codexDisk] = await Promise.all([
     hashSkills(targets.sourceDir, available),
     hashSkills(targets.agentsDir, names),
@@ -239,8 +285,9 @@ export async function uninstallSkills(
   targets: SkillTargets,
   selection: SkillSelection,
 ): Promise<SkillsStatus> {
-  const available = await listBundledSkills(targets.sourceDir);
-  for (const name of managedSkillNames(available)) {
+  const roleScopedNames = await listRoleScopedSkillNames(targets.sourceDir);
+  const available = await listBundledSkills(targets.sourceDir, roleScopedNames);
+  for (const name of managedSkillNames(available, roleScopedNames)) {
     await removeSkill(name, {
       agentsDir: targets.agentsDir,
       claudeDir: targets.claudeDir,

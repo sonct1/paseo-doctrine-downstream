@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "council": {
+      "provenance": "DEMONTHORN_EXACT"
+    }
+  },
+  "roles": {
+    "lead": {
+      "active": ["council"],
+      "explicitOnly": [],
+      "packagedDisabled": []
+    },
+    "peer": {
+      "active": [],
+      "explicitOnly": [],
+      "packagedDisabled": ["council"]
+    },
+    "supervisor": {
+      "active": [],
+      "explicitOnly": [],
+      "packagedDisabled": ["council"]
+    }
+  }
+}

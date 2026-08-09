@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHostAgentDetailRoute,
+  buildHostCouncilRoute,
+  buildHostCouncilsRoute,
   buildHostRootRoute,
   buildHostRoomRoute,
   buildHostRoomsRoute,
@@ -97,6 +99,13 @@ describe("workspace route parsing", () => {
   it("builds host-scoped room routes with encoded IDs", () => {
     expect(buildHostRoomsRoute("local host")).toBe("/h/local%20host/rooms");
     expect(buildHostRoomRoute("local host", "room/one")).toBe("/h/local%20host/rooms/room%2Fone");
+  });
+
+  it("builds host-scoped council routes with encoded case IDs", () => {
+    expect(buildHostCouncilsRoute("local host")).toBe("/h/local%20host/councils");
+    expect(buildHostCouncilRoute("local host", "case/one")).toBe(
+      "/h/local%20host/councils/case%2Fone",
+    );
   });
 
   it("parses workspace open intent from pathname query", () => {

@@ -24,16 +24,24 @@ function manifestPath(): string {
         "frontend-design": {},
         "paseo-supervisor": {},
         "repo-refresh": {},
-        "ultra-review": {},
+        "triple-review": {},
       },
       roles: {
         lead: {
-          active: [],
+          active: ["triple-review"],
           explicitOnly: ["repo-refresh"],
-          packagedDisabled: ["ultra-review"],
+          packagedDisabled: [],
         },
-        peer: { active: ["frontend-design"], explicitOnly: [], packagedDisabled: [] },
-        supervisor: { active: ["paseo-supervisor"], explicitOnly: [], packagedDisabled: [] },
+        peer: {
+          active: ["frontend-design"],
+          explicitOnly: [],
+          packagedDisabled: ["triple-review"],
+        },
+        supervisor: {
+          active: ["paseo-supervisor"],
+          explicitOnly: [],
+          packagedDisabled: ["triple-review"],
+        },
       },
     })}\n`,
   );
@@ -47,7 +55,10 @@ afterEach(() => {
 describe("Foundation skill policy", () => {
   test("loads exact active and explicit-only role admission", () => {
     const source = manifestPath();
-    expect([...loadFoundationSkillPolicy("lead", source).enabledNames]).toEqual(["repo-refresh"]);
+    expect([...loadFoundationSkillPolicy("lead", source).enabledNames]).toEqual([
+      "triple-review",
+      "repo-refresh",
+    ]);
     expect([...loadFoundationSkillPolicy("peer", source).enabledNames]).toEqual([
       "frontend-design",
     ]);
@@ -61,6 +72,7 @@ describe("Foundation skill policy", () => {
     expect(policy.status).toBe("missing-or-invalid");
     expect(policy.enabledNames.size).toBe(0);
     expect(policy.packageNames).toContain("paseo-supervisor");
+    expect(policy.packageNames).toContain("triple-review");
   });
 
   test("replaces only Foundation entries in Codex skills.config", () => {
@@ -95,5 +107,25 @@ describe("Foundation skill policy", () => {
         policy,
       ),
     ).toEqual([{ name: "frontend-design" }, { name: "third-party-skill" }]);
+  });
+
+  test("keeps triple-review visible to Lead and hidden from general Peer", () => {
+    const leadPolicy = loadFoundationSkillPolicy("lead", manifestPath());
+    const peerPolicy = loadFoundationSkillPolicy("peer", manifestPath());
+    const inventory = [{ name: "triple-review" }, { name: "third-party-skill" }];
+    expect(filterFoundationSkills(inventory, leadPolicy)).toEqual(inventory);
+    expect(filterFoundationSkills(inventory, peerPolicy)).toEqual([{ name: "third-party-skill" }]);
+  });
+
+  test("disables every Foundation skill for the review Peer specialization", () => {
+    const policy = loadFoundationSkillPolicy("peer", manifestPath(), "review");
+    expect(policy.status).toBe("bound");
+    expect(policy.enabledNames.size).toBe(0);
+    expect(
+      filterFoundationSkills(
+        [{ name: "frontend-design" }, { name: "triple-review" }, { name: "third-party-skill" }],
+        policy,
+      ),
+    ).toEqual([{ name: "third-party-skill" }]);
   });
 });

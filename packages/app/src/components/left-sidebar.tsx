@@ -6,6 +6,7 @@ import {
   Home,
   MessagesSquare,
   Plus,
+  Scale,
   Search,
   Server,
   Settings,
@@ -62,6 +63,7 @@ import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
 import {
   buildOpenProjectRoute,
+  buildHostCouncilsRoute,
   buildHostRoomsRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
@@ -110,6 +112,7 @@ interface SidebarLabels {
   sessions: string;
   schedules: string;
   rooms: string;
+  councils: string;
   closeSidebar: string;
 }
 
@@ -120,6 +123,7 @@ interface MobileSidebarProps extends SidebarSharedProps {
   handleViewMoreNavigate: () => void;
   handleViewSchedulesNavigate: () => void;
   handleViewRoomsNavigate: () => void;
+  handleViewCouncilsNavigate: () => void;
 }
 
 interface DesktopSidebarProps extends SidebarSharedProps {
@@ -128,6 +132,7 @@ interface DesktopSidebarProps extends SidebarSharedProps {
   handleViewMore: () => void;
   handleViewSchedules: () => void;
   handleViewRooms: () => void;
+  handleViewCouncils: () => void;
 }
 
 export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boolean }) {
@@ -138,7 +143,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
   const hosts = useHosts();
   const lastWorkspaceSelection = useLastWorkspaceSelection();
-  const roomsServerId = lastWorkspaceSelection?.serverId ?? hosts[0]?.serverId ?? null;
+  const coordinationServerId = lastWorkspaceSelection?.serverId ?? hosts[0]?.serverId ?? null;
 
   const {
     projects,
@@ -227,10 +232,16 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   }, []);
 
   const handleViewRoomsNavigate = useCallback(() => {
-    if (roomsServerId) {
-      router.push(buildHostRoomsRoute(roomsServerId));
+    if (coordinationServerId) {
+      router.push(buildHostRoomsRoute(coordinationServerId));
     }
-  }, [roomsServerId]);
+  }, [coordinationServerId]);
+
+  const handleViewCouncilsNavigate = useCallback(() => {
+    if (coordinationServerId) {
+      router.push(buildHostCouncilsRoute(coordinationServerId));
+    }
+  }, [coordinationServerId]);
 
   const newWorkspaceKeys = useShortcutKeys("new-workspace");
   const labels = useMemo(
@@ -244,6 +255,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
       sessions: t("sidebar.sections.sessions"),
       schedules: t("sidebar.sections.schedules"),
       rooms: "Rooms",
+      councils: "Councils",
       closeSidebar: t("sidebar.actions.closeSidebar"),
     }),
     [t],
@@ -283,6 +295,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
           handleViewMoreNavigate={handleViewMoreNavigate}
           handleViewSchedulesNavigate={handleViewSchedulesNavigate}
           handleViewRoomsNavigate={handleViewRoomsNavigate}
+          handleViewCouncilsNavigate={handleViewCouncilsNavigate}
         />
       </RetainedPanelActivity>
     );
@@ -302,6 +315,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
         handleViewMore={handleViewMoreNavigate}
         handleViewSchedules={handleViewSchedulesNavigate}
         handleViewRooms={handleViewRoomsNavigate}
+        handleViewCouncils={handleViewCouncilsNavigate}
       />
     </RetainedPanelActivity>
   );
@@ -631,12 +645,14 @@ function MobileSidebar({
   handleViewMoreNavigate,
   handleViewSchedulesNavigate,
   handleViewRoomsNavigate,
+  handleViewCouncilsNavigate,
 }: MobileSidebarProps) {
   const pathname = usePathname();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
   const isRoomsActive = pathname.includes("/rooms");
+  const isCouncilsActive = pathname.includes("/councils");
   const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
   const dragGestureHostPresented = useIsMobilePanelPresented("agent-list");
 
@@ -654,6 +670,11 @@ function MobileSidebar({
     closeSidebar();
     handleViewRoomsNavigate();
   }, [closeSidebar, handleViewRoomsNavigate]);
+
+  const handleViewCouncils = useCallback(() => {
+    closeSidebar();
+    handleViewCouncilsNavigate();
+  }, [closeSidebar, handleViewCouncilsNavigate]);
 
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
@@ -698,6 +719,14 @@ function MobileSidebar({
             onPress={handleViewRooms}
             isActive={isRoomsActive}
             testID="sidebar-rooms"
+            variant="compact"
+          />
+          <SidebarHeaderRow
+            icon={Scale}
+            label={labels.councils}
+            onPress={handleViewCouncils}
+            isActive={isCouncilsActive}
+            testID="sidebar-councils"
             variant="compact"
           />
           <SidebarHeaderRow
@@ -791,6 +820,7 @@ function DesktopSidebar({
   handleViewMore,
   handleViewSchedules,
   handleViewRooms,
+  handleViewCouncils,
 }: DesktopSidebarProps) {
   const ownsTopLeft = useOwnsWindowChromeCorner("top-left");
   const pathname = usePathname();
@@ -798,6 +828,7 @@ function DesktopSidebar({
   const isSessionsActive = pathname.includes("/sessions");
   const isSchedulesActive = pathname.includes("/schedules");
   const isRoomsActive = pathname.includes("/rooms");
+  const isCouncilsActive = pathname.includes("/councils");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
@@ -892,6 +923,14 @@ function DesktopSidebar({
               onPress={handleViewRooms}
               isActive={isRoomsActive}
               testID="sidebar-rooms"
+              variant="compact"
+            />
+            <SidebarHeaderRow
+              icon={Scale}
+              label={labels.councils}
+              onPress={handleViewCouncils}
+              isActive={isCouncilsActive}
+              testID="sidebar-councils"
               variant="compact"
             />
             <SidebarHeaderRow

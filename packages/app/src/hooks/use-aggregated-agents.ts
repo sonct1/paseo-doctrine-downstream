@@ -9,6 +9,9 @@ import { getHostRuntimeStore, useHosts } from "@/runtime/host-runtime";
 export interface AggregatedAgent extends AgentDirectoryEntry {
   serverId: string;
   serverLabel: string;
+  model?: Agent["model"];
+  parentAgentId?: Agent["parentAgentId"];
+  roleBinding?: Agent["roleBinding"];
 }
 
 export interface AggregatedAgentsResult {
@@ -80,6 +83,9 @@ export function useAggregatedAgents(options?: {
           cwd: agent.cwd,
           workspaceId: agent.workspaceId,
           provider: agent.provider,
+          model: agent.model,
+          parentAgentId: agent.parentAgentId,
+          roleBinding: agent.roleBinding,
           pendingPermissionCount: agent.pendingPermissions.length,
           requiresAttention: agent.requiresAttention,
           attentionReason: agent.attentionReason,

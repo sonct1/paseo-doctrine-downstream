@@ -38,6 +38,7 @@ import {
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import type { Logger } from "pino";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -54,6 +55,12 @@ import {
   mergeCodexFoundationSkillConfig,
   type FoundationSkillPolicy,
 } from "../foundation-skill-policy.js";
+import {
+  filterProductSkills,
+  loadProductSkillPolicy,
+  mergeCodexProductSkillConfig,
+  type ProductSkillPolicy,
+} from "../product-skill-policy.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import {
   mapCodexToolCallEnvelope,
@@ -251,6 +258,7 @@ interface CodexAppServerClientLike {
 
 interface CodexAppServerAgentDeps {
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
+  productSkillBundleRoot?: string;
   customProvider?: {
     id: string;
     label: string;
@@ -650,6 +658,33 @@ function parseFrontMatter(markdown: string): {
   return { frontMatter, body };
 }
 
+async function listProjectedCodexProductSkills(
+  policy: ProductSkillPolicy | null | undefined,
+): Promise<Array<{ name: string; description: string; path: string }>> {
+  if (!policy || policy.status !== "bound") return [];
+
+  const projected = await Promise.all(
+    [...policy.enabledNames].sort().map(async (admittedName) => {
+      const skillPath = policy.skillPaths.get(admittedName);
+      if (!skillPath) return null;
+      try {
+        const { frontMatter } = parseFrontMatter(await fs.readFile(skillPath, "utf8"));
+        if (frontMatter["name"] !== admittedName || !frontMatter["description"]) return null;
+        return {
+          name: admittedName,
+          description: frontMatter["description"],
+          path: skillPath,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return projected.filter(
+    (skill): skill is { name: string; description: string; path: string } => skill !== null,
+  );
+}
+
 async function listCodexCustomPrompts(): Promise<AgentSlashCommand[]> {
   const codexHome = resolveCodexHomeDir();
   const promptsDir = path.join(codexHome, "prompts");
@@ -695,6 +730,7 @@ export async function listCodexSkills(
   cwd: string,
   workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">,
   foundationSkillPolicy?: FoundationSkillPolicy | null,
+  productSkillPolicy?: ProductSkillPolicy | null,
 ): Promise<AgentSlashCommand[]> {
   const candidates: string[] = [];
   candidates.push(path.join(cwd, ".codex", "skills"));
@@ -752,10 +788,19 @@ export async function listCodexSkills(
       }
     }
   }
+  for (const skill of await listProjectedCodexProductSkills(productSkillPolicy)) {
+    commandsByName.set(skill.name, {
+      name: skill.name,
+      description: skill.description,
+      argumentHint: "",
+      kind: "skill",
+    });
+  }
 
-  return filterFoundationSkills(Array.from(commandsByName.values()), foundationSkillPolicy).sort(
-    (a, b) => a.name.localeCompare(b.name),
-  );
+  return filterProductSkills(
+    filterFoundationSkills(Array.from(commandsByName.values()), foundationSkillPolicy),
+    productSkillPolicy,
+  ).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function escapeRegExp(value: string): string {
@@ -3326,6 +3371,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   } | null = null;
   private cachedSkills: Array<{ name: string; description: string; path: string }> = [];
   private readonly foundationSkillPolicy: FoundationSkillPolicy | null;
+  private readonly productSkillPolicy: ProductSkillPolicy | null;
 
   constructor(
     config: AgentSessionConfig,
@@ -3341,13 +3387,19 @@ export class CodexAppServerAgentSession implements AgentSession {
     private readonly roleInstructions?: string,
     private readonly providerLaunchBinding?: ProviderLaunchBinding,
     roleId?: PaseoRoleId,
+    executionProfileId?: FoundationExecutionProfileId,
   ) {
     this.logger = logger.child({
       module: "agent",
       provider: CODEX_PROVIDER,
       agentId: this.agentId,
     });
-    this.foundationSkillPolicy = roleId ? loadFoundationSkillPolicy(roleId) : null;
+    this.foundationSkillPolicy = roleId
+      ? loadFoundationSkillPolicy(roleId, undefined, executionProfileId)
+      : null;
+    this.productSkillPolicy = roleId
+      ? loadProductSkillPolicy(roleId, this.deps.productSkillBundleRoot)
+      : null;
     if (config.modeId === undefined) {
       throw new Error("Codex agent requires modeId to be specified");
     }
@@ -3528,6 +3580,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       const response = toObjectRecord(
         await this.client.request("skills/list", {
           cwds: [this.config.cwd],
+          forceReload: true,
         }),
       );
       const entries = Array.isArray(response?.data) ? response.data : [];
@@ -3548,9 +3601,12 @@ export class CodexAppServerAgentSession implements AgentSession {
           }
         }
       }
-      this.cachedSkills = filterFoundationSkills(
-        Array.from(skillsByName.values()),
-        this.foundationSkillPolicy,
+      for (const skill of await listProjectedCodexProductSkills(this.productSkillPolicy)) {
+        skillsByName.set(skill.name, skill);
+      }
+      this.cachedSkills = filterProductSkills(
+        filterFoundationSkills(Array.from(skillsByName.values()), this.foundationSkillPolicy),
+        this.productSkillPolicy,
       );
     } catch (error) {
       this.logger.trace(
@@ -3890,6 +3946,27 @@ export class CodexAppServerAgentSession implements AgentSession {
     const skill = this.cachedSkills.find((entry) => entry.name === commandName);
     if (skill) {
       const trimmedArgs = args?.trim() ?? "";
+      const projectedProductSkillPath = this.productSkillPolicy?.skillPaths.get(commandName);
+      if (
+        projectedProductSkillPath &&
+        path.resolve(projectedProductSkillPath) === path.resolve(skill.path)
+      ) {
+        const exactSkill = await fs.readFile(projectedProductSkillPath, "utf8");
+        const invocation = trimmedArgs ? `/${skill.name} ${trimmedArgs}` : `/${skill.name}`;
+        return [
+          {
+            type: "text",
+            text: [
+              `Paseo role-admitted skill invocation: ${invocation}`,
+              "Follow the complete exact skill package below. It is projected by the daemon for this role-bound session; do not search global or workspace skill directories.",
+              `In the package, $ARGUMENTS means exactly: ${trimmedArgs || "(empty)"}`,
+              `<paseo-role-skill name="${skill.name}">`,
+              exactSkill,
+              "</paseo-role-skill>",
+            ].join("\n\n"),
+          },
+        ];
+      }
       const text = trimmedArgs ? `$${skill.name} ${trimmedArgs}` : `$${skill.name}`;
       const input: CodexPromptContentBlock[] = [
         { type: "skill", name: skill.name, path: skill.path },
@@ -4584,6 +4661,7 @@ export class CodexAppServerAgentSession implements AgentSession {
             this.config.cwd,
             this.deps.workspaceGitService,
             this.foundationSkillPolicy,
+            this.productSkillPolicy,
           )
         : [];
     const builtin: AgentSlashCommand[] = [
@@ -4854,15 +4932,26 @@ export class CodexAppServerAgentSession implements AgentSession {
         multi_agent_v2: false,
       };
       innerConfig.agents = { ...agents, enabled: false };
-      if (this.foundationSkillPolicy) {
+      if (this.foundationSkillPolicy || this.productSkillPolicy) {
         const skills = toObjectRecord(innerConfig.skills) ?? {};
-        innerConfig.skills = {
-          ...skills,
-          config: mergeCodexFoundationSkillConfig(
-            skills.config,
+        let skillConfig: unknown = skills.config;
+        if (this.foundationSkillPolicy) {
+          skillConfig = mergeCodexFoundationSkillConfig(
+            skillConfig,
             this.foundationSkillPolicy,
             resolveCodexHomeDir(),
-          ),
+          );
+        }
+        if (this.productSkillPolicy) {
+          skillConfig = mergeCodexProductSkillConfig(
+            skillConfig,
+            this.productSkillPolicy,
+            resolveCodexHomeDir(),
+          );
+        }
+        innerConfig.skills = {
+          ...skills,
+          config: skillConfig,
         };
       }
       delete innerConfig.developer_instructions;
@@ -6736,6 +6825,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
+      launchContext?.roleBinding?.executionProfile?.id,
     );
     await session.connect();
     return session;
@@ -6775,6 +6865,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
+      launchContext?.roleBinding?.executionProfile?.id,
     );
     await session.connect();
     return session;

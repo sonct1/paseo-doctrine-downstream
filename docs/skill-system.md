@@ -13,12 +13,25 @@ Các package dưới [`skills/`](../skills/) phục vụ client hoặc coding ag
 | `paseo`           | Quản lý workspace, agent, script, provider, schedule và heartbeat         |
 | `paseo-advisor`   | Lấy một second opinion mà không giao ownership của task                   |
 | `paseo-committee` | Dùng hai advisor cho hard planning/root-cause question                    |
+| `council`         | Lead chạy sealed evidence review và tự ra binding verdict, không vote     |
 | `paseo-handoff`   | Chuẩn bị briefing và launch receiving agent; không transfer SLP authority |
 | `paseo-loop`      | Chạy bounded worker/verifier loop tới exit condition                      |
 
 Đây là product capabilities. Việc một package được install hoặc visible không cho agent quyền tạo
 workspace, launch agent, mutate repository hoặc accept engineering. Current role, exact lease và exposed
 tool catalog vẫn quyết định action hợp lệ.
+
+Product package không đồng nghĩa với global package. Canonical admission cho product skill nhạy role nằm
+tại [`skills/role-admission.json`](../skills/role-admission.json). `council` được admit `active` cho Lead và
+`packaged-disabled` cho Peer/Supervisor. Desktop global installer loại các package trong manifest này khỏi
+catalog selectable, nhưng vẫn quản lý tên của chúng để phát hiện và gỡ bản global cũ. Daemon bundle exact
+bytes rồi project vào từng role-bound session, nên một Lead có thể gọi Council trong bất kỳ workspace nào
+mà không phụ thuộc `~/.agents/skills`, `~/.claude/skills` hay `~/.codex/skills`.
+
+`council` khác `paseo-committee`: Committee là hai advisor hỗ trợ planning/root-cause; Council là
+protocol Lead-only cho quyết định material, giữ Round 1 sealed, chỉ verify claim có thể đổi verdict và
+không dùng vote hay Chat Room trong V0. WebUI chỉ project case từ `council.*` labels và lifecycle agent;
+report cùng binding verdict vẫn nằm trong timeline của seat và Lead.
 
 `paseo-handoff` là workflow skill cho context briefing và agent creation. Nó không tạo adjacent-Lead
 handoff packet/state machine, không revoke predecessor, không activate successor Lead và không chuyển
@@ -45,6 +58,11 @@ admission map là
 
 `ultra-review` chưa được admit chỉ vì file tồn tại. Nó cần một Foundation-authored adaptation loại bỏ
 native subagent/provider/path hard-code và có complete receive/verification path trước khi xin admission.
+
+Foundation source candidate `2026-08-09` đã thay active package này bằng Lead-only `triple-review`:
+hai sealed semantic Peer lane cộng private provider-neutral `review` coverage seat, không majority vote và chỉ Lead
+ra verdict. Product allowlist/policy reader đã nhận package mới và hide nó khỏi general Peer; bảng trên
+vẫn mô tả immutable `foundation/dist` hiện tại cho tới khi một clean Foundation commit được tag/import.
 
 ## Tại sao bundle theo role
 
@@ -89,12 +107,19 @@ còn lại.
 Role bundle là canonical admission source; provider adapter chỉ là transport:
 
 - Codex nhận exact `skills.config` với Foundation package ngoài bundle bị disable;
-- Codex hiện có executable role-bundle projection; các provider khác chưa được claim role-visible skill isolation cho tới khi có adapter và fresh canary tương ứng;
+- Council dùng product role-admission manifest riêng nhưng cùng nguyên tắc: Codex command inventory lấy
+  từ daemon bundle và inject exact `SKILL.md` vào đúng invocation `/council`; `skills.config` đồng thời
+  disable stale/caller-supplied Council path. Cách này không phụ thuộc global discovery của Codex;
+- Claude nhận Council như session-local single-skill plugin chỉ ở Lead; Peer/Supervisor vừa strip local
+  plugin path, deny `Skill(council)` và hide plain/namespaced command khỏi inventory;
+- Codex và Claude là hai provider adapter được qualify trong release này. Provider khác giữ
+  `UNKNOWN` cho tới khi có executable adapter và fresh role-visible canary tương ứng;
 - global package link hoặc user-global install không được biến thành eligibility cho non-owning role.
 
-Nếu `role-bundles.json` missing, invalid hoặc trỏ tới package không tồn tại, projection phải fail closed và
-không enable Foundation skill. Static file presence không chứng minh skill visible đúng role; release gate
-cần fresh role-visible canary.
+Nếu Foundation `role-bundles.json` hoặc product `role-admission.json` missing, invalid hoặc trỏ tới package
+không tồn tại, projection phải fail closed và không enable skill thuộc manifest đó. Static file presence
+không chứng minh skill visible đúng role; release gate cần fresh Lead-positive và non-owning-role-negative
+canary trên từng provider được claim.
 
 ## Thêm hoặc đổi Foundation skill
 

@@ -630,6 +630,9 @@ export interface AgentLaunchContext {
   roleBinding?: {
     roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId;
     instructions: string;
+    executionProfile?: {
+      id: import("./foundation-execution-profiles.js").FoundationExecutionProfileId;
+    };
   };
   /** Exact daemon-owned provider route paired with the role for this session. */
   providerLaunchBinding?: ProviderLaunchBinding;

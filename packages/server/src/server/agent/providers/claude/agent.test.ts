@@ -669,15 +669,53 @@ describe("ClaudeAgentSession features", () => {
         append: "GLOBAL APPEND\n\nPASEO ROLE PEER",
       });
       expect(launches[0]?.options.agents).toEqual({});
+      expect(launches[0]?.options.plugins).toEqual([]);
       expect(launches[0]?.options.disallowedTools).toEqual(
         expect.arrayContaining([
           "ExistingDeny",
+          "Skill(council)",
+          "Skill(council:council)",
           "Agent",
           "Task",
           "TeamCreate",
           "TeamDelete",
           "SendMessage",
         ]),
+      );
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("projects bundled Council as a Lead-only Claude session plugin", async () => {
+    const { queryFactory, launches } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession(
+      { provider: "claude", cwd: process.cwd() },
+      {
+        roleBinding: {
+          roleId: "lead",
+          instructions: "PASEO ROLE LEAD\nRoom role: Root",
+        },
+      },
+    );
+
+    try {
+      await session.startTurn("/council test the session-local projection");
+
+      expect(launches[0]?.options.plugins).toEqual([
+        {
+          type: "local",
+          path: expect.stringMatching(/[\\/]skills[\\/]council$/u),
+          skipMcpDiscovery: true,
+        },
+      ]);
+      expect(launches[0]?.options.disallowedTools).not.toEqual(
+        expect.arrayContaining(["Skill(council)", "Skill(council:council)"]),
       );
     } finally {
       await session.close();
@@ -1767,6 +1805,99 @@ describe("ClaudeAgentSession context window usage", () => {
         kind: "command",
       },
     ]);
+  });
+
+  test("exposes the Claude Council plugin through its plain Lead alias", async () => {
+    const queryFactory = vi.fn(({ prompt }: { prompt: AsyncIterable<unknown> }) => {
+      void prompt;
+      return {
+        next: async () => ({ done: true, value: undefined }),
+        interrupt: async () => undefined,
+        return: async () => undefined,
+        close: () => undefined,
+        setPermissionMode: async () => undefined,
+        setModel: async () => undefined,
+        getContextUsage: async () => undefined,
+        supportedModels: async () => [],
+        supportedCommands: async () => [
+          {
+            name: "council:council",
+            description: "Lead-only Council",
+            argumentHint: "",
+            aliases: ["council"],
+          },
+        ],
+        rewindFiles: async () => ({ canRewind: true }),
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+    });
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession(
+      { provider: "claude", cwd: process.cwd() },
+      { roleBinding: { roleId: "lead", instructions: "Room role: Root" } },
+    );
+
+    const commands = await session.listCommands();
+    await session.close();
+
+    expect(commands).toContainEqual({
+      name: "council",
+      description: "Lead-only Council",
+      argumentHint: "",
+      kind: "skill",
+    });
+    expect(commands).not.toContainEqual(expect.objectContaining({ name: "council:council" }));
+  });
+
+  test("hides plain and namespaced Council commands from a Peer", async () => {
+    const queryFactory = vi.fn(({ prompt }: { prompt: AsyncIterable<unknown> }) => {
+      void prompt;
+      return {
+        next: async () => ({ done: true, value: undefined }),
+        interrupt: async () => undefined,
+        return: async () => undefined,
+        close: () => undefined,
+        setPermissionMode: async () => undefined,
+        setModel: async () => undefined,
+        getContextUsage: async () => undefined,
+        supportedModels: async () => [],
+        supportedCommands: async () => [
+          {
+            name: "council:council",
+            description: "Lead-only Council",
+            argumentHint: "",
+            aliases: ["council"],
+          },
+          { name: "taste", description: "General skill", argumentHint: "" },
+        ],
+        rewindFiles: async () => ({ canRewind: true }),
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+    });
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession(
+      { provider: "claude", cwd: process.cwd() },
+      { roleBinding: { roleId: "peer", instructions: "Role: Peer" } },
+    );
+
+    const commands = await session.listCommands();
+    await session.close();
+
+    expect(commands).toContainEqual(expect.objectContaining({ name: "taste" }));
+    expect(commands).not.toContainEqual(expect.objectContaining({ name: "council" }));
+    expect(commands).not.toContainEqual(expect.objectContaining({ name: "council:council" }));
   });
 
   test("deletes the persisted session jsonl on close when persistSession=false", async () => {

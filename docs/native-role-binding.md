@@ -19,6 +19,11 @@ RoleDefinition + Provider + Workspace Protocol + Assignment
 - `WORKSPACE_PROTOCOL.md` vẫn là optional policy delta do repository sở hữu; Paseo quản lý path, digest, byte-validity state và readership. File vắng mặt là zero-delta hợp lệ.
 - `Assignment` giữ bounded objective, disposition, lease, scope, evidence, handback và stop condition.
 
+Một Lead có thể thêm private execution specialization vào Peer binding khi repository protocol yêu cầu
+một method lặp lại nhưng không cấp authority mới. Provider-neutral `review` là slice đầu tiên; xem
+[triple-lane review](review-lanes.md). Profile ID không đi vào generic Peer catalog hoặc public role
+receipt.
+
 ## Vì sao không dùng initial prompt
 
 Role phải đi qua provider-native durable instruction channel để còn hiệu lực sau compact, resume và turn mới. Initial user prompt, label hoặc convention không đủ làm standing authority boundary.

@@ -75,6 +75,7 @@ function canonicalContractBytes(
     roleDefinitionVersion: roleBinding.definitionVersion,
     roleDefinitionDigest: roleBinding.definitionDigest,
     roleBindingDigest: roleBinding.bindingDigest,
+    executionProfile: roleBinding.executionProfile ?? null,
     roleInstructions: roleBinding.instructions,
     providerBinding,
   });

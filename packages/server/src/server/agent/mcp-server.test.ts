@@ -1251,6 +1251,103 @@ describe("create_agent MCP tool", () => {
   });
   const ensureWorkspaceForCreate = async () => "workspace-created";
 
+  it("exposes review only to a role-bound Lead and forwards the private profile", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const lead = {
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_parent",
+      roleBinding: { roleId: "lead" },
+    } as ManagedAgent;
+    const child = {
+      id: "review-agent",
+      provider: "codex",
+      cwd: existingCwd,
+      workspaceId: "wks_parent",
+      lifecycle: "idle",
+      currentModeId: "full-access",
+      availableModes: [],
+      config: { title: "Coverage review" },
+    } as ManagedAgent;
+    spies.agentManager.getAgent.mockImplementation((id: string) => {
+      if (id === lead.id) return lead;
+      if (id === child.id) return child;
+      return null;
+    });
+    spies.agentManager.createAgent.mockResolvedValue(child);
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: lead.id,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+    expect((tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile).toBeDefined();
+
+    await tool.handler({
+      title: "Coverage review",
+      provider: "codex/gpt-5.4",
+      role: "peer",
+      executionProfile: "review",
+      settings: { modeId: "auto", thinkingOptionId: "medium" },
+      initialPrompt: "Review stable candidate abc123",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5.4",
+        modeId: "auto",
+        thinkingOptionId: "medium",
+      }),
+      undefined,
+      expect.objectContaining({
+        roleId: "peer",
+        executionProfileId: "review",
+        workspaceId: "wks_parent",
+      }),
+    );
+  });
+
+  it.each(["peer", "supervisor"] as const)(
+    "does not project the private execution-profile field to an ordinary %s",
+    async (callerRole) => {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      const callerAgentId = `${callerRole}-agent`;
+      spies.agentManager.getAgent.mockReturnValue({
+        id: callerAgentId,
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+        roleBinding: { roleId: callerRole },
+      } as ManagedAgent);
+
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId,
+        logger,
+      });
+      const tool = registeredTool(server, "create_agent");
+
+      expect(
+        (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile,
+      ).toBeUndefined();
+      await expect(
+        tool.handler({
+          title: "Coverage review",
+          provider: "codex/gpt-5.4",
+          role: "peer",
+          executionProfile: "review",
+          settings: { modeId: "auto", thinkingOptionId: "medium" },
+          initialPrompt: "Review stable candidate abc123",
+        }),
+      ).rejects.toThrow(/Unrecognized key/);
+    },
+  );
+
   it("requires a concise title no longer than 60 characters", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const server = await createAgentMcpServer({

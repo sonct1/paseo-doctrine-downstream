@@ -29,6 +29,8 @@ export const FOUNDATION_SKILL_NAMES = [
   "paseo-supervisor",
   "repo-refresh",
   "test-proof-debt-audit",
+  "triple-review",
+  // Accepted only so an already-imported immutable Foundation release remains installable.
   "ultra-review",
 ] as const;
 

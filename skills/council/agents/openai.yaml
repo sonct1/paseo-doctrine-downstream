@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paseo Council"
+  short_description: "Run a bounded, evidence-led council in Paseo."
+  default_prompt: "Use $council to evaluate this decision with fresh independent seats and issue a binding verdict."

@@ -59,6 +59,8 @@ describe("native Foundation role materialization", () => {
     });
     expect(binding.workspaceProtocol.digest).toMatch(/^[a-f0-9]{64}$/u);
     expect(binding.instructions).toContain("Role: Lead");
+    expect(binding.instructions).toContain("Room role: Root");
+    expect(binding.instructions).toContain("does not create another role");
     expect(binding.instructions).toContain("Demonthorn Agent Orchestration Deep Dive");
     expect(binding.instructions).toContain("Giáo Án Herdr");
     expect(binding.instructions).toContain("runtime-issued PASEO_AGENT_ID");
@@ -83,7 +85,74 @@ describe("native Foundation role materialization", () => {
     });
     expect(binding.instructions).toContain("Do not load");
     expect(binding.instructions).toContain("absent zero-delta");
+    expect(binding.instructions).not.toContain("Room role: Root");
   });
+
+  test("materializes review privately on Peer and redacts it from public receipts", async () => {
+    const cwd = await createWorkspace();
+    const binding = await materializeRoleBinding({
+      roleId: "peer",
+      executionProfileId: "review",
+      provider: "codex",
+      cwd,
+    });
+
+    expect(binding.executionProfile).toMatchObject({
+      id: "review",
+      version: "1.0.0-foundation",
+    });
+    expect(binding.instructions).toContain("OCR-delegated exhaustive review");
+    expect(toRoleBindingReceipt(binding)).not.toHaveProperty("executionProfile");
+  });
+
+  test("rejects review under a non-Peer authority role", async () => {
+    const cwd = await createWorkspace();
+
+    await expect(
+      materializeRoleBinding({
+        roleId: "lead",
+        executionProfileId: "review",
+        provider: "codex",
+        cwd,
+      }),
+    ).rejects.toThrow("requires role 'peer'");
+  });
+
+  test.each([
+    ["codex", "codex-developer-instructions", undefined],
+    ["claude", "claude-system-prompt", undefined],
+    ["pi", "pi-before-agent-start", undefined],
+    ["omp", "omp-append-system-prompt", undefined],
+    [
+      "cursor-acp",
+      "cursor-project-rule-capsule",
+      { status: "supported", injectionMethod: "cursor-project-rule-capsule" },
+    ],
+    [
+      "antigravity-acp",
+      "antigravity-custom-agent",
+      { status: "supported", injectionMethod: "antigravity-custom-agent" },
+    ],
+  ] as const)(
+    "composes review through the SLP-supported %s durable role channel",
+    async (provider, injectionMethod, providerSupport) => {
+      const cwd = await createWorkspace();
+      const binding = await materializeRoleBinding({
+        roleId: "peer",
+        executionProfileId: "review",
+        provider,
+        providerSupport,
+        cwd,
+      });
+
+      expect(binding.injectionMethod).toBe(injectionMethod);
+      expect(binding.instructions).toContain("Role: Peer");
+      expect(binding.instructions).toContain(
+        "Review specialization: OCR-delegated exhaustive review.",
+      );
+      expect(binding.executionProfile?.id).toBe("review");
+    },
+  );
 
   test("allows Lead orchestration without a repository protocol", async () => {
     const cwd = await createWorkspace();

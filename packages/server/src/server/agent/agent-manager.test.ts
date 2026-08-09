@@ -9441,6 +9441,123 @@ test("role-bound create rejects caller systemPrompt before provider launch", asy
   }
 });
 
+test("review rejects a non-Peer authority before state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-review-authority-"));
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        {
+          provider: "codex",
+          cwd: workdir,
+          model: "gpt-5.4",
+          thinkingOptionId: "medium",
+          modeId: "auto",
+        },
+        "00000000-0000-4000-8000-000000000120",
+        {
+          workspaceId: undefined,
+          roleId: "lead",
+          executionProfileId: "review",
+        },
+      ),
+    ).rejects.toThrow("requires role 'peer'");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("review preserves the provider-neutral specialization in the launch context", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-review-launch-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class ReviewCaptureClient extends TestAgentClient {
+    launchContexts: Array<AgentLaunchContext | undefined> = [];
+
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      if (!input.config.model) throw new Error("missing test model");
+      return {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: input.config.model,
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+
+    override async createSession(
+      config: AgentSessionConfig,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return new TestAgentSession(config);
+    }
+
+    override async resumeSession(
+      handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return super.resumeSession(handle, config, launchContext);
+    }
+  }
+
+  const client = new ReviewCaptureClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+
+  try {
+    const created = await manager.createAgent(
+      {
+        provider: "codex",
+        cwd: workdir,
+        model: "gpt-5.4",
+        thinkingOptionId: "medium",
+        modeId: "auto",
+      },
+      "00000000-0000-4000-8000-000000000121",
+      {
+        workspaceId: undefined,
+        roleId: "peer",
+        executionProfileId: "review",
+      },
+    );
+
+    expect(created.roleBinding?.executionProfile).toMatchObject({
+      id: "review",
+      version: "1.0.0-foundation",
+    });
+    expect(client.launchContexts[0]?.roleBinding?.executionProfile).toEqual({
+      id: "review",
+    });
+    expect(client.launchContexts[0]?.roleBinding?.instructions).toContain(
+      "Review specialization: OCR-delegated exhaustive review.",
+    );
+    const exactInstructions = created.roleBinding?.instructions;
+    const stored = await storage.get(created.id);
+    expect(stored?.roleBinding?.instructions).toBe(exactInstructions);
+    expect(stored?.launchContract?.roleBinding.executionProfile).toEqual(
+      created.roleBinding?.executionProfile,
+    );
+
+    await manager.reloadAgentSession(created.id);
+    expect(client.launchContexts[1]?.roleBinding).toEqual({
+      roleId: "peer",
+      instructions: exactInstructions,
+      executionProfile: { id: "review" },
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("role-bound create rejects a present-invalid protocol before state mutation", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-"));
   writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");

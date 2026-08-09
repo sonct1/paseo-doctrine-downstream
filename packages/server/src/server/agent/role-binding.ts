@@ -14,16 +14,24 @@ import {
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { z } from "zod";
 
+import {
+  ExecutionProfileBindingReceiptSchema,
+  foundationExecutionProfileDefinitionDigest,
+  getFoundationExecutionProfileDefinition,
+  type FoundationExecutionProfileId,
+} from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
+  executionProfile: ExecutionProfileBindingReceiptSchema.optional(),
 });
 
 export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
 
 export interface MaterializeRoleBindingInput {
   roleId: PaseoRoleId;
+  executionProfileId?: FoundationExecutionProfileId;
   provider: string;
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
@@ -49,6 +57,12 @@ const SUPERVISOR_PASEO_TOOLS = [
   "signal_agent",
   "resolve_agent_signal",
 ] as const;
+
+const COUNCIL_LEAD_COMPATIBILITY_MARKER = [
+  "Council compatibility marker for the native Paseo Lead:",
+  "Room role: Root",
+  "This legacy marker admits Lead-only Council execution; it does not create another role or broaden the current lease.",
+].join("\n");
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -356,8 +370,23 @@ export async function materializeRoleBinding(
   }
 
   const definition = getFoundationRoleDefinition(input.roleId);
+  const executionProfile = input.executionProfileId
+    ? getFoundationExecutionProfileDefinition(input.executionProfileId)
+    : null;
+  if (executionProfile && executionProfile.authorityRoleId !== input.roleId) {
+    throw new Error(
+      `Execution profile '${executionProfile.id}' requires role '${executionProfile.authorityRoleId}'`,
+    );
+  }
   const workspaceProtocol = await inspectWorkspaceProtocol(input.cwd, input.roleId);
-  const instructions = `${definition.instructions}\n\n${buildProtocolInstruction(workspaceProtocol)}`;
+  const instructions = [
+    definition.instructions,
+    executionProfile?.instructions,
+    input.roleId === "lead" ? COUNCIL_LEAD_COMPATIBILITY_MARKER : null,
+    buildProtocolInstruction(workspaceProtocol),
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("\n\n");
 
   return {
     roleId: input.roleId,
@@ -370,11 +399,20 @@ export async function materializeRoleBinding(
     workspaceProtocol,
     createdAt: (input.createdAt ?? new Date()).toISOString(),
     instructions,
+    ...(executionProfile
+      ? {
+          executionProfile: {
+            id: executionProfile.id,
+            version: executionProfile.version,
+            definitionDigest: foundationExecutionProfileDefinitionDigest(executionProfile),
+          },
+        }
+      : {}),
   };
 }
 
 export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBindingReceipt {
-  const { instructions: _instructions, ...receipt } = binding;
+  const { instructions: _instructions, executionProfile: _executionProfile, ...receipt } = binding;
   return receipt;
 }
 

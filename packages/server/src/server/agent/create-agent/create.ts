@@ -17,6 +17,7 @@ import type { AgentStorage } from "../agent-storage.js";
 import type { AgentOwner } from "../agent-owner.js";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
+import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
 import { buildAgentPrompt } from "../prompt-attachments.js";
@@ -82,6 +83,7 @@ export interface CreateAgentFromMcpInput {
   kind: "mcp";
   provider: string;
   roleId?: PaseoRoleId;
+  executionProfileId?: FoundationExecutionProfileId;
   title: string;
   initialPrompt?: string;
   config?: Partial<AgentSessionConfig>;
@@ -363,6 +365,7 @@ async function resolveMcpCreateAgent(
       owner: input.owner,
       env: input.env,
       roleId: input.roleId,
+      executionProfileId: input.executionProfileId,
     },
     prompt: trimmedPrompt ? trimmedPrompt : undefined,
     setupContinuation,
