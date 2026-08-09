@@ -14,6 +14,10 @@ import {
 } from "./role-binding.js";
 import { LaunchContractReceiptSchema } from "./launch-contract.js";
 import {
+  CoordinationSignalSchema,
+  ManualCoordinationSignalKindSchema,
+} from "./coordination-signal.js";
+import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
   ChatInspectRequestSchema,
@@ -796,6 +800,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   providerUnavailable: z.boolean().optional(),
   roleBinding: RoleBindingReceiptSchema.optional(),
   launchContract: LaunchContractReceiptSchema.optional(),
+  coordinationSignals: z.array(CoordinationSignalSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1296,6 +1301,23 @@ export const FoundationCredentialsDeleteRequestSchema = z.object({
   credentialRef: FoundationCredentialRefSchema,
 });
 
+const FoundationProviderConnectionTargetSchema = z.object({
+  provider: AgentProviderSchema,
+  model: z.string().trim().min(1),
+});
+
+export const FoundationProviderConnectionGetStatusRequestSchema =
+  FoundationProviderConnectionTargetSchema.extend({
+    type: z.literal("foundation.provider_connection.get_status.request"),
+    requestId: z.string(),
+  });
+
+export const FoundationProviderConnectionTestRequestSchema =
+  FoundationProviderConnectionTargetSchema.extend({
+    type: z.literal("foundation.provider_connection.test.request"),
+    requestId: z.string(),
+  });
+
 export const ReadProjectConfigRequestMessageSchema = z.object({
   type: z.literal("read_project_config_request"),
   requestId: z.string(),
@@ -1608,6 +1630,26 @@ export const AgentDetachRequestMessageSchema = z.object({
 export const AgentDetachResponseMessageSchema = z.object({
   type: z.literal("agent.detach.response"),
   payload: AgentActionResponsePayloadSchema,
+});
+
+export const AgentCoordinationSignalRequestMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  kind: ManualCoordinationSignalKindSchema,
+  reason: CoordinationSignalSchema.shape.reason,
+  relatedAgentId: z.string().min(1).optional(),
+  evidenceRefs: CoordinationSignalSchema.shape.evidenceRefs.optional(),
+});
+
+export const AgentCoordinationSignalResponseMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    signal: CoordinationSignalSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
@@ -2632,6 +2674,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsGetStatusRequestSchema,
   FoundationCredentialsSetRequestSchema,
   FoundationCredentialsDeleteRequestSchema,
+  FoundationProviderConnectionGetStatusRequestSchema,
+  FoundationProviderConnectionTestRequestSchema,
   ReadProjectConfigRequestMessageSchema,
   WriteProjectConfigRequestMessageSchema,
   DictationStreamStartMessageSchema,
@@ -2665,6 +2709,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentCoordinationSignalRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -3003,6 +3048,8 @@ export const ServerInfoStatusPayloadSchema = z
         paseoToolPolicies: z.boolean().optional(),
         // COMPAT(foundationCredentials): added in v0.3.0, remove after 2027-08-05.
         foundationCredentials: z.boolean().optional(),
+        // COMPAT(providerConnectionQualification): added after v0.3.0-beta.1.paseo.1.
+        providerConnectionQualification: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.1.106, drop the gate when daemon floor >= v0.1.106.
@@ -4000,6 +4047,11 @@ export const DaemonGetStatusResponseSchema = z.object({
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),
+      sourceRoot: z.string().nullable().optional(),
+      sourceCommit: z.string().nullable().optional(),
+      sourceDirty: z.boolean().nullable().optional(),
+      sourceFingerprint: z.string().nullable().optional(),
+      builtAt: z.string().nullable().optional(),
       listen: z.string().nullable(),
       relay: z
         .object({
@@ -4105,6 +4157,25 @@ export const FoundationCredentialsSetResponseSchema = z.object({
 export const FoundationCredentialsDeleteResponseSchema = z.object({
   type: z.literal("foundation.credentials.delete.response"),
   payload: FoundationCredentialStatusPayloadSchema,
+});
+
+const FoundationProviderConnectionStatusPayloadSchema = z.object({
+  requestId: z.string(),
+  provider: AgentProviderSchema,
+  model: z.string().min(1),
+  status: z.enum(["unqualified", "qualified", "stale"]),
+  qualifiedAt: z.string().datetime().optional(),
+  latencyMs: z.number().int().nonnegative().optional(),
+});
+
+export const FoundationProviderConnectionGetStatusResponseSchema = z.object({
+  type: z.literal("foundation.provider_connection.get_status.response"),
+  payload: FoundationProviderConnectionStatusPayloadSchema,
+});
+
+export const FoundationProviderConnectionTestResponseSchema = z.object({
+  type: z.literal("foundation.provider_connection.test.response"),
+  payload: FoundationProviderConnectionStatusPayloadSchema,
 });
 
 export const ReadProjectConfigResponseMessageSchema = z.object({
@@ -5534,6 +5605,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsGetStatusResponseSchema,
   FoundationCredentialsSetResponseSchema,
   FoundationCredentialsDeleteResponseSchema,
+  FoundationProviderConnectionGetStatusResponseSchema,
+  FoundationProviderConnectionTestResponseSchema,
   ReadProjectConfigResponseMessageSchema,
   WriteProjectConfigResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
@@ -5541,6 +5614,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentCoordinationSignalResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -5730,6 +5804,9 @@ export type SetAgentModelResponseMessage = z.infer<typeof SetAgentModelResponseM
 export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentCoordinationSignalResponseMessage = z.infer<
+  typeof AgentCoordinationSignalResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -5893,6 +5970,9 @@ export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMes
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentCoordinationSignalRequestMessage = z.infer<
+  typeof AgentCoordinationSignalRequestMessageSchema
+>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;

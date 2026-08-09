@@ -83,6 +83,20 @@ export const PASEO_TOOL_MANIFEST = [
     group: "Agents",
   },
   {
+    id: "signal_agent",
+    label: "Signal Lead",
+    description:
+      "Send a durable advisory handoff or detach recommendation without interrupting the Lead's active run.",
+    group: "Agents",
+  },
+  {
+    id: "resolve_agent_signal",
+    label: "Resolve agent signal",
+    description:
+      "Acknowledge, defer, decline, or complete one of your coordination signals or native attention receipts.",
+    group: "Agents",
+  },
+  {
     id: "get_agent_status",
     label: "Get agent status",
     description:

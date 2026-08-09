@@ -1638,9 +1638,20 @@ describe("fetchCatalog", () => {
     expect(catalog.modes).toEqual([]);
   });
 
-  test("custom Codex route never inherits subscription models", async () => {
+  test("custom Codex route keeps its exact model list while inheriting matching Codex metadata", async () => {
     mockState.runtimeModels.set("codex", [
       { provider: "codex", id: "subscription-model", label: "Subscription Model" },
+      {
+        provider: "codex",
+        id: "custom-model",
+        label: "Runtime Custom Model",
+        thinkingOptions: [
+          { id: "low", label: "low" },
+          { id: "medium", label: "medium", isDefault: true },
+          { id: "high", label: "high" },
+        ],
+        defaultThinkingOptionId: "medium",
+      },
     ]);
     const registry = buildProviderRegistry(logger, {
       providerOverrides: {
@@ -1667,7 +1678,16 @@ describe("fetchCatalog", () => {
 
     expect(definitionCatalog.models.map((model) => model.id)).toEqual(["custom-model"]);
     expect(clientCatalog.models.map((model) => model.id)).toEqual(["custom-model"]);
-    expect(mockState.fetchCatalogCalls.get("codex") ?? 0).toBe(0);
+    expect(definitionCatalog.models[0]?.thinkingOptions?.map((option) => option.id)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(definitionCatalog.models[0]?.defaultThinkingOptionId).toBe("medium");
+    expect(clientCatalog.models[0]?.thinkingOptions).toEqual(
+      definitionCatalog.models[0]?.thinkingOptions,
+    );
+    expect(mockState.fetchCatalogCalls.get("codex") ?? 0).toBe(2);
   });
 
   test("replacement models skip runtime model discovery but preserve additionalModels", async () => {

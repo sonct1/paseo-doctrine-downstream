@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   PaseoRoleIdSchema,
@@ -46,10 +46,68 @@ const SUPERVISOR_PASEO_TOOLS = [
   "list_providers",
   "list_models",
   "inspect_provider",
+  "signal_agent",
+  "resolve_agent_signal",
 ] as const;
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+class WorkspaceProtocolValidationError extends Error {
+  constructor(
+    readonly protocolPath: string,
+    readonly reason: string,
+    options?: ErrorOptions,
+  ) {
+    super(`Invalid WORKSPACE_PROTOCOL.md at '${protocolPath}': ${reason}`, options);
+    this.name = "WorkspaceProtocolValidationError";
+  }
+}
+
+function hasErrorCode(error: unknown): error is Error & { code: string } {
+  return error instanceof Error && "code" in error && typeof error.code === "string";
+}
+
+function assertValidWorkspaceProtocol(bytes: string, protocolPath: string): void {
+  if (!bytes.trim()) {
+    throw new WorkspaceProtocolValidationError(protocolPath, "root protocol is blank");
+  }
+  if (/\{\{REQUIRED:[^{}]+\}\}/u.test(bytes)) {
+    throw new WorkspaceProtocolValidationError(protocolPath, "unresolved required placeholder");
+  }
+  if (["<<<<<<<", "=======", ">>>>>>>"].some((marker) => bytes.includes(marker))) {
+    throw new WorkspaceProtocolValidationError(protocolPath, "merge conflict marker is present");
+  }
+
+  const markerPattern = /<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu;
+  const markers = bytes.match(markerPattern) ?? [];
+  if (markers.length > 1) {
+    throw new WorkspaceProtocolValidationError(protocolPath, "protocol marker is duplicated");
+  }
+  const supportedMarkers = new Set([
+    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->",
+    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->",
+  ]);
+  if (markers.length === 1 && !supportedMarkers.has(markers[0]?.trim() ?? "")) {
+    throw new WorkspaceProtocolValidationError(protocolPath, "protocol marker is not supported");
+  }
+
+  const normalized = bytes.toLocaleLowerCase("en-US");
+  const identityCategories = [
+    [/\bowner\b/u, /chủ sở hữu/u, /\bauthority\b/u, /thẩm quyền/u],
+    [/\bapplies_to\b/u, /áp dụng/u, /phạm vi/u, /\brepository\b/u, /\bproject\b/u],
+    [/\bversion\b/u, /\blast_reviewed\b/u, /trạng thái/u, /\bstatus\b/u, /\breview/u, /hiệu lực/u],
+  ];
+  const matchedCategories = identityCategories.filter((category) =>
+    category.some((pattern) => pattern.test(normalized)),
+  ).length;
+  if (matchedCategories < 2) {
+    throw new WorkspaceProtocolValidationError(
+      protocolPath,
+      "minimal owner, scope, or review identity is missing",
+    );
+  }
 }
 
 function resolveProviderFamily(provider: string, providerBaseId?: string | null): string {
@@ -231,7 +289,27 @@ async function inspectWorkspaceProtocol(
 ): Promise<WorkspaceProtocolBindingReceipt> {
   const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
   try {
+    await lstat(protocolPath);
+  } catch (error) {
+    if (hasErrorCode(error) && error.code === "ENOENT") {
+      return {
+        status: "missing",
+        readership: protocolReadership(roleId),
+        path: protocolPath,
+      };
+    }
+    throw new WorkspaceProtocolValidationError(protocolPath, "path cannot be inspected", {
+      cause: error,
+    });
+  }
+
+  try {
+    const resolvedPath = await stat(protocolPath);
+    if (!resolvedPath.isFile()) {
+      throw new WorkspaceProtocolValidationError(protocolPath, "path is not a regular file");
+    }
     const bytes = await readFile(protocolPath, "utf8");
+    assertValidWorkspaceProtocol(bytes, protocolPath);
     return {
       status: "bound",
       readership: protocolReadership(roleId),
@@ -239,26 +317,28 @@ async function inspectWorkspaceProtocol(
       digest: sha256(bytes),
     };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return {
-        status: "missing",
-        readership: protocolReadership(roleId),
-        path: protocolPath,
-      };
-    }
-    throw error;
+    if (error instanceof WorkspaceProtocolValidationError) throw error;
+    throw new WorkspaceProtocolValidationError(protocolPath, "file cannot be read", {
+      cause: error,
+    });
   }
 }
 
 function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): string {
+  if (receipt.status === "missing") {
+    if (receipt.readership === "assignment-only") {
+      return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. Do not load that path; no repository-specific protocol constraints are bound, so follow the standing role and bounded assignment.`;
+    }
+    if (receipt.readership === "governance-only") {
+      return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. No repository-specific protocol is bound; create, audit, or update one only under an exact Human governance mandate.`;
+    }
+    return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. Proceed under the standing Lead role and bounded assignment; no repository-specific policy delta is active.`;
+  }
   if (receipt.readership === "assignment-only") {
     return `Workspace Protocol binding: assignment-only. Do not load ${receipt.path}; receive only relevant constraints in the Lead assignment.`;
   }
   if (receipt.readership === "governance-only") {
     return `Workspace Protocol binding: governance-only at ${receipt.path}. Read it only when the exact Human mandate requires protocol create/audit/update. Bound status: ${receipt.status}${receipt.digest ? `; sha256=${receipt.digest}` : ""}.`;
-  }
-  if (receipt.status === "missing") {
-    return `Workspace Protocol binding: missing at ${receipt.path}. Do not begin ordinary Lead-to-Peer engineering orchestration until a valid root protocol is activated by the proper authority.`;
   }
   return `Workspace Protocol binding: full-read required at ${receipt.path}; sha256=${receipt.digest}. Read the exact current file before orchestration. If current bytes no longer match this digest, stop and request a fresh binding instead of relying on stale protocol state.`;
 }
@@ -299,14 +379,14 @@ export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBinding
 }
 
 function intersectSupervisorTools(providerPolicy: ProviderPaseoToolsPolicy | undefined): string[] {
-  const roleTools = [...SUPERVISOR_PASEO_TOOLS];
+  let roleTools = [...SUPERVISOR_PASEO_TOOLS];
   if (providerPolicy?.allowedTools) {
     const providerAllowed = new Set(providerPolicy.allowedTools);
-    return roleTools.filter((tool) => providerAllowed.has(tool));
+    roleTools = roleTools.filter((tool) => providerAllowed.has(tool));
   }
   if (providerPolicy?.disabledTools) {
     const providerDisabled = new Set(providerPolicy.disabledTools);
-    return roleTools.filter((tool) => !providerDisabled.has(tool));
+    roleTools = roleTools.filter((tool) => !providerDisabled.has(tool));
   }
   return roleTools;
 }

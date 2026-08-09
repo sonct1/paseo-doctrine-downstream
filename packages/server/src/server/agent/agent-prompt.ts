@@ -135,6 +135,8 @@ export interface SendPromptToAgentParams {
    * schedule fires, notify-on-finish).
    */
   unarchive?: boolean;
+  /** Default true. Set false for safe-boundary delivery that must never replace an active run. */
+  replaceRunning?: boolean;
   logger: Logger;
 }
 
@@ -202,7 +204,7 @@ export async function sendPromptToAgent(
     : params.runOptions;
 
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
-    replaceRunning: true,
+    replaceRunning: params.replaceRunning ?? true,
     runOptions,
   });
 }

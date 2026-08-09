@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -37,7 +37,11 @@ describe("native Foundation role materialization", () => {
 
   test("binds Lead to Codex with protocol provenance and a redacted receipt", async () => {
     const cwd = await createWorkspace();
-    await writeFile(join(cwd, "WORKSPACE_PROTOCOL.md"), "# Protocol\n\nOwner: Human\n", "utf8");
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      "# Protocol\n\nowner: Human\napplies_to: repository root\nversion: 1\n",
+      "utf8",
+    );
 
     const binding = await materializeRoleBinding({
       roleId: "lead",
@@ -78,7 +82,76 @@ describe("native Foundation role materialization", () => {
       path: join(cwd, "WORKSPACE_PROTOCOL.md"),
     });
     expect(binding.instructions).toContain("Do not load");
+    expect(binding.instructions).toContain("absent zero-delta");
   });
+
+  test("allows Lead orchestration without a repository protocol", async () => {
+    const cwd = await createWorkspace();
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+    });
+
+    expect(binding.workspaceProtocol).toEqual({
+      status: "missing",
+      readership: "full",
+      path: join(cwd, "WORKSPACE_PROTOCOL.md"),
+    });
+    expect(binding.instructions).toContain("absent zero-delta");
+    expect(binding.instructions).toContain("Proceed under the standing Lead role");
+    expect(binding.instructions).not.toContain("Do not begin ordinary");
+    expect(binding.instructions).toContain("fresh authoritative readback proves");
+    expect(binding.instructions).not.toContain("without an explicit Human lease");
+  });
+
+  test.each([
+    ["blank", "   \n", "root protocol is blank"],
+    [
+      "placeholder",
+      "owner: Human\napplies_to: repository\n{{REQUIRED: review}}\n",
+      "unresolved required placeholder",
+    ],
+    [
+      "conflict marker",
+      "owner: Human\napplies_to: repository\n<<<<<<< HEAD\n=======\n>>>>>>> branch\n",
+      "merge conflict marker is present",
+    ],
+    [
+      "duplicate marker",
+      "owner: Human\napplies_to: repository\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n",
+      "protocol marker is duplicated",
+    ],
+    [
+      "unsupported marker",
+      "owner: Human\napplies_to: repository\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n",
+      "protocol marker is not supported",
+    ],
+    ["missing identity", "# Local notes\n", "minimal owner, scope, or review identity is missing"],
+  ])("fails closed for a present-invalid protocol: %s", async (_name, bytes, reason) => {
+    const cwd = await createWorkspace();
+    await writeFile(join(cwd, "WORKSPACE_PROTOCOL.md"), bytes, "utf8");
+
+    await expect(
+      materializeRoleBinding({ roleId: "lead", provider: "codex", cwd }),
+    ).rejects.toThrow(reason);
+  });
+
+  test.each(["directory", "broken-symlink"])(
+    "fails closed when the protocol path is a %s",
+    async (kind) => {
+      const cwd = await createWorkspace();
+      const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
+      if (kind === "directory") await mkdir(protocolPath);
+      else await symlink(join(cwd, "missing-protocol"), protocolPath);
+
+      await expect(
+        materializeRoleBinding({ roleId: "lead", provider: "codex", cwd }),
+      ).rejects.toThrow(
+        kind === "directory" ? "path is not a regular file" : "file cannot be read",
+      );
+    },
+  );
 
   test("fails closed for a provider without a native durable role channel", async () => {
     const cwd = await createWorkspace();
@@ -156,5 +229,12 @@ describe("native Foundation role materialization", () => {
         allowedTools: ["list_agents", "create_agent"],
       }),
     ).toEqual({ enabled: true, allowedTools: ["list_agents"] });
+    expect(
+      applyRolePaseoToolPolicy("supervisor", {
+        enabled: true,
+        allowedTools: ["list_agents", "get_agent_status"],
+        disabledTools: ["list_agents"],
+      }),
+    ).toEqual({ enabled: true, allowedTools: ["get_agent_status"] });
   });
 });

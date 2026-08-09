@@ -199,6 +199,12 @@ function buildStoredPersistenceHandle(
   return toAgentPersistenceHandle(validProviders, record.persistence);
 }
 
+function projectStoredCoordinationSignals(
+  record: StoredAgentRecord,
+): Pick<AgentSnapshotPayload, "coordinationSignals"> | Record<string, never> {
+  return record.coordinationSignals ? { coordinationSignals: record.coordinationSignals } : {};
+}
+
 export function buildStoredAgentPayload(
   record: StoredAgentRecord,
   validProviders: Iterable<AgentProvider>,
@@ -256,6 +262,7 @@ export function buildStoredAgentPayload(
     ...(record.launchContract
       ? { launchContract: toLaunchContractReceipt(record.launchContract) }
       : {}),
+    ...projectStoredCoordinationSignals(record),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

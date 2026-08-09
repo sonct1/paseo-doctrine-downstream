@@ -111,7 +111,7 @@ function roleBoundaryGate(releasePath: string): DoctorGate {
   };
 }
 
-function projectGate(projectRoot?: string): DoctorGate {
+export function inspectProjectReadiness(projectRoot?: string): DoctorGate {
   if (!projectRoot) {
     return {
       name: "PROJECT_READY",
@@ -120,13 +120,65 @@ function projectGate(projectRoot?: string): DoctorGate {
     };
   }
   const protocolPath = path.join(path.resolve(projectRoot), "WORKSPACE_PROTOCOL.md");
-  if (!existsSync(protocolPath)) {
-    return { name: "PROJECT_READY", status: "FAIL", evidence: ["WORKSPACE_PROTOCOL.md is absent"] };
+  try {
+    lstatSync(protocolPath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {
+        name: "PROJECT_READY",
+        status: "UNKNOWN",
+        evidence: [
+          "WORKSPACE_PROTOCOL.md is absent zero-delta; project activation and task evidence are not proven",
+        ],
+      };
+    }
+    return {
+      name: "PROJECT_READY",
+      status: "FAIL",
+      evidence: ["WORKSPACE_PROTOCOL.md path cannot be inspected"],
+    };
   }
+
+  try {
+    if (!statSync(protocolPath).isFile()) {
+      return {
+        name: "PROJECT_READY",
+        status: "FAIL",
+        evidence: ["WORKSPACE_PROTOCOL.md is not a regular file"],
+      };
+    }
+  } catch {
+    return {
+      name: "PROJECT_READY",
+      status: "FAIL",
+      evidence: ["WORKSPACE_PROTOCOL.md is not a readable regular file"],
+    };
+  }
+
   const protocol = readFileSync(protocolPath, "utf8");
-  const unresolved = protocol.includes("{{") || /\b(TBD|TODO|UNKNOWN)\b/u.test(protocol);
-  return unresolved
-    ? { name: "PROJECT_READY", status: "FAIL", evidence: ["workspace protocol is unresolved"] }
+  const markers = protocol.match(/<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu) ?? [];
+  const supportedMarkers = new Set([
+    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->",
+    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->",
+  ]);
+  const normalized = protocol.toLocaleLowerCase("en-US");
+  const identityCategories = [
+    [/\bowner\b/u, /chủ sở hữu/u, /\bauthority\b/u, /thẩm quyền/u],
+    [/\bapplies_to\b/u, /áp dụng/u, /phạm vi/u, /\brepository\b/u, /\bproject\b/u],
+    [/\bversion\b/u, /\blast_reviewed\b/u, /trạng thái/u, /\bstatus\b/u, /\breview/u, /hiệu lực/u],
+  ];
+  const matchedCategories = identityCategories.filter((category) =>
+    category.some((pattern) => pattern.test(normalized)),
+  ).length;
+  const invalid =
+    !protocol.trim() ||
+    /\{\{REQUIRED:[^{}]+\}\}/u.test(protocol) ||
+    ["<<<<<<<", "=======", ">>>>>>>"].some((marker) => protocol.includes(marker)) ||
+    markers.length > 1 ||
+    (markers.length === 1 && !supportedMarkers.has(markers[0]?.trim() ?? "")) ||
+    matchedCategories < 2;
+  return invalid
+    ? { name: "PROJECT_READY", status: "FAIL", evidence: ["workspace protocol is invalid"] }
     : {
         name: "PROJECT_READY",
         status: "UNKNOWN",
@@ -163,7 +215,7 @@ export function doctorFoundation(input: {
           status: "UNKNOWN",
           evidence: ["Foundation is not installed"],
         },
-        projectGate(input.projectRoot),
+        inspectProjectReadiness(input.projectRoot),
       ],
     };
   }
@@ -181,7 +233,7 @@ export function doctorFoundation(input: {
         interruptedTransactionPresent: inspection.interruptedTransactionPresent,
       }),
       roleBoundaryGate(record.releasePath),
-      projectGate(input.projectRoot),
+      inspectProjectReadiness(input.projectRoot),
     ],
   };
 }

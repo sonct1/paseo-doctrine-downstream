@@ -131,6 +131,10 @@ import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { resolveAgentIdentifier } from "./agent/identifier.js";
 import { formatSystemNotificationPrompt, sendPromptToAgent } from "./agent/agent-prompt.js";
+import {
+  resumePendingCoordinationSignalDeliveries,
+  type CoordinationSignalDependencies,
+} from "./agent/coordination-signals.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import {
@@ -172,6 +176,7 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/notifications.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
+import { DAEMON_BUILD_PROVENANCE } from "./build-provenance.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import {
   isProviderCredentialEnvironmentKey,
@@ -744,6 +749,7 @@ export async function createPaseoDaemon(
       serverId,
       hostname: getHostname(),
       version: daemonVersion,
+      ...DAEMON_BUILD_PROVENANCE,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
   });
@@ -1274,6 +1280,31 @@ export async function createPaseoDaemon(
   );
   logger.info({ elapsed: elapsed() }, "Preparing voice and MCP runtime");
 
+  const sendCoordinationMessageAtSafeBoundary = async (agentId: string, text: string) => {
+    if (agentManager.hasInFlightRun(agentId)) {
+      throw new Error(`Agent ${agentId} is still running`);
+    }
+    await sendPromptToAgent({
+      agentManager,
+      agentStorage,
+      agentId,
+      prompt: formatSystemNotificationPrompt(text),
+      unarchive: false,
+      replaceRunning: false,
+      logger,
+    });
+  };
+  const coordinationSignalDependencies: CoordinationSignalDependencies = {
+    agentManager,
+    agentStorage,
+    sendAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
+    logger,
+  };
+  const stopPendingCoordinationSignalDeliveries = await resumePendingCoordinationSignalDeliveries({
+    ...coordinationSignalDependencies,
+    agentStorage,
+  });
+
   const createAgentToolHostDependencies = (
     runtime: PaseoToolRuntimeContext,
   ): PaseoToolHostDependencies => ({
@@ -1295,6 +1326,7 @@ export async function createPaseoDaemon(
         logger,
       });
     },
+    sendAgentMessageAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
     providerSnapshotManager,
     github,
     workspaceGitService,
@@ -1676,6 +1708,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    stopPendingCoordinationSignalDeliveries();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();

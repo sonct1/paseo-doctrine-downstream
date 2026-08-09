@@ -9294,7 +9294,11 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
 
 test("role-bound create persists immutable binding and passes only launch instructions", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
-  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    "# Workspace Protocol\n\nowner: Human\napplies_to: repository root\nversion: 1\n",
+    "utf8",
+  );
   const storage = new AgentStorage(join(workdir, "agents"), logger);
 
   class RoleCaptureClient extends TestAgentClient {
@@ -9430,6 +9434,28 @@ test("role-bound create rejects caller systemPrompt before provider launch", asy
         { workspaceId: undefined, roleId: "peer" },
       ),
     ).rejects.toThrow("Cannot set systemPrompt on a role-bound agent");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects a present-invalid protocol before state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-"));
+  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir },
+        "00000000-0000-4000-8000-000000000119",
+        { workspaceId: undefined, roleId: "lead" },
+      ),
+    ).rejects.toThrow("minimal owner, scope, or review identity is missing");
     expect(deleteAgentState).not.toHaveBeenCalled();
     expect(client.createdConfigs).toHaveLength(0);
   } finally {

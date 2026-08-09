@@ -11,6 +11,7 @@ import type { AgentSessionConfig } from "./agent-sdk-types.js";
 import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./agent-owner.js";
 import { PersistedRoleBindingSchema } from "./role-binding.js";
 import { PersistedLaunchContractSchema } from "./launch-contract.js";
+import { CoordinationSignalSchema } from "@getpaseo/protocol/coordination-signal";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
@@ -70,6 +71,7 @@ const STORED_AGENT_SCHEMA = z.object({
   owner: AgentOwnerSchema.optional(),
   roleBinding: PersistedRoleBindingSchema.optional(),
   launchContract: PersistedLaunchContractSchema.optional(),
+  coordinationSignals: z.array(CoordinationSignalSchema).optional(),
 });
 
 export type SerializableAgentConfig = Pick<
@@ -228,6 +230,9 @@ export class AgentStorage {
     // would wipe it during normal persistence (including on daemon restart).
     if (existing && existing.archivedAt !== undefined) {
       record.archivedAt = existing.archivedAt;
+    }
+    if (existing?.coordinationSignals !== undefined) {
+      record.coordinationSignals = existing.coordinationSignals;
     }
     await this.upsert(record);
   }

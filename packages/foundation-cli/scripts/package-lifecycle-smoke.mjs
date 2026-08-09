@@ -86,7 +86,29 @@ try {
   assert.equal(existsSync(activeRecord.currentLink), false);
   for (const link of activeRecord.installedLinks) assert.equal(existsSync(link.target), false);
   assert.equal(existsSync(activeRecord.releasePath), true);
-  assert.equal(existsSync(activeRecord.controlHome), true);
+  assert.equal(activeRecord.controlHome, null);
+  assert.equal(existsSync(path.join(home, ".paseo-control")), false);
+
+  const controlHome = path.join(temporaryRoot, "control-home");
+  const controlPlanPath = path.join(temporaryRoot, "control-plan.json");
+  mkdirSync(controlHome, { recursive: true });
+  runCli(binPath, [
+    "plan",
+    "--mode",
+    "clean-empty",
+    "--home",
+    controlHome,
+    "--with-control-workspace",
+    "--output",
+    controlPlanPath,
+  ]);
+  runCli(binPath, ["install", "--plan", controlPlanPath]);
+  const controlRecordPath = path.join(controlHome, ".paseo-foundation", "install.json");
+  const controlRecord = JSON.parse(readFileSync(controlRecordPath, "utf8"));
+  assert.equal(controlRecord.controlHome, path.join(controlHome, ".paseo-control"));
+  assert.equal(existsSync(path.join(controlRecord.controlHome, "PROJECT_INDEX.yaml")), true);
+  runCli(binPath, ["uninstall", "--home", controlHome]);
+  assert.equal(existsSync(path.join(controlRecord.controlHome, "PROJECT_INDEX.yaml")), true);
 
   const migrationHome = path.join(temporaryRoot, "migration-home");
   const migrationPlanPath = path.join(temporaryRoot, "migration-plan.json");
@@ -124,7 +146,13 @@ try {
   runCli(binPath, ["install", "--plan", migrationPlanPath]);
   const migrationRecordPath = path.join(migrationHome, ".paseo-foundation", "install.json");
   const migrationRecord = JSON.parse(readFileSync(migrationRecordPath, "utf8"));
-  assert.equal(migrationRecord.previousLinks.length, legacyLinks.length);
+  assert.equal(migrationRecord.previousLinks.length, migrationRecord.installedLinks.length);
+  assert.deepEqual(
+    migrationRecord.previousLinks
+      .map(({ previousTarget }) => previousTarget)
+      .filter((previousTarget) => previousTarget !== null),
+    legacyLinks.map(({ source }) => source),
+  );
   runCli(binPath, ["uninstall", "--home", migrationHome]);
   for (const link of legacyLinks) {
     assert.equal(

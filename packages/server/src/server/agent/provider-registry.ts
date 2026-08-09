@@ -369,6 +369,20 @@ function mergeModelAdditions(
   );
 }
 
+function enrichConfiguredModelsFromExactRuntimeMatches(
+  provider: AgentProvider,
+  configuredModels: AgentModelDefinition[],
+  runtimeModels: AgentModelDefinition[],
+): AgentModelDefinition[] {
+  const runtimeById = new Map(runtimeModels.map((model) => [model.id, model]));
+  return configuredModels.map((configured) => {
+    const runtime = runtimeById.get(configured.id);
+    return runtime
+      ? normalizeAgentModelDefinition({ ...runtime, ...configured, provider })
+      : configured;
+  });
+}
+
 export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession): AgentSession {
   return {
     provider,
@@ -459,11 +473,17 @@ function wrapClientProvider(
       : undefined,
     fetchCatalog: async (options) => {
       if (forceStaticModels) {
+        const configuredModels = mergeModels(provider, profileModels, additionalModels, [], {
+          profileModelsAreAdditive,
+        });
+        const catalog = await inner.fetchCatalog(options);
         return {
-          models: mergeModels(provider, profileModels, additionalModels, [], {
-            profileModelsAreAdditive,
-          }),
-          modes: [],
+          ...catalog,
+          models: enrichConfiguredModelsFromExactRuntimeMatches(
+            provider,
+            configuredModels,
+            catalog.models,
+          ),
         };
       }
       const catalog = await inner.fetchCatalog(options);
@@ -571,6 +591,14 @@ function createRegistryEntry(
         // must still be merged on top. If modes are dynamic, probe for modes via
         // the single catalog API; otherwise use static/empty modes with no runtime.
         const models = mergeModelAdditions(provider, replacementModels, additionalModels);
+        if (resolved.forceStaticModels) {
+          const catalog = await catalogClient.fetchCatalog(options);
+          return {
+            ...catalog,
+            models: enrichConfiguredModelsFromExactRuntimeMatches(provider, models, catalog.models),
+            modes: decorateModes(hasStaticModes ? resolved.definition.modes : catalog.modes),
+          };
+        }
         if (hasStaticModes) {
           const defaultModeId = await catalogClient.resolveDefaultModeId?.({
             config: {

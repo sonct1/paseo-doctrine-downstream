@@ -67,7 +67,7 @@ paseo-foundation inspect --product-root "$PWD" --json
 
 Chọn mode từ exact inspection, không chọn theo lịch sử máy:
 
-- `clean-empty`: chưa có Foundation, Control Workspace hoặc target link;
+- `clean-empty`: chưa có Foundation hoặc target link; Control Workspace chỉ được xét khi plan opt in;
 - `coexist`: giữ config/tool hiện có, chỉ nhận target chưa có owner;
 - `migration`: chỉ nhận symlink đã classify là Foundation-owned hoặc legacy-owned;
 - `update`: install record đang active.
@@ -83,6 +83,9 @@ paseo-foundation plan \
 paseo-foundation install \
   --plan "$HOME/.paseo-foundation/install-plan.json"
 ```
+
+Mặc định plan không tạo `~/.paseo-control`. Chỉ thêm `--with-control-workspace` vào lệnh `plan` cho một
+bounded experimental pilot đã có reproduced cross-project need, privacy boundary, owner và rollback path.
 
 Nếu state đổi sau plan, installer phải fail closed. Chạy lại `inspect`, review delta rồi tạo plan mới. Không
 restart daemon như side effect của Foundation install.
@@ -224,7 +227,7 @@ muốn gỡ owned runtime links, chạy:
 paseo-foundation uninstall
 ```
 
-`uninstall` giữ release và `~/.paseo-control` để audit/recovery. Gỡ source-linked CLI khỏi shell bằng cách
+`uninstall` giữ release và một `~/.paseo-control` đã tồn tại để audit/recovery. Gỡ source-linked CLI khỏi shell bằng cách
 mở shell mới hoặc bỏ pilot prefix khỏi `PATH`. Muốn thu hồi prefix theo cách recoverable trên macOS:
 
 ```bash

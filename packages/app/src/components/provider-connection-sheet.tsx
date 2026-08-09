@@ -21,9 +21,11 @@ interface ProviderConnectionSheetProps {
   mode: "create" | "edit";
   provider: string;
   providerLabel: string;
+  modelId: string;
   serverId: string;
   baseUrl: string;
   credentialRef: string | null;
+  canTestConnection: boolean;
   onClose: () => void;
   onSaved: (providerId: string) => Promise<void>;
 }
@@ -32,6 +34,7 @@ function useProviderConnectionForm(input: {
   mode: "create" | "edit";
   provider: string;
   providerLabel: string;
+  modelId: string;
   baseUrl: string;
 }): ProviderConnectionFormModel {
   const [model] = useState(() =>
@@ -39,7 +42,7 @@ function useProviderConnectionForm(input: {
       mode: input.mode,
       providerId: input.provider,
       providerLabel: input.providerLabel,
-      modelId: "",
+      modelId: input.modelId,
       baseUrl: input.baseUrl,
     }),
   );
@@ -47,19 +50,119 @@ function useProviderConnectionForm(input: {
   return model;
 }
 
+function useProviderConnectionTest(input: {
+  serverId: string;
+  mode: "create" | "edit";
+  provider: string;
+  modelId: string;
+  credentialConfigured: boolean | null;
+  hasUnsavedChanges: boolean;
+  onSaved: (providerId: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const client = useHostRuntimeClient(input.serverId);
+  const [result, setResult] = useState<{
+    status: "idle" | "testing" | "qualified" | "error";
+    message: string | null;
+  }>({ status: "idle", message: null });
+  const canRun =
+    input.mode === "edit" &&
+    input.modelId.length > 0 &&
+    input.credentialConfigured === true &&
+    !input.hasUnsavedChanges;
+  const run = useCallback(async () => {
+    if (!client || !canRun) return;
+    setResult({ status: "testing", message: null });
+    try {
+      const qualification = await client.testFoundationProviderConnection(
+        input.provider,
+        input.modelId,
+      );
+      setResult({
+        status: "qualified",
+        message: t("settings.providers.connection.testQualified", {
+          model: qualification.model,
+          latency: qualification.latencyMs ?? 0,
+        }),
+      });
+      await input.onSaved(input.provider);
+    } catch (error) {
+      setResult({
+        status: "error",
+        message:
+          error instanceof Error ? error.message : t("settings.providers.connection.testFailed"),
+      });
+    }
+  }, [canRun, client, input, t]);
+  const onPress = useCallback(() => void run(), [run]);
+  return { ...result, canRun, onPress };
+}
+
+function ProviderConnectionTestResult({
+  status,
+  message,
+}: {
+  status: "idle" | "testing" | "qualified" | "error";
+  message: string | null;
+}) {
+  if (!message) return null;
+  return (
+    <Text
+      style={status === "error" ? styles.testError : styles.testSuccess}
+      testID="provider-connection-test-result"
+    >
+      {message}
+    </Text>
+  );
+}
+
+function ProviderConnectionTestButton({
+  visible,
+  status,
+  canRun,
+  onPress,
+}: {
+  visible: boolean;
+  status: "idle" | "testing" | "qualified" | "error";
+  canRun: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onPress={onPress}
+      disabled={status === "testing" || !canRun}
+      testID="provider-connection-test"
+    >
+      {status === "testing"
+        ? t("settings.providers.connection.testing")
+        : t("settings.providers.connection.test")}
+    </Button>
+  );
+}
+
+function shouldShowConnectionTest(mode: "create" | "edit", featureAvailable: boolean): boolean {
+  return mode === "edit" && featureAvailable;
+}
+
 export function ProviderConnectionSheet({
   mode,
   provider,
   providerLabel,
+  modelId,
   serverId,
   baseUrl,
   credentialRef,
+  canTestConnection,
   onClose,
   onSaved,
 }: ProviderConnectionSheetProps) {
   const { t } = useTranslation();
   const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
-  const model = useProviderConnectionForm({ mode, provider, providerLabel, baseUrl });
+  const model = useProviderConnectionForm({ mode, provider, providerLabel, baseUrl, modelId });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
   const client = useHostRuntimeClient(serverId);
   const { patchConfig } = useDaemonConfig(serverId);
@@ -127,6 +230,17 @@ export function ProviderConnectionSheet({
     }
   }, [client, credentialRef, mode, model, onClose, onSaved, patchConfig, state, t]);
   const handleSavePress = useCallback(() => void handleSave(), [handleSave]);
+  const hasUnsavedConnectionChanges =
+    state.baseUrl !== baseUrl || state.apiKey.trim().length > 0 || state.status !== "idle";
+  const connectionTest = useProviderConnectionTest({
+    serverId,
+    mode,
+    provider,
+    modelId,
+    credentialConfigured: state.credentialConfigured,
+    hasUnsavedChanges: hasUnsavedConnectionChanges,
+    onSaved,
+  });
   const handleDeleteCredential = useCallback(async () => {
     if (!client || mode !== "edit" || !credentialRef || state.credentialConfigured !== true) return;
     const confirmed = await confirmDialog({
@@ -252,7 +366,17 @@ export function ProviderConnectionSheet({
           />
         </Field>
         <Text style={styles.note}>{t("settings.providers.connection.privateStorage")}</Text>
+        <ProviderConnectionTestResult
+          status={connectionTest.status}
+          message={connectionTest.message}
+        />
         <View style={styles.actions}>
+          <ProviderConnectionTestButton
+            visible={shouldShowConnectionTest(mode, canTestConnection)}
+            status={connectionTest.status}
+            canRun={connectionTest.canRun}
+            onPress={connectionTest.onPress}
+          />
           <Button
             variant="secondary"
             size="sm"
@@ -291,6 +415,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   note: {
     color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  testSuccess: {
+    color: theme.colors.statusSuccess,
+    fontSize: theme.fontSize.xs,
+  },
+  testError: {
+    color: theme.colors.statusDanger,
     fontSize: theme.fontSize.xs,
   },
   actions: {

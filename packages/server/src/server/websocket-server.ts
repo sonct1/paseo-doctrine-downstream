@@ -1599,6 +1599,8 @@ export class VoiceAssistantWebSocketServer {
         paseoToolPolicies: true,
         // COMPAT(foundationCredentials): added in v0.3.0, remove after 2027-08-05.
         foundationCredentials: true,
+        // COMPAT(providerConnectionQualification): added after v0.3.0-beta.1.paseo.1.
+        providerConnectionQualification: true,
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,
         // COMPAT(forgeProviders): added in v0.1.106, drop the gate when daemon floor >= v0.1.106.

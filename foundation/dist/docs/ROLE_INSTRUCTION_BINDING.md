@@ -106,7 +106,9 @@ không có fresh evidence rằng non-owning role bị hide/deny.
 
 ## Provider-native role sources
 
-Repository giữ model-neutral role source cho Lead, Peer và Supervisor dưới `profiles/claude/`,
+Repository giữ model-neutral runtime source tại `profiles/native/role-definitions.json`; Paseo Product
+phải import exact version rồi derive native role instruction từ artifact này, không giữ một bản prompt
+độc lập trong source code. Provider projection cho Lead, Peer và Supervisor nằm dưới `profiles/claude/`,
 `profiles/opencode/`, `profiles/antigravity/`, `profiles/omp/` và `profiles/cursor/`. Human chọn/pin Lead;
 Lead chọn/pin provider/model cho từng Peer session; Human chọn/authorize Supervisor. Provider-native
 source chỉ giữ standing contract, không cấp lease, activation, qualification hoặc authority chọn role.

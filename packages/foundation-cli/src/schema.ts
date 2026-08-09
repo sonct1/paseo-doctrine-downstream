@@ -45,7 +45,7 @@ export const InstallRecordSchema = z.object({
   installedAt: z.string().datetime(),
   releasePath: z.string().min(1),
   currentLink: z.string().min(1),
-  controlHome: z.string().min(1),
+  controlHome: z.string().min(1).nullable(),
   installedLinks: z.array(InstalledLinkSchema),
   previousReleasePath: z.string().nullable(),
   previousCurrentTarget: z.string().nullable().optional(),
@@ -82,21 +82,33 @@ export const PlannedLinkSchema = InstalledLinkSchema.extend({
   previousTarget: z.string().nullable(),
 });
 
-export const InstallPlanSchema = z.object({
-  schemaVersion: z.literal(1),
-  planId: z.string().regex(/^[a-f0-9]{64}$/u),
-  mode: InstallModeSchema,
-  home: z.string().min(1),
-  productRoot: z.string().min(1),
-  distributionVersion: z.string().min(1),
-  foundationCommit: z.string().regex(/^[a-f0-9]{40}$/u),
-  releasePath: z.string().min(1),
-  currentLink: z.string().min(1),
-  controlHome: z.string().min(1),
-  inspectionFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
-  links: z.array(PlannedLinkSchema),
-  blockers: z.array(z.string()),
-});
+export const InstallPlanSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    planId: z.string().regex(/^[a-f0-9]{64}$/u),
+    mode: InstallModeSchema,
+    home: z.string().min(1),
+    productRoot: z.string().min(1),
+    distributionVersion: z.string().min(1),
+    foundationCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+    releasePath: z.string().min(1),
+    currentLink: z.string().min(1),
+    includeControlWorkspace: z.boolean(),
+    controlHome: z.string().min(1).nullable(),
+    controlHomePresent: z.boolean().nullable(),
+    inspectionFingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+    links: z.array(PlannedLinkSchema),
+    blockers: z.array(z.string()),
+  })
+  .superRefine((plan, context) => {
+    const hasControlWorkspacePlan = plan.controlHome !== null && plan.controlHomePresent !== null;
+    if (plan.includeControlWorkspace !== hasControlWorkspacePlan) {
+      context.addIssue({
+        code: "custom",
+        message: "Control Workspace plan fields do not match the explicit inclusion choice",
+      });
+    }
+  });
 
 export type FoundationManifest = z.infer<typeof FoundationManifestSchema>;
 export type InstallMode = z.infer<typeof InstallModeSchema>;

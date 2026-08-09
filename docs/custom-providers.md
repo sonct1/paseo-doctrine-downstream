@@ -214,6 +214,9 @@ For a role-first launch, Paseo pins the logical provider, model, URL and command
 
 Tạo provider và lưu key qua **Settings → Host → Providers → Add provider** là flow khuyến nghị. WebUI gửi
 secret bằng credential RPC; secret không đi qua provider config. JSON trên chỉ minh họa phần non-secret.
+Trong UI, loại provider này được gọi là **Custom Codex**. Sau khi lưu, mở **Connection → Test connection**
+để probe exact model qua Responses API. Receipt hợp lệ không chứa key hoặc URL và tự chuyển sang stale khi
+route, model, credential hoặc daemon version thay đổi.
 
 ### What Paseo wires up
 
@@ -241,6 +244,7 @@ args = ["-e", "<Paseo credential reader>", "<private credential projection>"]
 
 - The endpoint must speak the OpenAI **Responses API**, not just chat completions. Many gateways (OpenRouter, LiteLLM) support both — pick the Responses-compatible route.
 - Set a model explicitly. Custom endpoints expose their own model IDs, and Paseo neither discovers them automatically nor inherits the built-in Codex subscription catalog.
+- Nếu exact model ID trùng model trong Codex runtime catalog, Paseo chỉ reuse metadata `thinkingOptions` và default thinking level cho model đã cấu hình; các model subscription khác vẫn bị loại khỏi custom provider.
 - To run multiple endpoints side-by-side, define multiple entries that each extend `"codex"` with different IDs, labels, and env. Each appears as its own provider in the app.
 - If you only want to override the binary (e.g. a nightly Codex build) without changing the endpoint, omit `OPENAI_BASE_URL` and use `command` instead — see [Custom binary for a provider](#custom-binary-for-a-provider).
 - Missing model, URL, `credentialRef`, configured key, or a provider launch error is terminal for that create attempt; Paseo does not retry through the subscription route.

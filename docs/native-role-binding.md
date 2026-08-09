@@ -1,6 +1,6 @@
 # ADR — Native Role Binding trong Paseo
 
-Trạng thái: accepted by Human; Codex/Claude/Pi/OMP/Cursor/Antigravity implementation và focused qualification gates hoàn tất trong current branch
+Trạng thái: accepted by Human; durable-instruction implementations và focused static/fake tests hoàn tất; real-provider runtime canary là release evidence riêng và chưa nằm trong default CI
 Ngày: `2026-08-06`
 Foundation contract: `ROLE_CONTRACTS 3.2.0-topology-recovery`
 
@@ -16,7 +16,7 @@ RoleDefinition + Provider + Workspace Protocol + Assignment
 
 - `RoleDefinition` giữ identity, universal authority boundary và anti-pattern guards.
 - `Provider` chỉ giữ transport, credentials, endpoint, model catalog và runtime capability.
-- `WORKSPACE_PROTOCOL.md` vẫn là source do repository sở hữu; Paseo quản lý path, digest, validation state và readership.
+- `WORKSPACE_PROTOCOL.md` vẫn là optional policy delta do repository sở hữu; Paseo quản lý path, digest, byte-validity state và readership. File vắng mặt là zero-delta hợp lệ.
 - `Assignment` giữ bounded objective, disposition, lease, scope, evidence, handback và stop condition.
 
 ## Vì sao không dùng initial prompt
@@ -59,7 +59,7 @@ Role và provider chỉ ghép được khi adapter có native durable instructio
 - Antigravity ACP materialize một unique per-agent custom-agent profile và exact wrapper pin `agy --agent`; profile được create/verify/cleanup theo exact bytes. Official `agy` custom-agent registration, marker và resume canary pass; wrapper args cho discovery/prompt/resume và caller `--agent` override có focused executable tests. Driver chạy trên macOS/Linux. Live `agy models` là provider-catalog diagnostic riêng và có thể timeout độc lập với role binding.
 - Generic ACP không có standardized system-instruction field nên mặc định `unsupported`. Paseo chỉ auto-detect hai exact transport shape trên; custom ACP khác phải có provider-native driver riêng và qualification evidence trước khi được chọn cho role-bound spawn.
 
-Capability có ba trạng thái: `supported` được role-first picker sử dụng; `candidate` dành cho exact implementation method còn thiếu runtime gate; `unsupported` không có native durable channel hoặc launch shape không hợp lệ. Candidate không được fallback sang initial prompt hoặc generic ACP. Cursor và Antigravity hiện là `supported`; legacy `cursor-plugin` fail closed với migration notice.
+Capability có hai trạng thái: `supported` nghĩa adapter có implementation method mà role-first picker có thể dùng; `unsupported` nghĩa không có native durable channel hoặc launch shape hợp lệ. `supported` không tự chứng minh current-host runtime qualification; evidence đó phải đến từ fresh canary/readback riêng. Không fallback sang initial prompt hoặc generic ACP. Cursor và Antigravity hiện là implementation-supported; legacy `cursor-plugin` fail closed với migration notice.
 
 `agy-acp` là third-party transport. Technical role support không thay user-account policy: provider detail phải hiện notice yêu cầu review current [Google Antigravity authentication terms](https://antigravity.google/terms). Qualification trong branch dùng official `agy` cho model calls và fake binary cho bridge pinning, không dùng OAuth account qua third-party bridge.
 
@@ -96,27 +96,29 @@ toàn bộ projection.
 
 ## Workspace Protocol
 
-Paseo không copy protocol vào global config. Repository tiếp tục sở hữu bytes tại root. Paseo ghi nhận:
+Paseo không copy protocol vào global config. Repository tiếp tục sở hữu bytes tại root. Protocol vắng mặt không chặn role-bound launch; standing role và bounded assignment vẫn đủ authority. Protocol hiện diện nhưng blank, unresolved, conflict, malformed identity hoặc unreadable thì fail closed trước provider launch. Paseo ghi nhận:
 
 - resolved path;
-- content digest và binding state (`bound|missing`; chưa claim semantic validation);
+- content digest và binding state (`bound|missing`) sau byte-validity gate;
 - role-specific readership;
 - receipt của lần bind.
 
 Lead được bind full protocol trước orchestration. Peer không đọc full protocol và chỉ nhận relevant constraints trong assignment. Supervisor chỉ được bind full protocol khi governance assignment yêu cầu create/audit/update.
 
-## UX
+## UX hiện có và target UX
 
-Create flow đi theo thứ tự:
+Current create flow đã có workspace, role-first picker, provider tương thích, model/mode và assignment. Sau spawn, public receipt được đọc bằng `paseo agent inspect`; provider detail có native method hoặc policy notice khi adapter cung cấp.
+
+Target flow dưới đây **chưa ship đầy đủ**:
 
 1. tạo/chọn workspace;
 2. chọn role;
-3. hiển thị authority summary và protocol requirement;
+3. hiển thị authority summary và protocol status (`absent zero-delta` hoặc exact bound digest);
 4. chọn một provider tương thích;
 5. chọn model/mode và preview binding receipt;
 6. nhập assignment rồi spawn.
 
-Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
+Provider Settings hiện chỉ cấu hình connection/credentials/model và provider diagnostics; chưa có màn hình Foundation Roles riêng, protocol digest pre-spawn hoặc binding-receipt preview. Role-first picker chỉ liệt kê implementation-supported provider. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
 Trong migration window, daemon nhận diện **exact legacy wrapper command** như `codex-profile <role>`, `codex-cliproxy-profile <role>` hoặc `claude --agent paseo-<role>`. Các route này bị loại khỏi native role-first picker và bị reject trước state mutation/session launch; Paseo không suy role từ provider ID tùy ý. Transport-only alias kế thừa Codex/Claude vẫn tương thích.
 
@@ -146,6 +148,8 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Snapshot, MCP create result và `paseo agent inspect` hiển thị effective `roleId`, `providerId`, `model` và
   `credentialConfigured` nhưng không expose instruction hoặc secret-bearing route bytes.
 - Incompatible provider bị reject trước session launch.
+- Project không có `WORKSPACE_PROTOCOL.md` vẫn launch role-bound agent theo standing role và assignment.
+- Protocol hiện diện nhưng invalid bị reject trước state mutation hoặc provider launch.
 - Cursor capsule phải giữ exact role marker qua ACP create/resume mà không ghi `.cursor/rules` vào target repository.
 - Antigravity wrapper phải pin exact materialized agent trên discovery/prompt/resume, reject caller `--agent`, cleanup only exact owned profile, và hiện third-party auth notice.
 - Legacy no-role sessions tiếp tục chạy như trước.

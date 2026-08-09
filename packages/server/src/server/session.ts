@@ -46,6 +46,7 @@ import {
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
 } from "./agent/agent-prompt.js";
+import { requestCoordinationSignal } from "./agent/coordination-signals.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -61,9 +62,14 @@ import {
 } from "./session/workspace-scripts/workspace-scripts-service.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
+import { FoundationProviderConnectionService } from "./foundation-provider-connection-service.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
 import { getAgentStatusPriority } from "@getpaseo/protocol/agent-state-bucket";
+
+function connectionQualificationDaemonVersion(daemonVersion: string | undefined): string {
+  return daemonVersion === undefined ? "unknown" : daemonVersion;
+}
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
 import type { ProjectUpdate } from "./workspace-reconciliation-service.js";
@@ -620,6 +626,7 @@ export class Session {
   private readonly sessionLogger: pino.Logger;
   private readonly paseoHome: string;
   private readonly foundationCredentialStore: FoundationCredentialStore;
+  private readonly foundationProviderConnectionService: FoundationProviderConnectionService;
   private readonly worktreesRoot: string | undefined;
 
   private agentManager: AgentManager;
@@ -759,6 +766,12 @@ export class Session {
       module: "session",
       clientId: this.clientId,
       sessionId: this.sessionId,
+    });
+    this.foundationProviderConnectionService = new FoundationProviderConnectionService({
+      paseoHome,
+      daemonVersion: connectionQualificationDaemonVersion(daemonVersion),
+      getConfig: () => daemonConfigStore.get(),
+      credentialStore: this.foundationCredentialStore,
     });
     this.workspaceFilesSession = new WorkspaceFilesSession({
       host: {
@@ -1926,6 +1939,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.coordination_signal.request":
+        return this.handleAgentCoordinationSignalRequest(msg);
       default:
         return undefined;
     }
@@ -2262,6 +2277,24 @@ export class Session {
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
       case "provider.usage.list.request":
         return this.providerCatalogSession.handleProviderUsageListRequest(msg);
+      case "foundation.provider_connection.get_status.request": {
+        const status = this.foundationProviderConnectionService.getStatus(msg.provider, msg.model);
+        this.emit({
+          type: "foundation.provider_connection.get_status.response",
+          payload: { requestId: msg.requestId, ...status },
+        });
+        return undefined;
+      }
+      case "foundation.provider_connection.test.request":
+        return this.foundationProviderConnectionService
+          .test(msg.provider, msg.model)
+          .then((status) => {
+            this.emit({
+              type: "foundation.provider_connection.test.response",
+              payload: { requestId: msg.requestId, ...status },
+            });
+            return undefined;
+          });
       default:
         return undefined;
     }
@@ -2545,6 +2578,64 @@ export class Session {
           accepted: false,
           error: message,
         },
+      });
+    }
+  }
+
+  private async handleAgentCoordinationSignalRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.coordination_signal.request" }>,
+  ): Promise<void> {
+    try {
+      const target = await this.agentStorage.get(msg.agentId);
+      if (!target || target.internal || target.archivedAt) {
+        throw new Error(`Agent ${msg.agentId} is not available`);
+      }
+      if (target.roleBinding?.roleId !== "lead") {
+        throw new Error(
+          `Coordination signals require a role-bound Lead target; ${msg.agentId} is not one`,
+        );
+      }
+      if (msg.kind === "detach_recommended" && !msg.relatedAgentId) {
+        throw new Error("detach_recommended requires relatedAgentId");
+      }
+      const signal = await requestCoordinationSignal(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          sendAtSafeBoundary: async (agentId, text) => {
+            if (this.agentManager.hasInFlightRun(agentId)) {
+              throw new Error(`Agent ${agentId} is still running`);
+            }
+            await sendPromptToAgent({
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              agentId,
+              prompt: formatSystemNotificationPrompt(text),
+              unarchive: false,
+              replaceRunning: false,
+              logger: this.sessionLogger,
+            });
+          },
+          logger: this.sessionLogger,
+        },
+        {
+          targetAgentId: msg.agentId,
+          requestedByAgentId: null,
+          kind: msg.kind,
+          reason: msg.reason,
+          relatedAgentId: msg.relatedAgentId,
+          evidenceRefs: msg.evidenceRefs,
+        },
+      );
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal, error: null },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to signal agent");
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal: null, error: message },
       });
     }
   }

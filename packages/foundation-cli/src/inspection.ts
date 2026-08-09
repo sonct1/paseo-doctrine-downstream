@@ -384,7 +384,6 @@ export function inspectMachine(
     installRecord: existsSync(install.installRecordPath)
       ? createHash("sha256").update(readFileSync(install.installRecordPath)).digest("hex")
       : null,
-    controlHomePresent: nodeExists(install.controlHome),
     releasePresent: nodeExists(install.releasePath),
     interruptedTransactionPresent: nodeExists(install.transactionPath),
   };

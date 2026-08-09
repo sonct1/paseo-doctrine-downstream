@@ -39,6 +39,10 @@ import { useProviderSettingsStore } from "@/stores/provider-settings-store";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { ProviderConnectionSheet } from "@/components/provider-connection-sheet";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
+import {
+  useFoundationProviderConnectionStatus,
+  type FoundationProviderConnectionQualification,
+} from "@/providers/use-foundation-provider-connection-status";
 import { ChevronRight, MoreHorizontal, Settings2, Trash2 } from "lucide-react-native";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
@@ -57,6 +61,7 @@ function getProviderStatus(
   enabled: boolean,
   modelCount: number,
   requiresConnectionQualification: boolean,
+  connectionQualification: FoundationProviderConnectionQualification,
   t: TFunction,
 ): ProviderStatus {
   if (!enabled)
@@ -68,9 +73,23 @@ function getProviderStatus(
     return { tone: "danger", label: t("settings.providers.statuses.error"), modelCount: null };
   }
   if (requiresConnectionQualification) {
+    if (connectionQualification === "qualified") {
+      return {
+        tone: "success",
+        label: t("settings.providers.statuses.connectionQualified"),
+        modelCount: null,
+      };
+    }
+    if (connectionQualification === "stale") {
+      return {
+        tone: "warning",
+        label: t("settings.providers.statuses.connectionQualificationStale"),
+        modelCount: null,
+      };
+    }
     return {
       tone: "warning",
-      label: t("settings.providers.statuses.configuredUnqualified"),
+      label: t("settings.providers.statuses.connectionUnverified"),
       modelCount: null,
     };
   }
@@ -98,6 +117,9 @@ interface ProviderRowProps {
   isFirst: boolean;
   canConfigureTools: boolean;
   requiresConnectionQualification: boolean;
+  serverId: string;
+  qualificationModel: string | null;
+  supportsConnectionQualification: boolean;
   onPress: (providerId: string) => void;
   onToggleEnabled: (providerId: string, enabled: boolean) => void;
   onConfigureTools: (providerId: string) => void;
@@ -215,6 +237,9 @@ function ProviderRow({
   isFirst,
   canConfigureTools,
   requiresConnectionQualification,
+  serverId,
+  qualificationModel,
+  supportsConnectionQualification,
   onPress,
   onToggleEnabled,
   onConfigureTools,
@@ -232,11 +257,19 @@ function ProviderRow({
       ? entry.error.trim()
       : null;
   const modelCount = filterSelectableModels(entry.models ?? null)?.length ?? 0;
+  const connectionQualification = useFoundationProviderConnectionStatus({
+    serverId,
+    provider: def.id,
+    model: qualificationModel,
+    enabled: requiresConnectionQualification && supportsConnectionQualification,
+    refreshKey: entry.fetchedAt,
+  });
   const providerStatus = getProviderStatus(
     entry.status,
     enabled,
     modelCount,
     requiresConnectionQualification,
+    connectionQualification,
     t,
   );
 
@@ -404,6 +437,10 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const supportsPaseoToolPolicies = useHostFeature(serverId, "paseoToolPolicies");
   const supportsFoundationCredentials = useHostFeature(serverId, "foundationCredentials");
+  const supportsConnectionQualification = useHostFeature(
+    serverId,
+    "providerConnectionQualification",
+  );
   const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
   const { config, patchConfig } = useDaemonConfig(serverId);
   const openProviderSettings = useProviderSettingsStore((state) => state.open);
@@ -550,6 +587,13 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   canRemove={supportsProviderRemoval && entry.source === "custom"}
                   isFirst={index === 0}
                   canConfigureTools={supportsPaseoToolPolicies}
+                  serverId={serverId}
+                  qualificationModel={
+                    entry.models?.find((model) => model.isDefault)?.id ??
+                    entry.models?.[0]?.id ??
+                    null
+                  }
+                  supportsConnectionQualification={supportsConnectionQualification}
                   requiresConnectionQualification={
                     entry.source === "custom" && config?.providers?.[def.id]?.extends === "codex"
                   }
@@ -601,9 +645,11 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
           mode="create"
           provider=""
           providerLabel=""
+          modelId=""
           serverId={serverId}
           baseUrl=""
           credentialRef={null}
+          canTestConnection={supportsConnectionQualification}
           onClose={handleCloseFoundationProvider}
           onSaved={handleFoundationProviderSaved}
         />

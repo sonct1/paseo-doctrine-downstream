@@ -610,22 +610,30 @@ function resolveCredentialRef(credentialRef: string | undefined): string | null 
   return credentialRef ?? null;
 }
 
+function resolveQualificationModel(models: AgentModelDefinition[] | undefined): string {
+  return models?.find((model) => model.isDefault)?.id ?? models?.[0]?.id ?? "";
+}
+
 function ProviderConnectionEditor({
   visible,
   provider,
   providerLabel,
+  modelId,
   serverId,
   baseUrl,
   credentialRef,
+  canTestConnection,
   onClose,
   onSaved,
 }: {
   visible: boolean;
   provider: string;
   providerLabel: string;
+  modelId: string;
   serverId: string;
   baseUrl: string;
   credentialRef: string | null;
+  canTestConnection: boolean;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -636,9 +644,11 @@ function ProviderConnectionEditor({
       mode="edit"
       provider={provider}
       providerLabel={providerLabel}
+      modelId={modelId}
       serverId={serverId}
       baseUrl={baseUrl}
       credentialRef={credentialRef}
+      canTestConnection={canTestConnection}
       onClose={onClose}
       onSaved={onSaved}
     />
@@ -652,16 +662,11 @@ function ProviderRoleBindingAlert({
 }) {
   const { t } = useTranslation();
   if (!support || support.status === "unsupported") return null;
-  const isSupported = support.status === "supported";
   return (
     <InlineAlert
-      variant={isSupported ? "success" : "warning"}
+      variant="success"
       title={t("agentControls.role.title")}
-      description={
-        isSupported
-          ? `${support.injectionMethod} · implementation-supported${support.notice ? `\n${support.notice}` : ""}`
-          : support.reason
-      }
+      description={`${support.injectionMethod} · implementation-supported${support.notice ? `\n${support.notice}` : ""}`}
       testID="provider-role-binding-status"
     />
   );
@@ -678,6 +683,10 @@ export function ProviderDiagnosticSheet({
   const isCompact = useIsCompactFormFactor();
   const { entries: snapshotEntries, refresh, isRefreshing } = useProvidersSnapshot(serverId);
   const supportsFoundationCredentials = useHostFeature(serverId, "foundationCredentials");
+  const supportsConnectionQualification = useHostFeature(
+    serverId,
+    "providerConnectionQualification",
+  );
   const { config, patchConfig } = useDaemonConfig(serverId);
   const [query, setQuery] = useState("");
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -706,6 +715,7 @@ export function ProviderDiagnosticSheet({
     mutableProvider?.env?.PASEO_CLIPROXY_BASE_URL,
   );
   const providerCredentialRef = resolveCredentialRef(mutableProvider?.credentialRef);
+  const providerQualificationModel = resolveQualificationModel(providerEntry?.models);
   const providerErrorMessage =
     providerEntry?.status === "error"
       ? (providerEntry.error ?? t("settings.providers.diagnostic.unknownError"))
@@ -849,9 +859,11 @@ export function ProviderDiagnosticSheet({
         visible={connectionSheetOpen}
         provider={provider}
         providerLabel={providerLabel}
+        modelId={providerQualificationModel}
         serverId={serverId}
         baseUrl={providerBaseUrl}
         credentialRef={providerCredentialRef}
+        canTestConnection={supportsConnectionQualification}
         onClose={handleCloseConnectionSheet}
         onSaved={handleConnectionSaved}
       />

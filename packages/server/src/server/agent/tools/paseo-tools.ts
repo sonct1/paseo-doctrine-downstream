@@ -99,6 +99,12 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 import { toRoleBindingReceipt } from "../role-binding.js";
 import { toLaunchContractReceipt } from "../launch-contract.js";
 import { PaseoRoleIdSchema, RoleBindingReceiptSchema } from "@getpaseo/protocol/role-binding";
+import {
+  ManualCoordinationSignalKindSchema,
+  CoordinationSignalResolutionSchema,
+  CoordinationSignalSchema,
+} from "@getpaseo/protocol/coordination-signal";
+import { requestCoordinationSignal, resolveCoordinationSignal } from "../coordination-signals.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -111,6 +117,7 @@ export interface PaseoToolHostDependencies {
     identifier: string,
   ) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
   sendAgentMessage?: (agentId: string, text: string) => Promise<void>;
+  sendAgentMessageAtSafeBoundary?: (agentId: string, text: string) => Promise<void>;
   providerSnapshotManager: ProviderSnapshotManager;
   github?: ForgeService;
   workspaceGitService?: Pick<
@@ -1947,6 +1954,109 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         throw new Error("unreachable");
     }
   }
+
+  registerTool(
+    "signal_agent",
+    {
+      title: "Signal agent",
+      description:
+        "Send a durable advisory handoff or detach recommendation to a role-bound Lead. Delivery waits for an idle boundary and never replaces an active run.",
+      inputSchema: {
+        agentId: z.string().min(1),
+        kind: ManualCoordinationSignalKindSchema,
+        reason: z.string().trim().min(1).max(1_000),
+        relatedAgentId: z.string().min(1).optional(),
+        evidenceRefs: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
+      },
+      outputSchema: {
+        signal: CoordinationSignalSchema,
+      },
+    },
+    async ({ agentId, kind, reason, relatedAgentId, evidenceRefs }) => {
+      if (!options.sendAgentMessageAtSafeBoundary) {
+        throw new Error("Coordination signal delivery is unavailable");
+      }
+      const target = await agentStorage.get(agentId);
+      if (!target || target.internal || target.archivedAt) {
+        throw new Error(`Agent ${agentId} is not available`);
+      }
+      if (target.roleBinding?.roleId !== "lead") {
+        throw new Error(
+          `Coordination signals require a role-bound Lead target; ${agentId} is not one`,
+        );
+      }
+      if (kind === "detach_recommended" && !relatedAgentId) {
+        throw new Error("detach_recommended requires relatedAgentId");
+      }
+      if (callerAgentId) {
+        const caller = await agentStorage.get(callerAgentId);
+        const callerRole = caller?.roleBinding?.roleId;
+        if (callerRole !== "lead" && callerRole !== "supervisor") {
+          throw new Error("Only a role-bound Lead or Supervisor can signal another Lead");
+        }
+      }
+      const signal = await requestCoordinationSignal(
+        {
+          agentManager,
+          agentStorage,
+          sendAtSafeBoundary: options.sendAgentMessageAtSafeBoundary,
+          logger: childLogger,
+        },
+        {
+          targetAgentId: agentId,
+          requestedByAgentId: callerAgentId ?? null,
+          kind,
+          reason,
+          relatedAgentId,
+          evidenceRefs,
+        },
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ signal }),
+      };
+    },
+  );
+
+  registerTool(
+    "resolve_agent_signal",
+    {
+      title: "Resolve agent signal",
+      description:
+        "Record the receiving role's autonomous disposition of a coordination signal. This does not report to or transfer authority to the sender.",
+      inputSchema: {
+        agentId: z.string().min(1).optional(),
+        signalId: z.string().min(1),
+        resolution: CoordinationSignalResolutionSchema,
+        note: z.string().trim().max(1_000).optional(),
+      },
+      outputSchema: {
+        signal: CoordinationSignalSchema,
+      },
+    },
+    async ({ agentId, signalId, resolution, note }) => {
+      const targetAgentId = callerAgentId ?? agentId;
+      if (!targetAgentId) {
+        throw new Error("agentId is required outside an agent-scoped session");
+      }
+      if (callerAgentId && agentId && agentId !== callerAgentId) {
+        throw new Error("An agent may resolve only its own coordination signals");
+      }
+      const signal = await resolveCoordinationSignal(
+        {
+          agentManager,
+          agentStorage,
+          sendAtSafeBoundary: options.sendAgentMessageAtSafeBoundary ?? (async () => undefined),
+          logger: childLogger,
+        },
+        { targetAgentId, signalId, resolution, note },
+      );
+      return {
+        content: [],
+        structuredContent: ensureValidJson({ signal }),
+      };
+    },
+  );
 
   registerTool(
     "send_agent_prompt",

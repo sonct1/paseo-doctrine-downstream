@@ -123,7 +123,7 @@ test("focused contracts stay inside existing required checks", () => {
   const releaseQualification = jobs.get("release-qualification")?.join("\n") ?? "";
 
   assert.match(changes, /scripts\/daemon-launch-contract\.test\.mjs/);
-  assert.match(changes, /scripts\/foundation-qualification-contract\.test\.mjs/);
+  assert.match(changes, /scripts\/downstream-publish-guard\.test\.mjs/);
   assert.doesNotMatch(changes, /Install dependencies|npm run build/);
 
   assert.match(server, /test:hub-cli-contract/);

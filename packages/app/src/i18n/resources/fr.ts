@@ -2314,6 +2314,9 @@ export const fr: TranslationResources = {
         available: "Disponible",
         notInstalled: "Non installé",
         configuredUnqualified: "Configuré · qualification en attente",
+        connectionUnverified: "Configuré · non vérifié",
+        connectionQualified: "Connexion vérifiée",
+        connectionQualificationStale: "Vérification obsolète",
       },
       models: {
         one: "1 modèle",
@@ -2339,10 +2342,10 @@ export const fr: TranslationResources = {
       connection: {
         button: "Connexion",
         add: "Ajouter",
-        createTitle: "Ajouter un fournisseur compatible OpenAI",
+        createTitle: "Ajouter un fournisseur Codex personnalisé",
         title: "Configurer la connexion {{name}}",
-        openAICompatible: "Compatible OpenAI",
-        openAICompatibleHint: "Utilisez votre identifiant, votre URL Responses et votre clé API",
+        openAICompatible: "Codex personnalisé",
+        openAICompatibleHint: "Utilisez Codex avec votre URL Responses et votre clé API",
         providerId: "Identifiant du fournisseur",
         invalidProviderId:
           "Utilisez des minuscules, des chiffres et des tirets, en commençant par une lettre",
@@ -2356,7 +2359,11 @@ export const fr: TranslationResources = {
         privateStorage:
           "La clé est stockée uniquement sur cet hôte et n'est jamais renvoyée à l'application",
         hostDisconnected: "L'hôte s'est déconnecté avant l'enregistrement de la configuration",
-        saveFailed: "Impossible d'enregistrer la connexion du fournisseur",
+        saveFailed: "Impossible d’enregistrer la connexion du fournisseur",
+        test: "Tester la connexion",
+        testing: "Test en cours...",
+        testQualified: "Connexion vérifiée pour {{model}} en {{latency}} ms",
+        testFailed: "Échec du test de connexion",
         save: "Enregistrer",
         saving: "Enregistrement...",
         deleteCredential: "Supprimer la clé API",

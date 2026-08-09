@@ -2652,8 +2652,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
         this.handleSessionInfoUpdate(update);
         return pendingUserEvents;
       case "usage_update":
-        this.handleUsageUpdate(update);
-        return pendingUserEvents;
+        return [...pendingUserEvents, this.handleUsageUpdate(update)];
       case "available_commands_update":
         this.cachedCommands = update.availableCommands.map((command) => ({
           name: command.name,
@@ -2813,8 +2812,19 @@ export class ACPAgentSession implements AgentSession, ACPClient {
     }
   }
 
-  private handleUsageUpdate(update: UsageUpdate): void {
-    void update;
+  private handleUsageUpdate(update: UsageUpdate): AgentStreamEvent {
+    return {
+      type: "usage_updated",
+      provider: this.provider,
+      turnId: this.activeForegroundTurnId ?? undefined,
+      usage: {
+        contextWindowUsedTokens: update.used,
+        contextWindowMaxTokens: update.size,
+        ...(update.cost?.currency.toUpperCase() === "USD"
+          ? { totalCostUsd: update.cost.amount }
+          : {}),
+      },
+    };
   }
 
   private handlePromptResponse(response: PromptResponse, turnId: string): void {

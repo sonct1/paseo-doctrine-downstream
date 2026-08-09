@@ -50,6 +50,31 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and background prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` only for truly fire-and-forget agents or prompts.
 
+### Experimental coordination signals — manual only
+
+Protocol, daemon, CLI/tool, persistence, idle-boundary delivery, resolution, and focused-test bytes exist
+for a manual experimental slice. It is not a standing workflow default or runtime-qualified capability.
+
+The candidate design uses durable coordination signals for handoff and detach recommendations instead of ordinary prompts. A signal is advisory: it does not transfer authority, interrupt the target, or require the Lead to report to its sender. The candidate persists the signal on the target Lead record immediately. If the Lead is running, delivery waits for the next idle boundary; the delivery path never replaces an active run.
+
+Only role-bound Leads are valid manual targets. Role-bound Supervisors and Leads can call `signal_agent`;
+Human-facing clients can use `paseo agent signal`. No automatic native-attention policy is implemented or
+started by daemon bootstrap.
+
+If native attention is revisited, its threshold and routing policy must first be justified by reproduced
+evidence and an explicit owning policy layer. It must remain advisory, wait for an idle boundary, and fail
+closed on missing telemetry.
+
+The receiving role uses `resolve_agent_signal` to acknowledge, defer, decline, or mark the attention
+completed. Pending and resolved receipts are included in `get_agent_status` as `coordinationSignals`.
+
+```bash
+paseo agent signal <lead-id> --kind handoff --reason "Context dilution across repeated reopen"
+paseo agent signal <lead-id> --kind detach --related-agent <candidate-id> --reason "Promote the successor candidate"
+```
+
+Even if this candidate qualifies later, signals deliberately stop before handoff workflow automation. The Lead still decides the safe checkpoint and performs the actual handoff or detach through separately authorized lifecycle surfaces.
+
 ## Provider-managed child agents
 
 Some providers can create their own child sessions inside one provider runtime. OMP's task tool reports these with `child_session` events; `AgentManager` imports the live provider handle, stamps `paseo.parent-agent-id`, and surfaces the result as a normal subagent in the parent's subagents track.

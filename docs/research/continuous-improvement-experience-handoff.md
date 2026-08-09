@@ -1,6 +1,9 @@
 # Continuous Improvement Experience Handoff
 
-Status: product proposal, not implementation guidance.
+Status: broader product proposal. A durable, non-interrupting manual coordination-signal slice exists as
+experimental product code, but it is not a standing workflow default or runtime-qualified capability. No
+automatic native-attention policy is implemented. The adjacent-Lead handoff artifact and workflow remain
+proposals. See [agent lifecycle](../agent-lifecycle.md).
 
 Scope: this note uses current local Paseo product/Foundation bytes plus first-party GitHub material from Hermes and Better Harness. It separates sourced facts from proposal and inference.
 

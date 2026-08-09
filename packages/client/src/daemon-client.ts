@@ -2561,6 +2561,26 @@ export class DaemonClient {
     }
   }
 
+  async signalAgent(input: {
+    agentId: string;
+    kind: "handoff_recommended" | "detach_recommended";
+    reason: string;
+    relatedAgentId?: string;
+    evidenceRefs?: string[];
+  }) {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.coordination_signal.response">({
+        message: {
+          type: "agent.coordination_signal.request",
+          ...input,
+        },
+      });
+    if (!payload.signal) {
+      throw new Error(payload.error ?? "signalAgent rejected");
+    }
+    return payload.signal;
+  }
+
   async updateAgent(
     agentId: string,
     updates: { name?: string; labels?: Record<string, string> },
@@ -4632,6 +4652,32 @@ export class DaemonClient {
         credentialRef,
       },
     });
+  }
+
+  async getFoundationProviderConnectionStatus(provider: string, model: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.provider_connection.get_status.response">(
+      {
+        requestId,
+        message: {
+          type: "foundation.provider_connection.get_status.request",
+          provider,
+          model,
+        },
+      },
+    );
+  }
+
+  async testFoundationProviderConnection(provider: string, model: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.provider_connection.test.response">(
+      {
+        requestId,
+        message: {
+          type: "foundation.provider_connection.test.request",
+          provider,
+          model,
+        },
+      },
+    );
   }
 
   sendBrowserAutomationExecuteResponse(response: BrowserAutomationExecuteResponse): void {
