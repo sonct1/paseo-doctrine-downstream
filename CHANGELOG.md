@@ -21,6 +21,7 @@ This downstream release is based on upstream Paseo 0.3.1.
 ### Fixed
 
 - New-agent drafts wait for model defaults to finish loading before accepting a submission.
+- Downstream macOS release smoke tests run on stock GitHub runners, and both architecture builds retain the required native Lightning CSS binary.
 
 ## 0.3.1 - 2026-08-09
 

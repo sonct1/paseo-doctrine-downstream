@@ -18,6 +18,8 @@ import { installerScript as renderArtifactInstaller } from "./build-macos-web-cl
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.join(scriptDir, "install-macos.sh");
+const artifactSmoke = path.join(scriptDir, "smoke-macos-web-cli-artifact.sh");
+const packageLock = path.join(scriptDir, "..", "package-lock.json");
 
 function writeExecutable(file, source) {
   writeFileSync(file, source, { mode: 0o755 });
@@ -171,6 +173,24 @@ test("help is side-effect free and does not require macOS or curl", () => {
     assert.deepEqual(new Set(readFileNames(fixture.root)), before);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("artifact smoke uses stock macOS inspection commands", () => {
+  const source = readFileSync(artifactSmoke, "utf8");
+  assert.equal(source.includes("\nrg "), false);
+  assert.equal(source.includes("\njq "), false);
+  assert.match(source, /\/usr\/bin\/grep -Fq/);
+});
+
+test("release lock retains Lightning CSS binaries for both macOS architectures", () => {
+  const lock = JSON.parse(readFileSync(packageLock, "utf8"));
+  for (const arch of ["arm64", "x64"]) {
+    const entry = lock.packages[`node_modules/lightningcss-darwin-${arch}`];
+    assert.equal(entry.version, "1.30.1");
+    assert.deepEqual(entry.os, ["darwin"]);
+    assert.deepEqual(entry.cpu, [arch]);
+    assert.equal(entry.optional, true);
   }
 });
 

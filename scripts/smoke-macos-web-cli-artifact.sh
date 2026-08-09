@@ -24,8 +24,8 @@ cd "$(dirname "$ARTIFACT")"
 /usr/bin/tar -xzf "$ARTIFACT" -C "$SMOKE_ROOT"
 BUNDLE="$SMOKE_ROOT/$BUNDLE_NAME"
 
-rg -q 'Refusing to replace Paseo while an agent is running or starting' "$BUNDLE/install.sh"
-rg -q 'failed authoritative startup readback' "$BUNDLE/install.sh"
+/usr/bin/grep -Fq 'Refusing to replace Paseo while an agent is running or starting' "$BUNDLE/install.sh"
+/usr/bin/grep -Fq 'failed authoritative startup readback' "$BUNDLE/install.sh"
 
 mkdir -p "$SMOKE_ROOT/help-home"
 HOME="$SMOKE_ROOT/help-home" "$BUNDLE/install.sh" --help >/dev/null
@@ -60,8 +60,9 @@ done
 test "$HEALTHY" = "1"
 
 /usr/bin/curl -fsS --max-time 3 "http://127.0.0.1:$PORT/" >"$SMOKE_ROOT/index.html"
-rg -q '<title>Paseo</title>' "$SMOKE_ROOT/index.html"
-jq '{status,serverId,version}' "$SMOKE_ROOT/health.json"
+/usr/bin/grep -Fq '<title>Paseo</title>' "$SMOKE_ROOT/index.html"
+/bin/cat "$SMOKE_ROOT/health.json"
+/bin/echo
 
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
   "$SMOKE_ROOT/bin/paseo" daemon stop >/dev/null 2>&1 || true
