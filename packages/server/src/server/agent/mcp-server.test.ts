@@ -52,6 +52,7 @@ import type { ForgeService } from "../../services/forge-service.js";
 import { areEquivalentPaths } from "../../utils/path.js";
 import type { TerminalManager } from "../../terminal/terminal-manager.js";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "../browser-tools/broker.js";
 import type { BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { readPaseoWorktreeMetadata } from "../../utils/worktree-metadata.js";
@@ -208,6 +209,7 @@ function buildAgentManagerSpies() {
     setTitle: vi.fn().mockResolvedValue(undefined),
     updateAgentMetadata: vi.fn().mockResolvedValue(undefined),
     archiveAgent: vi.fn().mockResolvedValue({ archivedAt: new Date().toISOString() }),
+    unarchiveSnapshot: vi.fn().mockResolvedValue(false),
     notifyAgentState: vi.fn(),
     getAgent: vi.fn(),
     listAgents: vi.fn().mockReturnValue([]),
@@ -220,6 +222,7 @@ function buildAgentManagerSpies() {
     tryRunOutOfBand: vi.fn().mockReturnValue(false),
     subscribe: vi.fn().mockReturnValue(() => {}),
     streamAgent: vi.fn(() => (async function* noop() {})()),
+    replaceAgentRun: vi.fn(() => (async function* noop() {})()),
     waitForAgentRunStart: vi.fn().mockResolvedValue(undefined),
     respondToPermission: vi.fn(),
     cancelAgentRun: vi.fn(),
@@ -477,6 +480,42 @@ function createStoredRecord(overrides: Partial<StoredAgentRecord> = {}): StoredA
     archivedAt: "2026-04-12T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function createActiveStoredRecord(overrides: Partial<StoredAgentRecord> = {}): StoredAgentRecord {
+  return createStoredRecord({ archivedAt: null, ...overrides });
+}
+
+function createTestRoleBinding(roleId: PaseoRoleId): NonNullable<StoredAgentRecord["roleBinding"]> {
+  let readership: "full" | "assignment-only" | "governance-only";
+  if (roleId === "lead") {
+    readership = "full";
+  } else if (roleId === "peer") {
+    readership = "assignment-only";
+  } else {
+    readership = "governance-only";
+  }
+  return {
+    roleId,
+    definitionVersion: "test-role-contract",
+    definitionDigest: "a".repeat(64),
+    bindingDigest: "b".repeat(64),
+    provider: "codex",
+    injectionMethod: "codex-developer-instructions",
+    qualification: "implementation-supported",
+    workspaceProtocol: {
+      status: "missing",
+      readership,
+      path: "/tmp/test/WORKSPACE_PROTOCOL.md",
+    },
+    createdAt: "2026-08-09T00:00:00.000Z",
+    instructions: `Test ${roleId} instructions`,
+  };
+}
+
+function mockStoredAgentRecords(get: AgentStorageSpies["get"], records: StoredAgentRecord[]): void {
+  const recordsById = new Map(records.map((record) => [record.id, record]));
+  get.mockImplementation(async (agentId: string) => recordsById.get(agentId) ?? null);
 }
 
 function createManagedAgent(overrides: Partial<ManagedAgent> = {}): ManagedAgent {
@@ -1251,6 +1290,194 @@ describe("create_agent MCP tool", () => {
   });
   const ensureWorkspaceForCreate = async () => "workspace-created";
 
+  it("allows a role-bound Lead to create a role-bound Peer", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({
+        id: "peer-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_lead",
+        roleBinding: createTestRoleBinding("peer"),
+      }),
+    );
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await registeredTool(server, "create_agent").handler({
+      title: "Peer child",
+      provider: "opencode/gpt-5.4",
+      role: "peer",
+      initialPrompt: "Do bounded work",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "opencode", model: "gpt-5.4" }),
+      undefined,
+      expect.objectContaining({
+        labels: expect.objectContaining({ [PARENT_AGENT_ID_LABEL]: caller.id }),
+        workspaceId: "wks_lead",
+        roleId: "peer",
+      }),
+    );
+  });
+
+  it.each([
+    { callerRole: "lead" as const, requestedRole: "lead" as const },
+    { callerRole: "lead" as const, requestedRole: "supervisor" as const },
+    { callerRole: "lead" as const, requestedRole: undefined },
+    { callerRole: "peer" as const, requestedRole: "peer" as const },
+    { callerRole: "supervisor" as const, requestedRole: "peer" as const },
+  ])(
+    "rejects role-bound $callerRole create_agent role=$requestedRole before partial mutation",
+    async ({ callerRole, requestedRole }) => {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      const caller = createManagedAgent({
+        id: `${callerRole}-agent`,
+        cwd: existingCwd,
+        workspaceId: "wks_bound",
+        roleBinding: createTestRoleBinding(callerRole),
+      });
+      spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+        agentId === caller.id ? caller : null,
+      );
+      mockStoredAgentRecords(spies.agentStorage.get, [
+        createActiveStoredRecord({
+          id: caller.id,
+          cwd: caller.cwd,
+          workspaceId: caller.workspaceId,
+          roleBinding: caller.roleBinding,
+        }),
+      ]);
+      const ensureWorkspace = vi.fn(async () => "unexpected-workspace");
+      const listActiveWorkspaces = vi.fn(async () => []);
+      const providerSnapshot = createOpenCodeManager();
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: providerSnapshot.manager,
+        callerAgentId: caller.id,
+        ensureWorkspaceForCreate: ensureWorkspace,
+        listActiveWorkspaces,
+        logger,
+      });
+      const request = {
+        title: "Denied child",
+        provider: "opencode/gpt-5.4",
+        initialPrompt: "Must not run",
+        ...(requestedRole ? { role: requestedRole } : {}),
+      };
+
+      await expect(registeredTool(server, "create_agent").handler(request)).rejects.toThrow(
+        callerRole === "lead"
+          ? "A role-bound Lead may create only a role-bound Peer"
+          : `Role-bound ${callerRole} agents cannot use create_agent`,
+      );
+
+      expect(ensureWorkspace).not.toHaveBeenCalled();
+      expect(listActiveWorkspaces).not.toHaveBeenCalled();
+      expect(providerSnapshot.stub.resolveCreateConfig).not.toHaveBeenCalled();
+      expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+      expect(spies.agentStorage.setTitle).not.toHaveBeenCalled();
+      expect(spies.agentStorage.upsert).not.toHaveBeenCalled();
+      expect(spies.agentStorage.applySnapshot).not.toHaveBeenCalled();
+      expect(spies.agentStorage.remove).not.toHaveBeenCalled();
+      expect(spies.agentManager.streamAgent).not.toHaveBeenCalled();
+      expect(spies.agentManager.subscribe).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves legacy unbound agent-scoped create_agent behavior", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "legacy-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_legacy",
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({ id: "legacy-child", cwd: existingCwd, workspaceId: "wks_legacy" }),
+    );
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await registeredTool(server, "create_agent").handler({
+      title: "Legacy child",
+      provider: "opencode/gpt-5.4",
+      initialPrompt: "Keep legacy behavior",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects create_agent when durable caller data is unavailable", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue(
+      createManagedAgent({ id: "missing-caller", cwd: existingCwd, workspaceId: "wks_missing" }),
+    );
+    const ensureWorkspace = vi.fn(async () => "unexpected-workspace");
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "missing-caller",
+      ensureWorkspaceForCreate: ensureWorkspace,
+      logger,
+    });
+
+    await expect(
+      registeredTool(server, "create_agent").handler({
+        title: "Unknown caller",
+        provider: "opencode/gpt-5.4",
+        role: "peer",
+        initialPrompt: "Must not run",
+      }),
+    ).rejects.toThrow("Caller agent missing-caller is unavailable in durable storage");
+
+    expect(ensureWorkspace).not.toHaveBeenCalled();
+    expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+    expect(spies.agentStorage.setTitle).not.toHaveBeenCalled();
+    expect(spies.agentStorage.upsert).not.toHaveBeenCalled();
+    expect(spies.agentStorage.applySnapshot).not.toHaveBeenCalled();
+    expect(spies.agentStorage.remove).not.toHaveBeenCalled();
+    expect(spies.agentManager.streamAgent).not.toHaveBeenCalled();
+  });
+
   it("requires a concise title no longer than 60 characters", async () => {
     const { agentManager, agentStorage } = createTestDeps();
     const server = await createAgentMcpServer({
@@ -1414,6 +1641,9 @@ describe("create_agent MCP tool", () => {
       provider: "codex",
       currentModeId: "full-access",
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({ id: "parent-agent", cwd: existingCwd }),
+    ]);
     const server = await createAgentMcpServer({
       agentManager,
       agentStorage,
@@ -3108,6 +3338,9 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Child" },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({ id: "voice-agent", cwd: baseDir, workspaceId: "wks_voice" }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3154,6 +3387,13 @@ describe("create_agent MCP tool", () => {
       provider: "codex",
       currentModeId: "full-access",
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3214,6 +3454,13 @@ describe("create_agent MCP tool", () => {
       return null;
     });
     spies.agentManager.createAgent.mockResolvedValue(childAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3253,6 +3500,13 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Detached" },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3305,6 +3559,13 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Child", featureValues: { fast_mode: true } },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
     const providerSnapshot = createOpenCodeManager();
     providerSnapshot.stub.resolveCreateConfig.mockImplementation(async (input) => {
       const opts = input as { featureValues: Record<string, unknown> | undefined };
@@ -3464,6 +3725,13 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Child" },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
     const dynamicModes: AgentMode[] = [
       { id: "dynamic", label: "Dynamic", description: "Runtime mode" },
     ];
@@ -3562,6 +3830,13 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Child" },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
     const providerSnapshot = createOpenCodeManager();
     providerSnapshot.stub.resolveCreateConfig.mockResolvedValue({
       modeId: "resolver-mode",
@@ -3613,6 +3888,13 @@ describe("create_agent MCP tool", () => {
       availableModes: [],
       config: { title: "Child" },
     } as ManagedAgent);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: "parent-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+      }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3642,6 +3924,228 @@ describe("send_agent_prompt MCP tool", () => {
   const logger = createTestLogger();
   const existingCwd = process.cwd();
 
+  it("allows a role-bound Lead to prompt its own direct child", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    const child = createManagedAgent({
+      id: "peer-child",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      labels: { [PARENT_AGENT_ID_LABEL]: caller.id },
+      roleBinding: createTestRoleBinding("peer"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) => {
+      if (agentId === caller.id) return caller;
+      if (agentId === child.id) return child;
+      return null;
+    });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+      createActiveStoredRecord({
+        id: child.id,
+        cwd: child.cwd,
+        workspaceId: child.workspaceId,
+        labels: child.labels,
+        roleBinding: child.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await invokeToolWithParsedInput(registeredTool(server, "send_agent_prompt"), {
+      agentId: child.id,
+      prompt: "Continue bounded work",
+    });
+
+    expect(spies.agentManager.streamAgent).toHaveBeenCalledWith(
+      child.id,
+      "Continue bounded work",
+      undefined,
+    );
+    expect(spies.agentManager.subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { callerRole: "peer" as const, targetParentId: "peer-agent" },
+    { callerRole: "supervisor" as const, targetParentId: "supervisor-agent" },
+    { callerRole: "lead" as const, targetParentId: "different-lead" },
+  ])(
+    "rejects role-bound $callerRole send_agent_prompt before partial mutation",
+    async ({ callerRole, targetParentId }) => {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      const caller = createManagedAgent({
+        id: `${callerRole}-agent`,
+        cwd: existingCwd,
+        workspaceId: "wks_bound",
+        roleBinding: createTestRoleBinding(callerRole),
+      });
+      const target = createManagedAgent({
+        id: "target-agent",
+        cwd: existingCwd,
+        workspaceId: "wks_bound",
+        labels: { [PARENT_AGENT_ID_LABEL]: targetParentId },
+      });
+      spies.agentManager.getAgent.mockImplementation((agentId: string) => {
+        if (agentId === caller.id) return caller;
+        if (agentId === target.id) return target;
+        return null;
+      });
+      mockStoredAgentRecords(spies.agentStorage.get, [
+        createActiveStoredRecord({
+          id: caller.id,
+          cwd: caller.cwd,
+          workspaceId: caller.workspaceId,
+          roleBinding: caller.roleBinding,
+        }),
+        createStoredRecord({
+          id: target.id,
+          cwd: target.cwd,
+          workspaceId: target.workspaceId,
+          labels: target.labels,
+          archivedAt: "2026-08-09T00:00:00.000Z",
+        }),
+      ]);
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: caller.id,
+        logger,
+      });
+
+      await expect(
+        invokeToolWithParsedInput(registeredTool(server, "send_agent_prompt"), {
+          agentId: target.id,
+          prompt: "Must not be delivered",
+          sessionMode: "full-access",
+        }),
+      ).rejects.toThrow(
+        callerRole === "lead"
+          ? "A role-bound Lead may prompt only its own direct child"
+          : `Role-bound ${callerRole} agents cannot use send_agent_prompt`,
+      );
+
+      expect(spies.agentManager.unarchiveSnapshot).not.toHaveBeenCalled();
+      expect(spies.agentManager.notifyAgentState).not.toHaveBeenCalled();
+      expect(spies.agentManager.resumeAgentFromPersistence).not.toHaveBeenCalled();
+      expect(spies.agentManager.setAgentMode).not.toHaveBeenCalled();
+      expect(spies.agentManager.tryRunOutOfBand).not.toHaveBeenCalled();
+      expect(spies.agentManager.replaceAgentRun).not.toHaveBeenCalled();
+      expect(spies.agentManager.streamAgent).not.toHaveBeenCalled();
+      expect(spies.agentManager.subscribe).not.toHaveBeenCalled();
+      expect(spies.agentStorage.setTitle).not.toHaveBeenCalled();
+      expect(spies.agentStorage.upsert).not.toHaveBeenCalled();
+      expect(spies.agentStorage.applySnapshot).not.toHaveBeenCalled();
+      expect(spies.agentStorage.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  it("preserves legacy unbound agent-scoped prompt behavior", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "legacy-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_legacy",
+    });
+    const target = createManagedAgent({
+      id: "unrelated-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_other",
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) => {
+      if (agentId === caller.id) return caller;
+      if (agentId === target.id) return target;
+      return null;
+    });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({ id: caller.id, cwd: caller.cwd }),
+      createActiveStoredRecord({ id: target.id, cwd: target.cwd }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await invokeToolWithParsedInput(registeredTool(server, "send_agent_prompt"), {
+      agentId: target.id,
+      prompt: "Legacy follow-up",
+      notifyOnFinish: false,
+    });
+
+    expect(spies.agentManager.streamAgent).toHaveBeenCalledWith(
+      target.id,
+      "Legacy follow-up",
+      undefined,
+    );
+  });
+
+  it("rejects a role-bound Lead prompt when durable target data is unavailable", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    const target = createManagedAgent({ id: "missing-target", cwd: existingCwd });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) => {
+      if (agentId === caller.id) return caller;
+      if (agentId === target.id) return target;
+      return null;
+    });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await expect(
+      invokeToolWithParsedInput(registeredTool(server, "send_agent_prompt"), {
+        agentId: target.id,
+        prompt: "Must not be delivered",
+        sessionMode: "full-access",
+      }),
+    ).rejects.toThrow("Target agent missing-target is unavailable in durable storage");
+
+    expect(spies.agentManager.unarchiveSnapshot).not.toHaveBeenCalled();
+    expect(spies.agentManager.setAgentMode).not.toHaveBeenCalled();
+    expect(spies.agentManager.resumeAgentFromPersistence).not.toHaveBeenCalled();
+    expect(spies.agentManager.streamAgent).not.toHaveBeenCalled();
+    expect(spies.agentManager.subscribe).not.toHaveBeenCalled();
+    expect(spies.agentStorage.setTitle).not.toHaveBeenCalled();
+    expect(spies.agentStorage.upsert).not.toHaveBeenCalled();
+    expect(spies.agentStorage.applySnapshot).not.toHaveBeenCalled();
+    expect(spies.agentStorage.remove).not.toHaveBeenCalled();
+  });
+
   it("defaults agent-scoped prompts to background finish notifications", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const parentAgent = {
@@ -3664,6 +4168,14 @@ describe("send_agent_prompt MCP tool", () => {
       if (agentId === "child-agent") return childAgent;
       return null;
     });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: parentAgent.id,
+        cwd: parentAgent.cwd,
+        workspaceId: parentAgent.workspaceId,
+      }),
+      createActiveStoredRecord({ id: childAgent.id, cwd: childAgent.cwd }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,
@@ -3759,6 +4271,14 @@ describe("send_agent_prompt MCP tool", () => {
       if (agentId === "child-agent") return childAgent;
       return null;
     });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: parentAgent.id,
+        cwd: parentAgent.cwd,
+        workspaceId: parentAgent.workspaceId,
+      }),
+      createActiveStoredRecord({ id: childAgent.id, cwd: childAgent.cwd }),
+    ]);
 
     const server = await createAgentMcpServer({
       agentManager,

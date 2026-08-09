@@ -69,6 +69,10 @@ Tạo Supervisor bằng `--role supervisor` trong một governance assignment ri
 Paseo `create_agent` với `role=peer`, exact workspace, discovered provider/model và bounded assignment.
 Không dùng provider alias hoặc initial prompt để giả lập role.
 
+Ở agent-scoped action boundary, Lead đã bind role chỉ được tạo `role=peer` và chỉ được
+`send_agent_prompt` tới direct child có `paseo.parent-agent-id` trỏ về chính Lead. Peer hoặc Supervisor
+đã bind role bị từ chối nếu tool bị expose nhầm; session cũ không có `RoleBinding` giữ behavior hiện tại.
+
 Sau create, đọc effective binding từ daemon:
 
 ```bash
