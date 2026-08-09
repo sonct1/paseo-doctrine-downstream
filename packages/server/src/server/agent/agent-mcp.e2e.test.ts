@@ -27,7 +27,9 @@ interface StructuredContent {
 
 interface McpToolResult {
   structuredContent?: StructuredContent;
-  content?: Array<{ structuredContent?: StructuredContent } | StructuredContent>;
+  content?: Array<
+    { structuredContent?: StructuredContent; text?: string; type?: string } | StructuredContent
+  >;
   isError?: boolean;
 }
 
@@ -87,6 +89,33 @@ async function createMcpClient(url: string, authToken?: string): Promise<McpClie
   const rawClient = await experimental_createMCPClient({ transport });
   const boundCallTool: McpClient["callTool"] = Reflect.get(rawClient, "callTool").bind(rawClient);
   return { callTool: boundCallTool, close: () => rawClient.close() };
+}
+
+async function expectMcpToolRejection(
+  action: () => Promise<McpToolResult>,
+  expectedMessage: string,
+): Promise<void> {
+  let result: McpToolResult | null = null;
+  let caught: unknown;
+  try {
+    result = await action();
+  } catch (error) {
+    caught = error;
+  }
+  if (caught !== undefined) {
+    expect(caught instanceof Error ? caught.message : String(caught)).toContain(expectedMessage);
+    return;
+  }
+  expect(result?.isError).toBe(true);
+  expect(JSON.stringify(result)).toContain(expectedMessage);
+}
+
+function requireAgentId(result: McpToolResult): string {
+  const agentId = getStructuredContent(result)?.agentId;
+  if (typeof agentId !== "string" || !agentId) {
+    throw new Error("MCP create_agent returned no agentId");
+  }
+  return agentId;
 }
 
 interface LaunchRecorder {
@@ -165,6 +194,169 @@ async function assertAgentNotRunning(options: {
 }
 
 describe("agent MCP end-to-end (offline)", () => {
+  test("role-bound agent actions enforce topology before side effects", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-static-"));
+    const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-cwd-"));
+    const recorder: LaunchRecorder = { recordedLaunches: [] };
+    const daemonConfig: PaseoDaemonConfig = {
+      listen: "127.0.0.1:0",
+      paseoHome,
+      corsAllowedOrigins: [],
+      hostnames: true,
+      mcpEnabled: true,
+      staticDir,
+      mcpDebug: false,
+      agentClients: createMcpRecordingAgentClients(recorder),
+      agentStoragePath: path.join(paseoHome, "agents"),
+    };
+    const daemon = await createPaseoDaemon(daemonConfig, pino({ level: "silent" }));
+    const clients: McpClient[] = [];
+
+    try {
+      await daemon.start();
+      const listenTarget = daemon.getListenTarget();
+      if (!listenTarget || listenTarget.type !== "tcp") {
+        throw new Error("Isolated daemon did not bind a TCP port");
+      }
+      const mcpUrl = `http://127.0.0.1:${listenTarget.port}/mcp/agents`;
+      const topClient = await createMcpClient(mcpUrl);
+      clients.push(topClient);
+
+      const createRoot = async (title: string, role: "lead" | "supervisor") =>
+        requireAgentId(
+          await topClient.callTool({
+            name: "create_agent",
+            args: {
+              cwd: agentCwd,
+              title,
+              provider: "claude/claude-test-model",
+              role,
+              initialPrompt: "Reply done and stop",
+              background: true,
+            },
+          }),
+        );
+      const leadOneId = await createRoot("Lead one", "lead");
+      const leadTwoId = await createRoot("Lead two", "lead");
+      const supervisorId = await createRoot("Supervisor", "supervisor");
+      const leadOneClient = await createMcpClient(`${mcpUrl}?callerAgentId=${leadOneId}`);
+      const leadTwoClient = await createMcpClient(`${mcpUrl}?callerAgentId=${leadTwoId}`);
+      const supervisorClient = await createMcpClient(`${mcpUrl}?callerAgentId=${supervisorId}`);
+      clients.push(leadOneClient, leadTwoClient, supervisorClient);
+
+      const peerOneId = requireAgentId(
+        await leadOneClient.callTool({
+          name: "create_agent",
+          args: {
+            title: "Peer one",
+            provider: "claude/claude-test-model",
+            role: "peer",
+            initialPrompt: "Reply done and stop",
+            notifyOnFinish: false,
+          },
+        }),
+      );
+      const peerTwoId = requireAgentId(
+        await leadTwoClient.callTool({
+          name: "create_agent",
+          args: {
+            title: "Peer two",
+            provider: "claude/claude-test-model",
+            role: "peer",
+            initialPrompt: "Reply done and stop",
+            notifyOnFinish: false,
+          },
+        }),
+      );
+      const peerOne = await daemon.agentStorage.get(peerOneId);
+      const peerTwo = await daemon.agentStorage.get(peerTwoId);
+      expect(peerOne?.roleBinding?.roleId).toBe("peer");
+      expect(peerOne?.labels?.["paseo.parent-agent-id"]).toBe(leadOneId);
+      expect(peerTwo?.labels?.["paseo.parent-agent-id"]).toBe(leadTwoId);
+
+      for (const deniedRole of ["lead", "supervisor", undefined] as const) {
+        const recordCountBefore = (await daemon.agentStorage.list()).length;
+        const launchCountBefore = recorder.recordedLaunches.length;
+        await expectMcpToolRejection(
+          () =>
+            leadOneClient.callTool({
+              name: "create_agent",
+              args: {
+                title: "Denied child",
+                provider: "claude/claude-test-model",
+                initialPrompt: "Must not launch",
+                ...(deniedRole ? { role: deniedRole } : {}),
+              },
+            }),
+          "A role-bound Lead may create only a role-bound Peer",
+        );
+        expect((await daemon.agentStorage.list()).length).toBe(recordCountBefore);
+        expect(recorder.recordedLaunches).toHaveLength(launchCountBefore);
+      }
+
+      const peerClient = await createMcpClient(`${mcpUrl}?callerAgentId=${peerOneId}`);
+      clients.push(peerClient);
+      await expectMcpToolRejection(
+        () =>
+          peerClient.callTool({
+            name: "create_agent",
+            args: {
+              title: "Peer cannot create",
+              provider: "claude/claude-test-model",
+              role: "peer",
+              initialPrompt: "Must not launch",
+            },
+          }),
+        "Server does not support tools",
+      );
+      await expectMcpToolRejection(
+        () =>
+          supervisorClient.callTool({
+            name: "create_agent",
+            args: {
+              title: "Supervisor cannot create",
+              provider: "claude/claude-test-model",
+              role: "peer",
+              initialPrompt: "Must not launch",
+            },
+          }),
+        "create_agent",
+      );
+
+      const allowedPrompt = await leadOneClient.callTool({
+        name: "send_agent_prompt",
+        args: {
+          agentId: peerOneId,
+          prompt: "Allowed direct-child follow-up",
+          notifyOnFinish: false,
+        },
+      });
+      expect(getStructuredContent(allowedPrompt)?.success).toBe(true);
+
+      const peerTwoBefore = await daemon.agentStorage.get(peerTwoId);
+      await expectMcpToolRejection(
+        () =>
+          leadOneClient.callTool({
+            name: "send_agent_prompt",
+            args: {
+              agentId: peerTwoId,
+              prompt: "Denied cross-child follow-up",
+              sessionMode: "bypassPermissions",
+            },
+          }),
+        "A role-bound Lead may prompt only its own direct child",
+      );
+      expect(await daemon.agentStorage.get(peerTwoId)).toEqual(peerTwoBefore);
+    } finally {
+      await Promise.allSettled(clients.map((client) => client.close()));
+      await daemon.stop();
+      await rm(paseoHome, { recursive: true, force: true });
+      await rm(staticDir, { recursive: true, force: true });
+      await rm(agentCwd, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test("create_agent runs initial prompt and affects filesystem", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-"));

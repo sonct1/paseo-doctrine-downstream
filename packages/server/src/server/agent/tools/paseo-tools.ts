@@ -59,6 +59,7 @@ import {
   waitForAgentWithTimeout,
 } from "../mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
+import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import { ChatMessageSchema } from "@getpaseo/protocol/chat/types";
 import { LaunchContractReceiptSchema } from "@getpaseo/protocol/launch-contract";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
@@ -98,7 +99,11 @@ import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { toRoleBindingReceipt } from "../role-binding.js";
 import { toLaunchContractReceipt } from "../launch-contract.js";
-import { PaseoRoleIdSchema, RoleBindingReceiptSchema } from "@getpaseo/protocol/role-binding";
+import {
+  PaseoRoleIdSchema,
+  RoleBindingReceiptSchema,
+  type PaseoRoleId,
+} from "@getpaseo/protocol/role-binding";
 import {
   ManualCoordinationSignalKindSchema,
   CoordinationSignalResolutionSchema,
@@ -229,6 +234,49 @@ function resolvePrivateExecutionProfileRequest(
     throw new Error(`Execution profile '${profile.id}' requires role '${profile.authorityRoleId}'`);
   }
   return executionProfileId;
+}
+
+type AgentScopedRoleTopologyAction =
+  | { kind: "create_agent"; requestedRole: PaseoRoleId | undefined }
+  | { kind: "send_agent_prompt"; targetAgentId: string };
+
+async function assertAgentScopedRoleTopologyAuthorized(params: {
+  agentStorage: AgentStorage;
+  callerAgentId: string | undefined;
+  action: AgentScopedRoleTopologyAction;
+}): Promise<void> {
+  if (!params.callerAgentId) {
+    return;
+  }
+
+  const caller = await params.agentStorage.get(params.callerAgentId);
+  if (!caller) {
+    throw new Error(`Caller agent ${params.callerAgentId} is unavailable in durable storage`);
+  }
+  const callerRole = caller.roleBinding?.roleId;
+  if (!callerRole) {
+    return;
+  }
+  if (callerRole !== "lead") {
+    throw new Error(`Role-bound ${callerRole} agents cannot use ${params.action.kind}`);
+  }
+
+  if (params.action.kind === "create_agent") {
+    if (params.action.requestedRole !== "peer") {
+      throw new Error("A role-bound Lead may create only a role-bound Peer");
+    }
+    return;
+  }
+
+  const target = await params.agentStorage.get(params.action.targetAgentId);
+  if (!target) {
+    throw new Error(
+      `Target agent ${params.action.targetAgentId} is unavailable in durable storage`,
+    );
+  }
+  if (getParentAgentIdFromLabels(target.labels) !== params.callerAgentId) {
+    throw new Error("A role-bound Lead may prompt only its own direct child");
+  }
 }
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -1711,6 +1759,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         // COMPAT(nestedCreateAgentPlacement): accept the old relationship/workspace shape without
         // advertising it to models. Added in v0.2.0; remove after 2027-01-17.
         const parsed = legacyAgentToAgentCreateAgentArgsSchema.parse(args);
+        await assertAgentScopedRoleTopologyAuthorized({
+          agentStorage,
+          callerAgentId,
+          action: { kind: "create_agent", requestedRole: parsed.role },
+        });
         const { cwd, workspaceId, worktree } = await resolveCreateAgentWorkspace(parsed.workspace, {
           prompt: parsed.initialPrompt,
         });
@@ -1724,6 +1777,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         };
       }
       const parsed = agentToAgentCreateAgentArgsSchema.parse(args);
+      await assertAgentScopedRoleTopologyAuthorized({
+        agentStorage,
+        callerAgentId,
+        action: { kind: "create_agent", requestedRole: parsed.role },
+      });
       const { cwd, workspaceId } = await resolveCanonicalCreateAgentWorkspace(parsed.workspaceId, {
         prompt: parsed.initialPrompt,
       });
@@ -2145,6 +2203,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       background = Boolean(callerAgentId),
       notifyOnFinish = Boolean(callerAgentId),
     }) => {
+      await assertAgentScopedRoleTopologyAuthorized({
+        agentStorage,
+        callerAgentId,
+        action: { kind: "send_agent_prompt", targetAgentId: agentId },
+      });
       const shouldNotifyOnFinish = Boolean(callerAgentId && notifyOnFinish && background);
 
       await sendPromptToAgent({
