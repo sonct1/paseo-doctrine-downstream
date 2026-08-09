@@ -22,7 +22,23 @@ same Paseo agent ID. Provider history is not appended again when the canonical t
 primed.
 
 Idle agents remain resident indefinitely. Runtime closure happens only through an explicit lifecycle
-action such as archive, replacement, reload, workspace teardown, or daemon shutdown.
+action such as archive, final adjacent-Lead release, replacement, reload, workspace teardown, or daemon
+shutdown.
+
+Final adjacent-Lead release deliberately creates a narrower closed state: Paseo closes the predecessor
+runtime and retains its unarchived durable record for audit, but its released write lease prevents normal
+resume or prompt dispatch under that agent ID. Returning the same person or role to Lead creates a fresh
+role-bound identity; it does not reactivate the released predecessor. Timeline and prompt-index reads use
+the durable timeline store for a released predecessor and do not initialize a provider session. Final
+release reconciles that agent's durable pending-write manifests before runtime closure and fails closed
+while any batch cannot commit. Pending batches survive daemon restart; a timed-out reconciliation is
+aborted before it may start a later runtime close. A failure before manifest creation remains in the
+current daemon's repair ledger, blocks release, and is retried during graceful shutdown. A hard process
+loss in that pre-manifest interval is an explicitly unqualified storage-failure boundary, not a claimed
+restart-recovery guarantee. Per-agent repair drains are serialized; graceful shutdown attempts every
+known repair before reporting an aggregate failure. This retention guarantee starts when the file-backed
+store is activated;
+older candidate release records keep their packet and receipts but have no automatic timeline backfill.
 
 A provider runtime can still die on its own — crash, OOM kill, host suspend. Work the agent parked
 inside that process dies with it: Claude Code's background Bash shells, `Monitor` watches, and
@@ -50,30 +66,18 @@ Users can also detach an existing subagent from the subagents track. Detach is d
 
 `notifyOnFinish` defaults to `true` for agent-scoped creation and background prompt follow-ups because most delegated work needs to report back to the creating agent. Set it to `false` only for truly fire-and-forget agents or prompts.
 
-### Experimental coordination signals — manual only
+### Coordination signal và Lead handoff candidate
 
-Protocol, daemon, CLI/tool, persistence, idle-boundary delivery, resolution, and focused-test bytes exist
-for a manual experimental slice. It is not a standing workflow default or runtime-qualified capability.
+Current branch có candidate implementation cho durable coordination signal. Signal là advisory, persist
+trên target record và chờ idle boundary nếu agent đang chạy. Nó không replace active run, chuyển
+authority, detach hoặc archive agent. Native attention dùng context telemetry, compaction event và
+repeated terminal failure; missing telemetry fail closed.
 
-The candidate design uses durable coordination signals for handoff and detach recommendations instead of ordinary prompts. A signal is advisory: it does not transfer authority, interrupt the target, or require the Lead to report to its sender. The candidate persists the signal on the target Lead record immediately. If the Lead is running, delivery waits for the next idle boundary; the delivery path never replaces an active run.
-
-Only role-bound Leads are valid manual targets. Role-bound Supervisors and Leads can call `signal_agent`;
-Human-facing clients can use `paseo agent signal`. No automatic native-attention policy is implemented or
-started by daemon bootstrap.
-
-If native attention is revisited, its threshold and routing policy must first be justified by reproduced
-evidence and an explicit owning policy layer. It must remain advisory, wait for an idle boundary, and fail
-closed on missing telemetry.
-
-The receiving role uses `resolve_agent_signal` to acknowledge, defer, decline, or mark the attention
-completed. Pending and resolved receipts are included in `get_agent_status` as `coordinationSignals`.
-
-```bash
-paseo agent signal <lead-id> --kind handoff --reason "Context dilution across repeated reopen"
-paseo agent signal <lead-id> --kind detach --related-agent <candidate-id> --reason "Promote the successor candidate"
-```
-
-Even if this candidate qualifies later, signals deliberately stop before handoff workflow automation. The Lead still decides the safe checkpoint and performs the actual handoff or detach through separately authorized lifecycle surfaces.
+Adjacent-Lead handoff là workflow riêng. Frozen packet phải tồn tại trước Human authorization; designated
+successor phải ACK trước Human predecessor release. Các receipt trước final release không mutate role
+binding hoặc lifecycle. Final release đóng predecessor runtime nhưng giữ durable record, rồi chuyển write
+ownership; nó không detach hoặc archive. Xem docs/slp-coordination-handoff.md cho maturity, role routing
+và usage.
 
 ## Provider-managed child agents
 

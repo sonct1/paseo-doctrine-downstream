@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssignmentEnvelopeSchema } from "./assignment-contract.js";
 import { TerminalActivitySchema } from "./terminal-activity.js";
 import { CLIENT_CAPS } from "./client-capabilities.js";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-lifecycle.js";
@@ -17,6 +18,7 @@ import {
   CoordinationSignalSchema,
   ManualCoordinationSignalKindSchema,
 } from "./coordination-signal.js";
+import { LeadHandoffPacketSchema } from "./lead-handoff.js";
 import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
@@ -86,6 +88,14 @@ import {
   type PaseoScriptEntryRaw,
   type ProjectConfigRpcError,
 } from "./paseo-config-schema.js";
+import {
+  WorkspaceProtocolRevisionSchema,
+  WorkspaceProtocolRpcErrorSchema,
+  WorkspaceProtocolSnapshotSchema,
+  type WorkspaceProtocolRevision,
+  type WorkspaceProtocolRpcError,
+  type WorkspaceProtocolSnapshot,
+} from "./workspace-protocol-schema.js";
 export {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
@@ -99,6 +109,12 @@ export {
   type PaseoMetadataGenerationEntry,
   type PaseoScriptEntryRaw,
   type ProjectConfigRpcError,
+  WorkspaceProtocolRevisionSchema,
+  WorkspaceProtocolRpcErrorSchema,
+  WorkspaceProtocolSnapshotSchema,
+  type WorkspaceProtocolRevision,
+  type WorkspaceProtocolRpcError,
+  type WorkspaceProtocolSnapshot,
 };
 // ---------------------------------------------------------------------------
 // Mutable daemon config schemas (shared between server store and client)
@@ -808,6 +824,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   roleBinding: RoleBindingReceiptSchema.optional(),
   launchContract: LaunchContractReceiptSchema.optional(),
   coordinationSignals: z.array(CoordinationSignalSchema).optional(),
+  leadHandoffs: z.array(LeadHandoffPacketSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1339,6 +1356,20 @@ export const WriteProjectConfigRequestMessageSchema = z.object({
   expectedRevision: PaseoConfigRevisionSchema.nullable(),
 });
 
+export const WorkspaceProtocolInspectRequestMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.inspect.request"),
+  requestId: z.string(),
+  repoRoot: z.string(),
+});
+
+export const WorkspaceProtocolWriteRequestMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.write.request"),
+  requestId: z.string(),
+  repoRoot: z.string(),
+  content: z.string(),
+  expectedRevision: WorkspaceProtocolRevisionSchema.nullable(),
+});
+
 // ============================================================================
 // Dictation Streaming (lossless, resumable)
 // ============================================================================
@@ -1408,6 +1439,8 @@ export const CreateAgentRequestMessageSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   workspaceId: z.string().optional(),
   roleId: PaseoRoleIdSchema.optional(),
+  // COMPAT(assignmentContracts): added in v0.3.0-beta.1.paseo.2; old clients omit it.
+  assignment: AssignmentEnvelopeSchema.optional(),
   // Optional caller context lets managed CLI invocations use the same daemon-owned
   // workspace and parentage policy as agent-scoped MCP creation.
   callerAgentId: z.string().optional(),
@@ -2713,6 +2746,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FoundationProviderConnectionTestRequestSchema,
   ReadProjectConfigRequestMessageSchema,
   WriteProjectConfigRequestMessageSchema,
+  WorkspaceProtocolInspectRequestMessageSchema,
+  WorkspaceProtocolWriteRequestMessageSchema,
   DictationStreamStartMessageSchema,
   DictationStreamChunkMessageSchema,
   DictationStreamFinishMessageSchema,
@@ -3045,6 +3080,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRecovery: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
+        // COMPAT(workspaceProtocolEditing): added in the Foundation WebUI slice; keep optional for older daemons.
+        workspaceProtocolEditing: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -4251,6 +4288,38 @@ export const WriteProjectConfigResponseMessageSchema = z.object({
       repoRoot: z.string(),
       ok: z.literal(false),
       error: ProjectConfigRpcErrorSchema,
+    }),
+  ]),
+});
+
+export const WorkspaceProtocolInspectResponseMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.inspect.response"),
+  payload: z.union([
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(true),
+      snapshot: WorkspaceProtocolSnapshotSchema,
+    }),
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(false),
+      error: WorkspaceProtocolRpcErrorSchema,
+    }),
+  ]),
+});
+
+export const WorkspaceProtocolWriteResponseMessageSchema = z.object({
+  type: z.literal("foundation.workspaceProtocol.write.response"),
+  payload: z.union([
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(true),
+      snapshot: WorkspaceProtocolSnapshotSchema,
+    }),
+    z.object({
+      requestId: z.string(),
+      ok: z.literal(false),
+      error: WorkspaceProtocolRpcErrorSchema,
     }),
   ]),
 });
@@ -5645,6 +5714,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FoundationProviderConnectionTestResponseSchema,
   ReadProjectConfigResponseMessageSchema,
   WriteProjectConfigResponseMessageSchema,
+  WorkspaceProtocolInspectResponseMessageSchema,
+  WorkspaceProtocolWriteResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
   SetAgentModelResponseMessageSchema,
   SetAgentThinkingResponseMessageSchema,

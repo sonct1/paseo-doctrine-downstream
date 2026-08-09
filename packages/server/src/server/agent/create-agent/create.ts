@@ -16,6 +16,10 @@ import type { AgentPromptInput, AgentRunOptions, AgentSessionConfig } from "../a
 import type { AgentStorage } from "../agent-storage.js";
 import type { AgentOwner } from "../agent-owner.js";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type {
+  AssignmentAssignerReceipt,
+  AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
 import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
@@ -60,6 +64,8 @@ export interface CreateAgentFromSessionInput {
   config: AgentSessionConfig;
   workspaceId: string;
   roleId?: PaseoRoleId;
+  assignment?: AssignmentEnvelope;
+  assignmentAssigner?: AssignmentAssignerReceipt;
   worktreeName?: string;
   initialPrompt?: string;
   clientMessageId?: string;
@@ -84,6 +90,7 @@ export interface CreateAgentFromMcpInput {
   provider: string;
   roleId?: PaseoRoleId;
   executionProfileId?: FoundationExecutionProfileId;
+  assignment?: AssignmentEnvelope;
   title: string;
   initialPrompt?: string;
   config?: Partial<AgentSessionConfig>;
@@ -293,6 +300,8 @@ async function resolveSessionCreateAgent(
       // is the freshly created worktree's workspace.
       workspaceId: requireResolvedWorkspaceId(workspaceId),
       roleId: input.roleId,
+      assignment: input.assignment,
+      assignmentAssigner: input.assignmentAssigner,
     },
     prompt: hasPromptContent ? prompt : undefined,
     runOptions,
@@ -362,10 +371,18 @@ async function resolveMcpCreateAgent(
     createOptions: {
       ...(Object.keys(intent.labels).length > 0 ? { labels: intent.labels } : {}),
       workspaceId: intent.workspaceId,
-      owner: input.owner,
-      env: input.env,
-      roleId: input.roleId,
-      executionProfileId: input.executionProfileId,
+      ...(input.owner ? { owner: input.owner } : {}),
+      ...(input.env ? { env: input.env } : {}),
+      ...(input.roleId
+        ? {
+            roleId: input.roleId,
+            ...(input.executionProfileId ? { executionProfileId: input.executionProfileId } : {}),
+            assignment: input.assignment,
+            assignmentAssigner: input.callerAgentId
+              ? { kind: "agent", agentId: input.callerAgentId }
+              : { kind: "human-session" },
+          }
+        : {}),
     },
     prompt: trimmedPrompt ? trimmedPrompt : undefined,
     setupContinuation,

@@ -39,6 +39,16 @@ export interface RequestCoordinationSignalInput {
   evidence?: Record<string, string | number | boolean | null>;
 }
 
+export type CoordinationPolicyState = NonNullable<StoredAgentRecord["coordinationPolicyState"]>;
+
+export const EMPTY_COORDINATION_POLICY_STATE: CoordinationPolicyState = {
+  consecutiveTurnFailures: 0,
+  failureAttentionSent: false,
+  automaticCompactionCount: 0,
+  automaticCompactionAttentionSent: false,
+  contextPressureAttentionSent: false,
+};
+
 const scheduledDeliveries = new Map<string, () => void>();
 const deliveryInFlight = new Set<string>();
 const recordUpdates = new Map<string, Promise<unknown>>();
@@ -246,6 +256,26 @@ export async function requestCoordinationSignal(
   });
   scheduleDelivery(dependencies, input.targetAgentId);
   return signal;
+}
+
+export async function updateCoordinationPolicyState<T>(
+  dependencies: CoordinationSignalDependencies,
+  agentId: string,
+  update: (state: CoordinationPolicyState) => {
+    state: CoordinationPolicyState;
+    result: T;
+  },
+): Promise<T> {
+  return updateRecord(dependencies, agentId, (record) => {
+    const next = update({
+      ...EMPTY_COORDINATION_POLICY_STATE,
+      ...record.coordinationPolicyState,
+    });
+    return {
+      record: { ...record, coordinationPolicyState: next.state },
+      result: next.result,
+    };
+  });
 }
 
 export async function resumePendingCoordinationSignalDeliveries(

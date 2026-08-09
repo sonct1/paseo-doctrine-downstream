@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssignmentEnvelopeSchema } from "@getpaseo/protocol/assignment-contract";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -21,7 +22,7 @@ import {
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
-import { ensureAgentLoaded } from "../agent-loading.js";
+import { ensureAgentLoaded, hasPendingAgentInitialization } from "../agent-loading.js";
 import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
 import {
   archiveByScope,
@@ -115,6 +116,12 @@ import {
   FoundationExecutionProfileIdSchema,
   getFoundationExecutionProfileDefinition,
 } from "../foundation-execution-profiles.js";
+import {
+  LeadHandoffPacketSchema,
+  LeadHandoffTransitionSchema,
+  PrepareLeadHandoffInputSchema,
+} from "@getpaseo/protocol/lead-handoff";
+import { prepareLeadHandoff, transitionLeadHandoff } from "../lead-handoffs.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -1123,6 +1130,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       "Paseo Foundation role to bind through the provider-native durable instruction channel.",
     ),
     ...privateExecutionProfileInputShape(canCreatePrivateExecutionProfile),
+    assignment: AssignmentEnvelopeSchema.optional().describe(
+      "Required immutable one-task authority envelope when role is set.",
+    ),
     labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
     settings: CreateAgentSettingsInputSchema.optional().describe(
       "Initial runtime settings for the new agent.",
@@ -1661,6 +1671,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           provider: parsedArgs.provider,
           roleId: parsedArgs.role,
           executionProfileId,
+          assignment: parsedArgs.assignment,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
           config: inheritedConfig,
@@ -2083,6 +2094,73 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         throw new Error("unreachable");
     }
   }
+
+  registerTool(
+    "prepare_lead_handoff",
+    {
+      title: "Prepare Lead handoff",
+      description:
+        "Persist an immutable adjacent-Lead handoff packet. The predecessor remains write Owner; this does not authorize or release either Lead.",
+      inputSchema: PrepareLeadHandoffInputSchema.omit({ predecessorAgentId: true }).shape,
+      outputSchema: { handoff: LeadHandoffPacketSchema },
+    },
+    async (input) => {
+      if (!callerAgentId) {
+        throw new Error("prepare_lead_handoff requires an agent-scoped predecessor Lead");
+      }
+      const caller = await agentStorage.get(callerAgentId);
+      if (caller?.roleBinding?.roleId !== "lead") {
+        throw new Error("prepare_lead_handoff requires a role-bound predecessor Lead");
+      }
+      const handoff = await prepareLeadHandoff(
+        { agentStorage },
+        { ...input, predecessorAgentId: callerAgentId },
+      );
+      agentManager.notifyAgentState(callerAgentId);
+      return { content: [], structuredContent: ensureValidJson({ handoff }) };
+    },
+  );
+
+  registerTool(
+    "transition_lead_handoff",
+    {
+      title: "Transition Lead handoff",
+      description:
+        "Record explicit Human authorization/release or the designated successor's acknowledgement/rejection. Final release requires an idle predecessor, closes its runtime while retaining the durable record, transfers current write ownership, and blocks later predecessor prompts without detaching, archiving, or changing role binding.",
+      inputSchema: {
+        predecessorAgentId: z.string().min(1),
+        handoffId: z.string().min(1),
+        transition: LeadHandoffTransitionSchema,
+        successorAgentId: z.string().min(1).optional(),
+        note: z.string().trim().min(1).max(1_000),
+      },
+      outputSchema: { handoff: LeadHandoffPacketSchema },
+    },
+    async ({ predecessorAgentId, handoffId, transition, successorAgentId, note }) => {
+      if (callerAgentId && transition !== "successor_acknowledged" && transition !== "rejected") {
+        throw new Error("Only a Human-facing caller can authorize or release a Lead handoff");
+      }
+      const handoff = await transitionLeadHandoff(
+        {
+          agentStorage,
+          hasInFlightRun: (agentId) =>
+            agentManager.hasInFlightRun(agentId) || hasPendingAgentInitialization(agentId),
+          closePredecessorRuntime: async (agentId, signal) =>
+            agentManager.closeAgentForLeadHandoff(agentId, signal),
+        },
+        {
+          predecessorAgentId,
+          handoffId,
+          transition,
+          actorAgentId: callerAgentId ?? null,
+          successorAgentId,
+          note,
+        },
+      );
+      agentManager.notifyAgentState(predecessorAgentId);
+      return { content: [], structuredContent: ensureValidJson({ handoff }) };
+    },
+  );
 
   registerTool(
     "signal_agent",

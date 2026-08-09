@@ -217,6 +217,11 @@ describe("projects settings routes", () => {
     expect(buildProjectSettingsRoute("host a", "project/1")).toBe(
       "/settings/hosts/host%20a/projects/project%2F1",
     );
+    expect(
+      buildProjectSettingsRoute("host a", "project/1", {
+        protocolRoot: "/repo/worktree one",
+      }),
+    ).toBe("/settings/hosts/host%20a/projects/project%2F1?protocolRoot=%2Frepo%2Fworktree%20one");
   });
 
   it("keeps route ids opaque", () => {

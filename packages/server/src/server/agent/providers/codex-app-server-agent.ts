@@ -119,6 +119,7 @@ import {
   CodexProviderOptionsSchema,
   type CodexProviderOptions,
 } from "./codex/options.js";
+import { isRuntimePaseoMcpServer } from "../runtime-mcp-config.js";
 
 function assertChildWithPipes(
   child: ChildProcess,
@@ -857,6 +858,7 @@ interface CodexMcpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   tool_timeout_sec?: number;
+  required?: boolean;
 }
 
 function toCodexMcpConfig(config: McpServerConfig): CodexMcpServerConfig {
@@ -3351,6 +3353,12 @@ export class CodexAppServerAgentSession implements AgentSession {
   > | null = null;
   private resolvedSandboxPolicy: Record<string, unknown> | null = null;
   private currentThreadId: string | null = null;
+  private runtimeThreadConfigAppliedForThreadId: string | null = null;
+  private pendingRuntimeThreadConfigApply: {
+    client: CodexAppServerClient;
+    threadId: string;
+    promise: Promise<void>;
+  } | null = null;
   private currentTurnId: string | null = null;
   private pendingForegroundTurnIdentification: {
     foregroundTurnId: string;
@@ -3521,6 +3529,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       throw this.createClosedError();
     }
     this.client = client;
+    this.runtimeThreadConfigAppliedForThreadId = null;
     client.setUnexpectedTerminationHandler((error) => {
       this.handleUnexpectedTermination(error);
     });
@@ -3538,6 +3547,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       if (this.currentThreadId) {
         await this.ensureThreadLoaded({
           allowArchivedHistory: this.initialResumePurpose === "history",
+          applyRuntimeOverrides: this.initialResumePurpose !== "history",
         });
         await this.loadPersistedHistory();
       }
@@ -3923,32 +3933,86 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private async ensureThreadLoaded(
-    options: { allowArchivedHistory?: boolean } = {},
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean } = {},
   ): Promise<void> {
-    if (!this.client || !this.currentThreadId) return;
+    const client = this.client;
+    const threadId = this.currentThreadId;
+    if (!client || !threadId) return;
+    const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
+    if (applyRuntimeOverrides) {
+      try {
+        await this.applyRuntimeThreadConfigOnce(client, threadId, options);
+      } catch (error) {
+        if (this.client !== client || this.currentThreadId !== threadId) {
+          await this.ensureThreadLoaded(options);
+          return;
+        }
+        throw error;
+      }
+      if (this.client !== client || this.currentThreadId !== threadId) {
+        await this.ensureThreadLoaded(options);
+      }
+      return;
+    }
+    await this.ensureThreadLoadedFor(client, threadId, options);
+  }
+
+  private async applyRuntimeThreadConfigOnce(
+    client: CodexAppServerClient,
+    threadId: string,
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean },
+  ): Promise<void> {
+    const pending = this.pendingRuntimeThreadConfigApply;
+    if (pending?.client === client && pending.threadId === threadId) {
+      await pending.promise;
+      return;
+    }
+    const promise = this.ensureThreadLoadedFor(client, threadId, options);
+    this.pendingRuntimeThreadConfigApply = { client, threadId, promise };
     try {
-      const loaded = toObjectRecord(await this.client.request("thread/loaded/list", {}));
+      await promise;
+    } finally {
+      if (this.pendingRuntimeThreadConfigApply?.promise === promise) {
+        this.pendingRuntimeThreadConfigApply = null;
+      }
+    }
+  }
+
+  private async ensureThreadLoadedFor(
+    client: CodexAppServerClient,
+    threadId: string,
+    options: { allowArchivedHistory?: boolean; applyRuntimeOverrides?: boolean },
+  ): Promise<void> {
+    try {
+      const loaded = toObjectRecord(await client.request("thread/loaded/list", {}));
       const ids = Array.isArray(loaded?.data) ? loaded.data : [];
-      if (ids.includes(this.currentThreadId)) {
+      const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
+      const params: Record<string, unknown> = { threadId };
+      const developerInstructions = applyRuntimeOverrides
+        ? composeSystemPromptParts(
+            this.config.systemPrompt,
+            this.config.daemonAppendSystemPrompt,
+            this.roleInstructions,
+          )
+        : undefined;
+      if (developerInstructions) params.developerInstructions = developerInstructions;
+      const codexConfig = applyRuntimeOverrides ? this.buildCodexInnerConfig() : null;
+      if (codexConfig) params.config = codexConfig;
+      const hasRuntimeOverrides = Boolean(developerInstructions) || codexConfig !== null;
+      if (
+        ids.includes(threadId) &&
+        (!applyRuntimeOverrides ||
+          !hasRuntimeOverrides ||
+          this.runtimeThreadConfigAppliedForThreadId === threadId)
+      ) {
         return;
       }
-      const params: Record<string, unknown> = { threadId: this.currentThreadId };
-      const developerInstructions = composeSystemPromptParts(
-        this.config.systemPrompt,
-        this.config.daemonAppendSystemPrompt,
-        this.roleInstructions,
-      );
-      if (developerInstructions) {
-        params.developerInstructions = developerInstructions;
-      }
-      const codexConfig = this.buildCodexInnerConfig();
-      if (codexConfig) {
-        params.config = codexConfig;
-      }
-      const response = await this.client.request("thread/resume", params);
+      const response = await client.request("thread/resume", params);
       this.rememberResolvedSandboxPolicy(response);
+      if (hasRuntimeOverrides && this.client === client && this.currentThreadId === threadId) {
+        this.runtimeThreadConfigAppliedForThreadId = threadId;
+      }
     } catch (error) {
-      const threadId = this.currentThreadId;
       const message = error instanceof Error ? error.message : String(error);
       if (
         options.allowArchivedHistory === true &&
@@ -4985,6 +5049,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.cachedRuntimeInfo = null;
     }
     this.currentThreadId = threadId;
+    this.runtimeThreadConfigAppliedForThreadId = threadId;
   }
 
   private buildThreadStartRequest(model: string): {
@@ -5024,19 +5089,20 @@ export class CodexAppServerAgentSession implements AgentSession {
     if (this.deps.customCodexConfig) {
       Object.assign(innerConfig, this.deps.customCodexConfig);
     }
-    if (this.config.mcpServers) {
-      const mcpServers: Record<string, CodexMcpServerConfig> = {};
-      for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
-        mcpServers[name] = toCodexMcpConfig(serverConfig);
-      }
-      innerConfig.mcp_servers = mcpServers;
-    }
-    if (this.deps.customCodexConfig) {
-      Object.assign(innerConfig, this.deps.customCodexConfig);
-    }
     const boundProviderConfig = buildCodexBoundProviderConfig(this.providerLaunchBinding);
     if (boundProviderConfig) {
       Object.assign(innerConfig, boundProviderConfig);
+    }
+    if (this.config.mcpServers) {
+      const configuredMcpServers = toObjectRecord(innerConfig.mcp_servers) ?? {};
+      const mcpServers: Record<string, unknown> = { ...configuredMcpServers };
+      for (const [name, serverConfig] of Object.entries(this.config.mcpServers)) {
+        mcpServers[name] = {
+          ...toCodexMcpConfig(serverConfig),
+          ...(isRuntimePaseoMcpServer(serverConfig) ? { required: true } : {}),
+        };
+      }
+      innerConfig.mcp_servers = mcpServers;
     }
     if (this.roleInstructions) {
       const features = toObjectRecord(innerConfig.features) ?? {};

@@ -1365,6 +1365,12 @@ export const ptBR: TranslationResources = {
       hostDisconnected: "Host não está conectado",
       pendingRequired: "Nenhuma configuração de workspace está pendente",
       composerStateRequired: "O estado do composer da configuração do workspace é obrigatório",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {
@@ -2376,6 +2382,36 @@ export const ptBR: TranslationResources = {
     project: {
       noEditableTarget: "Este projeto não pode ser editado neste host.",
       backToProjects: "Voltar para projetos",
+      workspaceProtocol: {
+        title: "Workspace protocol",
+        info: "Repository-specific orchestration rules that Paseo binds to Foundation roles",
+        unsupportedTitle: "Update this host to manage the workspace protocol",
+        unsupportedDescription:
+          "This daemon does not expose Workspace Protocol editing in Paseo yet.",
+        unreadableTitle: "Workspace Protocol cannot be read",
+        unreadableDescription:
+          "Check the file permissions or path on the host, then reload. Paseo will not overwrite it.",
+        loadFailedTitle: "Could not load Workspace Protocol",
+        loadFailedDescription: "The host did not return the protocol state.",
+        missingTitle: "Workspace Protocol is required",
+        missingDescription:
+          "Review the generated repository defaults, then bootstrap the file from this screen.",
+        invalidTitle: "Workspace Protocol needs correction",
+        invalidDescription: "Fix these checks before saving:",
+        staleTitle: "Workspace Protocol changed on disk",
+        staleDescription: "Reload the current file before applying your edits.",
+        writeFailedTitle: "Could not save Workspace Protocol",
+        writeFailedDescription:
+          "Paseo left the existing file unchanged. Check permissions, then try again.",
+        editorAccessibility: "Workspace Protocol content",
+        bootstrap: "Bootstrap protocol",
+        saved: "Workspace Protocol saved",
+        status: {
+          missing: "Bootstrap required",
+          valid: "Active protocol",
+          invalid: "Correction required",
+        },
+      },
       edit: {
         title: "Editar projeto",
         name: "Nome",

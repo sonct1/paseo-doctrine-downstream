@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
 import {
   PaseoRoleIdSchema,
   RoleBindingReceiptSchema,
@@ -12,6 +10,10 @@ import {
   type WorkspaceProtocolBindingReceipt,
 } from "@getpaseo/protocol/role-binding";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import type {
+  AssignmentAssignerReceipt,
+  AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import { z } from "zod";
 
 import {
@@ -21,10 +23,20 @@ import {
   type FoundationExecutionProfileId,
 } from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
+import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
+import {
+  buildAssignmentInstruction,
+  materializeAssignmentContract,
+  PersistedAssignmentContractSchema,
+  type PersistedAssignmentContract,
+} from "./assignment-contract.js";
+
+export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
   executionProfile: ExecutionProfileBindingReceiptSchema.optional(),
+  assignmentContract: PersistedAssignmentContractSchema.optional(),
 });
 
 export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
@@ -36,6 +48,9 @@ export interface MaterializeRoleBindingInput {
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
   cwd: string;
+  workspaceId: string;
+  assignment?: AssignmentEnvelope;
+  assignmentAssigner: AssignmentAssignerReceipt;
   createdAt?: Date;
 }
 
@@ -66,62 +81,6 @@ const COUNCIL_LEAD_COMPATIBILITY_MARKER = [
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-class WorkspaceProtocolValidationError extends Error {
-  constructor(
-    readonly protocolPath: string,
-    readonly reason: string,
-    options?: ErrorOptions,
-  ) {
-    super(`Invalid WORKSPACE_PROTOCOL.md at '${protocolPath}': ${reason}`, options);
-    this.name = "WorkspaceProtocolValidationError";
-  }
-}
-
-function hasErrorCode(error: unknown): error is Error & { code: string } {
-  return error instanceof Error && "code" in error && typeof error.code === "string";
-}
-
-function assertValidWorkspaceProtocol(bytes: string, protocolPath: string): void {
-  if (!bytes.trim()) {
-    throw new WorkspaceProtocolValidationError(protocolPath, "root protocol is blank");
-  }
-  if (/\{\{REQUIRED:[^{}]+\}\}/u.test(bytes)) {
-    throw new WorkspaceProtocolValidationError(protocolPath, "unresolved required placeholder");
-  }
-  if (["<<<<<<<", "=======", ">>>>>>>"].some((marker) => bytes.includes(marker))) {
-    throw new WorkspaceProtocolValidationError(protocolPath, "merge conflict marker is present");
-  }
-
-  const markerPattern = /<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu;
-  const markers = bytes.match(markerPattern) ?? [];
-  if (markers.length > 1) {
-    throw new WorkspaceProtocolValidationError(protocolPath, "protocol marker is duplicated");
-  }
-  const supportedMarkers = new Set([
-    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->",
-    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->",
-  ]);
-  if (markers.length === 1 && !supportedMarkers.has(markers[0]?.trim() ?? "")) {
-    throw new WorkspaceProtocolValidationError(protocolPath, "protocol marker is not supported");
-  }
-
-  const normalized = bytes.toLocaleLowerCase("en-US");
-  const identityCategories = [
-    [/\bowner\b/u, /chủ sở hữu/u, /\bauthority\b/u, /thẩm quyền/u],
-    [/\bapplies_to\b/u, /áp dụng/u, /phạm vi/u, /\brepository\b/u, /\bproject\b/u],
-    [/\bversion\b/u, /\blast_reviewed\b/u, /trạng thái/u, /\bstatus\b/u, /\breview/u, /hiệu lực/u],
-  ];
-  const matchedCategories = identityCategories.filter((category) =>
-    category.some((pattern) => pattern.test(normalized)),
-  ).length;
-  if (matchedCategories < 2) {
-    throw new WorkspaceProtocolValidationError(
-      protocolPath,
-      "minimal owner, scope, or review identity is missing",
-    );
-  }
 }
 
 function resolveProviderFamily(provider: string, providerBaseId?: string | null): string {
@@ -297,45 +256,34 @@ function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceip
   return "assignment-only";
 }
 
-async function inspectWorkspaceProtocol(
+function requireWorkspaceProtocol(
   cwd: string,
   roleId: PaseoRoleId,
-): Promise<WorkspaceProtocolBindingReceipt> {
-  const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
-  try {
-    await lstat(protocolPath);
-  } catch (error) {
-    if (hasErrorCode(error) && error.code === "ENOENT") {
-      return {
-        status: "missing",
-        readership: protocolReadership(roleId),
-        path: protocolPath,
-      };
-    }
-    throw new WorkspaceProtocolValidationError(protocolPath, "path cannot be inspected", {
-      cause: error,
-    });
-  }
-
-  try {
-    const resolvedPath = await stat(protocolPath);
-    if (!resolvedPath.isFile()) {
-      throw new WorkspaceProtocolValidationError(protocolPath, "path is not a regular file");
-    }
-    const bytes = await readFile(protocolPath, "utf8");
-    assertValidWorkspaceProtocol(bytes, protocolPath);
+  assignment: PersistedAssignmentContract,
+): WorkspaceProtocolBindingReceipt {
+  const snapshot = inspectWorkspaceProtocol(cwd);
+  if (snapshot.status === "missing" && assignment.envelope.protocolException) {
     return {
-      status: "bound",
+      status: "missing",
       readership: protocolReadership(roleId),
-      path: protocolPath,
-      digest: sha256(bytes),
+      path: snapshot.path,
     };
-  } catch (error) {
-    if (error instanceof WorkspaceProtocolValidationError) throw error;
-    throw new WorkspaceProtocolValidationError(protocolPath, "file cannot be read", {
-      cause: error,
-    });
   }
+  if (snapshot.status !== "valid") {
+    const details =
+      snapshot.status === "invalid" && snapshot.issues.length > 0
+        ? `; issues=${snapshot.issues.join(",")}`
+        : "";
+    throw new Error(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: ${snapshot.status}: ${snapshot.path}${details}`,
+    );
+  }
+  return {
+    status: "bound",
+    readership: protocolReadership(roleId),
+    path: snapshot.path,
+    digest: snapshot.revision.sha256,
+  };
 }
 
 function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): string {
@@ -370,6 +318,15 @@ export async function materializeRoleBinding(
   }
 
   const definition = getFoundationRoleDefinition(input.roleId);
+  const createdAt = input.createdAt ?? new Date();
+  const assignmentContract = materializeAssignmentContract({
+    roleId: input.roleId,
+    assigner: input.assignmentAssigner,
+    workspaceId: input.workspaceId,
+    cwd: input.cwd,
+    envelope: input.assignment,
+    createdAt,
+  });
   const executionProfile = input.executionProfileId
     ? getFoundationExecutionProfileDefinition(input.executionProfileId)
     : null;
@@ -378,12 +335,13 @@ export async function materializeRoleBinding(
       `Execution profile '${executionProfile.id}' requires role '${executionProfile.authorityRoleId}'`,
     );
   }
-  const workspaceProtocol = await inspectWorkspaceProtocol(input.cwd, input.roleId);
+  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId, assignmentContract);
   const instructions = [
     definition.instructions,
     executionProfile?.instructions,
     input.roleId === "lead" ? COUNCIL_LEAD_COMPATIBILITY_MARKER : null,
     buildProtocolInstruction(workspaceProtocol),
+    buildAssignmentInstruction(assignmentContract),
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");
@@ -397,7 +355,9 @@ export async function materializeRoleBinding(
     injectionMethod: support.injectionMethod,
     qualification: "implementation-supported",
     workspaceProtocol,
-    createdAt: (input.createdAt ?? new Date()).toISOString(),
+    assignment: assignmentContract.receipt,
+    assignmentContract,
+    createdAt: createdAt.toISOString(),
     instructions,
     ...(executionProfile
       ? {
@@ -412,8 +372,7 @@ export async function materializeRoleBinding(
 }
 
 export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBindingReceipt {
-  const { instructions: _instructions, executionProfile: _executionProfile, ...receipt } = binding;
-  return receipt;
+  return RoleBindingReceiptSchema.parse(binding);
 }
 
 function intersectSupervisorTools(providerPolicy: ProviderPaseoToolsPolicy | undefined): string[] {

@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { AssignmentContractReceiptSchema } from "./assignment-contract.js";
 
 export const PASEO_ROLE_IDS = ["lead", "peer", "supervisor"] as const;
 
 export const PaseoRoleIdSchema = z.enum(PASEO_ROLE_IDS);
 export type PaseoRoleId = z.infer<typeof PaseoRoleIdSchema>;
 
-export const PASEO_ROLE_CONTRACT_VERSION = "3.2.0-topology-recovery";
+export const PASEO_ROLE_CONTRACT_VERSION = "3.3.0-mandatory-protocol-webui";
 
 export const PASEO_ROLE_SUMMARIES = [
   {
@@ -91,6 +92,8 @@ export const RoleBindingReceiptSchema = z.object({
   injectionMethod: RoleBindingInjectionMethodSchema,
   qualification: z.literal("implementation-supported"),
   workspaceProtocol: WorkspaceProtocolBindingReceiptSchema,
+  // COMPAT(assignmentContracts): added in v0.3.0-beta.1.paseo.2; old persisted agents omit it.
+  assignment: AssignmentContractReceiptSchema.optional(),
   createdAt: z.string(),
 });
 export type RoleBindingReceipt = z.infer<typeof RoleBindingReceiptSchema>;

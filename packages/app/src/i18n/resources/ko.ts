@@ -1348,6 +1348,12 @@ export const ko: TranslationResources = {
       hostDisconnected: "호스트가 연결되어 있지 않습니다",
       pendingRequired: "대기 중인 워크스페이스 설정이 없습니다",
       composerStateRequired: "워크스페이스 설정 작성기 상태가 필요합니다",
+      workspaceProtocolRequired:
+        "역할이 바인딩된 에이전트를 만들기 전에 프로젝트 설정에서 Workspace Protocol을 검토하고 수정하세요.",
+      workspaceProtocolUnsupported:
+        "역할이 바인딩된 에이전트를 만들기 전에 이 Paseo 호스트를 업데이트하세요. 프로젝트 설정에서 필요한 Workspace Protocol 기능을 확인할 수 있습니다.",
+      workspaceProtocolInspectionFailed:
+        "Paseo가 Workspace Protocol을 확인하지 못했습니다. 다시 시도하기 전에 프로젝트 설정에서 확인하세요.",
     },
   },
   onboarding: {
@@ -2351,6 +2357,35 @@ export const ko: TranslationResources = {
     project: {
       noEditableTarget: "이 호스트에서는 이 프로젝트를 편집할 수 없습니다.",
       backToProjects: "프로젝트로 돌아가기",
+      workspaceProtocol: {
+        title: "Workspace Protocol",
+        info: "Paseo가 Foundation 역할에 바인딩하는 저장소별 오케스트레이션 규칙",
+        unsupportedTitle: "Workspace Protocol을 관리하려면 이 호스트를 업데이트하세요",
+        unsupportedDescription:
+          "이 데몬은 아직 Paseo에서 Workspace Protocol 편집 기능을 제공하지 않습니다.",
+        unreadableTitle: "Workspace Protocol을 읽을 수 없습니다",
+        unreadableDescription:
+          "호스트의 파일 권한 또는 경로를 확인한 후 다시 불러오세요. Paseo는 파일을 덮어쓰지 않습니다.",
+        loadFailedTitle: "Workspace Protocol을 불러오지 못했습니다",
+        loadFailedDescription: "호스트가 프로토콜 상태를 반환하지 않았습니다.",
+        missingTitle: "Workspace Protocol이 필요합니다",
+        missingDescription: "생성된 저장소 기본값을 검토한 후 이 화면에서 파일을 부트스트랩하세요.",
+        invalidTitle: "Workspace Protocol을 수정해야 합니다",
+        invalidDescription: "저장하기 전에 다음 검사를 수정하세요:",
+        staleTitle: "디스크의 Workspace Protocol이 변경되었습니다",
+        staleDescription: "수정 사항을 적용하기 전에 현재 파일을 다시 불러오세요.",
+        writeFailedTitle: "Workspace Protocol을 저장하지 못했습니다",
+        writeFailedDescription:
+          "Paseo는 기존 파일을 변경하지 않았습니다. 권한을 확인한 후 다시 시도하세요.",
+        editorAccessibility: "Workspace Protocol 내용",
+        bootstrap: "프로토콜 부트스트랩",
+        saved: "Workspace Protocol이 저장되었습니다",
+        status: {
+          missing: "부트스트랩 필요",
+          valid: "활성 프로토콜",
+          invalid: "수정 필요",
+        },
+      },
       edit: {
         title: "프로젝트 편집",
         name: "이름",

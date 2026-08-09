@@ -1,7 +1,11 @@
 import type { AgentSessionConfig, McpServerConfig } from "./agent-sdk-types.js";
 
 const PASEO_MCP_SERVER_NAME = "paseo";
-const PASEO_MCP_PATHNAME = "/mcp/agents";
+const runtimePaseoMcpServers = new WeakSet<object>();
+
+export function isRuntimePaseoMcpServer(config: McpServerConfig): boolean {
+  return runtimePaseoMcpServers.has(config);
+}
 
 export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSessionConfig {
   const mcpServers = config.mcpServers;
@@ -10,7 +14,10 @@ export function stripInternalPaseoMcpServer(config: AgentSessionConfig): AgentSe
   }
 
   const paseoServer = mcpServers[PASEO_MCP_SERVER_NAME];
-  if (!paseoServer || !isInternalPaseoMcpServer(paseoServer)) {
+  if (
+    !paseoServer ||
+    (!isRuntimePaseoMcpServer(paseoServer) && !isLegacyLocalPaseoMcpServer(paseoServer))
+  ) {
     return config;
   }
 
@@ -38,32 +45,38 @@ export function withRuntimePaseoMcpServer(params: {
   mcpAuthToken: string | null;
 }): AgentSessionConfig {
   const storedConfig = stripInternalPaseoMcpServer(params.config);
-  if (!params.mcpBaseUrl || storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
+  if (!params.mcpBaseUrl) {
     return storedConfig;
   }
+  if (storedConfig.mcpServers?.[PASEO_MCP_SERVER_NAME]) {
+    throw new Error(`MCP server name ${PASEO_MCP_SERVER_NAME} is reserved for Paseo runtime`);
+  }
+
+  const runtimeServer: McpServerConfig = {
+    type: "http",
+    url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
+    ...(params.mcpAuthToken ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } } : {}),
+  };
+  runtimePaseoMcpServers.add(runtimeServer);
 
   return {
     ...storedConfig,
     mcpServers: {
-      [PASEO_MCP_SERVER_NAME]: {
-        type: "http",
-        url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
-        ...(params.mcpAuthToken
-          ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } }
-          : {}),
-      },
+      [PASEO_MCP_SERVER_NAME]: runtimeServer,
       ...storedConfig.mcpServers,
     },
   };
 }
 
-function isInternalPaseoMcpServer(config: McpServerConfig): boolean {
-  if (config.type !== "http" && config.type !== "sse") {
-    return false;
-  }
-
+function isLegacyLocalPaseoMcpServer(config: McpServerConfig): boolean {
+  if (config.type !== "http" && config.type !== "sse") return false;
   try {
-    return new URL(config.url).pathname === PASEO_MCP_PATHNAME;
+    const url = new URL(config.url);
+    const isLoopback =
+      url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
+    return (
+      isLoopback && url.pathname === "/mcp/agents" && Boolean(url.searchParams.get("callerAgentId"))
+    );
   } catch {
     return false;
   }

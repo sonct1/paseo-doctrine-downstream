@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Keyboard, ScrollView, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
+import { router } from "expo-router";
 import ReanimatedAnimated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,6 +18,7 @@ import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { useDraftAgentCreateFlow, type DraftCreateAttempt } from "@/composer/draft/create-flow";
 import { resolveTurnPresentation, TURN_LIVENESS_IDLE } from "@/timeline/turn-liveness";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { usePanelStore } from "@/stores/panel-store";
@@ -49,6 +51,13 @@ import {
 } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
+import {
+  requireWorkspaceProtocolForRole,
+  workspaceProtocolAdmissionMessageKey,
+  WorkspaceProtocolCreateAdmissionError,
+} from "@/workspace-protocol/create-admission";
+import { buildAssignmentEnvelope } from "@/workspace-protocol/assignment-envelope";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
 const EMPTY_ONLINE_SERVER_IDS: string[] = [];
@@ -132,6 +141,29 @@ function resolveDraftModeId(input: {
   return null;
 }
 
+function buildRoleCreateFields(input: {
+  roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId | null | undefined;
+  effectClass: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+  objective: string;
+  cwd: string;
+  protocolException?: AssignmentEnvelope["protocolException"];
+}): {
+  roleId?: import("@getpaseo/protocol/role-binding").PaseoRoleId;
+  assignment?: AssignmentEnvelope;
+} {
+  if (!input.roleId) return {};
+  return {
+    roleId: input.roleId,
+    assignment: buildAssignmentEnvelope({
+      roleId: input.roleId,
+      effectClass: input.effectClass,
+      objective: input.objective,
+      cwd: input.cwd,
+      protocolException: input.protocolException,
+    }),
+  };
+}
+
 async function submitDraftCreateRequest(input: {
   attempt: { clientMessageId: string };
   text: string;
@@ -144,6 +176,7 @@ async function submitDraftCreateRequest(input: {
   autoSubmitConfig: AutoSubmitConfig | null;
   composerState: {
     selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    selectedAssignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
     selectedProvider: string | null;
     selectedMode: string;
     modeOptions: readonly { id: string }[];
@@ -153,6 +186,7 @@ async function submitDraftCreateRequest(input: {
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
+  protocolException?: AssignmentEnvelope["protocolException"];
 }): Promise<{ agentId: string | null; result: AgentSnapshotPayload }> {
   const {
     attempt,
@@ -197,7 +231,13 @@ async function submitDraftCreateRequest(input: {
   const result = await client.createAgent({
     config,
     workspaceId,
-    ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
+    ...buildRoleCreateFields({
+      roleId: composerState.selectedRole,
+      effectClass: composerState.selectedAssignmentEffect,
+      objective: text,
+      cwd: workspaceDirectory,
+      protocolException: input.protocolException,
+    }),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
@@ -343,7 +383,9 @@ export function WorkspaceDraftAgentTab({
   const workspaceFields = useWorkspaceFields(serverId, workspaceId, (w) => ({
     workspaceDirectory: w.workspaceDirectory,
     id: w.id,
+    projectId: w.projectId,
   }));
+  const supportsWorkspaceProtocol = useHostFeature(serverId, "workspaceProtocolEditing");
   const workspaceDirectory = workspaceFields?.workspaceDirectory || null;
   const draftSetup = initialSetup ?? null;
   const draftWorkingDirectory = resolveDraftWorkingDirectory({
@@ -512,8 +554,30 @@ export function WorkspaceDraftAgentTab({
         composerState,
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
-    createRequest: async ({ attempt, text, images, attachments, cwd }) =>
-      submitDraftCreateRequest({
+    createRequest: async ({ attempt, text, images, attachments, cwd }) => {
+      let protocolException: AssignmentEnvelope["protocolException"] | undefined;
+      try {
+        if (composerState.selectedRole) {
+          invariant(client, "Connected daemon client is required for role admission");
+          invariant(workspaceFields?.projectId, "Project id is required for role admission");
+          protocolException = await requireWorkspaceProtocolForRole({
+            client,
+            serverId,
+            projectId: workspaceFields.projectId,
+            repoRoot: draftWorkingDirectory ?? cwd,
+            roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
+            supported: supportsWorkspaceProtocol,
+          });
+        }
+      } catch (error) {
+        if (error instanceof WorkspaceProtocolCreateAdmissionError) {
+          router.navigate(error.projectSettingsRoute);
+          throw new Error(t(workspaceProtocolAdmissionMessageKey(error.kind)), { cause: error });
+        }
+        throw error;
+      }
+      return submitDraftCreateRequest({
         attempt,
         text,
         images,
@@ -526,7 +590,9 @@ export function WorkspaceDraftAgentTab({
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
-      }),
+        protocolException,
+      });
+    },
     onCreateSuccess: ({ result }) => {
       clearDraftInput("sent");
       clearWorkspaceAttachments({ scopeKey: draftAttachmentScopeKey });

@@ -32,7 +32,7 @@ class FakePermissionAgentManager {
     return this.permissionResult;
   }
 
-  tryRunOutOfBand(): boolean {
+  async tryRunOutOfBandAuthorized(): Promise<boolean> {
     return this.outOfBandHandled;
   }
 
@@ -44,11 +44,11 @@ class FakePermissionAgentManager {
     return this.hasRunInFlight;
   }
 
-  streamAgent(
+  async startAuthorizedAgentStream(
     agentId: string,
     prompt: AgentPromptInput,
     options?: AgentRunOptions,
-  ): AsyncGenerator<AgentStreamEvent> {
+  ): Promise<AsyncGenerator<AgentStreamEvent>> {
     this.streamRuns.push({ agentId, prompt, options });
     return emptyAgentStream();
   }

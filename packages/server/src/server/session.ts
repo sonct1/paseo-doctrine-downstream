@@ -115,6 +115,7 @@ import {
 } from "./agent/timeline-projection.js";
 import { buildAgentForkContextAttachment } from "./agent/activity-curator.js";
 import { buildAgentPrompt } from "./agent/prompt-attachments.js";
+import { hasReleasedAgentWriteLease } from "./agent/lead-handoffs.js";
 import type { StructuredGenerationDaemonConfig } from "./agent/structured-generation-providers.js";
 import {
   getAgentStreamEventTurnId,
@@ -170,6 +171,7 @@ import { ProviderCatalogSession } from "./session/provider/provider-catalog-sess
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
+import { WorkspaceProtocolSession } from "./session/workspace-protocol/workspace-protocol-session.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
@@ -686,6 +688,7 @@ export class Session {
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
+  private readonly workspaceProtocolSession: WorkspaceProtocolSession;
   private readonly daemonSession: DaemonSession;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
@@ -912,6 +915,14 @@ export class Session {
         emit: (msg) => this.emit(msg),
       },
       projectRegistry: this.projectRegistry,
+      logger: this.sessionLogger,
+    });
+    this.workspaceProtocolSession = new WorkspaceProtocolSession({
+      host: {
+        emit: (msg) => this.emit(msg),
+      },
+      projectRegistry: this.projectRegistry,
+      workspaceRegistry: this.workspaceRegistry,
       logger: this.sessionLogger,
     });
     this.daemonSession = new DaemonSession({
@@ -1864,6 +1875,7 @@ export class Session {
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchAgentLifecycleMessage(msg) ??
+      this.dispatchProjectConfigurationMessage(msg) ??
       this.dispatchAgentConfigMessage(msg) ??
       this.dispatchCheckoutMessage(msg) ??
       this.dispatchWorkspaceRecoveryMessage(msg) ??
@@ -2099,10 +2111,23 @@ export class Session {
         });
         return undefined;
       }
+      default:
+        return undefined;
+    }
+  }
+
+  private dispatchProjectConfigurationMessage(
+    msg: SessionInboundMessage,
+  ): Promise<void> | undefined {
+    switch (msg.type) {
       case "read_project_config_request":
         return this.projectConfigSession.handleReadProjectConfigRequest(msg);
       case "write_project_config_request":
         return this.projectConfigSession.handleWriteProjectConfigRequest(msg);
+      case "foundation.workspaceProtocol.inspect.request":
+        return this.workspaceProtocolSession.handleInspectRequest(msg);
+      case "foundation.workspaceProtocol.write.request":
+        return this.workspaceProtocolSession.handleWriteRequest(msg);
       default:
         return undefined;
     }
@@ -3260,6 +3285,7 @@ export class Session {
       attachments,
       env,
       roleId,
+      assignment,
     } = msg;
     this.sessionLogger.info(
       { cwd: config.cwd, provider: config.provider, worktreeName },
@@ -3319,6 +3345,10 @@ export class Session {
           config: resolvedIntent.config,
           workspaceId: resolvedIntent.intent.workspaceId,
           roleId,
+          assignment,
+          assignmentAssigner: msg.callerAgentId
+            ? { kind: "agent", agentId: msg.callerAgentId }
+            : { kind: "human-session" },
           worktreeName,
           initialPrompt,
           clientMessageId,
@@ -6440,18 +6470,36 @@ export class Session {
       : undefined;
 
     try {
-      const snapshot = await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
-      const agentPayload = await this.buildAgentPayload(snapshot);
+      const storedRecord = await this.agentStorage.get(msg.agentId);
+      const released = hasReleasedAgentWriteLease(storedRecord);
+      const agentPayload = released
+        ? this.buildStoredAgentPayload(storedRecord as StoredAgentRecord)
+        : await this.buildAgentPayload(
+            await ensureAgentLoaded(msg.agentId, {
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              logger: this.sessionLogger,
+            }),
+          );
 
-      const fetchedControlTimeline = this.agentManager.fetchTimeline(msg.agentId, {
-        direction,
-        cursor,
-        limit: pageLimit,
-      });
+      const fetchedControlTimeline = released
+        ? await this.agentManager.fetchDurableTimeline(msg.agentId, {
+            direction,
+            cursor,
+            limit: pageLimit,
+          })
+        : this.agentManager.fetchTimeline(msg.agentId, {
+            direction,
+            cursor,
+            limit: pageLimit,
+          });
+      const fullTimeline =
+        released && projection === "projected"
+          ? await this.agentManager.fetchDurableTimeline(msg.agentId, {
+              direction: "tail",
+              limit: 0,
+            })
+          : undefined;
       const selectedTimeline = this.selectTimelineProjection({
         agentId: msg.agentId,
         projection,
@@ -6459,6 +6507,7 @@ export class Session {
         direction,
         ...(cursor ? { cursor } : {}),
         pageLimit,
+        ...(fullTimeline ? { fullTimeline } : {}),
       });
       const startCursor =
         selectedTimeline.startSeq !== null
@@ -6489,7 +6538,7 @@ export class Session {
             hasNewer: selectedTimeline.hasNewer,
             ...(msg.mergeWindow === true ? { mergeWindow: true } : {}),
             entries: selectedTimeline.entries.map((entry) => ({
-              provider: snapshot.provider,
+              provider: agentPayload.provider,
               item: entry.item,
               timestamp: entry.timestamp,
               seqStart: entry.seqStart,
@@ -6546,16 +6595,27 @@ export class Session {
     source?: object,
   ): Promise<void> {
     try {
-      await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
-      const rows = await this.agentManager.getTimelineRows(msg.agentId);
-      const timeline = this.agentManager.fetchTimeline(msg.agentId, {
-        direction: "tail",
-        limit: 1,
-      });
+      const storedRecord = await this.agentStorage.get(msg.agentId);
+      const released = hasReleasedAgentWriteLease(storedRecord);
+      if (!released) {
+        await ensureAgentLoaded(msg.agentId, {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.sessionLogger,
+        });
+      }
+      const rows = released
+        ? await this.agentManager.getDurableTimelineRows(msg.agentId)
+        : await this.agentManager.getTimelineRows(msg.agentId);
+      const timeline = released
+        ? await this.agentManager.fetchDurableTimeline(msg.agentId, {
+            direction: "tail",
+            limit: 1,
+          })
+        : this.agentManager.fetchTimeline(msg.agentId, {
+            direction: "tail",
+            limit: 1,
+          });
       const index = buildTimelinePromptIndex(timeline.epoch, rows);
       this.emitForSource(
         {
@@ -6694,16 +6754,27 @@ export class Session {
     msg: Extract<SessionInboundMessage, { type: "agent.fork_context.request" }>,
   ): Promise<void> {
     try {
-      const snapshot = await ensureAgentLoaded(msg.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.sessionLogger,
-      });
-      const agentPayload = await this.buildAgentPayload(snapshot);
-      const timeline = this.agentManager.fetchTimeline(msg.agentId, {
-        direction: "tail",
-        limit: 0,
-      });
+      const storedRecord = await this.agentStorage.get(msg.agentId);
+      const released = hasReleasedAgentWriteLease(storedRecord);
+      const snapshot = released
+        ? null
+        : await ensureAgentLoaded(msg.agentId, {
+            agentManager: this.agentManager,
+            agentStorage: this.agentStorage,
+            logger: this.sessionLogger,
+          });
+      const agentPayload = released
+        ? this.buildStoredAgentPayload(storedRecord as StoredAgentRecord)
+        : await this.buildAgentPayload(snapshot as ManagedAgent);
+      const timeline = released
+        ? await this.agentManager.fetchDurableTimeline(msg.agentId, {
+            direction: "tail",
+            limit: 0,
+          })
+        : this.agentManager.fetchTimeline(msg.agentId, {
+            direction: "tail",
+            limit: 0,
+          });
       const forkContext = buildAgentForkContextAttachment({
         rows: timeline.rows,
         cursorBoundary: msg.boundaryCursor
@@ -6711,7 +6782,7 @@ export class Session {
           : null,
         boundaryMessageId: msg.boundaryMessageId,
         agentTitle: agentPayload.title,
-        cwd: snapshot.cwd,
+        cwd: released ? (storedRecord as StoredAgentRecord).cwd : (snapshot as ManagedAgent).cwd,
       });
 
       this.emit({

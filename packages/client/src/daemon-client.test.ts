@@ -2183,6 +2183,16 @@ test("sends create_agent_request with workspace and caller identity", async () =
     callerAgentId: "parent-agent",
     title: "Compat agent",
     modeId: "default",
+    assignment: {
+      version: 1,
+      disposition: "lead-direct",
+      objective: "Inspect compatibility bytes.",
+      effectClass: "read-only",
+      mutationBoundary: { mode: "no-write" },
+      externalEffectBoundary: { mode: "denied" },
+      evidence: "Return exact request evidence.",
+      handbackAndStop: "Stop after handback.",
+    },
   });
 
   expect(mock.sent).toHaveLength(1);
@@ -2192,6 +2202,7 @@ test("sends create_agent_request with workspace and caller identity", async () =
       type: "create_agent_request",
       workspaceId: "ws-feature-a",
       callerAgentId: "parent-agent",
+      assignment: expect.objectContaining({ effectClass: "read-only" }),
     }),
   );
 
@@ -3413,6 +3424,97 @@ test("writes project config via correlated RPC and returns inline failures", asy
       code: "stale_project_config",
       currentRevision: { mtimeMs: 11, size: 21 },
     },
+  });
+});
+
+test("inspects Workspace Protocol through the namespaced correlated RPC", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.inspectWorkspaceProtocol("/repo/app", "protocol-inspect-1");
+  expect(parseSentFrame(mock.sent[0])).toEqual({
+    type: "foundation.workspaceProtocol.inspect.request",
+    requestId: "protocol-inspect-1",
+    repoRoot: "/repo/app",
+  });
+
+  const snapshot = {
+    status: "missing" as const,
+    repoRoot: "/repo/app",
+    path: "/repo/app/WORKSPACE_PROTOCOL.md",
+    suggestedContent: "# Workspace Protocol\n",
+    revision: null,
+    issues: [],
+  };
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "foundation.workspaceProtocol.inspect.response",
+      payload: { requestId: "protocol-inspect-1", ok: true, snapshot },
+    }),
+  );
+  await expect(promise).resolves.toEqual({
+    requestId: "protocol-inspect-1",
+    ok: true,
+    snapshot,
+  });
+});
+
+test("writes Workspace Protocol with an immutable expected revision", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+  const revision = { mtimeMs: 10, size: 20, sha256: "a".repeat(64) };
+
+  const promise = client.writeWorkspaceProtocol({
+    requestId: "protocol-write-1",
+    repoRoot: "/repo/app",
+    content: "# Workspace Protocol\n",
+    expectedRevision: revision,
+  });
+  expect(parseSentFrame(mock.sent[0])).toEqual({
+    type: "foundation.workspaceProtocol.write.request",
+    requestId: "protocol-write-1",
+    repoRoot: "/repo/app",
+    content: "# Workspace Protocol\n",
+    expectedRevision: revision,
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "foundation.workspaceProtocol.write.response",
+      payload: {
+        requestId: "protocol-write-1",
+        ok: false,
+        error: {
+          code: "invalid_content",
+          issues: ["missing_version_marker"],
+        },
+      },
+    }),
+  );
+  await expect(promise).resolves.toEqual({
+    requestId: "protocol-write-1",
+    ok: false,
+    error: { code: "invalid_content", issues: ["missing_version_marker"] },
   });
 });
 

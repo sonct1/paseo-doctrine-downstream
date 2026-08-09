@@ -11,6 +11,7 @@ import { AgentStorage } from "../agent-storage.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../../worktree-session.js";
 import { createAgentCommand } from "./create.js";
 import type { ManagedAgent } from "../agent-manager.js";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 const logger = createTestLogger();
 
@@ -68,9 +69,11 @@ test("session create forwards clientMessageId to the initial prompt run options"
     agentManager: {
       createAgent: vi.fn(async () => snapshot),
       getAgent: vi.fn(() => snapshot),
-      tryRunOutOfBand: vi.fn(() => false),
+      tryRunOutOfBandAuthorized: vi.fn(async () => false),
       hasInFlightRun: vi.fn(() => false),
-      streamAgent,
+      startAuthorizedAgentStream: vi.fn(async (...args: Parameters<typeof streamAgent>) =>
+        streamAgent(...args),
+      ),
       waitForAgentRunStart: vi.fn(async () => undefined),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
     agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
@@ -182,6 +185,16 @@ test("session create applies the resolved mode from the provider create config",
 });
 
 test("mcp create accepts provider-only internal input and leaves model undefined", async () => {
+  const assignment: AssignmentEnvelope = {
+    version: 1,
+    disposition: "peer-execution",
+    objective: "Inspect the provider default.",
+    effectClass: "read-only",
+    mutationBoundary: { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return provider resolution evidence.",
+    handbackAndStop: "Stop after handback.",
+  };
   const snapshot = {
     id: "agent-1",
     provider: "claude",
@@ -208,6 +221,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     kind: "mcp",
     provider: "claude",
     roleId: "peer",
+    assignment,
     cwd: "/tmp/paseo-create-test",
     workspaceId: "ws-create-test",
     title: "provider default",
@@ -225,6 +239,8 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     expect.objectContaining({
       workspaceId: "ws-create-test",
       roleId: "peer",
+      assignment,
+      assignmentAssigner: { kind: "human-session" },
     }),
   );
 });

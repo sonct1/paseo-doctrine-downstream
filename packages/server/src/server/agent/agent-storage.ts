@@ -12,6 +12,7 @@ import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./a
 import { PersistedRoleBindingSchema } from "./role-binding.js";
 import { PersistedLaunchContractSchema } from "./launch-contract.js";
 import { CoordinationSignalSchema } from "@getpaseo/protocol/coordination-signal";
+import { LeadHandoffPacketSchema } from "@getpaseo/protocol/lead-handoff";
 
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
@@ -81,6 +82,17 @@ const STORED_AGENT_SCHEMA = z.object({
   roleBinding: PersistedRoleBindingSchema.optional(),
   launchContract: PersistedLaunchContractSchema.optional(),
   coordinationSignals: z.array(CoordinationSignalSchema).optional(),
+  leadHandoffs: z.array(LeadHandoffPacketSchema).optional(),
+  coordinationPolicyState: z
+    .object({
+      consecutiveTurnFailures: z.number().int().nonnegative().default(0),
+      failureAttentionSent: z.boolean().default(false),
+      automaticCompactionCount: z.number().int().nonnegative().default(0),
+      automaticCompactionAttentionSent: z.boolean().default(false),
+      contextPressureAttentionSent: z.boolean().default(false),
+      lastContextRatio: z.number().min(0).optional(),
+    })
+    .optional(),
 });
 
 export type SerializableAgentConfig = Pick<
@@ -100,12 +112,32 @@ export function parseStoredAgentRecord(value: unknown): StoredAgentRecord {
   return STORED_AGENT_SCHEMA.parse(value);
 }
 
+function preserveCoordinationMetadata(
+  existing: StoredAgentRecord | null,
+  record: StoredAgentRecord,
+): void {
+  if (existing?.coordinationSignals !== undefined) {
+    record.coordinationSignals = existing.coordinationSignals;
+  }
+  if (existing?.leadHandoffs !== undefined) {
+    record.leadHandoffs = existing.leadHandoffs;
+  }
+  if (existing?.coordinationPolicyState !== undefined) {
+    record.coordinationPolicyState = existing.coordinationPolicyState;
+  }
+}
+
 export class AgentStorage {
   private cache: Map<string, StoredAgentRecord> = new Map();
   private pathById: Map<string, string> = new Map();
   private pathsById: Map<string, Set<string>> = new Map();
   private pendingWrites: Map<string, Promise<void>> = new Map();
   private deleting: Set<string> = new Set();
+
+  /** Current daemon-owned cache entry; callers must fail closed when a required receipt is absent. */
+  getCached(agentId: string): StoredAgentRecord | null {
+    return this.cache.get(agentId) ?? null;
+  }
   private daemonAgentIdsByExecution: Map<string, string> = new Map();
   private daemonExecutionKeysByAgentId: Map<string, string> = new Map();
   private loaded = false;
@@ -247,9 +279,7 @@ export class AgentStorage {
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
       }
-      if (existing?.coordinationSignals !== undefined) {
-        record.coordinationSignals = existing.coordinationSignals;
-      }
+      preserveCoordinationMetadata(existing, record);
       return record;
     });
   }

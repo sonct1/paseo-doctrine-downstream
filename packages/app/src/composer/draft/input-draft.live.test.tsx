@@ -228,6 +228,12 @@ describe("useAgentInputDraft live contract", () => {
 
     expect(getLatest().composerState?.agentControls.selectedProvider).toBe("codex");
     expect(getLatest().composerState?.selectedRole).toBe("lead");
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("read-only");
+    expect(getLatest().composerState?.agentControls.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "foundation_assignment_effect", value: "read-only" }),
+      ]),
+    );
     expect(getLatest().composerState?.agentControls.roleOptions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "lead", label: "Lead" }),
@@ -237,8 +243,38 @@ describe("useAgentInputDraft live contract", () => {
     );
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("peer");
+      getLatest().composerState?.agentControls.onSetFeature?.(
+        "foundation_assignment_effect",
+        "mutating",
+      );
     });
     expect(getLatest().composerState?.selectedRole).toBe("peer");
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("mutating");
+    await act(async () => {
+      getLatest().composerState?.setRoleFromUser("lead");
+    });
+    await act(async () => {
+      getLatest().composerState?.agentControls.onSetFeature?.(
+        "foundation_assignment_effect",
+        "bootstrap",
+      );
+    });
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("bootstrap");
+    await act(async () => {
+      getLatest().composerState?.setRoleFromUser("peer");
+    });
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("read-only");
+    expect(getLatest().composerState?.agentControls.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "foundation_assignment_effect",
+          options: [
+            expect.objectContaining({ id: "read-only" }),
+            expect.objectContaining({ id: "mutating" }),
+          ],
+        }),
+      ]),
+    );
     expect(getLatest().composerState?.commandDraftConfig).toEqual({
       provider: "codex",
       cwd: "/repo",

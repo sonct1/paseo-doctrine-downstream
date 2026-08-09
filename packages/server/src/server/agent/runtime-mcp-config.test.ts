@@ -17,7 +17,7 @@ describe("withRuntimePaseoMcpServer", () => {
       mcpAuthToken: "cap-token",
     });
 
-    expect(result.mcpServers?.paseo).toEqual({
+    expect(result.mcpServers?.paseo).toMatchObject({
       type: "http",
       url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
       headers: { Authorization: "Bearer cap-token" },
@@ -32,7 +32,7 @@ describe("withRuntimePaseoMcpServer", () => {
       mcpAuthToken: null,
     });
 
-    expect(result.mcpServers?.paseo).toEqual({
+    expect(result.mcpServers?.paseo).toMatchObject({
       type: "http",
       url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1",
     });
@@ -47,5 +47,21 @@ describe("withRuntimePaseoMcpServer", () => {
     });
 
     expect(result.mcpServers).toBeUndefined();
+  });
+
+  test("rejects an untrusted collision with the reserved paseo server name", () => {
+    expect(() =>
+      withRuntimePaseoMcpServer({
+        config: {
+          ...BASE_CONFIG,
+          mcpServers: {
+            paseo: { type: "http", url: "https://other-host/mcp/agents" },
+          },
+        },
+        agentId: "agent-1",
+        mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+        mcpAuthToken: "cap-token",
+      }),
+    ).toThrow("MCP server name paseo is reserved for Paseo runtime");
   });
 });

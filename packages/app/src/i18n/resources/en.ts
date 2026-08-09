@@ -1349,6 +1349,12 @@ export const en = {
       hostDisconnected: "Host is not connected",
       pendingRequired: "No workspace setup is pending",
       composerStateRequired: "Workspace setup composer state is required",
+      workspaceProtocolRequired:
+        "Review and fix the Workspace Protocol in Project Settings before creating a role-bound agent.",
+      workspaceProtocolUnsupported:
+        "Update this Paseo host before creating a role-bound agent. Project Settings shows the required Workspace Protocol capability.",
+      workspaceProtocolInspectionFailed:
+        "Paseo could not verify the Workspace Protocol. Check it in Project Settings before trying again.",
     },
   },
   onboarding: {
@@ -2350,6 +2356,36 @@ export const en = {
     project: {
       noEditableTarget: "This project isn't editable on this host.",
       backToProjects: "Back to projects",
+      workspaceProtocol: {
+        title: "Workspace protocol",
+        info: "Repository-specific orchestration rules that Paseo binds to Foundation roles",
+        unsupportedTitle: "Update this host to manage the workspace protocol",
+        unsupportedDescription:
+          "This daemon doesn't expose Workspace Protocol editing in Paseo yet.",
+        unreadableTitle: "Workspace Protocol can't be read",
+        unreadableDescription:
+          "Check the file permissions or path on the host, then reload. Paseo won't overwrite it.",
+        loadFailedTitle: "Couldn't load Workspace Protocol",
+        loadFailedDescription: "The host didn't return the protocol state.",
+        missingTitle: "Workspace Protocol is required",
+        missingDescription:
+          "Review the generated repository defaults, then bootstrap the file from this screen.",
+        invalidTitle: "Workspace Protocol needs correction",
+        invalidDescription: "Fix these checks before saving:",
+        staleTitle: "Workspace Protocol changed on disk",
+        staleDescription: "Reload the current file before applying your edits.",
+        writeFailedTitle: "Couldn't save Workspace Protocol",
+        writeFailedDescription:
+          "Paseo left the existing file unchanged. Check permissions, then try again.",
+        editorAccessibility: "Workspace Protocol content",
+        bootstrap: "Bootstrap protocol",
+        saved: "Workspace Protocol saved",
+        status: {
+          missing: "Bootstrap required",
+          valid: "Active protocol",
+          invalid: "Correction required",
+        },
+      },
       edit: {
         title: "Edit project",
         name: "Name",

@@ -58,6 +58,7 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import { formatRoleBindingReceiptDescription } from "@/workspace-protocol/role-binding-receipt";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
@@ -263,6 +264,13 @@ function hasSelectableOptions(
   return onSelect !== undefined && Boolean(options?.length);
 }
 
+function roleControlAccessibilityLabel(
+  canSelectRole: boolean,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  return t(canSelectRole ? "agentControls.role.select" : "agentControls.role.title");
+}
+
 function isModelControlDisabled(
   controlsDisabled: boolean,
   modelSelectionDisabled: boolean | undefined,
@@ -372,6 +380,7 @@ type AgentControlsSlice = {
   thinkingOptionId: string | null | undefined;
   lastUsage: unknown;
   launchContract: Agent["launchContract"];
+  roleBinding: Agent["roleBinding"];
 } | null;
 
 function selectAgentControlsSlice(
@@ -392,6 +401,7 @@ function selectAgentControlsSlice(
     thinkingOptionId: currentAgent.thinkingOptionId,
     lastUsage: currentAgent.lastUsage,
     launchContract: currentAgent.launchContract,
+    roleBinding: currentAgent.roleBinding,
   };
 }
 
@@ -495,6 +505,7 @@ function ControlledAgentControls({
     onSelectProvider && providerOptions && providerOptions.length > 0,
   );
   const canSelectRole = hasSelectableOptions(roleOptions, onSelectRole);
+  const canOpenRole = Boolean(roleOptions?.length);
   const canSelectModel = Boolean(onSelectModel);
   const canSelectThinking = Boolean(
     onSelectThinkingOption && thinkingOptions && thinkingOptions.length > 0,
@@ -690,10 +701,10 @@ function ControlledAgentControls({
       makeBadgePressableStyle(
         styles.modeBadge,
         styles.disabledBadge,
-        disabled || !canSelectRole,
+        disabled || !canOpenRole,
         openSelector === "role",
       ),
-    [canSelectRole, disabled, openSelector],
+    [canOpenRole, disabled, openSelector],
   );
 
   const handleOpenSheet = useCallback((sheet: Exclude<ActiveSheet, null>) => {
@@ -758,6 +769,7 @@ function ControlledAgentControls({
             isModelLoading={isModelLoading}
             canSelectProvider={canSelectProvider}
             canSelectRole={canSelectRole}
+            canOpenRole={canOpenRole}
             canSelectModel={canSelectModel}
             canSelectThinking={canSelectThinking}
             modelSelectorProviders={effectiveModelSelectorProviders}
@@ -801,6 +813,7 @@ function ControlledAgentControls({
             roleOptions={roleOptions}
             selectedRoleId={selectedRoleId}
             canSelectRole={canSelectRole}
+            canOpenRole={canOpenRole}
             comboboxRoleOptions={comboboxRoleOptions}
             displayRole={displayRole}
             roleAnchorRef={roleAnchorRef}
@@ -866,6 +879,7 @@ interface DesktopAgentControlsContentProps {
   isModelLoading: boolean;
   canSelectProvider: boolean;
   canSelectRole: boolean;
+  canOpenRole: boolean;
   canSelectModel: boolean;
   canSelectThinking: boolean;
   modelSelectorProviders: ProviderSelectorProvider[];
@@ -935,6 +949,7 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
     isModelLoading,
     canSelectProvider,
     canSelectRole,
+    canOpenRole,
     canSelectModel,
     canSelectThinking,
     modelSelectorProviders,
@@ -988,11 +1003,11 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
           <ComboboxTrigger
             ref={roleAnchorRef}
             collapsable={false}
-            disabled={disabled || !canSelectRole}
+            disabled={disabled || !canOpenRole}
             onPress={handleRolePress}
             style={rolePressableStyle}
             accessibilityRole="button"
-            accessibilityLabel={t("agentControls.role.select")}
+            accessibilityLabel={roleControlAccessibilityLabel(canSelectRole, t)}
             testID="agent-role-selector"
           >
             <Text style={styles.modeBadgeText}>{displayRole}</Text>
@@ -1162,6 +1177,7 @@ interface SheetAgentControlsContentProps {
   roleOptions?: AgentControlOption[];
   selectedRoleId?: PaseoRoleId;
   canSelectRole: boolean;
+  canOpenRole: boolean;
   comboboxRoleOptions: ComboboxOption[];
   displayRole: string;
   roleAnchorRef: RefObject<View | null>;
@@ -1212,6 +1228,7 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
     roleOptions,
     selectedRoleId,
     canSelectRole,
+    canOpenRole,
     comboboxRoleOptions,
     displayRole,
     roleAnchorRef,
@@ -1321,11 +1338,11 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
           <ComboboxTrigger
             ref={roleAnchorRef}
             collapsable={false}
-            disabled={disabled || !canSelectRole}
+            disabled={disabled || !canOpenRole}
             onPress={handleRolePress}
             style={rolePressableStyle}
             accessibilityRole="button"
-            accessibilityLabel={t("agentControls.role.select")}
+            accessibilityLabel={roleControlAccessibilityLabel(canSelectRole, t)}
             testID="agent-role-selector"
           >
             <Text style={styles.modeBadgeText}>{displayRole}</Text>
@@ -1697,8 +1714,15 @@ export const AgentControls = memo(function AgentControls({
   const activeModelId = modelSelection.activeModelId;
   const boundRoleId = resolveBoundRoleId(agent);
   const boundRoleOptions = useMemo(
-    () => PASEO_ROLE_SUMMARIES.filter((role) => role.id === boundRoleId),
-    [boundRoleId],
+    () =>
+      PASEO_ROLE_SUMMARIES.filter((role) => role.id === boundRoleId).map((role) =>
+        Object.assign({}, role, {
+          description: agent?.roleBinding
+            ? formatRoleBindingReceiptDescription(role.description, agent.roleBinding)
+            : role.description,
+        }),
+      ),
+    [agent?.roleBinding, boundRoleId],
   );
 
   const handleSelectModel = useCallback(

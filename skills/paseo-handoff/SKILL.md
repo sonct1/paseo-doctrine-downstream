@@ -1,6 +1,6 @@
 ---
 name: paseo-handoff
-description: Hand off the current task to another agent with full context. Use when the user says "handoff", "hand off", "hand this to", or wants to pass work to another agent.
+description: Hand off a bounded task or transfer Lead continuity with complete context and explicit authority receipts. Use when the user says "handoff", "hand off", "hand this to", wants to pass work to another agent, or asks to replace an active Lead without losing decisions and evidence.
 user-invocable: true
 ---
 
@@ -19,6 +19,12 @@ Read the **paseo** skill. Before choosing a provider, read `~/.paseo/orchestrati
 1. **Provider** — explicit user request first; otherwise resolve from `impl` preference (or `ui` if the task is styling-only).
 2. **Isolation** — "in a worktree" / "worktree" → create a workspace with `isolation: "worktree"`, using a short branch name derived from the task.
 3. **Task description** — anything else the user said.
+
+First classify the request:
+
+- **Ordinary task transfer** — create a receiving agent with a self-contained briefing; no authority transfer.
+- **Adjacent-Lead continuity handoff** — use the gated packet workflow below. Do not represent ordinary
+  subagent creation or detach as Lead promotion.
 
 ## The handoff prompt
 
@@ -54,6 +60,8 @@ The receiving agent has zero context. Include:
 
 ## Launch
 
+### Ordinary task transfer
+
 Prepare the handoff in a dedicated workspace:
 
 1. Select the current workspace or call `create_workspace` with the requested isolation.
@@ -65,3 +73,44 @@ Do not encode independence as a create mode and do not invoke CLI or wire-level 
 Leave `notifyOnFinish` omitted unless the user explicitly wants no callback.
 
 Don't wait by default — the user decides whether to follow along or move on. Tell them the agent ID and how to follow along (the paseo skill explains).
+
+### Adjacent-Lead continuity handoff
+
+Require an exact Human handoff/replacement mandate and a role-bound predecessor Lead. Then:
+
+1. Bring the predecessor to a bounded stop point. Freeze new writes; do not stop it mid-scope merely
+   because a recommendation exists.
+2. Call prepare_lead_handoff from the predecessor Lead. Include objective, scope, current state,
+   current write Owner, decisions, failed approaches, successful patterns, concrete evidence index,
+   active risks/blockers, exact resume point, and stop condition. The packet may omit a successor until
+   Human chooses one.
+3. Only after packet_ready, let Human select or create a role-bound successor Lead in the same
+   workspace. A newly created successor initially verifies the packet and remains non-mutating.
+4. From a Human-facing session, call transition_lead_handoff with
+   transition=successor_authorized and the exact successorAgentId.
+5. Give the frozen packet to that successor. It independently verifies current bytes and either calls
+   transition_lead_handoff with successor_acknowledged, or rejects the packet with discrepancies.
+6. Only after successor ACK may Human record predecessor_released.
+
+Human authorization and release have no elapsed-time cooling delay. The packet, successor ACK, and safe
+idle boundary are the gates. Automated coordination signals remain advisory: do not turn one signal into
+replacement or authority transfer, and require repeated or independently corroborated evidence before
+proposing an authority-changing correction.
+
+The first transitions are durable receipts, not lifecycle mutations. Final `predecessor_released`
+requires an idle predecessor, closes its runtime while retaining its durable record, then transfers
+`currentWriteOwnerAgentId` to the successor. Runtime-closure failure aborts the transition without
+changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked. Final
+release does not detach, archive, or change role binding, and revalidates both identities under
+stable-ordered locks. It joins an existing close, remembers any close failure until daemon restart, and
+bounds the close wait so a stuck provider cannot hold the successor lock indefinitely. Audit timeline
+reads must use durable state without resuming the released provider runtime. Timeline batches must record
+durable pending intent before row commits so restart can reconcile partial writes. Final release must
+reconcile that intent and fail closed if durability remains unresolved; timeout must abort any
+continuation before it can start a later runtime close. Treat a pre-manifest failure as a current-daemon
+release and graceful-shutdown blocker. Serialize repair drains per agent and attempt every known repair
+before reporting aggregate shutdown failure; do not claim recovery from hard process loss in that exact
+unqualified interval. Never
+reactivate a released predecessor identity as a later successor; create a fresh role-bound Lead identity
+instead. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
+the mechanism as unsupported; do not fake transition receipts with chat prose.

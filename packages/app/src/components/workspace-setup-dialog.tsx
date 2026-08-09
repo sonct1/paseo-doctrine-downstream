@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { router } from "expo-router";
 import { createNameId } from "mnemonic-id";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
@@ -10,6 +11,7 @@ import { useToast } from "@/contexts/toast-context";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
 import { useProjectIcon } from "@/projects/icons";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useHostFeature } from "@/runtime/host-features";
 import { normalizeWorkspaceDescriptor, useSessionStore } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
@@ -30,6 +32,13 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import type { MessagePayload } from "@/composer/types";
 import { projectIconRadius } from "@/components/project-icon-view";
+import {
+  requireWorkspaceProtocolForRole,
+  workspaceProtocolAdmissionMessageKey,
+  WorkspaceProtocolCreateAdmissionError,
+} from "@/workspace-protocol/create-admission";
+import { buildAssignmentEnvelope } from "@/workspace-protocol/assignment-envelope";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 function toProjectIconDataUri(icon: { mimeType: string; data: string } | null): string | null {
   if (!icon) {
@@ -120,9 +129,11 @@ function buildCreateAgentOptions({
   workspaceDirectory,
   workspaceId,
   provider,
+  protocolException,
 }: {
   composerState: {
     selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    selectedAssignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
     modeOptions: { id: string }[];
     selectedMode: string;
     effectiveModelId: string | null;
@@ -134,6 +145,7 @@ function buildCreateAgentOptions({
   workspaceDirectory: string;
   workspaceId: string;
   provider: CreateAgentRequestOptions["provider"];
+  protocolException?: AssignmentEnvelope["protocolException"];
 }): CreateAgentRequestOptions {
   // Reconcile the selected mode against the discovered modes. The mode picker
   // shows modeOptions[0] when the stored mode isn't in the list (e.g. a stale
@@ -149,6 +161,17 @@ function buildCreateAgentOptions({
     cwd: workspaceDirectory,
     workspaceId,
     ...(composerState.selectedRole ? { roleId: composerState.selectedRole } : {}),
+    ...(composerState.selectedRole
+      ? {
+          assignment: buildAssignmentEnvelope({
+            roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
+            objective: text,
+            cwd: workspaceDirectory,
+            protocolException,
+          }),
+        }
+      : {}),
     ...(reconciledMode !== "" ? { modeId: reconciledMode } : {}),
     ...(composerState.effectiveModelId ? { model: composerState.effectiveModelId } : {}),
     ...(composerState.effectiveThinkingOptionId
@@ -183,6 +206,7 @@ export function WorkspaceSetupDialog() {
   const workspace = createdWorkspace;
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
+  const supportsWorkspaceProtocol = useHostFeature(serverId, "workspaceProtocolEditing");
   const chatDraft = useAgentInputDraft({
     draftKey: `workspace-setup:${serverId}:${sourceDirectory}`,
     composer: buildChatDraftComposerArgs({
@@ -326,6 +350,24 @@ export function WorkspaceSetupDialog() {
           workspaceId: ensuredWorkspace.id,
           workspaceDirectory: ensuredWorkspace.workspaceDirectory,
         });
+        let protocolException: AssignmentEnvelope["protocolException"] | undefined;
+        try {
+          protocolException = await requireWorkspaceProtocolForRole({
+            client: connectedClient,
+            serverId,
+            projectId: ensuredWorkspace.projectId,
+            repoRoot: workspaceDirectory,
+            roleId: composerState.selectedRole,
+            effectClass: composerState.selectedAssignmentEffect,
+            supported: supportsWorkspaceProtocol,
+          });
+        } catch (error) {
+          if (error instanceof WorkspaceProtocolCreateAdmissionError) {
+            router.navigate(error.projectSettingsRoute);
+            throw new Error(t(workspaceProtocolAdmissionMessageKey(error.kind)), { cause: error });
+          }
+          throw error;
+        }
         const agent = await connectedClient.createAgent(
           buildCreateAgentOptions({
             composerState,
@@ -335,6 +377,7 @@ export function WorkspaceSetupDialog() {
             workspaceDirectory,
             workspaceId: ensuredWorkspace.id,
             provider: composerState.selectedProvider,
+            protocolException,
           }),
         );
 
@@ -375,6 +418,7 @@ export function WorkspaceSetupDialog() {
       toast,
       withConnectedClient,
       supportsForgeSearch,
+      supportsWorkspaceProtocol,
     ],
   );
 

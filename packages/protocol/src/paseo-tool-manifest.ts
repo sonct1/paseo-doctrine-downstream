@@ -90,6 +90,19 @@ export const PASEO_TOOL_MANIFEST = [
     group: "Agents",
   },
   {
+    id: "prepare_lead_handoff",
+    label: "Prepare Lead handoff",
+    description: "Persist a complete adjacent-Lead handoff packet without transferring authority.",
+    group: "Agents",
+  },
+  {
+    id: "transition_lead_handoff",
+    label: "Transition Lead handoff",
+    description:
+      "Record explicit authorization, successor acknowledgement, rejection, or predecessor release; final release closes the predecessor runtime but retains its durable record.",
+    group: "Agents",
+  },
+  {
     id: "resolve_agent_signal",
     label: "Resolve agent signal",
     description:

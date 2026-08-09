@@ -194,6 +194,8 @@ interface TestDeps {
 }
 
 function buildAgentManagerSpies() {
+  const tryRunOutOfBand = vi.fn().mockReturnValue(false);
+  const streamAgent = vi.fn(() => (async function* noop() {})());
   return {
     createAgent: vi.fn(),
     waitForAgentEvent: vi.fn().mockResolvedValue({
@@ -219,9 +221,11 @@ function buildAgentManagerSpies() {
     appendTimelineItem: vi.fn().mockResolvedValue(undefined),
     emitLiveTimelineItem: vi.fn().mockResolvedValue(undefined),
     hasInFlightRun: vi.fn().mockReturnValue(false),
-    tryRunOutOfBand: vi.fn().mockReturnValue(false),
+    tryRunOutOfBand,
+    tryRunOutOfBandAuthorized: tryRunOutOfBand,
     subscribe: vi.fn().mockReturnValue(() => {}),
-    streamAgent: vi.fn(() => (async function* noop() {})()),
+    streamAgent,
+    startAuthorizedAgentStream: streamAgent,
     replaceAgentRun: vi.fn(() => (async function* noop() {})()),
     waitForAgentRunStart: vi.fn().mockResolvedValue(undefined),
     respondToPermission: vi.fn(),
@@ -1675,11 +1679,22 @@ describe("create_agent MCP tool", () => {
       ensureWorkspaceForCreate: ensureWorkspace,
       logger,
     });
+    const assignment = {
+      version: 1,
+      disposition: "peer-execution",
+      objective: "Complete the bounded test task.",
+      effectClass: "read-only",
+      mutationBoundary: { mode: "no-write" },
+      externalEffectBoundary: { mode: "denied" },
+      evidence: "Return exact observed evidence.",
+      handbackAndStop: "Stop after the evidence handback.",
+    } as const;
 
     await registeredTool(server, "create_agent").handler({
       title: "Top-level agent",
       provider: "codex/gpt-5.4",
       role: "peer",
+      assignment,
       initialPrompt: "Do work",
       background: true,
     });
@@ -1688,7 +1703,12 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: existingCwd }),
       undefined,
-      { workspaceId: "workspace-created", roleId: "peer" },
+      expect.objectContaining({
+        workspaceId: "workspace-created",
+        roleId: "peer",
+        assignment,
+        assignmentAssigner: { kind: "human-session" },
+      }),
     );
   });
 

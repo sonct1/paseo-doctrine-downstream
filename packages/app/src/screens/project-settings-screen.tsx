@@ -7,6 +7,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MoreVertical, Pencil, Plus } from "lucide-react-native";
 import { ProjectIconView } from "@/components/project-icon-view";
+import { WorkspaceProtocolSettings } from "@/components/workspace-protocol-settings";
 import type {
   PaseoConfigRaw,
   PaseoConfigRevision,
@@ -93,9 +94,14 @@ type ReadProjectConfigData = Awaited<ReturnType<DaemonClient["readProjectConfig"
 export interface ProjectSettingsScreenProps {
   serverId: string;
   projectId: string;
+  protocolRoot?: string;
 }
 
-export default function ProjectSettingsScreen({ serverId, projectId }: ProjectSettingsScreenProps) {
+export default function ProjectSettingsScreen({
+  serverId,
+  projectId,
+  protocolRoot,
+}: ProjectSettingsScreenProps) {
   const { projects } = useProjects();
   const project = useMemo(
     () => getProjectSummaryForHostProject(projects, serverId, projectId),
@@ -124,6 +130,7 @@ export default function ProjectSettingsScreen({ serverId, projectId }: ProjectSe
       selectedHost={selectedHost}
       client={client}
       isHostGone={isHostGone}
+      protocolRoot={protocolRoot}
     />
   );
 }
@@ -174,6 +181,7 @@ interface ProjectSettingsBodyProps {
   selectedHost: ProjectHostEntry;
   client: DaemonClient;
   isHostGone: boolean;
+  protocolRoot?: string;
 }
 
 function ProjectSettingsBody({
@@ -181,6 +189,7 @@ function ProjectSettingsBody({
   selectedHost,
   client,
   isHostGone,
+  protocolRoot,
 }: ProjectSettingsBodyProps) {
   const { t } = useTranslation();
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -203,6 +212,10 @@ function ProjectSettingsBody({
 
   const data = readQuery.data;
   const supportsCustomIcon = useHostFeature(selectedHost.serverId, "projectCustomIcon");
+  const supportsWorkspaceProtocol = useHostFeature(
+    selectedHost.serverId,
+    "workspaceProtocolEditing",
+  );
   const customIconRevision = selectedHost.customIconRevision ?? null;
   const projectIconTargets = useMemo(
     () => [
@@ -284,6 +297,13 @@ function ProjectSettingsBody({
         client={client}
         supportsCustomIcon={supportsCustomIcon}
         snapshot={editSnapshot}
+      />
+
+      <WorkspaceProtocolSettings
+        client={client}
+        serverId={selectedHost.serverId}
+        repoRoot={protocolRoot || selectedHost.repoRoot}
+        supported={supportsWorkspaceProtocol}
       />
 
       {renderContent({

@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -14,7 +14,8 @@ import {
   type ManagedAgent,
 } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
-import { toAgentPayload } from "./agent-projections.js";
+import { FileAgentTimelineStore } from "./file-agent-timeline-store.js";
+import { buildStoredAgentPayload, toAgentPayload } from "./agent-projections.js";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { formatSystemNotificationPrompt, startAgentRun } from "./agent-prompt.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
@@ -40,6 +41,34 @@ import type {
 } from "./agent-sdk-types.js";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
+import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
+import { writeJsonFileAtomic } from "../atomic-file.js";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
+
+function leadAssignment(
+  effectClass: AssignmentEnvelope["effectClass"] = "read-only",
+): AssignmentEnvelope {
+  return {
+    version: 1,
+    disposition: "lead-direct",
+    objective: "Complete the bounded test assignment.",
+    effectClass,
+    mutationBoundary:
+      effectClass === "mutating"
+        ? { mode: "bounded-write", scope: "src/**" }
+        : { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return exact focused test evidence.",
+    handbackAndStop: "Stop after evidence handback or a material blocker.",
+  };
+}
+
+function peerReviewAssignment(): AssignmentEnvelope {
+  return {
+    ...leadAssignment(),
+    disposition: "independent-review",
+  };
+}
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -2477,7 +2506,7 @@ test("resumeAgentFromPersistence drops stored internal paseo MCP when runtime in
   expect(snapshot.config.mcpServers).toBeUndefined();
 });
 
-test("createAgent preserves a user-provided paseo MCP config", async () => {
+test("createAgent rejects a user-provided collision with the reserved paseo MCP name", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));
   const storagePath = join(workdir, "agents");
   const storage = new AgentStorage(storagePath, logger);
@@ -2502,28 +2531,23 @@ test("createAgent preserves a user-provided paseo MCP config", async () => {
     idFactory: () => "00000000-0000-4000-8000-000000000104",
   });
 
-  const snapshot = await manager.createAgent(
-    {
-      provider: "codex",
-      cwd: workdir,
-      mcpServers: {
-        paseo: {
-          type: "http",
-          url: "https://example.com/custom-paseo",
+  await expect(
+    manager.createAgent(
+      {
+        provider: "codex",
+        cwd: workdir,
+        mcpServers: {
+          paseo: {
+            type: "http",
+            url: "https://example.com/custom-paseo",
+          },
         },
       },
-    },
-    undefined,
-    { workspaceId: undefined },
-  );
-
-  expect(snapshot.config.mcpServers).toEqual({
-    paseo: {
-      type: "http",
-      url: "https://example.com/custom-paseo",
-    },
-  });
-  expect(client.lastConfig?.mcpServers).toEqual(snapshot.config.mcpServers);
+      undefined,
+      { workspaceId: undefined },
+    ),
+  ).rejects.toThrow("MCP server name paseo is reserved for Paseo runtime");
+  expect(client.lastConfig).toBeNull();
 });
 
 test("createAgent fails when cwd does not exist", async () => {
@@ -4298,6 +4322,472 @@ test("getTimelineRows falls back to the in-memory timeline when no durable store
       },
     },
   ]);
+});
+
+test("seeds live timeline rows and epoch from the file store after manager restart", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-durable-timeline-restart-"));
+  const storagePath = join(workdir, "agents");
+  const timelinePath = join(workdir, "timelines");
+  const agentId = "00000000-0000-4000-8000-000000000141";
+  const firstStorage = new AgentStorage(storagePath, logger);
+  const firstManager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: firstStorage,
+    durableTimelineStore: new FileAgentTimelineStore(timelinePath),
+    logger,
+  });
+  let secondManager: AgentManager | null = null;
+
+  try {
+    const created = await firstManager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await firstManager.appendTimelineItem(created.id, {
+      type: "assistant_message",
+      text: "durable answer",
+    });
+    const beforeRestart = firstManager.fetchTimeline(agentId, { direction: "tail", limit: 0 });
+    await firstManager.flush();
+    await firstManager.closeAgent(agentId);
+    await firstStorage.flush();
+
+    const secondStorage = new AgentStorage(storagePath, logger);
+    await secondStorage.initialize();
+    secondManager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: secondStorage,
+      durableTimelineStore: new FileAgentTimelineStore(timelinePath),
+      logger,
+    });
+    await ensureAgentLoaded(agentId, {
+      agentManager: secondManager,
+      agentStorage: secondStorage,
+      logger,
+    });
+    const afterRestart = secondManager.fetchTimeline(agentId, {
+      direction: "tail",
+      limit: 0,
+    });
+
+    expect(afterRestart.epoch).toBe(beforeRestart.epoch);
+    expect(afterRestart.rows.map((row) => row.item)).toContainEqual({
+      type: "assistant_message",
+      text: "durable answer",
+    });
+  } finally {
+    await secondManager?.closeAgent(agentId).catch(() => undefined);
+    await secondManager?.flush().catch(() => undefined);
+    await firstManager.closeAgent(agentId).catch(() => undefined);
+    await firstManager.flush().catch(() => undefined);
+    await firstStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("repairs transient durable timeline failures before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let failRowWrite = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (failRowWrite && filePath.includes(`${join("rows", "1.json")}`)) {
+        failRowWrite = false;
+        throw new Error("transient durable write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000142";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "must survive release",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    const restartedStore = new FileAgentTimelineStore(join(workdir, "timelines"));
+    await expect(restartedStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "must survive release" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("retries a pre-manifest timeline failure before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-manifest-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let failManifestWrite = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (failManifestWrite && filePath.includes(`${sep}pending${sep}`)) {
+        failManifestWrite = false;
+        throw new Error("transient manifest write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000146";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "manifest must exist before release",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    await expect(durableStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "manifest must exist before release" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("surfaces an unresolved pre-manifest failure at release and graceful shutdown", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-manifest-failure-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        throw new Error("persistent manifest write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000147";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "do not release without intent",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).rejects.toThrow(
+      `predecessor_timeline_durability_failed: ${agentId}`,
+    );
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+    await expect(manager.flushForShutdown()).rejects.toThrow(
+      "Failed to reconcile durable agent timelines",
+    );
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("serializes concurrent durability flushes for one agent", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-concurrent-repair-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const firstRepairStarted = deferred<void>();
+  const firstRepairAllowed = deferred<void>();
+  let initialFailures = true;
+  let secondRepairFailures = 0;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        if (initialFailures) throw new Error("initial manifest failure");
+        const rows = Reflect.get(value as object, "rows") as Array<{ seq: number }> | undefined;
+        if (rows?.[0]?.seq === 1) {
+          firstRepairStarted.resolve();
+          await firstRepairAllowed.promise;
+        }
+        if (rows?.[0]?.seq === 2 && secondRepairFailures++ === 0) {
+          throw new Error("first second-row repair failure");
+        }
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000148";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "row one" });
+    await manager.appendTimelineItem(agentId, { type: "assistant_message", text: "row two" });
+    await manager.flush();
+    initialFailures = false;
+
+    const firstFlush = manager.flushDurableTimelineForLeadHandoff(agentId);
+    await firstRepairStarted.promise;
+    const secondFlush = manager.flushDurableTimelineForLeadHandoff(agentId);
+    firstRepairAllowed.resolve();
+
+    await expect(Promise.allSettled([firstFlush, secondFlush])).resolves.toEqual([
+      expect.objectContaining({ status: "rejected" }),
+      expect.objectContaining({ status: "fulfilled" }),
+    ]);
+    await expect(durableStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({ seq: 1 }),
+      expect.objectContaining({ seq: 2 }),
+    ]);
+  } finally {
+    firstRepairAllowed.resolve();
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("graceful shutdown attempts durable repairs for every failed agent", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-shutdown-all-repairs-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const firstAgentId = "00000000-0000-4000-8000-000000000149";
+  const secondAgentId = "00000000-0000-4000-8000-000000000150";
+  let initialFailures = true;
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${sep}pending${sep}`)) {
+        if (initialFailures || filePath.includes(encodeURIComponent(firstAgentId))) {
+          throw new Error("agent-specific manifest failure");
+        }
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+
+  try {
+    for (const [agentId, text] of [
+      [firstAgentId, "persistent failure"],
+      [secondAgentId, "transient failure"],
+    ] as const) {
+      await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+        workspaceId: undefined,
+      });
+      await manager.appendTimelineItem(agentId, { type: "assistant_message", text });
+    }
+    await manager.flush();
+    initialFailures = false;
+
+    await expect(manager.flushForShutdown()).rejects.toThrow(
+      "Failed to reconcile durable agent timelines",
+    );
+    await expect(durableStore.getCommittedRows(secondAgentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "transient failure" },
+      }),
+    ]);
+  } finally {
+    await manager.closeAgent(firstAgentId).catch(() => undefined);
+    await manager.closeAgent(secondAgentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("repairs durable timeline intent after manager restart before Lead handoff closure", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-restart-repair-"));
+  const storagePath = join(workdir, "agents");
+  const timelinePath = join(workdir, "timelines");
+  const firstStorage = new AgentStorage(storagePath, logger);
+  const firstStore = new FileAgentTimelineStore(timelinePath, async (filePath, value) => {
+    if (filePath.includes(`${join("rows", "1.json")}`)) {
+      throw new Error("durable write unavailable before restart");
+    }
+    await writeJsonFileAtomic(filePath, value);
+  });
+  const firstManager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: firstStorage,
+    durableTimelineStore: firstStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000145";
+
+  try {
+    await firstManager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await firstManager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "repair after restart",
+    });
+    await firstManager.flush();
+    await firstManager.closeAgent(agentId);
+    await firstStorage.flush();
+
+    const restartedStorage = new AgentStorage(storagePath, logger);
+    await restartedStorage.initialize();
+    const restartedStore = new FileAgentTimelineStore(timelinePath);
+    const restartedManager = new AgentManager({
+      clients: { codex: new TestAgentClient() },
+      registry: restartedStorage,
+      durableTimelineStore: restartedStore,
+      logger,
+    });
+    await expect(restartedManager.closeAgentForLeadHandoff(agentId)).resolves.toBeUndefined();
+    await expect(restartedStore.getCommittedRows(agentId)).resolves.toEqual([
+      expect.objectContaining({
+        seq: 1,
+        item: { type: "assistant_message", text: "repair after restart" },
+      }),
+    ]);
+    await restartedManager.flush();
+  } finally {
+    await firstManager.closeAgent(agentId).catch(() => undefined);
+    await firstManager.flush().catch(() => undefined);
+    await firstStorage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("fails Lead handoff closure while durable timeline repair is unresolved", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-failure-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${join("rows", "1.json")}`)) {
+        throw new Error("persistent durable write failure");
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000143";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "cannot be lost",
+    });
+    await manager.flush();
+
+    await expect(manager.closeAgentForLeadHandoff(agentId)).rejects.toThrow(
+      `predecessor_timeline_durability_failed: ${agentId}`,
+    );
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("does not close a predecessor after an aborted durability wait", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-handoff-timeline-abort-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const rowWriteStarted = deferred<void>();
+  const rowWriteAllowed = deferred<void>();
+  const durableStore = new FileAgentTimelineStore(
+    join(workdir, "timelines"),
+    async (filePath, value) => {
+      if (filePath.includes(`${join("rows", "1.json")}`)) {
+        rowWriteStarted.resolve();
+        await rowWriteAllowed.promise;
+      }
+      await writeJsonFileAtomic(filePath, value);
+    },
+  );
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    durableTimelineStore: durableStore,
+    logger,
+  });
+  const agentId = "00000000-0000-4000-8000-000000000144";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, agentId, {
+      workspaceId: undefined,
+    });
+    await manager.appendTimelineItem(agentId, {
+      type: "assistant_message",
+      text: "wait for durability",
+    });
+    await rowWriteStarted.promise;
+
+    const controller = new AbortController();
+    const closing = manager.closeAgentForLeadHandoff(agentId, controller.signal);
+    controller.abort(new Error("handoff timeout"));
+    rowWriteAllowed.resolve();
+
+    await expect(closing).rejects.toThrow("handoff timeout");
+    expect(manager.getAgent(agentId)?.lifecycle).toBe("idle");
+    await manager.flush();
+  } finally {
+    rowWriteAllowed.resolve();
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("getAgent does not expose committed history internals once manager owns the seam", async () => {
@@ -8356,7 +8846,7 @@ test("concurrent explicit closes tear down the runtime once", async () => {
     });
     const firstClose = manager.closeAgent(agent.id);
     await closeStarted.promise;
-    const secondClose = manager.closeAgent(agent.id);
+    const secondClose = manager.closeAgentForLeadHandoff(agent.id);
 
     closeAllowed.resolve();
     await Promise.all([firstClose, secondClose]);
@@ -8392,6 +8882,9 @@ test("provider close failure still persists and emits a resumable closed agent",
 
     await expect(manager.closeAgent(created.id)).rejects.toThrow("provider cleanup failed");
     await closed;
+    await expect(manager.closeAgentForLeadHandoff(created.id)).rejects.toThrow(
+      `predecessor_runtime_close_failed: ${created.id}`,
+    );
     const stored = await storage.get(created.id);
     expect(stored).toMatchObject({ lastStatus: "closed" });
     expect(stored?.archivedAt).toBeFalsy();
@@ -8399,6 +8892,10 @@ test("provider close failure still persists and emits a resumable closed agent",
     await expect(
       ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
     ).resolves.toMatchObject({ id: created.id, lifecycle: "idle" });
+    await manager.closeAgent(created.id);
+    await expect(manager.closeAgentForLeadHandoff(created.id)).rejects.toThrow(
+      `predecessor_runtime_close_failed: ${created.id}`,
+    );
   } finally {
     await manager.closeAgent("00000000-0000-4000-8000-000000000217").catch(() => undefined);
     await storage.flush().catch(() => undefined);
@@ -9297,7 +9794,7 @@ test("role-bound create persists immutable binding and passes only launch instru
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
   writeFileSync(
     join(workdir, "WORKSPACE_PROTOCOL.md"),
-    "# Workspace Protocol\n\nowner: Human\napplies_to: repository root\nversion: 1\n",
+    buildWorkspaceProtocolTemplate(workdir),
     "utf8",
   );
   const storage = new AgentStorage(join(workdir, "agents"), logger);
@@ -9350,8 +9847,9 @@ test("role-bound create persists immutable binding and passes only launch instru
 
   try {
     const created = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
-      workspaceId: undefined,
+      workspaceId: "workspace-role-binding",
       roleId: "lead",
+      assignment: leadAssignment(),
     });
 
     expect(client.launchContexts[0]?.roleBinding).toMatchObject({
@@ -9379,6 +9877,10 @@ test("role-bound create persists immutable binding and passes only launch instru
       workspaceProtocol: { status: "bound", readership: "full" },
     });
     expect(toAgentPayload(created).roleBinding).not.toHaveProperty("instructions");
+    expect(toAgentPayload(created).roleBinding).not.toHaveProperty("assignmentContract");
+    expect(JSON.stringify(toAgentPayload(created).roleBinding)).not.toContain(
+      "Complete the bounded test assignment",
+    );
     expect(toAgentPayload(created).launchContract).toMatchObject({
       roleId: "lead",
       providerId: "codex",
@@ -9394,6 +9896,13 @@ test("role-bound create persists immutable binding and passes only launch instru
       modelProviderId: "openai",
     });
     expect(stored?.config?.systemPrompt).toBeUndefined();
+    expect(stored).not.toBeNull();
+    const storedWirePayload = buildStoredAgentPayload(stored as StoredAgentRecord, ["codex"]);
+    expect(storedWirePayload.roleBinding).not.toHaveProperty("assignmentContract");
+    const rawStoredWire = JSON.stringify(storedWirePayload);
+    expect(rawStoredWire).not.toContain("Complete the bounded test assignment");
+    expect(rawStoredWire).not.toContain("Return exact focused test evidence");
+    expect(rawStoredWire).not.toContain("Stop after evidence handback");
 
     const exactInstructions = created.roleBinding?.instructions;
     await manager.reloadAgentSession(created.id);
@@ -9444,6 +9953,11 @@ test("role-bound create rejects caller systemPrompt before provider launch", asy
 
 test("review rejects a non-Peer authority before state mutation", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-review-authority-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
   const client = new TestAgentClient("codex");
   const manager = new AgentManager({ clients: { codex: client }, logger });
   const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
@@ -9460,9 +9974,10 @@ test("review rejects a non-Peer authority before state mutation", async () => {
         },
         "00000000-0000-4000-8000-000000000120",
         {
-          workspaceId: undefined,
+          workspaceId: "workspace-review-authority",
           roleId: "lead",
           executionProfileId: "review",
+          assignment: leadAssignment(),
         },
       ),
     ).rejects.toThrow("requires role 'peer'");
@@ -9475,6 +9990,11 @@ test("review rejects a non-Peer authority before state mutation", async () => {
 
 test("review preserves the provider-neutral specialization in the launch context", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-review-launch-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
   const storage = new AgentStorage(join(workdir, "agents"), logger);
 
   class ReviewCaptureClient extends TestAgentClient {
@@ -9525,9 +10045,10 @@ test("review preserves the provider-neutral specialization in the launch context
       },
       "00000000-0000-4000-8000-000000000121",
       {
-        workspaceId: undefined,
+        workspaceId: "workspace-review-launch",
         roleId: "peer",
         executionProfileId: "review",
+        assignment: peerReviewAssignment(),
       },
     );
 
@@ -9559,9 +10080,8 @@ test("review preserves the provider-neutral specialization in the launch context
   }
 });
 
-test("role-bound create rejects a present-invalid protocol before state mutation", async () => {
-  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-"));
-  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+test("role-bound create rejects missing protocol before provider or state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-missing-protocol-"));
   const client = new TestAgentClient("codex");
   const manager = new AgentManager({ clients: { codex: client }, logger });
   const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
@@ -9571,11 +10091,92 @@ test("role-bound create rejects a present-invalid protocol before state mutation
       manager.createAgent(
         { provider: "codex", cwd: workdir },
         "00000000-0000-4000-8000-000000000119",
-        { workspaceId: undefined, roleId: "lead" },
+        {
+          workspaceId: "workspace-missing-protocol",
+          roleId: "lead",
+          assignment: leadAssignment("mutating"),
+        },
       ),
-    ).rejects.toThrow("minimal owner, scope, or review identity is missing");
+    ).rejects.toThrow("workspace_protocol_admission_required: missing");
     expect(deleteAgentState).not.toHaveBeenCalled();
     expect(client.createdConfigs).toHaveLength(0);
+    expect(manager.getAgent("00000000-0000-4000-8000-000000000119")).toBeNull();
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create admits an exact Human read-only exception for a missing protocol", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-missing-protocol-exception-"));
+  class ExactRoleTestClient extends TestAgentClient {
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      return {
+        providerId: input.config.provider,
+        providerFamily: "codex",
+        model: input.config.model ?? "test-model",
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+  }
+  const client = new ExactRoleTestClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    const created = await manager.createAgent(
+      { provider: "codex", cwd: workdir },
+      "00000000-0000-4000-8000-000000000120",
+      {
+        workspaceId: "workspace-missing-protocol-exception",
+        roleId: "lead",
+        assignment: {
+          ...leadAssignment(),
+          protocolException: {
+            reason: "Inspect exact current bytes before protocol bootstrap.",
+            scope: workdir,
+            expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          },
+        },
+      },
+    );
+
+    expect(created.roleBinding?.workspaceProtocol.status).toBe("missing");
+    expect(created.roleBinding?.assignment?.mutationBoundary).toEqual({ mode: "no-write" });
+    expect(client.createdConfigs).toHaveLength(1);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects invalid protocol despite a Human read-only exception", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-exception-"));
+  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir },
+        "00000000-0000-4000-8000-000000000121",
+        {
+          workspaceId: "workspace-invalid-protocol-exception",
+          roleId: "lead",
+          assignment: {
+            ...leadAssignment(),
+            protocolException: {
+              reason: "Inspect exact current bytes before protocol correction.",
+              scope: workdir,
+              expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("workspace_protocol_admission_required: invalid");
+    expect(client.createdConfigs).toHaveLength(0);
+    expect(manager.getAgent("00000000-0000-4000-8000-000000000121")).toBeNull();
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

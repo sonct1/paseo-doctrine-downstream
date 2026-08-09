@@ -247,6 +247,17 @@ Proposed anti-poisoning rules:
 - Provider-personality observations must be bounded, situational, and falsifiable, not anthropomorphic permanent labels.
 - No lesson is eligible for doctrine merge without later-effect evidence from at least one bounded experiment or repeated naturally observed episodes.
 
+## P1 evidence — 2026-08-08
+
+Một manual adjacent-Lead pilot đã chạy trên isolated dev daemon. Predecessor dừng tại bounded read-only
+checkpoint và tạo narrative packet. Independent successor trả SUCCESSOR_REJECT vì packet thiếu explicit
+write Owner, failed approaches, successful patterns, concrete evidence index, active blockers và exact
+resume point. Successor không claim predecessor release.
+
+Evidence này bác bỏ giả định rằng free-form summary hiện tại đã đủ. Candidate P2 vì thế bắt buộc các
+field trên và tách successor authorization, successor acknowledgement, predecessor release thành
+receipts. Chi tiết tại p1-adjacent-lead-handoff-pilot-2026-08-08.md.
+
 ## Smallest staged experiment
 
 The smallest safe experiment is manual and review-first.
@@ -285,4 +296,8 @@ Stage 3:
 
 ## Recommended next experiment
 
-Run Stage 1 only: add no automatic collector and no doctrine mutation. Over 3 to 7 days, capture manual ledger entries for one active Lead/Peer workflow, require explicit separation between fact, hypothesis, and candidate change, and review whether the resulting batch is good enough to justify a powerless collector and a formal adjacent-Lead handoff packet.
+Tiếp tục Stage 1 đủ 3 đến 7 ngày; one-shot P1 và isolated P2 qualification chưa thay thế multi-day
+evidence. P2 đã qua packet-first runtime flow và restart readback trong dev daemon cô lập. Bước tiếp theo
+là một bounded release-activation canary có exact Human lease, vẫn không detach/archive, không automatic
+collector và không doctrine mutation. Đo continuity effect và write-owner integrity trước khi cân nhắc
+ship surface này.

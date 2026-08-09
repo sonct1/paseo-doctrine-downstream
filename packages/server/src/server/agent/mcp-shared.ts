@@ -222,6 +222,7 @@ export async function serializeSnapshotWithMetadata(
   return {
     ...serializeAgentSnapshot(snapshot, { title: record?.title ?? null }),
     ...(record?.coordinationSignals ? { coordinationSignals: record.coordinationSignals } : {}),
+    ...(record?.leadHandoffs ? { leadHandoffs: record.leadHandoffs } : {}),
   };
 }
 

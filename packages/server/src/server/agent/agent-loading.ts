@@ -3,6 +3,8 @@ import type { Logger } from "pino";
 import type { AgentProvider } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
+import { withAgentAuthorityLock } from "./agent-authority-lock.js";
+import { hasReleasedAgentWriteLease } from "./lead-handoffs.js";
 import {
   buildConfigOverrides,
   buildSessionConfig,
@@ -26,7 +28,7 @@ export type AgentLoaderManager = Pick<
   | "hydrateTimelineFromProvider"
   | "resumeAgentFromPersistence"
 > &
-  Partial<Pick<AgentManager, "waitForAgentClose">>;
+  Partial<Pick<AgentManager, "isAgentCloseInFlight" | "waitForAgentClose">>;
 
 export interface EnsureAgentLoadedDeps {
   agentManager: AgentLoaderManager;
@@ -63,38 +65,60 @@ export async function ensureAgentLoaded(
   agentId: string,
   deps: EnsureAgentLoadedDeps,
 ): Promise<ManagedAgent> {
-  await deps.agentManager.waitForAgentClose?.(agentId);
+  for (;;) {
+    const inflight = pendingAgentInitializations.get(agentId);
+    if (inflight) {
+      inflight.options.broadcastTimeline ||= deps.broadcastTimeline === true;
+      return inflight.promise;
+    }
+
+    await deps.agentManager.waitForAgentClose?.(agentId);
+    const reservation = await withAgentAuthorityLock(agentId, async () =>
+      reserveAgentInitialization(agentId, deps),
+    );
+    if (reservation.kind === "retry") continue;
+    return reservation.promise;
+  }
+}
+
+async function reserveAgentInitialization(
+  agentId: string,
+  deps: EnsureAgentLoadedDeps,
+): Promise<{ kind: "load"; promise: Promise<ManagedAgent> } | { kind: "retry" }> {
+  if (deps.agentManager.isAgentCloseInFlight?.(agentId)) {
+    return { kind: "retry" };
+  }
+
+  const authoritativeRecord = await deps.agentStorage.get(agentId);
+  if (deps.agentManager.isAgentCloseInFlight?.(agentId)) {
+    return { kind: "retry" };
+  }
+  if (hasReleasedAgentWriteLease(authoritativeRecord)) {
+    throw new Error(`agent_write_lease_released_runtime_closed: ${agentId}`);
+  }
+  const existing = deps.agentManager.getAgent(agentId);
+  if (!authoritativeRecord) {
+    if (existing) {
+      return { kind: "load", promise: Promise.resolve(existing) };
+    }
+    throw new Error(`Agent not found: ${agentId}`);
+  }
 
   const inflight = pendingAgentInitializations.get(agentId);
   if (inflight) {
     inflight.options.broadcastTimeline ||= deps.broadcastTimeline === true;
-    return inflight.promise;
+    return { kind: "load", promise: inflight.promise };
   }
 
-  const existing = deps.agentManager.getAgent(agentId);
   if (existing) {
-    return existing;
-  }
-
-  // A close may have started after the first barrier observed no in-flight
-  // work. Once the live lookup is empty, this second barrier closes that gap
-  // before storage-backed resume begins.
-  await deps.agentManager.waitForAgentClose?.(agentId);
-
-  const laterInflight = pendingAgentInitializations.get(agentId);
-  if (laterInflight) {
-    laterInflight.options.broadcastTimeline ||= deps.broadcastTimeline === true;
-    return laterInflight.promise;
+    return { kind: "load", promise: Promise.resolve(existing) };
   }
 
   const pendingOptions = {
     broadcastTimeline: deps.broadcastTimeline === true,
   };
   const initPromise = (async () => {
-    const record = await deps.agentStorage.get(agentId);
-    if (!record) {
-      throw new Error(`Agent not found: ${agentId}`);
-    }
+    const record = authoritativeRecord;
 
     const validProviders = deps.validProviders ?? deps.agentManager.getRegisteredProviderIds();
     if (!isStoredAgentProviderAvailable(record, validProviders)) {
@@ -142,13 +166,17 @@ export async function ensureAgentLoaded(
 
   const pending: PendingAgentInitialization = { promise: initPromise, options: pendingOptions };
   pendingAgentInitializations.set(agentId, pending);
+  void initPromise
+    .finally(() => {
+      const current = pendingAgentInitializations.get(agentId);
+      if (current === pending) {
+        pendingAgentInitializations.delete(agentId);
+      }
+    })
+    .catch(() => undefined);
+  return { kind: "load", promise: initPromise };
+}
 
-  try {
-    return await initPromise;
-  } finally {
-    const current = pendingAgentInitializations.get(agentId);
-    if (current === pending) {
-      pendingAgentInitializations.delete(agentId);
-    }
-  }
+export function hasPendingAgentInitialization(agentId: string): boolean {
+  return pendingAgentInitializations.has(agentId);
 }

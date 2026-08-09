@@ -205,6 +205,12 @@ function projectStoredCoordinationSignals(
   return record.coordinationSignals ? { coordinationSignals: record.coordinationSignals } : {};
 }
 
+function projectStoredLeadHandoffs(
+  record: StoredAgentRecord,
+): Pick<AgentSnapshotPayload, "leadHandoffs"> | Record<string, never> {
+  return record.leadHandoffs ? { leadHandoffs: record.leadHandoffs } : {};
+}
+
 export function buildStoredAgentPayload(
   record: StoredAgentRecord,
   validProviders: Iterable<AgentProvider>,
@@ -263,6 +269,7 @@ export function buildStoredAgentPayload(
       ? { launchContract: toLaunchContractReceipt(record.launchContract) }
       : {}),
     ...projectStoredCoordinationSignals(record),
+    ...projectStoredLeadHandoffs(record),
     ...(providerAvailable ? {} : { providerUnavailable: true }),
   };
 }

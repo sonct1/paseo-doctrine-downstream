@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "foundation": {
-    "commit": "4b3350fd29218560565195f32cf1a1467c9f4e14",
-    "ref": "foundation-v0.1.0-dev.7"
+    "commit": "50509fddef52f68e279c6d874a230ab40d86f9ed",
+    "ref": "foundation-v0.1.0-dev.8"
   },
   "paseoUpstream": {
-    "commit": "0b624b5585123f1401d2178508340766b2b31d7d",
+    "commit": "02c4bc76a6cdd0f0a2665cc85ff4702e6b28f169",
     "remote": "https://github.com/getpaseo/paseo.git"
   }
 }

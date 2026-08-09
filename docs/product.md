@@ -13,7 +13,8 @@ The development workflow is shifting from manually editing files to orchestratin
 Freedom and flexibility. Every design decision follows from this:
 
 - **Multi-provider** — Use any coding agent harness. Pick the right model for each job, switch freely as the landscape shifts. No vendor-lock in.
-- **Cross-device** — Desktop, mobile, web, CLI. Start work at your desk, check progress from your phone, script from the terminal.
+- **Cross-device** — Use the same Human workflow from desktop, mobile, or a browser.
+- **WebUI-first for people** — Desktop, mobile, and browser clients expose the complete Human workflow. CLI and MCP are automation surfaces for agents and integrations; a Human-facing capability is incomplete until it has a WebUI path.
 - **Self-hosted** — The daemon runs on your machine. Your code, your keys, your environment. No inference markup, no cloud dependency.
 - **Respectful** - No telemetry, no forced cloud, no forced accounts
 - **Open source** — AGPL-3.0. Users can inspect, fork, and contribute.
@@ -68,7 +69,7 @@ Anyone who builds software:
 3. **The daemon as infrastructure.** Server/client architecture enables deployment anywhere.
 4. **Open source outlasts funding.** Open source communities are resilient. Contributors become advocates.
 
-## Current state (May 2026)
+## Current upstream state (May 2026) and candidate additions
 
 - Desktop (Electron), mobile (iOS/Android), web, CLI
 - Built-in providers: Claude Code (Agent SDK), Codex (app-server), GitHub Copilot (ACP), OpenCode, Pi, OMP
@@ -76,6 +77,8 @@ Anyone who builds software:
 - Voice mode: dictate prompts or talk through problems hands-free
 - MCP server exposes the daemon to other agents (workspaces, create/detach agent, schedules, heartbeats, terminals, workspace renaming)
 - Scheduled agents (cron-style triggers) via app, CLI, and MCP
+- Candidate branch, not production-qualified: Project Settings can inspect, preview, bootstrap, correct, and save a repository-owned `WORKSPACE_PROTOCOL.md` without asking the user to run a command.
+- Candidate branch, not production-qualified: role-bound agent creation verifies that protocol in WebUI and again in the daemon before launch; recovery opens the exact active project or worktree target in Project Settings.
 - Frequent releases (multiple per week)
 - Community contributions across packaging, providers, and bug fixes
 - Key UX: split panes, keybinding customization, workspace model, in-app browser

@@ -129,12 +129,14 @@ import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { createSpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
+import { FileAgentTimelineStore } from "./agent/file-agent-timeline-store.js";
 import { resolveAgentIdentifier } from "./agent/identifier.js";
 import { formatSystemNotificationPrompt, sendPromptToAgent } from "./agent/agent-prompt.js";
 import {
   resumePendingCoordinationSignalDeliveries,
   type CoordinationSignalDependencies,
 } from "./agent/coordination-signals.js";
+import { startNativeCoordinationPolicy } from "./agent/native-coordination-policy.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import {
@@ -866,6 +868,9 @@ export async function createPaseoDaemon(
     clients: initialAgentManagerState.clients,
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
+    durableTimelineStore: new FileAgentTimelineStore(
+      path.join(config.paseoHome, "agent-timelines"),
+    ),
     appendSystemPrompt: config.appendSystemPrompt,
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
@@ -1297,6 +1302,11 @@ export async function createPaseoDaemon(
     sendAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
     logger,
   };
+  const stopNativeCoordinationPolicy = startNativeCoordinationPolicy({
+    ...coordinationSignalDependencies,
+    agentManager,
+    agentStorage,
+  });
   const stopPendingCoordinationSignalDeliveries = await resumePendingCoordinationSignalDeliveries({
     ...coordinationSignalDependencies,
     agentStorage,
@@ -1705,26 +1715,35 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
-    stopPendingCoordinationSignalDeliveries();
-    await hubRelationships.stop();
-    workspaceReconciliation.dispose();
-    scriptHealthMonitor.stop();
+    const shutdownErrors: unknown[] = [];
+    const attempt = async (step: string, action: () => void | Promise<void>): Promise<void> => {
+      try {
+        await action();
+      } catch (error) {
+        shutdownErrors.push(error);
+        logger.error({ err: error, shutdownStep: step }, "Paseo shutdown step failed");
+      }
+    };
+
+    await attempt("native-coordination-policy", () => stopNativeCoordinationPolicy());
+    await attempt("pending-coordination-signals", () => stopPendingCoordinationSignalDeliveries());
+    await attempt("hub-relationships", () => hubRelationships.stop());
+    await attempt("workspace-reconciliation", () => workspaceReconciliation.dispose());
+    await attempt("script-health-monitor", () => scriptHealthMonitor.stop());
     // Freeze both ingress and registration before taking the agent closure snapshot.
-    wsServer?.prepareForShutdown();
-    agentManager.prepareForShutdown();
-    await closeAllAgents(logger, agentManager);
-    await agentManager.flushForShutdown().catch(() => undefined);
-    detachAgentStoragePersistence();
-    await agentStorage.flush().catch(() => undefined);
-    await providerSnapshotManager.shutdown();
-    terminalManager.killAll();
-    speechService.stop();
-    await scheduleService.stop().catch(() => undefined);
-    await relayRuntime?.stop().catch(() => undefined);
-    if (wsServer) {
-      await wsServer.close();
-    }
-    await serviceProxy.stopStandalone();
+    await attempt("websocket-ingress", () => wsServer?.prepareForShutdown());
+    await attempt("agent-registration-ingress", () => agentManager.prepareForShutdown());
+    await attempt("agent-runtime-close", () => closeAllAgents(logger, agentManager));
+    await attempt("durable-agent-timeline", () => agentManager.flushForShutdown());
+    await attempt("agent-storage-detach", () => detachAgentStoragePersistence());
+    await attempt("agent-storage-flush", () => agentStorage.flush());
+    await attempt("provider-snapshots", () => providerSnapshotManager.shutdown());
+    await attempt("terminals", () => terminalManager.killAll());
+    await attempt("speech", () => speechService.stop());
+    await attempt("schedules", () => scheduleService.stop());
+    await attempt("relay", () => relayRuntime?.stop());
+    await attempt("websocket-close", () => wsServer?.close());
+    await attempt("service-proxy", () => serviceProxy.stopStandalone());
     // Force-drop remaining sockets so httpServer.close() resolves promptly.
     // We've already closed wsServer (which sent ws-layer close frames) and
     // stopped every other service, so anything still attached is a TCP
@@ -1732,13 +1751,22 @@ export async function createPaseoDaemon(
     // upgraded WS sockets in the closing handshake, or HTTP keep-alive
     // sockets in CLOSE_WAIT). closeIdleConnections() does not catch
     // upgraded sockets, so we use closeAllConnections() here.
-    httpServer.closeAllConnections();
-    await new Promise<void>((resolve) => {
-      httpServer.close(() => resolve());
-    });
+    await attempt("http-connections", () => httpServer.closeAllConnections());
+    await attempt(
+      "http-server",
+      () =>
+        new Promise<void>((resolve) => {
+          httpServer.close(() => resolve());
+        }),
+    );
     // Clean up socket files
-    if (listenTarget.type === "socket" && existsSync(listenTarget.path)) {
-      unlinkSync(listenTarget.path);
+    await attempt("socket-file", () => {
+      if (listenTarget.type === "socket" && existsSync(listenTarget.path)) {
+        unlinkSync(listenTarget.path);
+      }
+    });
+    if (shutdownErrors.length > 0) {
+      throw new AggregateError(shutdownErrors, "Paseo shutdown completed with errors");
     }
   };
 

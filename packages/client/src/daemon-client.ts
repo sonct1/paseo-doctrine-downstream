@@ -99,6 +99,7 @@ import type {
   SendAgentMessageRequest,
   PaseoConfigRaw,
   PaseoConfigRevision,
+  WorkspaceProtocolRevision,
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
 } from "@getpaseo/protocol/messages";
@@ -350,6 +351,7 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   env?: CreateAgentRequestMessage["env"];
   workspaceId?: string;
   roleId?: CreateAgentRequestMessage["roleId"];
+  assignment?: CreateAgentRequestMessage["assignment"];
   callerAgentId?: string;
   initialPrompt?: string;
   clientMessageId?: string;
@@ -459,6 +461,14 @@ type WriteProjectConfigPayload = Extract<
   SessionOutboundMessage,
   { type: "write_project_config_response" }
 >["payload"];
+type WorkspaceProtocolInspectPayload = Extract<
+  SessionOutboundMessage,
+  { type: "foundation.workspaceProtocol.inspect.response" }
+>["payload"];
+type WorkspaceProtocolWritePayload = Extract<
+  SessionOutboundMessage,
+  { type: "foundation.workspaceProtocol.write.response" }
+>["payload"];
 
 type ListCommandsPayload = ListCommandsResponse["payload"];
 type ListCommandsDraftConfig = Pick<
@@ -469,6 +479,12 @@ export interface WriteProjectConfigInput {
   repoRoot: string;
   config: PaseoConfigRaw;
   expectedRevision: PaseoConfigRevision | null;
+  requestId?: string;
+}
+export interface WriteWorkspaceProtocolInput {
+  repoRoot: string;
+  content: string;
+  expectedRevision: WorkspaceProtocolRevision | null;
   requestId?: string;
 }
 interface ListCommandsOptions {
@@ -2454,6 +2470,7 @@ export class DaemonClient {
       ...(options.env ? { env: options.env } : {}),
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
       ...(options.roleId !== undefined ? { roleId: options.roleId } : {}),
+      ...(options.assignment !== undefined ? { assignment: options.assignment } : {}),
       ...(options.callerAgentId !== undefined ? { callerAgentId: options.callerAgentId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
       ...(options.clientMessageId ? { clientMessageId: options.clientMessageId } : {}),
@@ -4700,6 +4717,33 @@ export class DaemonClient {
         expectedRevision: input.expectedRevision,
       },
       responseType: "write_project_config_response",
+    });
+  }
+
+  async inspectWorkspaceProtocol(
+    repoRoot: string,
+    requestId?: string,
+  ): Promise<WorkspaceProtocolInspectPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "foundation.workspaceProtocol.inspect.request",
+        repoRoot,
+      },
+    });
+  }
+
+  async writeWorkspaceProtocol(
+    input: WriteWorkspaceProtocolInput,
+  ): Promise<WorkspaceProtocolWritePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: input.requestId,
+      message: {
+        type: "foundation.workspaceProtocol.write.request",
+        repoRoot: input.repoRoot,
+        content: input.content,
+        expectedRevision: input.expectedRevision,
+      },
     });
   }
 
