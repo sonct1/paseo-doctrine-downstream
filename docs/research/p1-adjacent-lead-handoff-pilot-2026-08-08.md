@@ -136,17 +136,19 @@ candidate vẫn cần fresh activation canary; section kế tiếp ghi exact evi
 
 ## Fresh post-doctrine activation canary
 
-Main daemon sau đó chạy exact runtime source `1e39d396d` từ isolated integration worktree. Disposable
-workspace `wks_4590ffbffbaadb57` dùng paid role-bound `codex/gpt-5.4` predecessor
+Canary bắt đầu trên runtime source `191e4eb9a` rồi tiếp tục trên exact candidate `1e39d396d` từ isolated
+integration worktree. Disposable workspace `wks_4590ffbffbaadb57` dùng paid role-bound
+`codex/gpt-5.4` predecessor
 `d13c7ced-caf7-422b-b5c1-a3a40b60e1ce`, successor
 `afc83cf2-ab92-4de3-8d58-edd48d8f2bc0` và handoff
 `8c630cc6-2593-403f-952e-2ffb94860582`.
 
 Canary đầu tiên phát hiện một proof-design error: Codex giữ MCP tools sau built-in deferred tool search,
 nên prompt cấm mọi auxiliary tool trả `UNAVAILABLE` dù app-server inventory đã có authenticated
-`transition_lead_handoff`. Retry cho phép native tool discovery nhưng vẫn cấm shell, write, delegation
-và mọi action tool khác; successor gọi đúng native transition và durable readback ghi
-`successor_acknowledged` lúc `2026-08-08T13:14:05.295Z`, Owner vẫn là predecessor.
+`transition_lead_handoff`. Retry trên source `191e4eb9a` cho phép native tool discovery nhưng vẫn cấm
+shell, write, delegation và mọi action tool khác; successor gọi đúng native transition và durable readback
+ghi `successor_acknowledged` lúc `2026-08-08T13:14:05.295Z`, Owner vẫn là predecessor. Daemon sau đó
+được rebuild và restart trên exact candidate `1e39d396d`; durable packet giữ ACK này trước final release.
 
 Sau exact idle readback, Human-facing tool ghi `predecessor_released` lúc
 `2026-08-08T13:23:05.615Z`. Durable packet có ba ordered receipts và Owner đổi sang exact successor.
@@ -154,16 +156,18 @@ Predecessor readback là `closed`, `Archived=false`; prompt trước và sau dae
 `agent_write_lease_released`. Durable predecessor timeline vẫn đọc được sau restart mà agent không
 resume. Successor nhận prompt trước và sau restart. Disposable repository vẫn clean.
 
-Canary này qualify exact post-doctrine candidate cho native successor ACK, final runtime closure, durable
-unarchived retention, write-lease revocation và restart readback. Nó không qualify production release,
-multi-day continuity effect hoặc hard-process-loss recovery trong pre-manifest interval.
+Canary theo hai source revision này qualify native successor ACK trên `191e4eb9a`, rồi qualify exact
+candidate `1e39d396d` cho durable ACK continuation, final runtime closure, durable unarchived retention,
+write-lease revocation và restart readback. Nó không chứng minh exact candidate tự tạo một ACK mới, và
+không qualify production release, multi-day continuity effect hoặc hard-process-loss recovery trong
+pre-manifest interval.
 
 ## Residual unknowns
 
 - Chưa có multi-day evidence về continuity improvement.
-- Candidate P0 đã có paid-provider callable proof trên integrated daemon, nhưng chưa release-activated
-  hoặc production-qualified.
-- Candidate P2 đã qualified trên isolated runtime, chưa release-activated hoặc production-qualified.
+- P0 callable proof và isolated P2 qualification trước đó tự chúng không chứng minh release activation;
+  fresh staged canary ở trên supersede gap đó cho exact continuation/release path, nhưng chưa
+  production-qualified.
 - Candidate enforce final release ở core daemon dispatch boundary, bao gồm existing-agent schedule
   và permission follow-up; release bị reject khi predecessor còn in-flight. Released identity không thể
   được tái authorize làm successor; successor được revalidate dưới dual-identity stable locks ngay tại
