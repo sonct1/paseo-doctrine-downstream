@@ -25,6 +25,7 @@ import {
 } from "./layout.js";
 import {
   FoundationManifestSchema,
+  InstallPlanSchema,
   InstallRecordSchema,
   InstallTransactionSchema,
   type FoundationManifest,
@@ -230,6 +231,7 @@ function prepareControlHome(
 function transactionStagingPaths(input: {
   install: ReturnType<typeof resolveInstallLayout>;
   planId: string;
+  includeControlWorkspace: boolean;
 }): { releaseStagingPath: string | null; controlStagingPath: string | null } {
   const suffix = `${process.pid}-${input.planId.slice(0, 12)}-staging`;
   return {
@@ -239,9 +241,10 @@ function transactionStagingPaths(input: {
           input.install.releasesRoot,
           `.${path.basename(input.install.releasePath)}-${suffix}`,
         ),
-    controlStagingPath: existsSync(input.install.controlHome)
-      ? null
-      : path.join(path.dirname(input.install.controlHome), `.paseo-control-${suffix}`),
+    controlStagingPath:
+      !input.includeControlWorkspace || existsSync(input.install.controlHome)
+        ? null
+        : path.join(path.dirname(input.install.controlHome), `.paseo-control-${suffix}`),
   };
 }
 
@@ -413,14 +416,19 @@ export function recoverInterruptedInstall(home: string): boolean {
   return true;
 }
 
-function prepareInstallApplication(plan: InstallPlan) {
+function prepareInstallApplication(planInput: InstallPlan) {
+  const plan = InstallPlanSchema.parse(planInput);
   verifyPlanIdentity(plan);
   if (process.platform !== "darwin") {
     throw new Error(`macOS is required; detected ${process.platform}`);
   }
   recoverInterruptedInstall(plan.home);
   const inspection = inspectMachine({ home: plan.home, productRoot: plan.productRoot });
-  const canonicalPlan = createInstallPlanFromInspection(plan.mode, inspection);
+  const canonicalPlan = createInstallPlanFromInspection(
+    plan.mode,
+    inspection,
+    plan.includeControlWorkspace,
+  );
   if (canonicalPlan.planId !== plan.planId) {
     throw new Error(
       "install plan does not match current canonical machine targets; generate a fresh plan",
@@ -454,7 +462,11 @@ function prepareInstallApplication(plan: InstallPlan) {
     target: link.target,
     previousTarget: linkTarget(link.target),
   }));
-  const staging = transactionStagingPaths({ install, planId: plan.planId });
+  const staging = transactionStagingPaths({
+    install,
+    planId: plan.planId,
+    includeControlWorkspace: plan.includeControlWorkspace,
+  });
   const transaction = InstallTransactionSchema.parse({
     schemaVersion: 1,
     operation: "install",
@@ -509,11 +521,13 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
       releasePath: install.releasePath,
       stagingPath: staging.releaseStagingPath,
     });
-    const createdControlHome = prepareControlHome(
-      product.controlTemplateRoot,
-      install.controlHome,
-      staging.controlStagingPath,
-    );
+    const createdControlHome = plan.includeControlWorkspace
+      ? prepareControlHome(
+          product.controlTemplateRoot,
+          install.controlHome,
+          staging.controlStagingPath,
+        )
+      : false;
     if (staging.releaseStagingPath) renameSync(staging.releaseStagingPath, install.releasePath);
     if (staging.controlStagingPath) renameSync(staging.controlStagingPath, install.controlHome);
     atomicSymlink(install.releasePath, install.currentLink);
@@ -533,7 +547,7 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
       installedAt: new Date().toISOString(),
       releasePath: install.releasePath,
       currentLink: install.currentLink,
-      controlHome: install.controlHome,
+      controlHome: plan.includeControlWorkspace ? install.controlHome : null,
       installedLinks: plan.links.map(({ source, target }) => ({ source, target })),
       previousReleasePath:
         previousReleasePath && previousReleasePath !== install.releasePath
@@ -577,7 +591,7 @@ function validateRecordOwnership(home: string, record: InstallRecord): void {
   if (
     record.releasePath !== install.releasePath ||
     record.currentLink !== install.currentLink ||
-    record.controlHome !== install.controlHome ||
+    (record.controlHome !== null && record.controlHome !== install.controlHome) ||
     JSON.stringify(recordLinks) !== JSON.stringify(expectedLinks) ||
     (previousTargets !== undefined &&
       JSON.stringify(previousTargets) !== JSON.stringify(expectedTargets)) ||

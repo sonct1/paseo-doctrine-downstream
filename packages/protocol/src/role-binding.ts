@@ -66,11 +66,6 @@ export const ProviderRoleBindingSupportSchema = z.discriminatedUnion("status", [
     notice: z.string().optional(),
   }),
   z.object({
-    status: z.literal("candidate"),
-    injectionMethod: RoleBindingInjectionMethodSchema,
-    reason: z.string(),
-  }),
-  z.object({
     status: z.literal("unsupported"),
     reason: z.string(),
   }),

@@ -13,6 +13,8 @@ const {
   configState,
   patchConfigMock,
   openProviderSettingsMock,
+  connectionStatusMock,
+  hostRuntimeClientMock,
   hostFeatureState,
 } = vi.hoisted(() => ({
   theme: {
@@ -46,10 +48,26 @@ const {
   },
   patchConfigMock: vi.fn(async () => undefined),
   openProviderSettingsMock: vi.fn(),
+  connectionStatusMock: vi.fn(async () => ({
+    provider: "codex-proxy",
+    model: "custom-model",
+    status: "unqualified" as "unqualified" | "qualified" | "stale",
+  })),
+  hostRuntimeClientMock: {} as {
+    getFoundationProviderConnectionStatus?: (
+      provider: string,
+      model: string,
+    ) => Promise<{
+      provider: string;
+      model: string;
+      status: "unqualified" | "qualified" | "stale";
+    }>;
+  },
   hostFeatureState: {
     providerRemoval: false,
     paseoToolPolicies: true,
     foundationCredentials: false,
+    providerConnectionQualification: true,
   },
 }));
 
@@ -140,6 +158,9 @@ vi.mock("react-i18next", () => ({
           "settings.providers.statuses.error": "Error",
           "settings.providers.statuses.notInstalled": "Not installed",
           "settings.providers.statuses.configuredUnqualified": "Configured · qualification pending",
+          "settings.providers.statuses.connectionUnverified": "Configured · unverified",
+          "settings.providers.statuses.connectionQualified": "Connection verified",
+          "settings.providers.statuses.connectionQualificationStale": "Verification stale",
           "settings.providers.models.one": "1 model",
           "settings.providers.models.many": "{{count}} models",
           "settings.providers.addErrorTitle": "Unable to add provider",
@@ -329,6 +350,7 @@ vi.mock("@/hooks/use-daemon-config", () => ({
 
 vi.mock("@/runtime/host-runtime", () => ({
   useHostRuntimeIsConnected: () => true,
+  useHostRuntimeClient: () => hostRuntimeClientMock,
 }));
 
 vi.mock("@/runtime/host-features", () => ({
@@ -411,9 +433,17 @@ describe("ProvidersSection", () => {
     hostFeatureState.providerRemoval = false;
     hostFeatureState.paseoToolPolicies = true;
     hostFeatureState.foundationCredentials = false;
+    hostFeatureState.providerConnectionQualification = true;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     openProviderSettingsMock.mockReset();
+    connectionStatusMock.mockReset();
+    connectionStatusMock.mockResolvedValue({
+      provider: "codex-proxy",
+      model: "custom-model",
+      status: "unqualified",
+    });
+    hostRuntimeClientMock.getFoundationProviderConnectionStatus = connectionStatusMock;
   });
 
   afterEach(() => {
@@ -487,7 +517,7 @@ describe("ProvidersSection", () => {
     expect(switchEl).toBeGreaterThan(modelCount);
   });
 
-  it("does not present an inherited catalog as a qualified custom endpoint", () => {
+  it("does not present an unverified custom endpoint as available", async () => {
     const customEntry: ProviderSnapshotEntry = {
       ...claudeEntry,
       provider: "codex-proxy",
@@ -505,11 +535,48 @@ describe("ProvidersSection", () => {
     });
 
     render();
+    await act(async () => Promise.resolve());
 
     const row = findRow("Codex proxy provider details");
-    expect(row.textContent).toContain("Configured · qualification pending");
+    expect(row.textContent).toContain("Configured · unverified");
     expect(row.textContent).not.toContain("Available");
     expect(row.textContent).not.toContain("3 models");
+  });
+
+  it("presents a custom endpoint as verified after a matching qualification receipt", async () => {
+    connectionStatusMock.mockResolvedValue({
+      provider: "codex-proxy",
+      model: "custom-model",
+      status: "qualified",
+    });
+    snapshotState.entries = [
+      {
+        ...claudeEntry,
+        provider: "codex-proxy",
+        label: "Codex proxy",
+        source: "custom",
+        models: [
+          {
+            provider: "codex-proxy",
+            id: "custom-model",
+            label: "Custom model",
+            isDefault: true,
+          },
+        ],
+      },
+    ];
+    configState.config = makeConfig({
+      "codex-proxy": {
+        extends: "codex",
+        credentialRef: "shared-proxy-key",
+        env: { OPENAI_BASE_URL: "https://proxy.example/v1" },
+      },
+    });
+
+    render();
+    await act(async () => Promise.resolve());
+
+    expect(findRow("Codex proxy provider details").textContent).toContain("Connection verified");
   });
 
   it("opens the diagnostic sheet when the outer row is pressed for a disabled provider", () => {
@@ -589,7 +656,7 @@ describe("ProvidersSection", () => {
     );
   });
 
-  it("opens the OpenAI-compatible provider form only when the host advertises support", () => {
+  it("opens the custom Codex provider form only when the host advertises support", () => {
     hostFeatureState.foundationCredentials = true;
     snapshotState.entries = [];
     configState.config = makeConfig();

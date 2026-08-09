@@ -1,4 +1,4 @@
-const versionPattern = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+)(?:\.paseo\.(\d+))?)?$/;
+const versionPattern = /^(\d+)\.(\d+)\.(\d+)(?:-beta\.(\d+)(?:\.paseo\.(\d+))?|-paseo\.(\d+))?$/;
 const stableIosBuildSlot = 999;
 
 function getNativeReleaseVersion(version) {
@@ -7,11 +7,12 @@ function getNativeReleaseVersion(version) {
     throw new Error(`Cannot derive native release version from unsupported version: ${version}`);
   }
 
-  const [, majorText, minorText, patchText, betaText, paseoText] = match;
+  const [, majorText, minorText, patchText, betaText, betaPaseoText, stablePaseoText] = match;
   const major = Number(majorText);
   const minor = Number(minorText);
   const patch = Number(patchText);
   const betaNumber = betaText === undefined ? null : Number(betaText);
+  const paseoText = betaPaseoText ?? stablePaseoText;
   const paseoNumber = paseoText === undefined ? null : Number(paseoText);
 
   if (minor > 999 || patch > 999) {

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.5",
+  "distributionVersion": "0.1.0-dev.7",
   "foundationSource": {
-    "commit": "f237d64de4af9ea72d6024f33887630f4ea3c64c",
-    "ref": "f237d64"
+    "commit": "4b3350fd29218560565195f32cf1a1467c9f4e14",
+    "ref": "foundation-v0.1.0-dev.7"
   },
   "files": [
     {
       "path": "AGENTS.md",
       "mode": "0644",
-      "sha256": "216a4f6bb6746fced07f2d7effbd9e922c862711ef1833638d8aee0f3c820688"
+      "sha256": "a9b9d4eacc2947b638a41e4094e7a0bfdf42de47f486f9f40deaf70cc0047eb0"
     },
     {
       "path": "docs/ASSIGNMENT_AND_HANDBACK.md",
@@ -24,12 +24,12 @@
     {
       "path": "docs/ROLE_CONTRACTS.md",
       "mode": "0644",
-      "sha256": "4fdb1301ec95e60babe95c4bca8eeda03659ecae384e955a8ea17b7ad675a480"
+      "sha256": "7f74ffcfd16f0110e79fea8e487b38cecf5a4a2255766f6e41259c556ac5fc1d"
     },
     {
       "path": "docs/ROLE_INSTRUCTION_BINDING.md",
       "mode": "0644",
-      "sha256": "78a7f057d830ac006a582159d808fd1eaadf838e9daad90d48bed79c67224a38"
+      "sha256": "69ef48f7096e364caa6ae565adb4a4947d9d2b4d2903d8453f81825ba8afe648"
     },
     {
       "path": "docs/SUPERVISOR_NOTEBOOK.md",
@@ -54,7 +54,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "c0d81861615c0b8066fbbabc1a4e85bd472d3198914c6965a3a8245ab88c858e"
+      "sha256": "b223569fecc1fe52f9be5a9cb6c667b368920d035837d6720344be8a88e4dac4"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
@@ -79,7 +79,7 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "e7850627c2fbf10a39ee49d563a9eea12c9820a0eb8bdb6f6b8578187eabd97e"
+      "sha256": "b5936073240fe30612a7bb831f1f164ce45d0b08c50f41926a64e8db9f8ec6fa"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
@@ -94,7 +94,7 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "8804ec91ab76fff5ba9e640a3baceedacc6eaf9c23fa6f6ffb8742386a6c805c"
+      "sha256": "e3f9ddd9e521d4ce303c0117d7c1db92f149c3f46e0b017397a4d90b138460ec"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
@@ -230,6 +230,11 @@
       "path": "profiles/cursor/paseo-supervisor/skills/test-proof-debt-audit/references/catalog.md",
       "mode": "0644",
       "sha256": "4b1cb8a85502bd139f744488a85d55e86316f20ed12c29d55c32286b76ed9afd"
+    },
+    {
+      "path": "profiles/native/role-definitions.json",
+      "mode": "0644",
+      "sha256": "ae0d8b7563a2cdce1f5385045f267b25700036790814bdb8b9347ec84c306157"
     },
     {
       "path": "profiles/omp/paseo-lead.md",

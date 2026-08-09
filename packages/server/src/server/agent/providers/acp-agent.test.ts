@@ -700,6 +700,29 @@ describe("mapACPUsage", () => {
       cachedInputTokens: 5,
     });
   });
+
+  test("maps ACP usage_update into provider-neutral context telemetry", () => {
+    const session = createSession();
+    const events = asInternals<ACPSessionInternals>(session).translateSessionUpdate({
+      sessionUpdate: "usage_update",
+      used: 85_000,
+      size: 100_000,
+      cost: { amount: 1.25, currency: "usd" },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "usage_updated",
+        provider: "claude-acp",
+        turnId: undefined,
+        usage: {
+          contextWindowUsedTokens: 85_000,
+          contextWindowMaxTokens: 100_000,
+          totalCostUsd: 1.25,
+        },
+      },
+    ]);
+  });
 });
 
 describe("deriveModesFromACP", () => {

@@ -81,9 +81,11 @@ export const ptBR: TranslationResources = {
       desktop: "Envie uma mensagem ao agente, marque @files ou use /commands e /skills",
       mobile: "Mensagem, @files, /commands",
       fallback: "Mensagem...",
+      terminal: "Prompt",
     },
     input: {
       accessibilityLabel: "Enviar mensagem ao agente...",
+      terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}} para focar",
       addAttachment: "Adicionar anexo",
       interruptAgent: "Interromper agente",
@@ -210,7 +212,7 @@ export const ptBR: TranslationResources = {
     states: {
       notFound: "Agente não encontrado",
       failedToLoad: "Falha ao carregar agente",
-      reconnecting: "Reconectando...",
+      reconnecting: "Reconectando",
       timelineSyncFailed: "Não foi possível atualizar o histórico do agente. Tentando novamente…",
       archivingTitle: "Arquivando agente...",
       archivingSubtitle: "Aguarde enquanto arquivamos este agente.",
@@ -237,8 +239,13 @@ export const ptBR: TranslationResources = {
   sessions: {
     title: "Histórico de agentes",
     empty: "Nenhuma sessão ainda",
+    noMatches: "Nenhuma sessão corresponde",
+    tooManyMatches: "Muitos resultados — refine a busca",
+    hostLoadFailed: "{{host}}: Não foi possível carregar o histórico",
+    searchPlaceholder: "Buscar no histórico",
     actions: {
       loadMore: "Carregar mais",
+      clearSearch: "Limpar busca",
     },
   },
   agentList: {
@@ -935,9 +942,14 @@ export const ptBR: TranslationResources = {
         host: "Host",
         changeRequest: "Pull request",
         checks: "Verificações",
-        scripts: "Scripts",
+        services: "Serviços",
         diff: "Estatísticas de diff",
         timestamp: "Última atividade",
+      },
+      checks: {
+        iconAndText: "Ícone e texto",
+        icon: "Somente ícone",
+        none: "Oculto",
       },
       hostFilter: {
         label: "Host",
@@ -969,7 +981,7 @@ export const ptBR: TranslationResources = {
       discord: "Discord",
       github: "Criar issue no GitHub",
       whatsNew: "Novidades",
-      version: "Paseo {{version}}",
+      appName: "Paseo",
     },
     sections: {
       sessions: "Histórico",
@@ -1011,7 +1023,8 @@ export const ptBR: TranslationResources = {
     },
     workspace: {
       status: {
-        scriptsAvailable: "Scripts disponíveis",
+        serviceRunning: "Serviço {{name}} em execução",
+        serviceUnhealthy: "Serviço {{name}} com falha",
         creating: "Criando...",
       },
       actions: {
@@ -1073,14 +1086,29 @@ export const ptBR: TranslationResources = {
       composerStateRequired: "O estado do composer é obrigatório",
       selectModel: "Selecione um modelo",
     },
+    tooltips: {
+      project: "Choose the project",
+      host: "Choose the host",
+      isolation: "Choose the isolation level",
+      startingRef: "Escolha de onde começar",
+      launch: "Choose what to launch",
+    },
     refPicker: {
       startingRef: "Ref inicial",
-      chooseStart: "Escolha de onde começar",
       intoBase: "em {{baseRef}}",
       searching: "Buscando...",
       noMatchingRefs: "Nenhuma ref correspondente.",
       searchPlaceholder: "Buscar branches e PRs",
       title: "Começar de",
+    },
+    launch: {
+      title: "What to launch",
+      chat: "Chat",
+      terminal: "Terminal",
+      manageProfiles: "Manage profiles",
+      submit: "Launch",
+      promptPlaceholder: "Prompt {{name}}",
+      commandPlaceholder: "Run a command, or leave empty for a blank terminal",
     },
   },
   desktop: {
@@ -1431,6 +1459,19 @@ export const ptBR: TranslationResources = {
         show: "Mostrar avançado",
         hide: "Ocultar avançado",
       },
+      headers: {
+        title: "Cabeçalhos personalizados",
+        add: "Adicionar cabeçalho",
+        name: "Nome",
+        value: "Valor",
+        remove: "Remover cabeçalho",
+        errors: {
+          missingName: "Digite um nome para cada cabeçalho",
+          invalidName: "{{name}} não é um nome de cabeçalho válido",
+          invalidValue: "{{name}} contém uma quebra de linha inválida",
+          duplicateName: "{{name}} foi inserido mais de uma vez",
+        },
+      },
       passwordVisibility: {
         show: "Mostrar senha",
         hide: "Ocultar senha",
@@ -1780,6 +1821,7 @@ export const ptBR: TranslationResources = {
           es: "Espanhol",
           fr: "Francês",
           ja: "Japonês",
+          ko: "Coreano",
           ptBR: "Português brasileiro",
           ru: "Russo",
           zhCN: "Chinês simplificado",
@@ -2253,6 +2295,9 @@ export const ptBR: TranslationResources = {
         available: "Disponível",
         notInstalled: "Não instalado",
         configuredUnqualified: "Configurado · qualificação pendente",
+        connectionUnverified: "Configurado · não verificado",
+        connectionQualified: "Conexão verificada",
+        connectionQualificationStale: "Verificação desatualizada",
       },
       models: {
         one: "1 modelo",
@@ -2278,10 +2323,10 @@ export const ptBR: TranslationResources = {
       connection: {
         button: "Conexão",
         add: "Adicionar",
-        createTitle: "Adicionar provedor compatível com OpenAI",
+        createTitle: "Adicionar provedor Codex personalizado",
         title: "Configurar conexão de {{name}}",
-        openAICompatible: "Compatível com OpenAI",
-        openAICompatibleHint: "Use seu ID de provedor, URL de Responses e chave de API",
+        openAICompatible: "Codex personalizado",
+        openAICompatibleHint: "Use o Codex com sua URL de Responses e chave de API",
         providerId: "ID do provedor",
         invalidProviderId: "Use letras minúsculas, números e hífens, começando com uma letra",
         providerLabel: "Nome",
@@ -2294,6 +2339,10 @@ export const ptBR: TranslationResources = {
         privateStorage: "A chave fica armazenada somente neste host e nunca retorna ao aplicativo",
         hostDisconnected: "O host desconectou antes de salvar a configuração",
         saveFailed: "Não foi possível salvar a conexão do provedor",
+        test: "Testar conexão",
+        testing: "Testando...",
+        testQualified: "Conexão verificada para {{model}} em {{latency}} ms",
+        testFailed: "Falha no teste de conexão",
         save: "Salvar",
         saving: "Salvando...",
         deleteCredential: "Excluir chave de API",

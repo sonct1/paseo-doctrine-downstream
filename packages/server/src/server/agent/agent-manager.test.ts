@@ -509,7 +509,7 @@ interface ControlledInterruptFixture {
   manager: AgentManager;
   session: ControlledInterruptSession;
   startForegroundRun(): Promise<void>;
-  cleanup(): void;
+  cleanup(): Promise<void>;
 }
 
 async function createControlledInterruptFixture(options: {
@@ -553,7 +553,10 @@ async function createControlledInterruptFixture(options: {
       })();
       await manager.waitForAgentRunStart(agent.id);
     },
-    cleanup: () => rmSync(workdir, { recursive: true, force: true }),
+    async cleanup() {
+      await manager.closeAgent(agent.id);
+      rmSync(workdir, { recursive: true, force: true });
+    },
   };
 }
 
@@ -1618,7 +1621,7 @@ test("cancelAgentRun preserves running state when the provider interrupt hangs",
     expect(fixture.session.interruptCalled).toBe(true);
     expect(fixture.manager.getAgent(fixture.agentId)?.lifecycle).toBe("running");
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1649,7 +1652,7 @@ test("cancelAgentRun preserves the active turn when the provider rejects the int
       turnId: "provider-still-active-turn",
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1682,7 +1685,7 @@ test("cancelAgentRun succeeds when the foreground turn finishes before the provi
       activeForegroundTurnId: null,
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -1712,7 +1715,7 @@ test("cancelAgentRun succeeds when the provider queues completion before rejecti
       activeForegroundTurnId: null,
     });
   } finally {
-    fixture.cleanup();
+    await fixture.cleanup();
   }
 });
 
@@ -3278,6 +3281,49 @@ test("reloadAgentSession clears provider children before rehydrating from disk",
   await manager.reloadAgentSession(snapshot.id, undefined, { rehydrateFromDisk: true });
 
   expect(manager.listProviderSubagents(snapshot.id)).toEqual([]);
+});
+
+test("reloadAgentSession terminalizes running provider children when preserving history", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-provider-child-hot-reload-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let activeSession: TestAgentSession | null = null;
+  class ProviderChildClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      activeSession = new TestAgentSession(config);
+      return activeSession;
+    }
+
+    override async resumeSession(
+      _handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+    ): Promise<AgentSession> {
+      return new TestAgentSession({
+        provider: "codex",
+        cwd: config?.cwd ?? workdir,
+      });
+    }
+  }
+  const manager = new AgentManager({
+    clients: { codex: new ProviderChildClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000119",
+  });
+  const snapshot = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  activeSession?.pushEvent({
+    type: "provider_subagent",
+    provider: "codex",
+    event: { type: "upsert", id: "running-child", title: "Running child", status: "running" },
+  });
+  await vi.waitFor(() => expect(manager.listProviderSubagents(snapshot.id)).toHaveLength(1));
+
+  await manager.reloadAgentSession(snapshot.id);
+
+  expect(manager.listProviderSubagents(snapshot.id)).toEqual([
+    expect.objectContaining({ id: "running-child", status: "canceled" }),
+  ]);
 });
 
 test("hydrateTimelineFromProvider restores and broadcasts provider children from session history", async () => {
@@ -9248,7 +9294,11 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
 
 test("role-bound create persists immutable binding and passes only launch instructions", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
-  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    "# Workspace Protocol\n\nowner: Human\napplies_to: repository root\nversion: 1\n",
+    "utf8",
+  );
   const storage = new AgentStorage(join(workdir, "agents"), logger);
 
   class RoleCaptureClient extends TestAgentClient {
@@ -9384,6 +9434,28 @@ test("role-bound create rejects caller systemPrompt before provider launch", asy
         { workspaceId: undefined, roleId: "peer" },
       ),
     ).rejects.toThrow("Cannot set systemPrompt on a role-bound agent");
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("role-bound create rejects a present-invalid protocol before state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-invalid-protocol-"));
+  writeFileSync(join(workdir, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
+  const client = new TestAgentClient("codex");
+  const manager = new AgentManager({ clients: { codex: client }, logger });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir },
+        "00000000-0000-4000-8000-000000000119",
+        { workspaceId: undefined, roleId: "lead" },
+      ),
+    ).rejects.toThrow("minimal owner, scope, or review identity is missing");
     expect(deleteAgentState).not.toHaveBeenCalled();
     expect(client.createdConfigs).toHaveLength(0);
   } finally {

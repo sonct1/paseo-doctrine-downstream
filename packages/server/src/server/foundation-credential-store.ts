@@ -122,6 +122,12 @@ export class FoundationCredentialStore {
     return { credentialRef: validRef, configured: isFoundationCredentialFileConfigured(filePath) };
   }
 
+  /** Server-internal credential access. Never expose this value through RPC or diagnostics. */
+  public readApiKeyForInternalUse(credentialRef: string): string | null {
+    const validRef = FoundationCredentialRefSchema.parse(credentialRef);
+    return readConfiguredApiKey(loadPersistedConfig(this.paseoHome), validRef);
+  }
+
   public set(credentialRef: string, rawApiKey: string): FoundationCredentialStatus {
     const validRef = FoundationCredentialRefSchema.parse(credentialRef);
     const apiKey = rawApiKey.trim();

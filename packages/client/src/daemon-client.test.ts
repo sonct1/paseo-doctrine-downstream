@@ -756,6 +756,33 @@ test("passes password as HTTP bearer header and WebSocket subprotocol", async ()
   });
 });
 
+test("passes custom headers and keeps password authorization authoritative", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const transportFactory = vi.fn(() => mock.transport);
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    password: "shared-secret",
+    headers: { "X-Tenant": "acme", Authorization: "Bearer ignored" },
+    logger,
+    reconnect: { enabled: false },
+    transportFactory,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  expect(transportFactory).toHaveBeenCalledWith({
+    url: "ws://test",
+    headers: { "X-Tenant": "acme", Authorization: "Bearer shared-secret" },
+    protocols: ["paseo.bearer.shared-secret"],
+  });
+});
+
 test("advertises client capabilities in hello", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();
@@ -4035,6 +4062,59 @@ test("detaches an agent through the namespaced detach RPC", async () => {
   );
 
   await expect(promise).resolves.toBeUndefined();
+});
+
+test("signals a Lead through the namespaced coordination RPC", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const promise = client.signalAgent({
+    agentId: "lead-agent",
+    kind: "handoff_recommended",
+    reason: "Context dilution",
+  });
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toMatchObject({
+    type: "agent.coordination_signal.request",
+    agentId: "lead-agent",
+    kind: "handoff_recommended",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.coordination_signal.response",
+      payload: {
+        requestId: request.requestId,
+        agentId: "lead-agent",
+        signal: {
+          id: "signal-1",
+          targetAgentId: "lead-agent",
+          requestedByAgentId: null,
+          kind: "handoff_recommended",
+          reason: "Context dilution",
+          evidenceRefs: [],
+          status: "pending",
+          createdAt: "2026-08-07T00:00:00.000Z",
+          deliveredAt: null,
+          resolvedAt: null,
+        },
+        error: null,
+      },
+    }),
+  );
+
+  await expect(promise).resolves.toMatchObject({ id: "signal-1", status: "pending" });
 });
 
 test("sends active-scoped fetch_agents_request", async () => {

@@ -7,6 +7,8 @@ import { resolveLocalDaemonState } from "./local-daemon.js";
 import { resolveNodePathFromPid } from "./runtime-toolchain.js";
 
 const DAEMON_STATUS_PROBE_TIMEOUT_MS = 1500;
+type ConnectedDaemonClient = Awaited<ReturnType<typeof connectToDaemon>>;
+type ReportedDaemonStatus = Awaited<ReturnType<ConnectedDaemonClient["getDaemonStatus"]>>;
 
 interface ProviderBinaryStatus {
   label: string;
@@ -34,6 +36,11 @@ interface DaemonStatus {
   cliNode: string;
   cliVersion: string;
   daemonVersion: string | null;
+  sourceRoot: string | null;
+  sourceCommit: string | null;
+  sourceDirty: boolean | null;
+  sourceFingerprint: string | null;
+  builtAt: string | null;
   desktopManaged: boolean;
   providers: ProviderBinaryStatus[];
   note?: string;
@@ -115,29 +122,35 @@ function createStatusSchema(status: DaemonStatus): OutputSchema<StatusRow> {
   };
 }
 
+function formatStatusValue(value: string | number | boolean | null): string {
+  return value === null ? "-" : String(value);
+}
+
 function toStatusRows(status: DaemonStatus): StatusRow[] {
   const rows: StatusRow[] = [
-    { key: "Server ID", value: status.serverId ?? "-" },
+    { key: "Server ID", value: formatStatusValue(status.serverId) },
     { key: "Local Daemon", value: status.localDaemon },
     { key: "Connected Daemon", value: status.connectedDaemon },
-    { key: "Connected Server ID", value: status.connectedServerId ?? "-" },
-    {
-      key: "Connected PID",
-      value: status.connectedPid === null ? "-" : String(status.connectedPid),
-    },
-    { key: "Connected Listen", value: status.connectedListen ?? "-" },
+    { key: "Connected Server ID", value: formatStatusValue(status.connectedServerId) },
+    { key: "Connected PID", value: formatStatusValue(status.connectedPid) },
+    { key: "Connected Listen", value: formatStatusValue(status.connectedListen) },
     { key: "Home", value: status.home },
     { key: "Listen", value: status.listen },
     { key: "Relay", value: status.relay },
-    { key: "Hostname", value: status.hostname ?? "-" },
-    { key: "PID", value: status.pid === null ? "-" : String(status.pid) },
-    { key: "Started", value: status.startedAt ?? "-" },
-    { key: "Owner", value: status.owner ?? "-" },
+    { key: "Hostname", value: formatStatusValue(status.hostname) },
+    { key: "PID", value: formatStatusValue(status.pid) },
+    { key: "Started", value: formatStatusValue(status.startedAt) },
+    { key: "Owner", value: formatStatusValue(status.owner) },
     { key: "Logs", value: status.logPath },
     { key: "Daemon Node", value: status.daemonNode },
     { key: "CLI Node", value: status.cliNode },
     { key: "CLI", value: status.cliVersion },
-    { key: "Daemon Version", value: status.daemonVersion ?? "-" },
+    { key: "Daemon Version", value: formatStatusValue(status.daemonVersion) },
+    { key: "Source Root", value: formatStatusValue(status.sourceRoot) },
+    { key: "Source Commit", value: formatStatusValue(status.sourceCommit) },
+    { key: "Source Dirty", value: formatStatusValue(status.sourceDirty) },
+    { key: "Source Fingerprint", value: formatStatusValue(status.sourceFingerprint) },
+    { key: "Built At", value: formatStatusValue(status.builtAt) },
   ];
 
   if (status.note) {
@@ -214,6 +227,11 @@ interface DaemonProbeResult {
   connectedListen?: string | null;
   localDaemonOverride?: DaemonStatus["localDaemon"];
   daemonVersion?: string | null;
+  sourceRoot?: string | null;
+  sourceCommit?: string | null;
+  sourceDirty?: boolean | null;
+  sourceFingerprint?: string | null;
+  builtAt?: string | null;
   daemonNodeOverride?: string;
   daemonProviders?: ProviderBinaryStatus[];
   relayStatus?: string;
@@ -236,12 +254,52 @@ function describeDaemonAuthProbeFailure(host: string, failure: DaemonAuthProbeFa
   return `Daemon is reachable at ${host} but the supplied password was rejected. Check PASEO_PASSWORD and retry.`;
 }
 
+function buildReachableDaemonProbe(
+  status: ReportedDaemonStatus,
+  handshakeVersion: string | null,
+  state: ReturnType<typeof resolveLocalDaemonState>,
+): DaemonProbeResult {
+  const labelMap = new Map(PROVIDER_BINARIES.map((provider) => [provider.binary, provider.label]));
+  const daemonProviders = status.providers.map((provider) => ({
+    label: labelMap.get(provider.provider) ?? provider.provider,
+    path: provider.available ? "available" : null,
+    version: provider.available ? null : (provider.error ?? null),
+    source: "daemon" as const,
+  }));
+  const result: DaemonProbeResult = {
+    connectedDaemon: "reachable",
+    connectedServerId: status.serverId,
+    connectedPid: status.pid,
+    connectedListen: status.listen,
+    daemonVersion: status.version ?? handshakeVersion,
+    sourceRoot: status.sourceRoot ?? null,
+    sourceCommit: status.sourceCommit ?? null,
+    sourceDirty: status.sourceDirty ?? null,
+    sourceFingerprint: status.sourceFingerprint ?? null,
+    builtAt: status.builtAt ?? null,
+    daemonNodeOverride: status.nodePath,
+    daemonProviders,
+  };
+  if (status.relay != null) {
+    result.relayStatus = selectRelayStatus({
+      persisted: relayConfigFromLocalState(state),
+      live: status.relay,
+    });
+  }
+  if (!state.running) {
+    result.note = state.pidInfo
+      ? `Connected daemon is reachable even though local daemon PID ${state.pidInfo.pid} is stale`
+      : "Connected daemon is reachable but no local daemon PID file was found";
+  }
+  return result;
+}
+
 async function probeDaemonOverWebsocket(args: {
   host: string;
   state: ReturnType<typeof resolveLocalDaemonState>;
 }): Promise<DaemonProbeResult> {
   const { host, state } = args;
-  let client: Awaited<ReturnType<typeof connectToDaemon>>;
+  let client: ConnectedDaemonClient;
   try {
     client = await connectToDaemon({ host, timeout: 1500 });
   } catch (error) {
@@ -268,47 +326,7 @@ async function probeDaemonOverWebsocket(args: {
     const statusPayload = await client.getDaemonStatus({
       timeout: DAEMON_STATUS_PROBE_TIMEOUT_MS,
     });
-    const labelMap = new Map(PROVIDER_BINARIES.map((p) => [p.binary, p.label]));
-    const daemonProviders = statusPayload.providers.map((p) => ({
-      label: labelMap.get(p.provider) ?? p.provider,
-      path: p.available ? "available" : null,
-      version: p.available ? null : (p.error ?? null),
-      source: "daemon" as const,
-    }));
-    const relayStatus =
-      statusPayload.relay == null
-        ? undefined
-        : selectRelayStatus({
-            persisted: relayConfigFromLocalState(state),
-            live: statusPayload.relay,
-          });
-
-    if (!state.running) {
-      return {
-        connectedDaemon: "reachable",
-        connectedServerId: statusPayload.serverId,
-        connectedPid: statusPayload.pid,
-        connectedListen: statusPayload.listen,
-        daemonVersion: statusPayload.version ?? daemonVersion,
-        daemonNodeOverride: statusPayload.nodePath,
-        daemonProviders,
-        relayStatus,
-        note: state.pidInfo
-          ? `Connected daemon is reachable at ${host} even though local daemon PID ${state.pidInfo.pid} is stale`
-          : `Connected daemon is reachable at ${host} but no local daemon PID file was found`,
-      };
-    }
-
-    return {
-      connectedDaemon: "reachable",
-      connectedServerId: statusPayload.serverId,
-      connectedPid: statusPayload.pid,
-      connectedListen: statusPayload.listen,
-      daemonVersion: statusPayload.version ?? daemonVersion,
-      daemonNodeOverride: statusPayload.nodePath,
-      daemonProviders,
-      relayStatus,
-    };
+    return buildReachableDaemonProbe(statusPayload, daemonVersion, state);
   } catch {
     return {
       connectedDaemon: "reachable",
@@ -331,6 +349,11 @@ interface ProbeMergeState {
   localDaemon: DaemonStatus["localDaemon"];
   daemonNode: string;
   daemonVersion: string | null;
+  sourceRoot: string | null;
+  sourceCommit: string | null;
+  sourceDirty: boolean | null;
+  sourceFingerprint: string | null;
+  builtAt: string | null;
   daemonProviders: ProviderBinaryStatus[] | undefined;
   relayStatus: string;
   note: string | undefined;
@@ -347,6 +370,12 @@ function applyProbeToStatus(input: ProbeMergeState): Omit<ProbeMergeState, "prob
     localDaemon: probe.localDaemonOverride ?? input.localDaemon,
     daemonNode: probe.daemonNodeOverride ?? input.daemonNode,
     daemonVersion: probe.daemonVersion !== undefined ? probe.daemonVersion : input.daemonVersion,
+    sourceRoot: probe.sourceRoot !== undefined ? probe.sourceRoot : input.sourceRoot,
+    sourceCommit: probe.sourceCommit !== undefined ? probe.sourceCommit : input.sourceCommit,
+    sourceDirty: probe.sourceDirty !== undefined ? probe.sourceDirty : input.sourceDirty,
+    sourceFingerprint:
+      probe.sourceFingerprint !== undefined ? probe.sourceFingerprint : input.sourceFingerprint,
+    builtAt: probe.builtAt !== undefined ? probe.builtAt : input.builtAt,
     daemonProviders: probe.daemonProviders ?? input.daemonProviders,
     relayStatus: probe.relayStatus ?? input.relayStatus,
     note: probe.note ? appendNote(input.note, probe.note) : input.note,
@@ -422,6 +451,11 @@ export async function runStatusCommand(
   let connectedPid: number | null = null;
   let connectedListen: string | null = null;
   let daemonVersion: string | null = null;
+  let sourceRoot: string | null = null;
+  let sourceCommit: string | null = null;
+  let sourceDirty: boolean | null = null;
+  let sourceFingerprint: string | null = null;
+  let builtAt: string | null = null;
   let daemonProviders: ProviderBinaryStatus[] | undefined;
   let relayStatus = selectRelayStatus({ persisted: relayConfigFromLocalState(state) });
   let note: string | undefined;
@@ -441,6 +475,11 @@ export async function runStatusCommand(
       localDaemon,
       daemonNode,
       daemonVersion,
+      sourceRoot,
+      sourceCommit,
+      sourceDirty,
+      sourceFingerprint,
+      builtAt,
       daemonProviders,
       relayStatus,
       note,
@@ -453,6 +492,11 @@ export async function runStatusCommand(
       localDaemon,
       daemonNode,
       daemonVersion,
+      sourceRoot,
+      sourceCommit,
+      sourceDirty,
+      sourceFingerprint,
+      builtAt,
       daemonProviders,
       relayStatus,
       note,
@@ -488,6 +532,11 @@ export async function runStatusCommand(
     cliNode,
     cliVersion,
     daemonVersion,
+    sourceRoot,
+    sourceCommit,
+    sourceDirty,
+    sourceFingerprint,
+    builtAt,
     desktopManaged: state.pidInfo?.desktopManaged === true,
     providers,
     note,

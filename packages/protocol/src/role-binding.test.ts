@@ -24,17 +24,13 @@ describe("Paseo role binding protocol", () => {
       injectionMethod: "codex-developer-instructions",
     });
     expect(() => ProviderRoleBindingSupportSchema.parse({ status: "unsupported" })).toThrow();
-    expect(
+    expect(() =>
       ProviderRoleBindingSupportSchema.parse({
         status: "candidate",
         injectionMethod: "cursor-always-apply-plugin",
         reason: "runtime canary required",
       }),
-    ).toEqual({
-      status: "candidate",
-      injectionMethod: "cursor-always-apply-plugin",
-      reason: "runtime canary required",
-    });
+    ).toThrow();
   });
 
   test("role receipts contain no materialized instruction bytes", () => {

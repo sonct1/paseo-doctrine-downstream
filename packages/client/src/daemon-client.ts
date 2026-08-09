@@ -301,6 +301,7 @@ export interface DaemonClientConfig {
   runtimeGeneration?: number | null;
   password?: string;
   authHeader?: string;
+  headers?: Record<string, string>;
   suppressSendErrors?: boolean;
   transportFactory?: DaemonTransportFactory;
   webSocketFactory?: WebSocketFactory;
@@ -1251,7 +1252,7 @@ export class DaemonClient {
       return;
     }
 
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...this.config.headers };
     const password = normalizePassword(this.config.password);
     if (password) {
       headers.Authorization = `Bearer ${password}`;
@@ -2107,6 +2108,7 @@ export class DaemonClient {
       type: "fetch_agent_history_request",
       requestId: resolvedRequestId,
       ...(options?.filter ? { filter: options.filter } : {}),
+      ...(options?.search ? { search: options.search } : {}),
       ...(options?.sort ? { sort: options.sort } : {}),
       ...(options?.page ? { page: options.page } : {}),
     });
@@ -2557,6 +2559,26 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "detachAgent rejected");
     }
+  }
+
+  async signalAgent(input: {
+    agentId: string;
+    kind: "handoff_recommended" | "detach_recommended";
+    reason: string;
+    relatedAgentId?: string;
+    evidenceRefs?: string[];
+  }) {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"agent.coordination_signal.response">({
+        message: {
+          type: "agent.coordination_signal.request",
+          ...input,
+        },
+      });
+    if (!payload.signal) {
+      throw new Error(payload.error ?? "signalAgent rejected");
+    }
+    return payload.signal;
   }
 
   async updateAgent(
@@ -4630,6 +4652,32 @@ export class DaemonClient {
         credentialRef,
       },
     });
+  }
+
+  async getFoundationProviderConnectionStatus(provider: string, model: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.provider_connection.get_status.response">(
+      {
+        requestId,
+        message: {
+          type: "foundation.provider_connection.get_status.request",
+          provider,
+          model,
+        },
+      },
+    );
+  }
+
+  async testFoundationProviderConnection(provider: string, model: string, requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"foundation.provider_connection.test.response">(
+      {
+        requestId,
+        message: {
+          type: "foundation.provider_connection.test.request",
+          provider,
+          model,
+        },
+      },
+    );
   }
 
   sendBrowserAutomationExecuteResponse(response: BrowserAutomationExecuteResponse): void {

@@ -14,6 +14,10 @@ import {
 } from "./role-binding.js";
 import { LaunchContractReceiptSchema } from "./launch-contract.js";
 import {
+  CoordinationSignalSchema,
+  ManualCoordinationSignalKindSchema,
+} from "./coordination-signal.js";
+import {
   ChatCreateRequestSchema,
   ChatListRequestSchema,
   ChatInspectRequestSchema,
@@ -296,6 +300,8 @@ export const AgentFeatureSchema = z.discriminatedUnion("type", [
 const AgentModelDefinitionSchema = z.object({
   provider: AgentProviderSchema,
   id: z.string(),
+  aliases: z.array(z.string()).optional(),
+  isSelectable: z.boolean().optional(),
   label: z.string(),
   description: z.string().optional(),
   isDefault: z.boolean().optional(),
@@ -794,6 +800,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   providerUnavailable: z.boolean().optional(),
   roleBinding: RoleBindingReceiptSchema.optional(),
   launchContract: LaunchContractReceiptSchema.optional(),
+  coordinationSignals: z.array(CoordinationSignalSchema).optional(),
 });
 
 export type AgentSnapshotPayload = z.infer<typeof AgentSnapshotPayloadSchema>;
@@ -1176,6 +1183,10 @@ export const FetchAgentHistoryRequestMessageSchema = z.object({
   type: z.literal("fetch_agent_history_request"),
   requestId: z.string(),
   filter: AgentDirectoryFilterSchema.optional(),
+  // A ranked free-text query over agent title, workspace name, branch, and
+  // project name. Present only on history: agent subscriptions filter on
+  // structure, not on relevance. Ranking replaces `sort` when it is set.
+  search: z.string().optional(),
   sort: z
     .array(
       z.object({
@@ -1289,6 +1300,23 @@ export const FoundationCredentialsDeleteRequestSchema = z.object({
   requestId: z.string(),
   credentialRef: FoundationCredentialRefSchema,
 });
+
+const FoundationProviderConnectionTargetSchema = z.object({
+  provider: AgentProviderSchema,
+  model: z.string().trim().min(1),
+});
+
+export const FoundationProviderConnectionGetStatusRequestSchema =
+  FoundationProviderConnectionTargetSchema.extend({
+    type: z.literal("foundation.provider_connection.get_status.request"),
+    requestId: z.string(),
+  });
+
+export const FoundationProviderConnectionTestRequestSchema =
+  FoundationProviderConnectionTargetSchema.extend({
+    type: z.literal("foundation.provider_connection.test.request"),
+    requestId: z.string(),
+  });
 
 export const ReadProjectConfigRequestMessageSchema = z.object({
   type: z.literal("read_project_config_request"),
@@ -1602,6 +1630,26 @@ export const AgentDetachRequestMessageSchema = z.object({
 export const AgentDetachResponseMessageSchema = z.object({
   type: z.literal("agent.detach.response"),
   payload: AgentActionResponsePayloadSchema,
+});
+
+export const AgentCoordinationSignalRequestMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.request"),
+  requestId: z.string(),
+  agentId: z.string(),
+  kind: ManualCoordinationSignalKindSchema,
+  reason: CoordinationSignalSchema.shape.reason,
+  relatedAgentId: z.string().min(1).optional(),
+  evidenceRefs: CoordinationSignalSchema.shape.evidenceRefs.optional(),
+});
+
+export const AgentCoordinationSignalResponseMessageSchema = z.object({
+  type: z.literal("agent.coordination_signal.response"),
+  payload: z.object({
+    requestId: z.string(),
+    agentId: z.string(),
+    signal: CoordinationSignalSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const AgentRewindModeSchema = z.enum(["conversation", "files", "both"]);
@@ -2626,6 +2674,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsGetStatusRequestSchema,
   FoundationCredentialsSetRequestSchema,
   FoundationCredentialsDeleteRequestSchema,
+  FoundationProviderConnectionGetStatusRequestSchema,
+  FoundationProviderConnectionTestRequestSchema,
   ReadProjectConfigRequestMessageSchema,
   WriteProjectConfigRequestMessageSchema,
   DictationStreamStartMessageSchema,
@@ -2659,6 +2709,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingRequestMessageSchema,
   SetAgentFeatureRequestMessageSchema,
   AgentDetachRequestMessageSchema,
+  AgentCoordinationSignalRequestMessageSchema,
   AgentRewindRequestMessageSchema,
   AgentPermissionResponseMessageSchema,
   CheckoutStatusRequestSchema,
@@ -2943,6 +2994,8 @@ export const ServerInfoStatusPayloadSchema = z
         rewind: z.boolean().optional(),
         // COMPAT(agentTimelinePromptIndex): added in v0.2.X, drop the gate when floor >= v0.2.X.
         agentTimelinePromptIndex: z.boolean().optional(),
+        // COMPAT(agentHistorySearch): added in v0.3.0, remove gate after 2027-02-07.
+        agentHistorySearch: z.boolean().optional(),
         // COMPAT(checkoutRefresh): added in v0.1.86, remove gate after 2026-11-29.
         checkoutRefresh: z.boolean().optional(),
         // COMPAT(workspaceMultiplicity): added in v0.1.97, drop the gate when floor >= v0.1.97
@@ -2995,6 +3048,8 @@ export const ServerInfoStatusPayloadSchema = z
         paseoToolPolicies: z.boolean().optional(),
         // COMPAT(foundationCredentials): added in v0.3.0, remove after 2027-08-05.
         foundationCredentials: z.boolean().optional(),
+        // COMPAT(providerConnectionQualification): added after v0.3.0-beta.1.paseo.1.
+        providerConnectionQualification: z.boolean().optional(),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.1.106, drop the gate when daemon floor >= v0.1.106.
@@ -3376,9 +3431,31 @@ export const AgentListMessageSchema = z.object({
   }),
 });
 
+export const AgentSearchMatchFieldSchema = z.enum(["workspace", "title", "branch", "project"]);
+
+export const AgentSearchMatchSchema = z.object({
+  field: AgentSearchMatchFieldSchema,
+  ranges: z.array(
+    z.object({
+      start: z.number().int().nonnegative(),
+      length: z.number().int().positive(),
+    }),
+  ),
+});
+
+export type AgentSearchMatch = z.infer<typeof AgentSearchMatchSchema>;
+
 const AgentDirectoryResponseEntrySchema = z.object({
   agent: AgentSnapshotPayloadSchema,
   project: ProjectPlacementPayloadSchema,
+  // Relevance of this entry to the request's `search`, lower being better.
+  // Set only when the request carried a query; a client merging results from
+  // several hosts needs it to interleave their separately ranked pages.
+  searchScore: z.number().optional(),
+  // Where the query matched, so the row can mark it. The ranker computes this
+  // anyway; sending it keeps the client from re-deriving a second opinion that
+  // could disagree with the ranking it is explaining.
+  searchMatches: z.array(AgentSearchMatchSchema).optional(),
 });
 
 const AgentDirectoryPageInfoSchema = z.object({
@@ -3403,6 +3480,10 @@ export const FetchAgentHistoryResponseMessageSchema = z.object({
     requestId: z.string(),
     entries: z.array(AgentDirectoryResponseEntrySchema),
     pageInfo: AgentDirectoryPageInfoSchema,
+    // More sessions matched the request's `search` than the page could hold.
+    // Distinct from `pageInfo.hasMore`, which promises a fetchable next page —
+    // a ranked result set has none, and the way on is a narrower query.
+    searchTruncated: z.boolean().optional(),
   }),
 });
 
@@ -3966,6 +4047,11 @@ export const DaemonGetStatusResponseSchema = z.object({
       pid: z.number(),
       nodePath: z.string(),
       startedAt: z.string().nullable().optional(),
+      sourceRoot: z.string().nullable().optional(),
+      sourceCommit: z.string().nullable().optional(),
+      sourceDirty: z.boolean().nullable().optional(),
+      sourceFingerprint: z.string().nullable().optional(),
+      builtAt: z.string().nullable().optional(),
       listen: z.string().nullable(),
       relay: z
         .object({
@@ -4071,6 +4157,25 @@ export const FoundationCredentialsSetResponseSchema = z.object({
 export const FoundationCredentialsDeleteResponseSchema = z.object({
   type: z.literal("foundation.credentials.delete.response"),
   payload: FoundationCredentialStatusPayloadSchema,
+});
+
+const FoundationProviderConnectionStatusPayloadSchema = z.object({
+  requestId: z.string(),
+  provider: AgentProviderSchema,
+  model: z.string().min(1),
+  status: z.enum(["unqualified", "qualified", "stale"]),
+  qualifiedAt: z.string().datetime().optional(),
+  latencyMs: z.number().int().nonnegative().optional(),
+});
+
+export const FoundationProviderConnectionGetStatusResponseSchema = z.object({
+  type: z.literal("foundation.provider_connection.get_status.response"),
+  payload: FoundationProviderConnectionStatusPayloadSchema,
+});
+
+export const FoundationProviderConnectionTestResponseSchema = z.object({
+  type: z.literal("foundation.provider_connection.test.response"),
+  payload: FoundationProviderConnectionStatusPayloadSchema,
 });
 
 export const ReadProjectConfigResponseMessageSchema = z.object({
@@ -5500,6 +5605,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FoundationCredentialsGetStatusResponseSchema,
   FoundationCredentialsSetResponseSchema,
   FoundationCredentialsDeleteResponseSchema,
+  FoundationProviderConnectionGetStatusResponseSchema,
+  FoundationProviderConnectionTestResponseSchema,
   ReadProjectConfigResponseMessageSchema,
   WriteProjectConfigResponseMessageSchema,
   SetAgentModeResponseMessageSchema,
@@ -5507,6 +5614,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   SetAgentThinkingResponseMessageSchema,
   SetAgentFeatureResponseMessageSchema,
   AgentDetachResponseMessageSchema,
+  AgentCoordinationSignalResponseMessageSchema,
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
@@ -5696,6 +5804,9 @@ export type SetAgentModelResponseMessage = z.infer<typeof SetAgentModelResponseM
 export type SetAgentThinkingResponseMessage = z.infer<typeof SetAgentThinkingResponseMessageSchema>;
 export type SetAgentFeatureResponseMessage = z.infer<typeof SetAgentFeatureResponseMessageSchema>;
 export type AgentDetachResponseMessage = z.infer<typeof AgentDetachResponseMessageSchema>;
+export type AgentCoordinationSignalResponseMessage = z.infer<
+  typeof AgentCoordinationSignalResponseMessageSchema
+>;
 export type AgentRewindResponseMessage = z.infer<typeof AgentRewindResponseMessageSchema>;
 export type UpdateAgentResponseMessage = z.infer<typeof UpdateAgentResponseMessageSchema>;
 export type ProjectRenameResponse = z.infer<typeof ProjectRenameResponseSchema>;
@@ -5859,6 +5970,9 @@ export type SetAgentModelRequestMessage = z.infer<typeof SetAgentModelRequestMes
 export type SetAgentThinkingRequestMessage = z.infer<typeof SetAgentThinkingRequestMessageSchema>;
 export type SetAgentFeatureRequestMessage = z.infer<typeof SetAgentFeatureRequestMessageSchema>;
 export type AgentDetachRequestMessage = z.infer<typeof AgentDetachRequestMessageSchema>;
+export type AgentCoordinationSignalRequestMessage = z.infer<
+  typeof AgentCoordinationSignalRequestMessageSchema
+>;
 export type AgentPermissionResponseMessage = z.infer<typeof AgentPermissionResponseMessageSchema>;
 export type CheckoutStatusRequest = z.infer<typeof CheckoutStatusRequestSchema>;
 export type CheckoutStatusResponse = z.infer<typeof CheckoutStatusResponseSchema>;

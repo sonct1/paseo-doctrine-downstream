@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  AgentSnapshotPayloadSchema,
   FileExplorerRequestSchema,
   PaseoWorktreeArchiveRequestSchema,
   parseServerInfoStatusPayload,
@@ -320,6 +321,104 @@ describe("agent detach RPC", () => {
       throw new Error("Expected server info payload to parse");
     }
     expect(parsed.features?.importSessionWorkspaceTarget).toBe(true);
+  });
+});
+
+describe("agent coordination signal RPC", () => {
+  test("parses a handoff recommendation request and response", () => {
+    const request = SessionInboundMessageSchema.parse({
+      type: "agent.coordination_signal.request",
+      requestId: "req-signal",
+      agentId: "lead-agent",
+      kind: "handoff_recommended",
+      reason: "Context dilution",
+      evidenceRefs: ["room-message-1"],
+    });
+    expect(request.type).toBe("agent.coordination_signal.request");
+
+    const response = SessionOutboundMessageSchema.parse({
+      type: "agent.coordination_signal.response",
+      payload: {
+        requestId: "req-signal",
+        agentId: "lead-agent",
+        signal: {
+          id: "signal-1",
+          targetAgentId: "lead-agent",
+          requestedByAgentId: null,
+          workspaceId: "workspace-1",
+          kind: "handoff_recommended",
+          reason: "Context dilution",
+          evidenceRefs: ["room-message-1"],
+          status: "pending",
+          createdAt: "2026-08-07T00:00:00.000Z",
+          deliveredAt: null,
+          resolvedAt: null,
+        },
+        error: null,
+      },
+    });
+    expect(response.type).toBe("agent.coordination_signal.response");
+  });
+
+  test("keeps native continuity attention out of the Human request surface", () => {
+    expect(() =>
+      SessionInboundMessageSchema.parse({
+        type: "agent.coordination_signal.request",
+        requestId: "req-native-signal",
+        agentId: "lead-agent",
+        kind: "continuity_attention",
+        reason: "Native telemetry only",
+      }),
+    ).toThrow();
+
+    const parsed = AgentSnapshotPayloadSchema.parse({
+      id: "lead-agent",
+      provider: "codex",
+      cwd: "/repo",
+      model: null,
+      createdAt: "2026-08-07T00:00:00.000Z",
+      updatedAt: "2026-08-07T00:00:00.000Z",
+      lastUserMessageAt: null,
+      status: "idle",
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsDynamicModes: true,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+      },
+      currentModeId: null,
+      availableModes: [],
+      pendingPermissions: [],
+      persistence: null,
+      title: null,
+      labels: {},
+      coordinationSignals: [
+        {
+          id: "native-1",
+          targetAgentId: "lead-agent",
+          requestedByAgentId: null,
+          kind: "continuity_attention",
+          trigger: "context_pressure",
+          severity: "warning",
+          recipientRole: "lead",
+          source: { kind: "paseo", ruleId: "lead_context_pressure", version: 1 },
+          reason: "Review continuity",
+          evidenceRefs: [],
+          evidence: { contextRatio: 0.9 },
+          status: "pending",
+          createdAt: "2026-08-07T00:00:00.000Z",
+          deliveredAt: null,
+          resolvedAt: null,
+        },
+      ],
+    });
+    expect(parsed.coordinationSignals?.[0]?.source).toEqual({
+      kind: "paseo",
+      ruleId: "lead_context_pressure",
+      version: 1,
+    });
   });
 });
 

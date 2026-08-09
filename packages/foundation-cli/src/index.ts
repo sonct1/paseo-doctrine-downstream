@@ -22,6 +22,8 @@ interface CommonOptions {
 interface PlanOptions extends CommonOptions {
   mode: InstallMode;
   output?: string;
+  withControlWorkspace?: boolean;
+  withoutControlWorkspace?: boolean;
 }
 
 interface ApplyOptions {
@@ -68,6 +70,9 @@ function printPlan(plan: InstallPlan): void {
   process.stdout.write(`Plan ${plan.planId}\n`);
   process.stdout.write(`Mode ${plan.mode}\n`);
   process.stdout.write(`Foundation ${plan.distributionVersion}\n`);
+  process.stdout.write(
+    `Control Workspace ${plan.includeControlWorkspace ? "included (experimental)" : "not included"}\n`,
+  );
   if (plan.blockers.length === 0) {
     process.stdout.write("Status READY\n");
   } else {
@@ -79,7 +84,11 @@ function printPlan(plan: InstallPlan): void {
 function printRecord(record: InstallRecord): void {
   process.stdout.write(`Foundation ${record.distributionVersion}: ${record.status}\n`);
   process.stdout.write(`Release ${record.releasePath}\n`);
-  process.stdout.write(`Control Workspace ${record.controlHome}\n`);
+  process.stdout.write(
+    record.controlHome
+      ? `Control Workspace ${record.controlHome}\n`
+      : "Control Workspace not included\n",
+  );
 }
 
 function printDoctor(report: DoctorReport): void {
@@ -120,13 +129,25 @@ program
   )
   .option("--home <path>", "User home to inspect")
   .option("--product-root <path>", "Product checkout or packaged assets root")
+  .option("--with-control-workspace", "Include the experimental mutable Control Workspace Home")
+  .option(
+    "--without-control-workspace",
+    "Do not include or preserve the experimental mutable Control Workspace Home",
+  )
   .option("--output <path>", "Write the plan as private JSON")
   .option("--json", "Print JSON")
   .action((options: PlanOptions) => {
+    if (options.withControlWorkspace && options.withoutControlWorkspace) {
+      throw new Error("choose only one of --with-control-workspace or --without-control-workspace");
+    }
+    let includeControlWorkspace: boolean | undefined;
+    if (options.withControlWorkspace) includeControlWorkspace = true;
+    if (options.withoutControlWorkspace) includeControlWorkspace = false;
     const plan = createInstallPlan({
       mode: options.mode,
       home: resolvedHome(options.home),
       productRoot: options.productRoot,
+      includeControlWorkspace,
     });
     if (options.output) writeInstallPlan(options.output, plan);
     if (options.json) writeJson(plan);

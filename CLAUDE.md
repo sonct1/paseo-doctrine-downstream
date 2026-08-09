@@ -43,6 +43,9 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/custom-providers.md](docs/custom-providers.md)               | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
 | [docs/native-role-binding.md](docs/native-role-binding.md)         | Native Foundation roles, immutable launch contracts, provider capability, and qualification gates                              |
 | [docs/foundation-product.md](docs/foundation-product.md)           | Foundation distribution, macOS installer, Control Workspace, WebUI provider credentials                                        |
+| [docs/foundation-doctrine.md](docs/foundation-doctrine.md)         | Foundation doctrine, authority model, evidence rules, topology, and product additions                                          |
+| [docs/slp-usage.md](docs/slp-usage.md)                             | Operating guidance for Supervisor, Lead, and Peer                                                                              |
+| [docs/skill-system.md](docs/skill-system.md)                       | Paseo workflow skills, Foundation role bundles, admission, triggers, and provider projection                                   |
 | [docs/dev-pilot.md](docs/dev-pilot.md)                             | Controlled macOS dev-pilot install, qualification, stop conditions, rollback, and known limits                                 |
 | [docs/service-proxy.md](docs/service-proxy.md)                     | Service proxy: exposing workspace scripts at public URLs, DNS setup, reverse proxy config                                      |
 | [docs/development.md](docs/development.md)                         | Dev server, build sync gotchas, CLI reference, agent state, Playwright MCP                                                     |
@@ -106,7 +109,7 @@ See [docs/development.md](docs/development.md) for full setup, build sync requir
 
 ## Critical rules
 
-- **NEVER restart the main Paseo daemon on port 6767 without permission** — it manages all running agents. If you're an agent, restarting it kills your own process.
+- **After daemon/runtime-facing changes, build and reload or restart the main Paseo daemon on port 6767 without asking again only when fresh authoritative readback shows no agent in a running/starting state and no workspace script running.** If work is active or the state cannot be determined, do not restart; report the blocker. A restart must use the current checkout build and preserve the existing home/listen/relay/WebUI settings unless the Human requests a change.
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER add auth checks to tests** — agent providers handle their own auth.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**

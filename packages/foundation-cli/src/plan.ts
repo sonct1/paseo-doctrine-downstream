@@ -22,7 +22,11 @@ function planDigest(plan: Omit<InstallPlan, "planId">): string {
   return createHash("sha256").update(JSON.stringify(plan)).digest("hex");
 }
 
-function blockersFor(input: { inspection: MachineInspection; mode: InstallMode }): string[] {
+function blockersFor(input: {
+  inspection: MachineInspection;
+  mode: InstallMode;
+  includeControlWorkspace: boolean;
+}): string[] {
   const blockers: string[] = [];
   if (input.inspection.platform !== "darwin") {
     blockers.push(`macOS is required; detected ${input.inspection.platform}`);
@@ -38,7 +42,7 @@ function blockersFor(input: { inspection: MachineInspection; mode: InstallMode }
     if (input.inspection.legacyInstallRecordPresent) {
       blockers.push("a legacy Paseo Foundation install record requires migration mode");
     }
-    if (input.inspection.controlHomePresent)
+    if (input.includeControlWorkspace && input.inspection.controlHomePresent)
       blockers.push("the Control Workspace Home already exists");
     if (input.inspection.releasePresent)
       blockers.push("the target Foundation release already exists");
@@ -59,23 +63,28 @@ export function createInstallPlan(input: {
   environmentPath?: string;
   platform?: string;
   architecture?: string;
+  includeControlWorkspace?: boolean;
 }): InstallPlan {
   const mode = InstallModeSchema.parse(input.mode);
   const inspection = inspectMachine(input);
-  return createInstallPlanFromInspection(mode, inspection);
+  return createInstallPlanFromInspection(mode, inspection, input.includeControlWorkspace);
 }
 
 export function createInstallPlanFromInspection(
   modeInput: InstallMode,
   inspection: MachineInspection,
+  includeControlWorkspace?: boolean,
 ): InstallPlan {
   const mode = InstallModeSchema.parse(modeInput);
   const install = resolveInstallLayout({
     home: inspection.home,
     distributionVersion: inspection.distributionVersion,
   });
+  const resolvedIncludeControlWorkspace =
+    includeControlWorkspace ??
+    (mode === "update" && inspection.installRecord?.controlHome === install.controlHome);
   const planWithoutId: Omit<InstallPlan, "planId"> = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode,
     home: inspection.home,
     productRoot: inspection.productRoot,
@@ -83,7 +92,9 @@ export function createInstallPlanFromInspection(
     foundationCommit: inspection.foundationCommit,
     releasePath: install.releasePath,
     currentLink: install.currentLink,
-    controlHome: install.controlHome,
+    includeControlWorkspace: resolvedIncludeControlWorkspace,
+    controlHome: resolvedIncludeControlWorkspace ? install.controlHome : null,
+    controlHomePresent: resolvedIncludeControlWorkspace ? inspection.controlHomePresent : null,
     inspectionFingerprint: inspection.mutationFingerprint,
     links: inspection.links.map(({ source, target, state, previousTarget }) => ({
       source,
@@ -91,7 +102,11 @@ export function createInstallPlanFromInspection(
       state,
       previousTarget,
     })),
-    blockers: blockersFor({ inspection, mode }),
+    blockers: blockersFor({
+      inspection,
+      mode,
+      includeControlWorkspace: resolvedIncludeControlWorkspace,
+    }),
   };
   return InstallPlanSchema.parse({ ...planWithoutId, planId: planDigest(planWithoutId) });
 }
@@ -104,6 +119,16 @@ export function verifyPlanIdentity(plan: InstallPlan): void {
 
 export function readInstallPlan(filePath: string): InstallPlan {
   const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "schemaVersion" in parsed &&
+    parsed.schemaVersion === 1
+  ) {
+    throw new Error(
+      "install plan schema version 1 predates explicit Control Workspace selection; generate a fresh plan",
+    );
+  }
   const plan = InstallPlanSchema.parse(parsed);
   verifyPlanIdentity(plan);
   return plan;

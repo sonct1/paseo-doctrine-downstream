@@ -27,8 +27,22 @@ describe("native release version", () => {
     });
   });
 
+  it("accepts stable downstream provenance without changing the upstream native stable slot", () => {
+    expect(getNativeReleaseVersion("0.3.0-paseo.1")).toEqual({
+      appVersion: "0.3.0",
+      androidVersionCode: 3000,
+      iosBuildNumber: "3000999",
+    });
+  });
+
   it("rejects a zero downstream revision", () => {
     expect(() => getNativeReleaseVersion("0.3.0-beta.1.paseo.0")).toThrow(
+      "Paseo downstream revision must be at least 1",
+    );
+  });
+
+  it("rejects a zero stable downstream revision", () => {
+    expect(() => getNativeReleaseVersion("0.3.0-paseo.0")).toThrow(
       "Paseo downstream revision must be at least 1",
     );
   });

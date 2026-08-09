@@ -11,6 +11,7 @@ import { DaemonSelfUpdateSessionController } from "./daemon-self-update-session-
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
+import { DAEMON_BUILD_PROVENANCE } from "../../build-provenance.js";
 
 export interface DaemonRuntimeConfig {
   listen: string | null;
@@ -168,6 +169,7 @@ export class DaemonSession {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: pidInfo?.startedAt ?? null,
+          ...DAEMON_BUILD_PROVENANCE,
           listen: this.daemonRuntimeConfig?.listen ?? null,
           relay: this.daemonRuntimeConfig?.getRelayConfig() ?? null,
           providers,
@@ -184,6 +186,7 @@ export class DaemonSession {
           pid: process.pid,
           nodePath: process.execPath,
           startedAt: null,
+          ...DAEMON_BUILD_PROVENANCE,
           listen: null,
           relay: null,
           providers: [],

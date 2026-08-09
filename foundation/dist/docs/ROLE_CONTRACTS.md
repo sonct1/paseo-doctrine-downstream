@@ -24,7 +24,7 @@ Provider/profile/mode chỉ transport capability. Authority đến từ current 
 - Một moving/coupled scope có đúng một write Owner.
 - Unknown giữ là `unknown`; test pass không tự là acceptance.
 - Creator đặt workspace title theo objective. Title không cấp authority.
-- Không restart daemon hoặc đổi global/runtime config ngoài explicit Human lease.
+- Sau thay đổi chạm daemon/runtime, chỉ build và reload/restart main Paseo daemon khi fresh authoritative readback chứng minh không có agent `running`/`starting` và không có workspace script đang chạy. Nếu state active hoặc không xác định chắc thì không restart; activation phải giữ nguyên home/listen/relay/WebUI settings trừ khi Human yêu cầu đổi.
 - Provider/model/effort được discover rồi đúng authority pin cho assignment; route không cấp authority và không silent fallback.
 
 ## Lead

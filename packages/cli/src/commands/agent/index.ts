@@ -14,6 +14,7 @@ import { addReloadOptions, runReloadCommand } from "./reload.js";
 import { addImportOptions, runImportCommand } from "./import.js";
 import { runUpdateCommand } from "./update.js";
 import { runDetachCommand } from "./detach.js";
+import { runSignalCommand } from "./signal.js";
 import { addOpenOptions, runOpenCommand } from "./open.js";
 import { withOutput } from "../../output/index.js";
 import {
@@ -88,6 +89,22 @@ export function createAgentCommand(): Command {
       .description("Make a subagent independent without stopping or moving it")
       .argument("<id>", "Agent ID, prefix, or name"),
   ).action(withOutput(runDetachCommand));
+
+  addJsonAndDaemonHostOptions(
+    agent
+      .command("signal")
+      .description("Send a non-interrupting handoff or detach recommendation to a Lead")
+      .argument("<id>", "Lead agent ID, prefix, or name")
+      .requiredOption("--kind <kind>", "Recommendation kind: handoff or detach")
+      .requiredOption("--reason <text>", "Concise material reason for the recommendation")
+      .option("--related-agent <id>", "Agent related to a detach recommendation")
+      .option(
+        "--evidence <ref>",
+        "Evidence reference (can be repeated or comma-separated)",
+        collectMultiple,
+        [],
+      ),
+  ).action(withOutput(runSignalCommand));
 
   addJsonAndDaemonHostOptions(
     agent

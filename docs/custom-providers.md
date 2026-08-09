@@ -214,6 +214,9 @@ For a role-first launch, Paseo pins the logical provider, model, URL and command
 
 Tạo provider và lưu key qua **Settings → Host → Providers → Add provider** là flow khuyến nghị. WebUI gửi
 secret bằng credential RPC; secret không đi qua provider config. JSON trên chỉ minh họa phần non-secret.
+Trong UI, loại provider này được gọi là **Custom Codex**. Sau khi lưu, mở **Connection → Test connection**
+để probe exact model qua Responses API. Receipt hợp lệ không chứa key hoặc URL và tự chuyển sang stale khi
+route, model, credential hoặc daemon version thay đổi.
 
 ### What Paseo wires up
 
@@ -241,6 +244,7 @@ args = ["-e", "<Paseo credential reader>", "<private credential projection>"]
 
 - The endpoint must speak the OpenAI **Responses API**, not just chat completions. Many gateways (OpenRouter, LiteLLM) support both — pick the Responses-compatible route.
 - Set a model explicitly. Custom endpoints expose their own model IDs, and Paseo neither discovers them automatically nor inherits the built-in Codex subscription catalog.
+- Nếu exact model ID trùng model trong Codex runtime catalog, Paseo chỉ reuse metadata `thinkingOptions` và default thinking level cho model đã cấu hình; các model subscription khác vẫn bị loại khỏi custom provider.
 - To run multiple endpoints side-by-side, define multiple entries that each extend `"codex"` with different IDs, labels, and env. Each appears as its own provider in the app.
 - If you only want to override the binary (e.g. a nightly Codex build) without changing the endpoint, omit `OPENAI_BASE_URL` and use `command` instead — see [Custom binary for a provider](#custom-binary-for-a-provider).
 - Missing model, URL, `credentialRef`, configured key, or a provider launch error is terminal for that create attempt; Paseo does not retry through the subscription route.
@@ -748,7 +752,7 @@ Each entry in the `models` array:
 
 The built-in `claude` provider appends concrete model IDs from `~/.claude/settings.json` to its first-party Claude model list. Paseo reads the top-level `model` field and these `env` keys: `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL`.
 
-This lets users who already configured Claude Code for Bedrock, OpenRouter, ollama, Z.AI, or another Anthropic-compatible gateway select the exact model ID in Paseo. When `agents.providers.claude.models` is set it **replaces** both the hardcoded first-party Claude list and any settings.json-discovered entries; use `agents.providers.claude.additionalModels` to keep the first-party list and append curated entries on top.
+This lets users who already configured Claude Code for Bedrock, OpenRouter, ollama, Z.AI, or another Anthropic-compatible gateway select the exact model ID in Paseo. Explicit model IDs are passed unchanged to Claude Code, even when the same string is a compatibility alias for a built-in model. When `agents.providers.claude.models` is set it **replaces** both the hardcoded first-party Claude list and any settings.json-discovered entries; use `agents.providers.claude.additionalModels` to keep the first-party list and append curated entries on top.
 
 ### Gotcha: `extends: "claude"` with third-party endpoints
 

@@ -39,7 +39,11 @@ quan sát orchestration và không bypass Lead trong ordinary work; exact Human 
 phép bounded stop/freeze hoặc decision relay theo [`docs/ROLE_CONTRACTS.md`](docs/ROLE_CONTRACTS.md).
 Mỗi moving/coupled scope chỉ có một write Owner.
 
-Không restart daemon hoặc đổi global/runtime activation ngoài explicit Human approval.
+Sau thay đổi chạm daemon/runtime, được tự build và reload hoặc restart main Paseo daemon mà không cần xin
+approval lại khi fresh authoritative readback chứng minh không có agent ở trạng thái running/starting và
+không có workspace script đang chạy. Nếu có active work hoặc không xác định chắc live state thì không
+restart và handback blocker. Restart phải dùng current checkout build, giữ nguyên home/listen/relay/WebUI
+settings trừ khi Human yêu cầu đổi.
 
 ## Simplicity và evidence
 

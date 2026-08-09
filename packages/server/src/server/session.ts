@@ -31,6 +31,7 @@ import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
 import { CursorError } from "./pagination/cursor.js";
 import { SortablePager, type SortSpec } from "./pagination/sortable-pager.js";
+import { describeAgentHistoryMatches, rankAgentHistoryCandidates } from "./agent-history-search.js";
 import type { SpeechToTextProvider, TextToSpeechProvider } from "./speech/speech-provider.js";
 import type { TurnDetectionProvider } from "./speech/turn-detection-provider.js";
 import {
@@ -45,6 +46,7 @@ import {
   waitForAgentRunStartWithTimeout,
   unarchiveAgentState,
 } from "./agent/agent-prompt.js";
+import { requestCoordinationSignal } from "./agent/coordination-signals.js";
 import {
   resolveCreateAgentTitles,
   resolveFirstAgentPromptTitle,
@@ -60,9 +62,14 @@ import {
 } from "./session/workspace-scripts/workspace-scripts-service.js";
 import type { DaemonConfigStore } from "./daemon-config-store.js";
 import { loadPersistedConfig } from "./persisted-config.js";
+import { FoundationProviderConnectionService } from "./foundation-provider-connection-service.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
 import { getErrorMessage, getErrorMessageOr } from "@getpaseo/protocol/error-utils";
 import { getAgentStatusPriority } from "@getpaseo/protocol/agent-state-bucket";
+
+function connectionQualificationDaemonVersion(daemonVersion: string | undefined): string {
+  return daemonVersion === undefined ? "unknown" : daemonVersion;
+}
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 import type { WorkspaceGitRuntimeSnapshot, WorkspaceGitService } from "./workspace-git-service.js";
 import type { ProjectUpdate } from "./workspace-reconciliation-service.js";
@@ -174,7 +181,6 @@ import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import {
   archivePersistedWorkspaceRecord,
   archiveWorkspaceContents,
-  requireActiveWorkspaceForArchive,
 } from "./workspace-archive-service.js";
 import type { ServiceProxySubsystem } from "./service-proxy.js";
 import { renameCurrentBranch as renameCurrentBranchDefault } from "../utils/checkout-git.js";
@@ -242,6 +248,13 @@ import {
   handleWorkspaceSetupStatusRequest as handleWorkspaceSetupStatusRequestMessage,
 } from "./worktree-session.js";
 import { archiveByScope, type ActiveWorkspaceRef } from "./workspace-archive-service.js";
+import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
+
+function resolveWorkspaceSetupRuntime(
+  runtime: WorkspaceSetupRuntime | undefined,
+): WorkspaceSetupRuntime {
+  return runtime ?? new WorkspaceSetupRuntime();
+}
 import { WorktreeRequestError, toWorktreeWireError } from "./worktree-errors.js";
 import { parseGitRemoteLocation } from "@getpaseo/protocol/git-remote";
 import {
@@ -344,6 +357,15 @@ type FetchAgentHistoryRequestMessage = Extract<
   { type: "fetch_agent_history_request" }
 >;
 type AgentDirectoryRequestMessage = FetchAgentsRequestMessage | FetchAgentHistoryRequestMessage;
+
+/**
+ * Only history carries a query. The active-agents directory filters on
+ * structure and never ranks, so it always reads as no query at all.
+ */
+function agentDirectorySearchQuery(request: AgentDirectoryRequestMessage): string {
+  if (request.type !== "fetch_agent_history_request") return "";
+  return request.search?.trim() ?? "";
+}
 type FetchAgentsRequestFilter = NonNullable<FetchAgentsRequestMessage["filter"]>;
 type FetchAgentsRequestSort = NonNullable<FetchAgentsRequestMessage["sort"]>[number];
 type FetchAgentsResponsePayload = Extract<
@@ -460,6 +482,7 @@ export interface SessionOptions {
   serviceProxy?: ServiceProxySubsystem;
   scriptRuntimeStore?: WorkspaceScriptRuntimeStore;
   workspaceSetupSnapshots?: Map<string, WorkspaceSetupSnapshot>;
+  workspaceSetupRuntime?: WorkspaceSetupRuntime;
   onBranchChanged?: (
     workspaceId: string,
     oldBranch: string | null,
@@ -603,6 +626,7 @@ export class Session {
   private readonly sessionLogger: pino.Logger;
   private readonly paseoHome: string;
   private readonly foundationCredentialStore: FoundationCredentialStore;
+  private readonly foundationProviderConnectionService: FoundationProviderConnectionService;
   private readonly worktreesRoot: string | undefined;
 
   private agentManager: AgentManager;
@@ -652,6 +676,7 @@ export class Session {
   private inflightRequests = 0;
   private peakInflightRequests = 0;
   private readonly workspaceSetupSnapshots: Map<string, WorkspaceSetupSnapshot>;
+  private readonly workspaceSetupRuntime: WorkspaceSetupRuntime;
   private readonly workspaceGitObserver: WorkspaceGitObserverService;
   private readonly workspaceDirectory: WorkspaceDirectory;
   private readonly voiceSession: VoiceSession;
@@ -707,6 +732,7 @@ export class Session {
       serviceProxy,
       scriptRuntimeStore,
       workspaceSetupSnapshots,
+      workspaceSetupRuntime,
       onBranchChanged,
       getDaemonTcpPort,
       getDaemonTcpHost,
@@ -740,6 +766,12 @@ export class Session {
       module: "session",
       clientId: this.clientId,
       sessionId: this.sessionId,
+    });
+    this.foundationProviderConnectionService = new FoundationProviderConnectionService({
+      paseoHome,
+      daemonVersion: connectionQualificationDaemonVersion(daemonVersion),
+      getConfig: () => daemonConfigStore.get(),
+      credentialStore: this.foundationCredentialStore,
     });
     this.workspaceFilesSession = new WorkspaceFilesSession({
       host: {
@@ -959,6 +991,7 @@ export class Session {
     this.serviceProxy = serviceProxy ?? null;
     this.scriptRuntimeStore = scriptRuntimeStore ?? null;
     this.workspaceSetupSnapshots = workspaceSetupSnapshots ?? new Map();
+    this.workspaceSetupRuntime = resolveWorkspaceSetupRuntime(workspaceSetupRuntime);
     this.getDaemonTcpPort = getDaemonTcpPort ?? null;
     this.getDaemonTcpHost = getDaemonTcpHost ?? null;
     this.serviceProxyPublicBaseUrl = serviceProxyPublicBaseUrl ?? null;
@@ -1906,6 +1939,8 @@ export class Session {
     switch (msg.type) {
       case "agent.detach.request":
         return this.handleDetachAgentRequest(msg.agentId, msg.requestId);
+      case "agent.coordination_signal.request":
+        return this.handleAgentCoordinationSignalRequest(msg);
       default:
         return undefined;
     }
@@ -2242,6 +2277,24 @@ export class Session {
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
       case "provider.usage.list.request":
         return this.providerCatalogSession.handleProviderUsageListRequest(msg);
+      case "foundation.provider_connection.get_status.request": {
+        const status = this.foundationProviderConnectionService.getStatus(msg.provider, msg.model);
+        this.emit({
+          type: "foundation.provider_connection.get_status.response",
+          payload: { requestId: msg.requestId, ...status },
+        });
+        return undefined;
+      }
+      case "foundation.provider_connection.test.request":
+        return this.foundationProviderConnectionService
+          .test(msg.provider, msg.model)
+          .then((status) => {
+            this.emit({
+              type: "foundation.provider_connection.test.response",
+              payload: { requestId: msg.requestId, ...status },
+            });
+            return undefined;
+          });
       default:
         return undefined;
     }
@@ -2525,6 +2578,64 @@ export class Session {
           accepted: false,
           error: message,
         },
+      });
+    }
+  }
+
+  private async handleAgentCoordinationSignalRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.coordination_signal.request" }>,
+  ): Promise<void> {
+    try {
+      const target = await this.agentStorage.get(msg.agentId);
+      if (!target || target.internal || target.archivedAt) {
+        throw new Error(`Agent ${msg.agentId} is not available`);
+      }
+      if (target.roleBinding?.roleId !== "lead") {
+        throw new Error(
+          `Coordination signals require a role-bound Lead target; ${msg.agentId} is not one`,
+        );
+      }
+      if (msg.kind === "detach_recommended" && !msg.relatedAgentId) {
+        throw new Error("detach_recommended requires relatedAgentId");
+      }
+      const signal = await requestCoordinationSignal(
+        {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          sendAtSafeBoundary: async (agentId, text) => {
+            if (this.agentManager.hasInFlightRun(agentId)) {
+              throw new Error(`Agent ${agentId} is still running`);
+            }
+            await sendPromptToAgent({
+              agentManager: this.agentManager,
+              agentStorage: this.agentStorage,
+              agentId,
+              prompt: formatSystemNotificationPrompt(text),
+              unarchive: false,
+              replaceRunning: false,
+              logger: this.sessionLogger,
+            });
+          },
+          logger: this.sessionLogger,
+        },
+        {
+          targetAgentId: msg.agentId,
+          requestedByAgentId: null,
+          kind: msg.kind,
+          reason: msg.reason,
+          relatedAgentId: msg.relatedAgentId,
+          evidenceRefs: msg.evidenceRefs,
+        },
+      );
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal, error: null },
+      });
+    } catch (error) {
+      const message = getErrorMessageOr(error, "Failed to signal agent");
+      this.emit({
+        type: "agent.coordination_signal.response",
+        payload: { requestId: msg.requestId, agentId: msg.agentId, signal: null, error: message },
       });
     }
   }
@@ -3928,6 +4039,7 @@ export class Session {
           ? WORKSPACE_SEARCH_HIDDEN_DIRECTORIES
           : [],
         confidentResultScanThreshold: searchesWorkspace ? undefined : 5_000,
+        respectGitIgnore: searchesWorkspace,
         includeFiles,
         includeDirectories,
         matchMode,
@@ -4204,6 +4316,7 @@ export class Session {
   private async listFetchAgentsEntries(request: AgentDirectoryRequestMessage): Promise<{
     entries: FetchAgentsResponseEntry[];
     pageInfo: FetchAgentsResponsePageInfo;
+    searchTruncated?: boolean;
   }> {
     const filter =
       request.type === "fetch_agent_history_request" &&
@@ -4248,6 +4361,18 @@ export class Session {
       return placementPromise;
     };
 
+    const search = agentDirectorySearchQuery(request);
+    if (search) {
+      return this.listRankedAgentHistoryEntries({
+        search,
+        agents,
+        sort,
+        filter,
+        getPlacement,
+        page: request.page,
+      });
+    }
+
     let candidates = [...agents];
     candidates.sort((left, right) => this.agentsPager.compare(left, right, sort));
     const cursorToken = request.page?.cursor;
@@ -4281,6 +4406,64 @@ export class Session {
         prevCursor: request.page?.cursor ?? null,
         hasMore,
       },
+    };
+  }
+
+  /**
+   * The searched history page. Ranking has to see every candidate before it can
+   * name the best one, so this path resolves placements for the whole set
+   * instead of stopping at the page limit — that is what makes a query answer
+   * from all persisted sessions rather than from the first page of them.
+   */
+  private async listRankedAgentHistoryEntries(params: {
+    search: string;
+    agents: AgentSnapshotPayload[];
+    sort: FetchAgentsRequestSort[];
+    filter: AgentUpdatesFilter | undefined;
+    getPlacement: (workspaceId: string | undefined) => Promise<ProjectPlacementPayload | null>;
+    page: AgentDirectoryRequestMessage["page"];
+  }): Promise<{
+    entries: FetchAgentsResponseEntry[];
+    pageInfo: FetchAgentsResponsePageInfo;
+    searchTruncated: boolean;
+  }> {
+    const { search, agents, sort, filter, getPlacement, page } = params;
+    if (page?.cursor) {
+      // A ranked result set has no pages to walk, so a cursor here is caller
+      // misuse. Returning the ranked head instead would hide it.
+      throw new SessionRequestError(
+        "invalid_cursor",
+        "A history search returns one ranked page; it cannot be paged with a cursor.",
+      );
+    }
+
+    const allEntries = await this.collectFetchAgentsEntries({
+      candidates: agents,
+      limit: Number.MAX_SAFE_INTEGER,
+      getPlacement,
+      filter,
+    });
+
+    const ranked = rankAgentHistoryCandidates(search, allEntries, (left, right) =>
+      this.agentsPager.compare(left.agent, right.agent, sort),
+    );
+
+    const limit = page?.limit ?? 200;
+    // Ranges are derived only for the rows that will be rendered; ranking
+    // itself never needs them.
+    const entries = ranked.slice(0, limit).map((result) =>
+      Object.assign({}, result.candidate, {
+        searchScore: result.searchScore,
+        searchMatches: describeAgentHistoryMatches(search, result.candidate),
+      }),
+    );
+
+    return {
+      entries,
+      // No next page exists, so `hasMore` is false and truncation is reported
+      // on its own field. See the note on rankAgentHistoryCandidates.
+      pageInfo: { nextCursor: null, prevCursor: null, hasMore: false },
+      searchTruncated: ranked.length > limit,
     };
   }
 
@@ -5876,6 +6059,8 @@ export class Session {
           this.workspaceAutoName.scheduleForWorktree(autoNameInput, {
             currentSelection: this.getFocusedAgentSelectionForCwd(autoNameInput.workspace.cwd),
           }),
+        startWorkspaceSetup: (workspaceId, operation) =>
+          this.workspaceSetupRuntime.start(workspaceId, operation),
         emitWorkspaceUpdateForWorkspaceId: (workspaceId) =>
           this.emitWorkspaceUpdateForWorkspaceId(workspaceId),
         cacheWorkspaceSetupSnapshot: (workspaceId, snapshot) => {
@@ -5915,10 +6100,10 @@ export class Session {
     request: Extract<SessionInboundMessage, { type: "archive_workspace_request" }>,
   ): Promise<void> {
     try {
-      const existing = await requireActiveWorkspaceForArchive(
-        { listActiveWorkspaces: () => this.listActiveWorkspaceRefs() },
-        request.workspaceId,
-      );
+      const existing = await this.workspaceRegistry.get(request.workspaceId);
+      if (!existing) {
+        throw new Error(`Workspace not found: ${request.workspaceId}`);
+      }
 
       await archiveByScope(
         {
@@ -5929,6 +6114,7 @@ export class Session {
           agentManager: this.agentManager,
           agentStorage: this.agentStorage,
           findWorkspaceIdForCwd: (cwd) => this.findWorkspaceIdForCwd(cwd),
+          getWorkspace: (workspaceId) => this.workspaceRegistry.get(workspaceId),
           listActiveWorkspaces: () => this.listActiveWorkspaceRefs(),
           archiveWorkspaceRecord: (workspaceId) => this.archiveWorkspaceRecord(workspaceId),
           emitWorkspaceUpdatesForWorkspaceIds: (workspaceIds) =>
@@ -5938,6 +6124,7 @@ export class Session {
           clearWorkspaceArchiving: (workspaceIds) => this.clearWorkspaceArchiving(workspaceIds),
           killTerminalsForWorkspace: (workspaceId) =>
             this.terminalController.killTerminalsForWorkspace(workspaceId),
+          stopWorkspaceSetup: (workspaceId) => this.workspaceSetupRuntime.stop(workspaceId),
           sessionLogger: this.sessionLogger,
         },
         {

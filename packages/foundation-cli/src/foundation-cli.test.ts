@@ -16,7 +16,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { doctorFoundation } from "./doctor.js";
+import { doctorFoundation, inspectProjectReadiness } from "./doctor.js";
 import { inspectMachine } from "./inspection.js";
 import {
   applyInstallPlan,
@@ -30,7 +30,7 @@ import {
   resolveProductLayout,
   roleLinks,
 } from "./layout.js";
-import { createInstallPlan } from "./plan.js";
+import { createInstallPlan, readInstallPlan } from "./plan.js";
 import type { InstallPlan } from "./schema.js";
 
 const temporaryHomes: string[] = [];
@@ -255,8 +255,87 @@ describe("Foundation host inspection", () => {
   });
 });
 
+describe("Foundation project readiness", () => {
+  it("treats an absent protocol as zero-delta and rejects present-invalid bytes", () => {
+    const projectRoot = temporaryHome();
+
+    expect(inspectProjectReadiness(projectRoot)).toEqual({
+      name: "PROJECT_READY",
+      status: "UNKNOWN",
+      evidence: [
+        "WORKSPACE_PROTOCOL.md is absent zero-delta; project activation and task evidence are not proven",
+      ],
+    });
+
+    writeFileSync(path.join(projectRoot, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n");
+    expect(inspectProjectReadiness(projectRoot).status).toBe("FAIL");
+
+    writeFileSync(
+      path.join(projectRoot, "WORKSPACE_PROTOCOL.md"),
+      "owner: Human\napplies_to: repository root\nversion: 1\n",
+    );
+    expect(inspectProjectReadiness(projectRoot).status).toBe("UNKNOWN");
+  });
+});
+
+describe("Foundation install planning", () => {
+  it("does not couple the default plan to an existing Control Workspace", () => {
+    const home = temporaryHome();
+    const controlHome = path.join(home, ".paseo-control");
+    mkdirSync(controlHome);
+    writeFileSync(path.join(controlHome, "user-owned.txt"), "keep\n");
+
+    const defaultPlan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    const optInPlan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+      includeControlWorkspace: true,
+    });
+
+    expect(defaultPlan.includeControlWorkspace).toBe(false);
+    expect(defaultPlan.controlHome).toBeNull();
+    expect(defaultPlan.controlHomePresent).toBeNull();
+    expect(defaultPlan.blockers).not.toContain("the Control Workspace Home already exists");
+    expect(optInPlan.controlHome).toBe(controlHome);
+    expect(optInPlan.controlHomePresent).toBe(true);
+    expect(optInPlan.blockers).toContain("the Control Workspace Home already exists");
+  });
+
+  it("rejects a version 1 plan instead of silently choosing Control Workspace semantics", () => {
+    const home = temporaryHome();
+    const planPath = path.join(home, "install-plan.json");
+    const currentPlan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    writeFileSync(planPath, `${JSON.stringify({ ...currentPlan, schemaVersion: 1 })}\n`);
+
+    expect(() => readInstallPlan(planPath)).toThrow(
+      "predates explicit Control Workspace selection",
+    );
+    expect(
+      existsSync(
+        resolveInstallLayout({ home, distributionVersion: currentPlan.distributionVersion })
+          .releasePath,
+      ),
+    ).toBe(false);
+  });
+});
+
 describe.runIf(process.platform === "darwin")("Foundation install lifecycle", () => {
-  it("installs atomically and uninstalls links while preserving user data", () => {
+  it("installs Foundation atomically without creating a Control Workspace by default", () => {
     const home = temporaryHome();
     const plan = createInstallPlan({
       mode: "clean-empty",
@@ -270,12 +349,14 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const applied = applyInstallPlan(plan);
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     expect(applied.record.status).toBe("active");
+    expect(applied.record.controlHome).toBeNull();
+    expect(applied.createdControlHome).toBe(false);
     expect(lstatSync(layout.currentLink).isSymbolicLink()).toBe(true);
     expect(path.resolve(path.dirname(layout.currentLink), readlinkSync(layout.currentLink))).toBe(
       layout.releasePath,
     );
     expect(existsSync(path.join(layout.releasePath, ".foundation-manifest.json"))).toBe(true);
-    expect(existsSync(path.join(layout.controlHome, "PROJECT_INDEX.yaml"))).toBe(true);
+    expect(existsSync(layout.controlHome)).toBe(false);
     expect(statSync(layout.installRecordPath).mode & 0o777).toBe(0o600);
 
     const doctor = doctorFoundation({ home, productRoot: productRoot() });
@@ -290,8 +371,52 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     expect(existsSync(layout.currentLink)).toBe(false);
     for (const link of plan.links) expect(existsSync(link.target)).toBe(false);
     expect(existsSync(layout.releasePath)).toBe(true);
-    expect(existsSync(layout.controlHome)).toBe(true);
+    expect(existsSync(layout.controlHome)).toBe(false);
   });
+
+  it("creates and preserves a Control Workspace only after explicit opt-in", () => {
+    const home = temporaryHome();
+    const plan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+      includeControlWorkspace: true,
+    });
+
+    const applied = applyInstallPlan(plan);
+    const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
+    expect(applied.createdControlHome).toBe(true);
+    expect(applied.record.controlHome).toBe(layout.controlHome);
+    expect(existsSync(path.join(layout.controlHome, "PROJECT_INDEX.yaml"))).toBe(true);
+
+    const preservingUpdate = createInstallPlan({
+      mode: "update",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+    });
+    expect(preservingUpdate.includeControlWorkspace).toBe(true);
+    expect(preservingUpdate.controlHome).toBe(layout.controlHome);
+    expect(applyInstallPlan(preservingUpdate).record.controlHome).toBe(layout.controlHome);
+
+    const explicitOptOut = createInstallPlan({
+      mode: "update",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "darwin",
+      includeControlWorkspace: false,
+    });
+    expect(explicitOptOut.includeControlWorkspace).toBe(false);
+    expect(applyInstallPlan(explicitOptOut).record.controlHome).toBeNull();
+    expect(existsSync(path.join(layout.controlHome, "PROJECT_INDEX.yaml"))).toBe(true);
+
+    uninstallFoundation(home);
+    expect(existsSync(path.join(layout.controlHome, "PROJECT_INDEX.yaml"))).toBe(true);
+  }, 15_000);
 
   it("refuses to uninstall a legacy migration record without its exact link snapshot", () => {
     const home = temporaryHome();
@@ -431,7 +556,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
         home,
         releasePath: plan.releasePath,
         releaseStagingPath: null,
-        controlHome: plan.controlHome,
+        controlHome: layout.controlHome,
         controlStagingPath: null,
         controlTemplateFingerprint: null,
         currentLink: plan.currentLink,
@@ -477,7 +602,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
         home,
         releasePath: plan.releasePath,
         releaseStagingPath: null,
-        controlHome: plan.controlHome,
+        controlHome: layout.controlHome,
         controlStagingPath: null,
         controlTemplateFingerprint: null,
         currentLink: plan.currentLink,

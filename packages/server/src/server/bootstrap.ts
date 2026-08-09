@@ -117,6 +117,7 @@ export async function fanOutReconciledWorkspaceUpdates(input: {
 }
 
 import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
+import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
 import { createGitHubService } from "../services/github-service.js";
 import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
@@ -130,6 +131,10 @@ import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { resolveAgentIdentifier } from "./agent/identifier.js";
 import { formatSystemNotificationPrompt, sendPromptToAgent } from "./agent/agent-prompt.js";
+import {
+  resumePendingCoordinationSignalDeliveries,
+  type CoordinationSignalDependencies,
+} from "./agent/coordination-signals.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import {
@@ -171,6 +176,7 @@ import { createRelayRuntime, type RelayRuntime } from "./relay-runtime.js";
 import type { PushNotificationSender } from "./push/notifications.js";
 import { getOrCreateServerId } from "./server-id.js";
 import { resolveDaemonVersion } from "./daemon-version.js";
+import { DAEMON_BUILD_PROVENANCE } from "./build-provenance.js";
 import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import {
   isProviderCredentialEnvironmentKey,
@@ -632,6 +638,7 @@ export async function createPaseoDaemon(
     publicBaseUrl: serviceProxyPublicBaseUrl,
   });
   const scriptRuntimeStore = new WorkspaceScriptRuntimeStore();
+  const workspaceSetupRuntime = new WorkspaceSetupRuntime();
   const configuredHostnames = config.hostnames ?? config.allowedHosts;
   let wsServer: VoiceAssistantWebSocketServer | null = null;
   let serviceProxyListenTarget: ListenTarget | null = null;
@@ -742,6 +749,7 @@ export async function createPaseoDaemon(
       serverId,
       hostname: getHostname(),
       version: daemonVersion,
+      ...DAEMON_BUILD_PROVENANCE,
       listen: formatListenTarget(boundListenTarget ?? listenTarget),
     });
   });
@@ -1068,6 +1076,8 @@ export async function createPaseoDaemon(
           await emitWorkspaceUpdatesExternal([workspaceId]);
         },
         cacheWorkspaceSetupSnapshot: () => {},
+        startWorkspaceSetup: (workspaceId, operation) =>
+          workspaceSetupRuntime.start(workspaceId, operation),
         emit: emitExternalSessionMessage,
         sessionLogger: logger,
         terminalManager,
@@ -1108,12 +1118,14 @@ export async function createPaseoDaemon(
         agentStorage,
         findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
         listActiveWorkspaces: listActiveWorkspacesExternal,
+        getWorkspace: (workspaceIdToGet) => workspaceRegistry.get(workspaceIdToGet),
         archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
         emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
         markWorkspaceArchiving: markWorkspaceArchivingExternal,
         clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
         killTerminalsForWorkspace: (workspaceIdToKill) =>
           killTerminalsForWorkspace({ terminalManager, sessionLogger: logger }, workspaceIdToKill),
+        stopWorkspaceSetup: (workspaceIdToStop) => workspaceSetupRuntime.stop(workspaceIdToStop),
         sessionLogger: logger,
       },
       { scope: { kind: "workspace", workspaceId }, requestId },
@@ -1216,6 +1228,7 @@ export async function createPaseoDaemon(
         agentStorage,
         findWorkspaceIdForCwd: findWorkspaceIdForCwdExternal,
         listActiveWorkspaces: listActiveWorkspacesExternal,
+        getWorkspace: (workspaceIdToGet) => workspaceRegistry.get(workspaceIdToGet),
         archiveWorkspaceRecord: archiveWorkspaceRecordExternal,
         emitWorkspaceUpdatesForWorkspaceIds: emitWorkspaceUpdatesExternal,
         markWorkspaceArchiving: markWorkspaceArchivingExternal,
@@ -1228,6 +1241,7 @@ export async function createPaseoDaemon(
             },
             workspaceIdToKill,
           ),
+        stopWorkspaceSetup: (workspaceIdToStop) => workspaceSetupRuntime.stop(workspaceIdToStop),
         sessionLogger: logger,
       },
       {
@@ -1266,6 +1280,31 @@ export async function createPaseoDaemon(
   );
   logger.info({ elapsed: elapsed() }, "Preparing voice and MCP runtime");
 
+  const sendCoordinationMessageAtSafeBoundary = async (agentId: string, text: string) => {
+    if (agentManager.hasInFlightRun(agentId)) {
+      throw new Error(`Agent ${agentId} is still running`);
+    }
+    await sendPromptToAgent({
+      agentManager,
+      agentStorage,
+      agentId,
+      prompt: formatSystemNotificationPrompt(text),
+      unarchive: false,
+      replaceRunning: false,
+      logger,
+    });
+  };
+  const coordinationSignalDependencies: CoordinationSignalDependencies = {
+    agentManager,
+    agentStorage,
+    sendAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
+    logger,
+  };
+  const stopPendingCoordinationSignalDeliveries = await resumePendingCoordinationSignalDeliveries({
+    ...coordinationSignalDependencies,
+    agentStorage,
+  });
+
   const createAgentToolHostDependencies = (
     runtime: PaseoToolRuntimeContext,
   ): PaseoToolHostDependencies => ({
@@ -1287,6 +1326,7 @@ export async function createPaseoDaemon(
         logger,
       });
     },
+    sendAgentMessageAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
     providerSnapshotManager,
     github,
     workspaceGitService,
@@ -1614,6 +1654,7 @@ export async function createPaseoDaemon(
               serviceProxyPublicBaseUrl,
               browserToolsBroker,
               hubRelationships,
+              workspaceSetupRuntime,
             );
             relayRuntime = createRelayRuntime({
               config: {
@@ -1667,6 +1708,7 @@ export async function createPaseoDaemon(
   };
 
   const stop = async () => {
+    stopPendingCoordinationSignalDeliveries();
     await hubRelationships.stop();
     workspaceReconciliation.dispose();
     scriptHealthMonitor.stop();

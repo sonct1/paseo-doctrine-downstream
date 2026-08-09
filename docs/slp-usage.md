@@ -1,0 +1,178 @@
+# Hướng dẫn sử dụng SLP
+
+SLP là topology `Supervisor — Lead — Peer` của Paseo Foundation. Không phải task nào cũng cần đủ ba
+role. Chọn topology nhỏ nhất vẫn giữ được ownership, independent judgment và acceptance boundary.
+
+Đọc [Foundation doctrine](foundation-doctrine.md) trước khi thay đổi role contract hoặc project
+protocol. Boundary normative nằm trong
+[Canonical Role Contracts](../foundation/dist/docs/ROLE_CONTRACTS.md).
+
+## Trạng thái của guidance
+
+Guidance này vận hành current role/authority contract. Nó không claim Paseo đã tự động hóa toàn bộ SLP:
+
+| Cơ chế                    | Trạng thái hiện tại                                                              |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| Assignment stop condition | Manual contract do authority holder ghi và enforce                               |
+| Handback                  | Manual structured report; chưa có first-class RPC, receipt hoặc acceptance state |
+| Coordination signal       | Manual experimental slice; chưa là default hoặc runtime-qualified capability     |
+| Lead handoff/replacement  | Human-driven proposal/workflow; chưa có automated state machine                  |
+
+Khi candidate signal unavailable, dùng current Human/Lead communication surface và record decision trong
+bounded assignment hoặc handback. Không coi lifecycle status là handback hoặc acceptance.
+
+## Chọn topology
+
+| Tình huống                                               | Topology mặc định                                                    |
+| -------------------------------------------------------- | -------------------------------------------------------------------- |
+| Exact tiny task, risk thấp, transfer không thêm judgment | Human → Lead                                                         |
+| Bounded implementation có material judgment              | Human → Lead → một Peer Owner                                        |
+| Stable candidate cần independent falsification           | Human → Lead → Owner, rồi fresh Peer Reviewer                        |
+| Architecture-sensitive slice                             | Human → Lead → Architect/Owner theo phase; Reviewer khi risk yêu cầu |
+| Nhiều project cần process observation                    | Human → Supervisor quan sát các Lead                                 |
+| Lead mất continuity hoặc workflow tạo material risk      | Human cấp exact recovery/replacement lease cho Supervisor            |
+
+Không launch Supervisor để quản lý task thường ngày. Không launch Peer khi Lead có thể hoàn thành exact
+tiny task trong lease. Không tạo nhiều writer cho một moving scope.
+
+## Trước khi launch
+
+Human hoặc current authority holder phải chốt:
+
+1. exact project/workspace và human-readable objective;
+2. Lead-of-record;
+3. decision nào Human giữ lại;
+4. mutation và external-effect boundary;
+5. evidence, handback và stop condition;
+6. provider/model/mode sau current discovery;
+7. recovery hoặc replacement authority của Supervisor, nếu có.
+
+Nếu repository có `WORKSPACE_PROTOCOL.md`, Lead đọc full file trước orchestration. Peer không đọc full
+protocol; Lead chỉ chuyển relevant constraints trong assignment. Supervisor chỉ đọc full protocol khi
+governance mandate yêu cầu create, audit hoặc update file đó.
+
+## Launch role-bound session
+
+Human có thể tạo Lead bằng CLI sau khi đã chọn exact workspace và current provider route:
+
+```bash
+paseo run \
+  --background \
+  --role lead \
+  --workspace <workspace-id> \
+  --provider <provider>/<model> \
+  --title "Lead — <objective>" \
+  "<bounded Human assignment>"
+```
+
+Tạo Supervisor bằng `--role supervisor` trong một governance assignment riêng. Lead tạo Peer bằng
+Paseo `create_agent` với `role=peer`, exact workspace, discovered provider/model và bounded assignment.
+Không dùng provider alias hoặc initial prompt để giả lập role.
+
+Sau create, đọc effective binding từ daemon:
+
+```bash
+paseo agent inspect <agent-id> --json
+```
+
+Kiểm `Role`, `ProviderId`, `Model`, `BindingDigest`, `ProtocolStatus` và credential readiness khi route
+dùng private credential. Agent tự khai role hoặc provider catalog không thay authoritative readback.
+
+## Assignment tối thiểu
+
+```text
+Objective: <observable outcome, không pre-solve solution>
+Authority: <exact write Owner và scope | no-write; external effects>
+Evidence: <behavior/checks cần quan sát>
+Handback/stop: <stable artifact, completion hoặc blocker condition>
+```
+
+Chỉ thêm disposition, excluded scope, stable review input, escalation trigger hoặc bounded routing
+override khi chúng làm thay đổi execution. Routing override cần exact reason, `applies_to` và expiry; nó
+hết hiệu lực ở handback/stop.
+
+## Cách vận hành từng role
+
+### Lead
+
+- bind exact identity, workspace, Human objective và Lead lease;
+- chọn topology nhỏ nhất và một Owner cho mỗi moving scope;
+- giao neutral outcome brief, không giao conclusion cần xác nhận;
+- nhận counterevidence và issue concrete ruling;
+- review stable candidate bằng proportional evidence;
+- giữ integration và engineering acceptance;
+- preserve objective, accepted decisions, ownership, unknowns và next action khi handoff.
+
+Lead chỉ sửa product trong exact tiny-task lease được Human/repository/protocol cho phép. Material work
+không được vừa implement vừa self-accept.
+
+### Peer
+
+- nhận đúng một disposition như `Engineer/Owner`, `Architect`, `Reviewer`, `Scout` hoặc `Shadow`;
+- giữ independent technical judgment trong bounded assignment;
+- không mutate nếu thiếu exact write lease;
+- không create, coordinate, stop, replace hoặc accept agent khác;
+- preserve unrelated state và tự verify writes;
+- dùng `REOPEN_REQUEST`, `DEPENDENCY_REQUEST`, `BLOCKED` hoặc `COUNCIL_REQUEST` khi conflict material.
+
+Reviewer nhận stable candidate và falsification mandate. Reviewer không patch finding trong cùng review
+lease.
+
+### Supervisor
+
+- bind exact workspace, current Lead, Human objective, decision source và reporting target;
+- quan sát causal episode, không đọc rộng theo curiosity;
+- tách observation, evidence, suspected mechanism, impact và unknown;
+- gửi smallest correction cho Lead hoặc Human;
+- không plan/staff product work, direct Peer, review product như Peer hoặc accept engineering.
+
+Thiếu recovery/replacement lease nghĩa là `observe + advise only`. Exact recovery lease chỉ cho phép
+bounded `STOP`/`FREEZE` hoặc relay Human decision trong stated condition. Lead replacement là flow riêng:
+checkpoint, handoff, revoke old Lead, activate new Lead, rồi reconcile/ACK.
+
+## Completion và manual handback
+
+Peer hoặc Lead gửi handback thủ công theo shape:
+
+```text
+Outcome: <complete | partial | blocked | reopen requested>
+Snapshot/candidate: <Git identity hoặc exact bounded identity>
+Changed/inspected scope: <paths>
+Verification/skips: <personally observed results và truthful omissions>
+Unknowns/risks/Human decisions: <material only>
+Ownership/lease: <released | retained with reason>
+```
+
+`completed`, notification hoặc test pass chỉ đánh thức authority holder. Lead inspect current stable
+artifact và issue `ACCEPT`, `REOPEN`, `REJECT` hoặc `UNKNOWN` trong engineering boundary của mình.
+
+## Experimental manual coordination signal
+
+Current product code có một experimental durable advisory signal. Interface không interrupt active run
+và không chuyển authority:
+
+```bash
+paseo agent signal <lead-id> \
+  --kind handoff \
+  --reason "Context dilution across repeated reopen"
+```
+
+Role-bound Lead là manual target và delivery đợi idle boundary. Slice có protocol, daemon, CLI/tool và
+focused tests, nhưng chưa có end-to-end SLP qualification. Không dùng command trên như standing
+production dependency.
+
+Automatic context pressure, compaction hoặc repeated-failure attention không được implement. Kể cả sau
+qualification, manual signal cũng không tự handoff, detach hoặc replace Lead.
+
+## Manual stop conditions
+
+Stop condition là assignment contract, không phải daemon rule engine. Agent và authority holder phải dừng
+và hand back thay vì improvise khi:
+
+- identity, workspace hoặc Lead-of-record không resolve được;
+- assignment thiếu mutation boundary hoặc có hai write Owner;
+- provider không bind được exact role hoặc route muốn silent fallback;
+- current bytes khác stable candidate được giao review;
+- required evidence không thể reproduce;
+- external effect, recovery hoặc replacement cần authority chưa được cấp;
+- continued action có thể làm mất dữ liệu, phá lease hoặc tăng irreversibility.

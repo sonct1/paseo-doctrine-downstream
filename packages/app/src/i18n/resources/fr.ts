@@ -83,9 +83,11 @@ export const fr: TranslationResources = {
       desktop: "Envoyez un message à l'agent, marquez@filesou utilisez/commandset/skills",
       mobile: "Message,@files,/commands",
       fallback: "Message...",
+      terminal: "Prompt",
     },
     input: {
       accessibilityLabel: "Agent de messagerie...",
+      terminalAccessibilityLabel: "Terminal prompt",
       focusHint: "{{shortcut}}pour se concentrer",
       addAttachment: "Ajouter une pièce jointe",
       interruptAgent: "Agent d'interruption",
@@ -212,7 +214,7 @@ export const fr: TranslationResources = {
     states: {
       notFound: "Agentintrouvable",
       failedToLoad: "Échec du chargement de l'agent",
-      reconnecting: "Reconnexion...",
+      reconnecting: "Reconnexion",
       timelineSyncFailed: "Impossible d’actualiser l’historique de l’agent. Nouvelle tentative…",
       archivingTitle: "Agent d'archivage...",
       archivingSubtitle: "Veuillez patienter pendant que nous archivons cet agent.",
@@ -238,8 +240,13 @@ export const fr: TranslationResources = {
   sessions: {
     title: "Historique",
     empty: "Aucune séance pour l'instant",
+    noMatches: "Aucune séance correspondante",
+    tooManyMatches: "Trop de résultats — affinez la recherche",
+    hostLoadFailed: "{{host}} : Impossible de charger l'historique",
+    searchPlaceholder: "Rechercher dans l'historique",
     actions: {
       loadMore: "Charger plus",
+      clearSearch: "Effacer la recherche",
     },
   },
   agentList: {
@@ -943,9 +950,14 @@ export const fr: TranslationResources = {
         host: "Hôte",
         changeRequest: "Pull request",
         checks: "Vérifications",
-        scripts: "Scripts",
+        services: "Services",
         diff: "Statistiques de diff",
         timestamp: "Dernière activité",
+      },
+      checks: {
+        iconAndText: "Icône et texte",
+        icon: "Icône seule",
+        none: "Masqué",
       },
       hostFilter: {
         label: "Hôte",
@@ -977,7 +989,7 @@ export const fr: TranslationResources = {
       discord: "Discord",
       github: "Créer un ticket GitHub",
       whatsNew: "Nouveautés",
-      version: "Paseo {{version}}",
+      appName: "Paseo",
     },
     sections: {
       sessions: "Historique",
@@ -1019,7 +1031,8 @@ export const fr: TranslationResources = {
     },
     workspace: {
       status: {
-        scriptsAvailable: "Scripts disponibles",
+        serviceRunning: "Service {{name}} en cours",
+        serviceUnhealthy: "Service {{name}} en échec",
         creating: "Création...",
       },
       actions: {
@@ -1081,14 +1094,29 @@ export const fr: TranslationResources = {
       composerStateRequired: "L'état du compositeur est requis",
       selectModel: "Sélectionnez un modèle",
     },
+    tooltips: {
+      project: "Choose the project",
+      host: "Choose the host",
+      isolation: "Choose the isolation level",
+      startingRef: "Choisissez par où commencer",
+      launch: "Choose what to launch",
+    },
     refPicker: {
       startingRef: "Réf de départ",
-      chooseStart: "Choisissez par où commencer",
       intoBase: "dans {{baseRef}}",
       searching: "Recherche...",
       noMatchingRefs: "Aucune référence correspondante.",
       searchPlaceholder: "Rechercher des succursales et des PR",
       title: "Commencer à partir de",
+    },
+    launch: {
+      title: "What to launch",
+      chat: "Chat",
+      terminal: "Terminal",
+      manageProfiles: "Manage profiles",
+      submit: "Launch",
+      promptPlaceholder: "Prompt {{name}}",
+      commandPlaceholder: "Run a command, or leave empty for a blank terminal",
     },
   },
   desktop: {
@@ -1449,6 +1477,19 @@ export const fr: TranslationResources = {
         show: "Afficher avancé",
         hide: "Masquer avancé",
       },
+      headers: {
+        title: "En-têtes personnalisés",
+        add: "Ajouter un en-tête",
+        name: "Nom",
+        value: "Valeur",
+        remove: "Supprimer l'en-tête",
+        errors: {
+          missingName: "Saisissez un nom pour chaque en-tête",
+          invalidName: "{{name}} n'est pas un nom d'en-tête valide",
+          invalidValue: "{{name}} contient un saut de ligne non valide",
+          duplicateName: "{{name}} est saisi plusieurs fois",
+        },
+      },
       passwordVisibility: {
         show: "Afficher le mot de passe",
         hide: "Masquer le mot de passe",
@@ -1798,6 +1839,7 @@ export const fr: TranslationResources = {
           es: "Español",
           fr: "Français",
           ja: "日本語",
+          ko: "한국어",
           ptBR: "Português brasileiro",
           ru: "Русский",
           zhCN: "中文",
@@ -2272,6 +2314,9 @@ export const fr: TranslationResources = {
         available: "Disponible",
         notInstalled: "Non installé",
         configuredUnqualified: "Configuré · qualification en attente",
+        connectionUnverified: "Configuré · non vérifié",
+        connectionQualified: "Connexion vérifiée",
+        connectionQualificationStale: "Vérification obsolète",
       },
       models: {
         one: "1 modèle",
@@ -2297,10 +2342,10 @@ export const fr: TranslationResources = {
       connection: {
         button: "Connexion",
         add: "Ajouter",
-        createTitle: "Ajouter un fournisseur compatible OpenAI",
+        createTitle: "Ajouter un fournisseur Codex personnalisé",
         title: "Configurer la connexion {{name}}",
-        openAICompatible: "Compatible OpenAI",
-        openAICompatibleHint: "Utilisez votre identifiant, votre URL Responses et votre clé API",
+        openAICompatible: "Codex personnalisé",
+        openAICompatibleHint: "Utilisez Codex avec votre URL Responses et votre clé API",
         providerId: "Identifiant du fournisseur",
         invalidProviderId:
           "Utilisez des minuscules, des chiffres et des tirets, en commençant par une lettre",
@@ -2314,7 +2359,11 @@ export const fr: TranslationResources = {
         privateStorage:
           "La clé est stockée uniquement sur cet hôte et n'est jamais renvoyée à l'application",
         hostDisconnected: "L'hôte s'est déconnecté avant l'enregistrement de la configuration",
-        saveFailed: "Impossible d'enregistrer la connexion du fournisseur",
+        saveFailed: "Impossible d’enregistrer la connexion du fournisseur",
+        test: "Tester la connexion",
+        testing: "Test en cours...",
+        testQualified: "Connexion vérifiée pour {{model}} en {{latency}} ms",
+        testFailed: "Échec du test de connexion",
         save: "Enregistrer",
         saving: "Enregistrement...",
         deleteCredential: "Supprimer la clé API",
