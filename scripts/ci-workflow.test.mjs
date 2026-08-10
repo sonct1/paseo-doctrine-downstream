@@ -8,6 +8,7 @@ const ciWorkflowPath = new URL(".github/workflows/ci.yml", repoRoot);
 const dockerWorkflowPath = new URL(".github/workflows/docker.yml", repoRoot);
 const nixWorkflowPath = new URL(".github/workflows/nix.yml", repoRoot);
 const nixUpdateHashWorkflowPath = new URL(".github/workflows/nix-update-hash.yml", repoRoot);
+const websiteWorkflowPath = new URL(".github/workflows/deploy-website.yml", repoRoot);
 const filtersPath = new URL(".github/ci-paths.yml", repoRoot);
 const serverTsconfigPath = new URL("packages/server/tsconfig.server.json", repoRoot);
 const desktopPackagePath = new URL("packages/desktop/package.json", repoRoot);
@@ -303,4 +304,17 @@ test("Nix hash updates remain verifiable without upstream bot credentials", () =
     source,
     /if: steps\.app-token\.outputs\.token != ''\s+run: \|\s+git diff --quiet package-lock\.json nix\/npm-deps\.hash/,
   );
+});
+
+test("website builds remain verifiable without Cloudflare credentials", () => {
+  const source = readFileSync(websiteWorkflowPath, "utf8");
+  const build = "run: npm run build --workspace=@getpaseo/website";
+  const deploy = "run: cd packages/website && npx wrangler deploy";
+
+  assert.match(source, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
+  assert.match(source, /if: env\.CLOUDFLARE_API_TOKEN != ''/);
+  assert.ok(source.includes(build));
+  assert.ok(source.includes(deploy));
+  assert.ok(source.indexOf(build) < source.indexOf(deploy));
+  assert.doesNotMatch(source, /run: npm run deploy --workspace=@getpaseo\/website/);
 });

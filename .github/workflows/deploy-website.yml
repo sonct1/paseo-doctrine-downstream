@@ -34,7 +34,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck --workspace=@getpaseo/website
 
+      - name: Build website
+        run: npm run build --workspace=@getpaseo/website
+
       - name: Deploy to Cloudflare Workers
-        run: npm run deploy --workspace=@getpaseo/website
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: cd packages/website && npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
