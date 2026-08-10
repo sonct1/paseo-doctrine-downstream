@@ -358,9 +358,12 @@ export async function findAcpCatalogProvider(page: Page, providerName: string): 
   await expect(page.getByText(providerName, { exact: true })).toBeVisible();
 }
 
-export async function installAcpCatalogProvider(page: Page, providerName: string): Promise<void> {
-  await findAcpCatalogProvider(page, providerName);
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+export async function installAcpCatalogProvider(
+  page: Page,
+  provider: { id: string; name: string },
+): Promise<void> {
+  await findAcpCatalogProvider(page, provider.name);
+  await page.getByTestId(`install-provider-${provider.id}`).click();
 }
 
 export async function expectProviderInstalledInSettings(

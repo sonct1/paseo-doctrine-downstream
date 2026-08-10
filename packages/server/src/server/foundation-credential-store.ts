@@ -58,7 +58,7 @@ export function resolveFoundationCredentialFile(paseoHome: string, credentialRef
 export function isFoundationCredentialFileConfigured(filePath: string): boolean {
   try {
     const stat = lstatSync(filePath);
-    if (!stat.isFile() || (stat.mode & 0o077) !== 0) return false;
+    if (!stat.isFile() || (process.platform !== "win32" && (stat.mode & 0o077) !== 0)) return false;
     const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
     const apiKey = (parsed as Record<string, unknown>).OPENAI_API_KEY;

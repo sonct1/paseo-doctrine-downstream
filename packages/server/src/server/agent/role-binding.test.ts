@@ -232,10 +232,11 @@ describe("native Foundation role materialization", () => {
         "--agy-binary",
         "/opt/agy",
       ]),
-    ).toMatchObject({
-      status: process.platform === "win32" ? "unsupported" : "supported",
-      injectionMethod: "antigravity-custom-agent",
-    });
+    ).toMatchObject(
+      process.platform === "win32"
+        ? { status: "unsupported" }
+        : { status: "supported", injectionMethod: "antigravity-custom-agent" },
+    );
     expect(
       resolveProviderRoleBindingSupport(
         "antigravity",

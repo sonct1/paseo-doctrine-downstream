@@ -76,7 +76,7 @@ test.describe("provider removal", () => {
       await expect(page.getByTestId("provider-remove-claude")).toHaveCount(0);
       await page.keyboard.press("Escape");
       await openAddProviderArea(page);
-      await installAcpCatalogProvider(page, CUSTOM_PROVIDER.name);
+      await installAcpCatalogProvider(page, CUSTOM_PROVIDER);
       await expectProviderInstalledInSettings(page, CUSTOM_PROVIDER.name);
       await expectProviderSource(client, "custom");
 

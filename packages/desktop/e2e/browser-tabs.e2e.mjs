@@ -119,7 +119,7 @@ function seedPaseoHome(paseoHome, listen, workspaceRoot) {
     daemon: {
       listen,
       relay: { enabled: false },
-      mcp: { enabled: true, injectIntoAgents: false },
+      mcp: { enabled: true, injectIntoAgents: true },
       browserTools: { enabled: true },
       cors: { allowedOrigins: ["*"] },
     },

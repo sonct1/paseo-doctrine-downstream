@@ -66,7 +66,11 @@ test.describe("Rooms", () => {
       await expect(composer).toHaveValue("@everyone ");
       await composer.pressSequentially("Human kickoff");
       await page.getByTestId("room-send").click();
-      await expect(page.getByText("@everyone Human kickoff", { exact: true })).toBeVisible();
+      await expect(
+        page
+          .locator('[data-testid^="room-message-"]')
+          .getByText("@everyone Human kickoff", { exact: true }),
+      ).toBeVisible();
       await expect(page.getByText("Human", { exact: true }).first()).toBeVisible();
 
       const firstRead = await roomClient.readChatMessages({ room: roomId!, limit: 20 });
@@ -82,9 +86,11 @@ test.describe("Rooms", () => {
         authorAgentId: "agent-room-e2e",
       });
       expect(livePost.error).toBeNull();
-      await expect(page.getByText("Agent status arrived live", { exact: true })).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(
+        page
+          .locator('[data-testid^="room-message-"]')
+          .getByText("Agent status arrived live", { exact: true }),
+      ).toBeVisible({ timeout: 30_000 });
 
       await page
         .getByTestId(`room-message-${kickoff!.id}`)
@@ -93,7 +99,9 @@ test.describe("Rooms", () => {
       await expect(page.getByText("Replying to Human", { exact: true })).toBeVisible();
       await composer.fill("Acknowledged");
       await page.getByTestId("room-send").click();
-      await expect(page.getByText("Acknowledged", { exact: true })).toBeVisible();
+      await expect(
+        page.locator('[data-testid^="room-message-"]').getByText("Acknowledged", { exact: true }),
+      ).toBeVisible();
 
       const replyRead = await roomClient.readChatMessages({ room: roomId!, limit: 20 });
       const reply = replyRead.messages.find((message) => message.body === "Acknowledged");

@@ -192,10 +192,11 @@ describe("ProviderSnapshotManager public surface", () => {
       });
       expect(
         snapshot.find((entry) => entry.provider === "gemini-antigravity")?.roleBinding,
-      ).toMatchObject({
-        status: "supported",
-        injectionMethod: "antigravity-custom-agent",
-      });
+      ).toMatchObject(
+        process.platform === "win32"
+          ? { status: "unsupported" }
+          : { status: "supported", injectionMethod: "antigravity-custom-agent" },
+      );
       expect(snapshot.find((entry) => entry.provider === "plain-acp")?.roleBinding).toMatchObject({
         status: "unsupported",
       });

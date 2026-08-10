@@ -28,7 +28,9 @@ describe("FoundationCredentialStore", () => {
 
     expect(status).toEqual({ credentialRef: "codex-proxy", configured: true });
     expect(JSON.stringify(status)).not.toContain("sk-private-value");
-    expect(lstatSync(filePath).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(lstatSync(filePath).mode & 0o777).toBe(0o600);
+    }
     expect(JSON.parse(readFileSync(filePath, "utf8"))).toEqual({
       schemaVersion: 1,
       OPENAI_API_KEY: "sk-private-value",

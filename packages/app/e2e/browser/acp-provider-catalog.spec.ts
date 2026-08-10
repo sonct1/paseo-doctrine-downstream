@@ -33,7 +33,7 @@ test.describe("ACP provider catalog", () => {
       await openSettingsHostSection(page, getServerId(), "providers");
       await openAddProviderArea(page);
 
-      await installAcpCatalogProvider(page, ACP_PROVIDER.name);
+      await installAcpCatalogProvider(page, ACP_PROVIDER);
       await expectProviderInstalledInSettings(page, ACP_PROVIDER.name);
     } finally {
       await client.patchDaemonConfig({ removeProviders: [ACP_PROVIDER.id] }).catch(() => undefined);
