@@ -20,19 +20,15 @@ Khi conflict material, đọc exact source. Memory, status, provider ID, runtime
 ## Instruction và authority
 
 - **Role profile:** identity và universal role invariants.
-- **Workspace Protocol:** mandatory thin repository contract; baseline có thể khai báo chưa có delta riêng.
+- **Workspace Protocol:** optional policy delta cho repository có tactics điều phối material và lặp lại.
 - **Assignment:** bounded objective với exact lease, scope, handback và stop condition.
 
-Mỗi greenfield hoặc brownfield repository dùng SLP có target state là root `WORKSPACE_PROTOCOL.md`. File
-giữ khoảng mười semantic clauses và không lặp universal role invariants, `AGENTS.md` hay one-task details;
-repository chưa có delta riêng dùng thin baseline với các giá trị `none`/`unclassified` minh bạch. Khi
-thiếu file, Paseo phân loại `bootstrap-required` và Human review/bootstrap trên WebUI. Default admission
-yêu cầu protocol hợp lệ trước new material delegation hoặc protected/mutating work; exact Human exception
-chỉ có thể nới cho bounded read-only inspection, bootstrap hoặc recovery với reason, scope và expiry.
-Invalid/unreadable file fail closed tới correction path; existing active work không bị auto-terminate.
-CLI/MCP chỉ là automation surface cho AI agent, không phải setup path Human phải gõ hoặc copy/paste.
+Khi có material repo-specific delta, Workspace Protocol giữ nó trong khoảng mười semantic clauses và
+không lặp universal role invariants, `AGENTS.md` hay one-task details. Repository không có delta dùng
+standing role, existing Harness và bounded assignment; thiếu file không tự block work. Provider/model/
+effort được discover rồi pin trong bounded assignment, không mutate standing role profile.
 
-Lead là execution reader duy nhất và đọc full file trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà chỉ nhận relevant constraints trong assignment.
+Khi file hiện diện, Lead là execution reader duy nhất và đọc trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà chỉ nhận relevant constraints trong assignment.
 
 Paseo là delegation/lifecycle plane duy nhất; Codex-native và Claude-native agents bị disable. Runtime `full-access` chỉ là capability, không mở rộng lease, ownership, external effects hoặc acceptance authority. Base/generated Codex profiles phải giữ `multi_agent=false`, `multi_agent_v2=false`; role profiles còn có `agents.enabled=false`.
 

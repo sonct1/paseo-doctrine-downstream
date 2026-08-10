@@ -75,6 +75,7 @@ function canonicalContractBytes(
     roleDefinitionVersion: roleBinding.definitionVersion,
     roleDefinitionDigest: roleBinding.definitionDigest,
     roleBindingDigest: roleBinding.bindingDigest,
+    // COMPAT(privateExecutionProfile): preserves existing launch-contract digests.
     executionProfile: roleBinding.executionProfile ?? null,
     roleInstructions: roleBinding.instructions,
     providerBinding,

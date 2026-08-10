@@ -1,4 +1,5 @@
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 import { buildHostCouncilRoute } from "@/utils/host-routes";
 import { expect, test } from "../support/fixtures";
 import { seedWorkspace } from "../support/helpers/seed-client";
@@ -6,6 +7,19 @@ import { getServerId } from "../support/helpers/server-id";
 
 const CASE_ID = "phase6-dirty-review";
 const CASE_TITLE = "Phase 6 dirty implementation review";
+
+function leadAssignment(): AssignmentEnvelope {
+  return {
+    version: 1,
+    disposition: "lead-direct",
+    objective: "Run the bounded Council case.",
+    effectClass: "read-only",
+    mutationBoundary: { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return the Council reports and Lead verdict.",
+    handbackAndStop: "Stop after the binding verdict or a material blocker.",
+  };
+}
 
 async function seedCouncilScenario() {
   const workspace = await seedWorkspace({ repoPrefix: "council-ui-" });
@@ -17,6 +31,8 @@ async function seedCouncilScenario() {
       title: "Council Lead",
       modeId: "load-test",
       model: "ten-second-stream",
+      roleId: "lead",
+      assignment: leadAssignment(),
     });
     const createSeat = (
       title: string,
@@ -74,19 +90,19 @@ test.describe("Council case surface", () => {
         page.getByText("One accountable Lead. Independent seats. No vote."),
       ).toBeVisible();
       await expect(page.getByTestId(`council-row-phase-${CASE_ID}`)).toContainText(
-        "Unverified verdict marker",
+        "Lead-linked verdict marker",
       );
       await expect(page.getByTestId("council-phase-rail")).toContainText(
-        "Unverified verdict marker",
+        "Lead-linked verdict marker",
       );
       await expect(
         page
           .getByTestId("council-verdict-summary")
-          .getByText("Unverified verdict marker", { exact: true }),
+          .getByText("Lead-linked verdict marker", { exact: true }),
       ).toBeVisible();
       await expect(
         page.getByText(
-          "Seat labels indicate verdict, but their linked owner does not have a daemon-issued Lead role binding. Do not treat this marker as a binding decision.",
+          "Seat labels indicate verdict, and the case link resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.",
           { exact: true },
         ),
       ).toBeVisible();

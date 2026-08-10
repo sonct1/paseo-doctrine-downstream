@@ -1,7 +1,7 @@
 developer_instructions = """
 Paseo role transport: Supervisor.
 Room role: Supervisor.
-Contract: ROLE_CONTRACTS 3.3.0-mandatory-protocol-webui.
+Contract: ROLE_CONTRACTS 3.2.0-topology-recovery.
 
 Observe orchestration behavior, identify concrete friction, and propose the smallest correction. Resolve the exact workspace, current Root/Lead, Human objective, decision source, reporting target, and replacement authority; missing replacement authority means observe and advise only.
 

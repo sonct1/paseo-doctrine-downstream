@@ -20,6 +20,7 @@ import type {
   AgentSessionConfig,
   AgentStreamEvent,
 } from "./agent-sdk-types.js";
+import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 interface StructuredContent {
   [key: string]: unknown;
@@ -113,9 +114,27 @@ async function expectMcpToolRejection(
 function requireAgentId(result: McpToolResult): string {
   const agentId = getStructuredContent(result)?.agentId;
   if (typeof agentId !== "string" || !agentId) {
-    throw new Error("MCP create_agent returned no agentId");
+    throw new Error(`MCP create_agent returned no agentId: ${JSON.stringify(result)}`);
   }
   return agentId;
+}
+
+function roleAssignment(role: "lead" | "peer" | "supervisor"): AssignmentEnvelope {
+  const disposition = {
+    lead: "lead-direct",
+    peer: "peer-execution",
+    supervisor: "supervision",
+  } as const;
+  return {
+    version: 1,
+    disposition: disposition[role],
+    objective: `Exercise the ${role} MCP topology contract.`,
+    effectClass: "read-only",
+    mutationBoundary: { mode: "no-write" },
+    externalEffectBoundary: { mode: "denied" },
+    evidence: "Return the daemon-issued role and topology receipts.",
+    handbackAndStop: "Stop after the topology assertion or a material blocker.",
+  };
 }
 
 interface LaunchRecorder {
@@ -179,18 +198,23 @@ async function assertAgentNotRunning(options: {
   client: McpClient;
   agentId: string;
 }): Promise<void> {
-  const statusResult = await options.client.callTool({
-    name: "get_agent_status",
-    args: { agentId: options.agentId },
-  });
-  const payload = getStructuredContent(statusResult);
-  if (!payload) {
-    throw new Error("get_agent_status returned no structured payload");
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 5_000) {
+    const statusResult = await options.client.callTool({
+      name: "get_agent_status",
+      args: { agentId: options.agentId },
+    });
+    const payload = getStructuredContent(statusResult);
+    if (!payload) {
+      throw new Error("get_agent_status returned no structured payload");
+    }
+    const status = payload.status;
+    if (status !== "running" && status !== "initializing") {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  const status = payload.status;
-  if (status === "running" || status === "initializing") {
-    throw new Error(`Agent still running after blocking create_agent (status=${status})`);
-  }
+  throw new Error("Agent still running after 5000ms");
 }
 
 describe("agent MCP end-to-end (offline)", () => {
@@ -232,8 +256,9 @@ describe("agent MCP end-to-end (offline)", () => {
               title,
               provider: "claude/claude-test-model",
               role,
+              assignment: roleAssignment(role),
               initialPrompt: "Reply done and stop",
-              background: true,
+              background: false,
             },
           }),
         );
@@ -252,6 +277,7 @@ describe("agent MCP end-to-end (offline)", () => {
             title: "Peer one",
             provider: "claude/claude-test-model",
             role: "peer",
+            assignment: roleAssignment("peer"),
             initialPrompt: "Reply done and stop",
             notifyOnFinish: false,
           },
@@ -264,6 +290,7 @@ describe("agent MCP end-to-end (offline)", () => {
             title: "Peer two",
             provider: "claude/claude-test-model",
             role: "peer",
+            assignment: roleAssignment("peer"),
             initialPrompt: "Reply done and stop",
             notifyOnFinish: false,
           },
@@ -271,6 +298,8 @@ describe("agent MCP end-to-end (offline)", () => {
       );
       const peerOne = await daemon.agentStorage.get(peerOneId);
       const peerTwo = await daemon.agentStorage.get(peerTwoId);
+      await assertAgentNotRunning({ client: topClient, agentId: peerOneId });
+      await assertAgentNotRunning({ client: topClient, agentId: peerTwoId });
       expect(peerOne?.roleBinding?.roleId).toBe("peer");
       expect(peerOne?.labels?.["paseo.parent-agent-id"]).toBe(leadOneId);
       expect(peerTwo?.labels?.["paseo.parent-agent-id"]).toBe(leadTwoId);
@@ -554,7 +583,7 @@ describe("agent MCP end-to-end (offline)", () => {
           provider: "claude/claude-test-model",
           mode: "bypassPermissions",
           initialPrompt: "reply with done and stop",
-          background: true,
+          background: false,
         },
       });
       const payload = getStructuredContent(result);
@@ -578,7 +607,7 @@ describe("agent MCP end-to-end (offline)", () => {
           provider: "claude/claude-test-model",
           mode: "bypassPermissions",
           initialPrompt: "reply with done and stop",
-          background: true,
+          background: false,
         },
       });
       const disabledPayload = getStructuredContent(disabledResult);

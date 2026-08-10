@@ -31,7 +31,6 @@ export function buildAssignmentEnvelope(input: {
   effectClass: AssignmentEffectClass;
   objective: string;
   cwd: string;
-  protocolException?: AssignmentEnvelope["protocolException"];
 }): AssignmentEnvelope {
   const objective = input.objective.trim();
   if (!objective) {
@@ -47,6 +46,5 @@ export function buildAssignmentEnvelope(input: {
     evidence: "Return exact changed or inspected scope and proportional verification.",
     handbackAndStop:
       "Stop at completion or a material blocker; hand back evidence, unknowns, residual risk, and lease state.",
-    ...(input.protocolException ? { protocolException: input.protocolException } : {}),
   };
 }

@@ -6,7 +6,7 @@ export const PASEO_ROLE_IDS = ["lead", "peer", "supervisor"] as const;
 export const PaseoRoleIdSchema = z.enum(PASEO_ROLE_IDS);
 export type PaseoRoleId = z.infer<typeof PaseoRoleIdSchema>;
 
-export const PASEO_ROLE_CONTRACT_VERSION = "3.3.0-mandatory-protocol-webui";
+export const PASEO_ROLE_CONTRACT_VERSION = "3.2.0-topology-recovery";
 
 export const PASEO_ROLE_SUMMARIES = [
   {

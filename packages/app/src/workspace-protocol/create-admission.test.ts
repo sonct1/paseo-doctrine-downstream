@@ -29,7 +29,6 @@ const baseInput = {
   projectId: "project-a",
   repoRoot: "/repo/worktree",
   roleId: "lead" as const,
-  effectClass: "mutating" as const,
   supported: true,
 };
 
@@ -40,20 +39,24 @@ describe("role create Workspace Protocol admission", () => {
     expect(client.inspectWorkspaceProtocol).not.toHaveBeenCalled();
   });
 
-  test("admits only a valid protocol at the exact workspace root", async () => {
-    const client = {
-      inspectWorkspaceProtocol: vi.fn(async () => ({
-        requestId: "inspect-1",
-        ok: true as const,
-        snapshot: snapshot("valid"),
-      })),
-    };
-    await requireWorkspaceProtocolForRole({ ...baseInput, client });
-    expect(client.inspectWorkspaceProtocol).toHaveBeenCalledWith("/repo/worktree");
-  });
+  test.each(["valid", "missing"] as const)(
+    "admits %s protocol state at the exact workspace root",
+    async (status) => {
+      const client = {
+        inspectWorkspaceProtocol: vi.fn(async () => ({
+          requestId: "inspect-1",
+          ok: true as const,
+          snapshot: snapshot(status),
+        })),
+      };
 
-  test.each(["missing", "invalid", "unreadable"] as const)(
-    "routes %s admission failures to project settings",
+      await requireWorkspaceProtocolForRole({ ...baseInput, client });
+      expect(client.inspectWorkspaceProtocol).toHaveBeenCalledWith("/repo/worktree");
+    },
+  );
+
+  test.each(["invalid", "unreadable"] as const)(
+    "routes an existing %s protocol to project settings",
     async (status) => {
       const client = {
         inspectWorkspaceProtocol: vi.fn(async () => ({
@@ -75,41 +78,18 @@ describe("role create Workspace Protocol admission", () => {
     },
   );
 
-  test("returns a bounded Human exception for explicit read-only work on a missing protocol", async () => {
-    const client = {
-      inspectWorkspaceProtocol: vi.fn(async () => ({
-        requestId: "inspect-1",
-        ok: true as const,
-        snapshot: snapshot("missing"),
-      })),
-    };
-
-    await expect(
-      requireWorkspaceProtocolForRole({
-        ...baseInput,
-        client,
-        effectClass: "read-only",
-        now: new Date("2026-08-08T00:00:00.000Z"),
-      }),
-    ).resolves.toEqual({
-      reason: "read-only work while the repository protocol is being bootstrapped",
-      scope: "/repo/worktree",
-      expiresAt: "2026-08-08T00:30:00.000Z",
-    });
-  });
-
-  test("fails closed when the host capability or inspection is unavailable", async () => {
+  test("does not turn an optional protocol capability into a launch gate", async () => {
     const client = {
       inspectWorkspaceProtocol: vi.fn(async () => Promise.reject(new Error("down"))),
     };
 
     await expect(
       requireWorkspaceProtocolForRole({ ...baseInput, client, supported: false }),
-    ).rejects.toMatchObject({ kind: "unsupported" });
+    ).resolves.toBeUndefined();
     expect(client.inspectWorkspaceProtocol).not.toHaveBeenCalled();
 
-    await expect(requireWorkspaceProtocolForRole({ ...baseInput, client })).rejects.toMatchObject({
-      kind: "inspection_failed",
-    });
+    await expect(
+      requireWorkspaceProtocolForRole({ ...baseInput, client }),
+    ).resolves.toBeUndefined();
   });
 });

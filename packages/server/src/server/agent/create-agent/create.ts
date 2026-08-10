@@ -21,7 +21,6 @@ import type {
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
-import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
 import { buildAgentPrompt } from "../prompt-attachments.js";
@@ -89,7 +88,6 @@ export interface CreateAgentFromMcpInput {
   kind: "mcp";
   provider: string;
   roleId?: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
   assignment?: AssignmentEnvelope;
   title: string;
   initialPrompt?: string;
@@ -376,7 +374,6 @@ async function resolveMcpCreateAgent(
       ...(input.roleId
         ? {
             roleId: input.roleId,
-            ...(input.executionProfileId ? { executionProfileId: input.executionProfileId } : {}),
             assignment: input.assignment,
             assignmentAssigner: input.callerAgentId
               ? { kind: "agent", agentId: input.callerAgentId }

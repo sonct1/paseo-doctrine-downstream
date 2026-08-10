@@ -59,11 +59,6 @@ admission map là
 `ultra-review` chưa được admit chỉ vì file tồn tại. Nó cần một Foundation-authored adaptation loại bỏ
 native subagent/provider/path hard-code và có complete receive/verification path trước khi xin admission.
 
-Foundation source candidate `2026-08-09` đã thay active package này bằng Lead-only `triple-review`:
-hai sealed semantic Peer lane cộng private provider-neutral `review` coverage seat, không majority vote và chỉ Lead
-ra verdict. Product allowlist/policy reader đã nhận package mới và hide nó khỏi general Peer; bảng trên
-vẫn mô tả immutable `foundation/dist` hiện tại cho tới khi một clean Foundation commit được tag/import.
-
 ## Tại sao bundle theo role
 
 Skill topology đi theo attention:

@@ -146,7 +146,6 @@ function buildRoleCreateFields(input: {
   effectClass: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
   objective: string;
   cwd: string;
-  protocolException?: AssignmentEnvelope["protocolException"];
 }): {
   roleId?: import("@getpaseo/protocol/role-binding").PaseoRoleId;
   assignment?: AssignmentEnvelope;
@@ -159,7 +158,6 @@ function buildRoleCreateFields(input: {
       effectClass: input.effectClass,
       objective: input.objective,
       cwd: input.cwd,
-      protocolException: input.protocolException,
     }),
   };
 }
@@ -186,7 +184,6 @@ async function submitDraftCreateRequest(input: {
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
-  protocolException?: AssignmentEnvelope["protocolException"];
 }): Promise<{ agentId: string | null; result: AgentSnapshotPayload }> {
   const {
     attempt,
@@ -236,7 +233,6 @@ async function submitDraftCreateRequest(input: {
       effectClass: composerState.selectedAssignmentEffect,
       objective: text,
       cwd: workspaceDirectory,
-      protocolException: input.protocolException,
     }),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
@@ -555,18 +551,16 @@ export function WorkspaceDraftAgentTab({
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
       }),
     createRequest: async ({ attempt, text, images, attachments, cwd }) => {
-      let protocolException: AssignmentEnvelope["protocolException"] | undefined;
       try {
         if (composerState.selectedRole) {
           invariant(client, "Connected daemon client is required for role admission");
           invariant(workspaceFields?.projectId, "Project id is required for role admission");
-          protocolException = await requireWorkspaceProtocolForRole({
+          await requireWorkspaceProtocolForRole({
             client,
             serverId,
             projectId: workspaceFields.projectId,
             repoRoot: draftWorkingDirectory ?? cwd,
             roleId: composerState.selectedRole,
-            effectClass: composerState.selectedAssignmentEffect,
             supported: supportsWorkspaceProtocol,
           });
         }
@@ -590,7 +584,6 @@ export function WorkspaceDraftAgentTab({
         composerState,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
         selectModelMessage: t("workspaceSetup.errors.selectModel"),
-        protocolException,
       });
     },
     onCreateSuccess: ({ result }) => {

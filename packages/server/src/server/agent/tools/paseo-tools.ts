@@ -112,11 +112,6 @@ import {
 } from "@getpaseo/protocol/coordination-signal";
 import { requestCoordinationSignal, resolveCoordinationSignal } from "../coordination-signals.js";
 import {
-  ExecutionProfileBindingReceiptSchema,
-  FoundationExecutionProfileIdSchema,
-  getFoundationExecutionProfileDefinition,
-} from "../foundation-execution-profiles.js";
-import {
   LeadHandoffPacketSchema,
   LeadHandoffTransitionSchema,
   PrepareLeadHandoffInputSchema,
@@ -184,63 +179,13 @@ export interface PaseoToolHostDependencies {
 
 function projectFoundationLaunchReceipts(
   agent: Pick<ManagedAgent, "roleBinding" | "launchContract">,
-  options?: { includePrivateExecutionProfile?: boolean },
 ) {
   return {
     ...(agent.roleBinding ? { roleBinding: toRoleBindingReceipt(agent.roleBinding) } : {}),
     ...(agent.launchContract
       ? { launchContract: toLaunchContractReceipt(agent.launchContract) }
       : {}),
-    ...(options?.includePrivateExecutionProfile && agent.roleBinding?.executionProfile
-      ? { executionProfile: agent.roleBinding.executionProfile }
-      : {}),
   };
-}
-
-function resolveCallerRoleId(
-  agentManager: AgentManager,
-  callerAgentId: string | undefined,
-): string | undefined {
-  if (!callerAgentId) {
-    return undefined;
-  }
-  return agentManager.getAgent(callerAgentId)?.roleBinding?.roleId;
-}
-
-function privateExecutionProfileInputShape(enabled: boolean): z.ZodRawShape {
-  if (!enabled) {
-    return {};
-  }
-  return {
-    executionProfile: FoundationExecutionProfileIdSchema.optional().describe(
-      "Lead-only private execution profile. review creates an exhaustive coverage reviewer under Peer authority; its implementation mechanism stays private and ordinary Peers do not receive this profile catalog.",
-    ),
-  };
-}
-
-function privateExecutionProfileOutputShape(enabled: boolean): z.ZodRawShape {
-  if (!enabled) {
-    return {};
-  }
-  return { executionProfile: ExecutionProfileBindingReceiptSchema.optional() };
-}
-
-function resolvePrivateExecutionProfileRequest(
-  parsedArgs: object,
-  callerRoleId: string | undefined,
-) {
-  if (!("executionProfile" in parsedArgs) || parsedArgs.executionProfile === undefined) {
-    return undefined;
-  }
-  const executionProfileId = FoundationExecutionProfileIdSchema.parse(parsedArgs.executionProfile);
-  if (callerRoleId !== "lead") {
-    throw new Error("Only a role-bound Lead can create a private execution profile");
-  }
-  const profile = getFoundationExecutionProfileDefinition(executionProfileId);
-  if (!("role" in parsedArgs) || parsedArgs.role !== profile.authorityRoleId) {
-    throw new Error(`Execution profile '${profile.id}' requires role '${profile.authorityRoleId}'`);
-  }
-  return executionProfileId;
 }
 
 type AgentScopedRoleTopologyAction =
@@ -777,9 +722,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     }
     return parentAgent;
   };
-  const callerRoleId = resolveCallerRoleId(agentManager, callerAgentId);
-  const canCreatePrivateExecutionProfile = callerRoleId === "lead";
-
   const resolveInheritedProviderConfig = (
     selectedProvider: string,
   ): Pick<AgentSessionConfig, "providerOptions"> | undefined => {
@@ -1129,7 +1071,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     role: PaseoRoleIdSchema.optional().describe(
       "Paseo Foundation role to bind through the provider-native durable instruction channel.",
     ),
-    ...privateExecutionProfileInputShape(canCreatePrivateExecutionProfile),
     assignment: AssignmentEnvelopeSchema.optional().describe(
       "Required immutable one-task authority envelope when role is set.",
     ),
@@ -1627,7 +1568,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         availableModes: z.array(ProviderModeSchema),
         roleBinding: RoleBindingReceiptSchema.optional(),
         launchContract: LaunchContractReceiptSchema.optional(),
-        ...privateExecutionProfileOutputShape(canCreatePrivateExecutionProfile),
         lastMessage: z.string().nullable().optional(),
         permission: AgentPermissionRequestPayloadSchema.nullable().optional(),
         guidance: z.string().optional(),
@@ -1636,7 +1576,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     async (args: unknown) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs, worktree } = resolvedArgs;
-      const executionProfileId = resolvePrivateExecutionProfileRequest(parsedArgs, callerRoleId);
       let requestedBackground: boolean;
       let notifyOnFinish: boolean;
       if (resolvedArgs.kind === "agent-scoped") {
@@ -1670,7 +1609,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           kind: "mcp",
           provider: parsedArgs.provider,
           roleId: parsedArgs.role,
-          executionProfileId,
           assignment: parsedArgs.assignment,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
@@ -1705,9 +1643,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ...(liveSnapshot.workspaceId ? { workspaceId: liveSnapshot.workspaceId } : {}),
             currentModeId: liveSnapshot.currentModeId,
             availableModes: liveSnapshot.availableModes,
-            ...projectFoundationLaunchReceipts(liveSnapshot, {
-              includePrivateExecutionProfile: canCreatePrivateExecutionProfile,
-            }),
+            ...projectFoundationLaunchReceipts(liveSnapshot),
             lastMessage: result.lastMessage,
             permission: sanitizePermissionRequest(result.permission),
           };
@@ -1740,9 +1676,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...(currentSnapshot.workspaceId ? { workspaceId: currentSnapshot.workspaceId } : {}),
           currentModeId: currentSnapshot.currentModeId,
           availableModes: currentSnapshot.availableModes,
-          ...projectFoundationLaunchReceipts(currentSnapshot, {
-            includePrivateExecutionProfile: canCreatePrivateExecutionProfile,
-          }),
+          ...projectFoundationLaunchReceipts(currentSnapshot),
           lastMessage: null,
           permission: null,
           ...(guidance ? { guidance } : {}),

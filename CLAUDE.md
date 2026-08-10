@@ -42,7 +42,6 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/forge-providers.md](docs/forge-providers.md)                 | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
 | [docs/custom-providers.md](docs/custom-providers.md)               | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
 | [docs/native-role-binding.md](docs/native-role-binding.md)         | Native Foundation roles, immutable launch contracts, provider capability, and qualification gates                              |
-| [docs/review-lanes.md](docs/review-lanes.md)                       | Triple-lane review, Lead-only private execution profiles, exhaustive coverage, and convergence boundaries                      |
 | [docs/foundation-product.md](docs/foundation-product.md)           | Foundation distribution, macOS installer, Control Workspace, WebUI provider credentials                                        |
 | [docs/foundation-doctrine.md](docs/foundation-doctrine.md)         | Foundation doctrine, authority model, evidence rules, topology, and product additions                                          |
 | [docs/slp-usage.md](docs/slp-usage.md)                             | Operating guidance for Supervisor, Lead, and Peer                                                                              |

@@ -1294,73 +1294,6 @@ describe("create_agent MCP tool", () => {
   });
   const ensureWorkspaceForCreate = async () => "workspace-created";
 
-  it("exposes review only to a role-bound Lead and forwards the private profile", async () => {
-    const { agentManager, agentStorage, spies } = createTestDeps();
-    const lead = createManagedAgent({
-      id: "lead-agent",
-      cwd: existingCwd,
-      workspaceId: "wks_parent",
-      roleBinding: createTestRoleBinding("lead"),
-    });
-    const child = createManagedAgent({
-      id: "review-agent",
-      provider: "codex",
-      cwd: existingCwd,
-      workspaceId: "wks_parent",
-      lifecycle: "idle",
-      currentModeId: "full-access",
-      availableModes: [],
-      config: { title: "Coverage review" },
-    });
-    spies.agentManager.getAgent.mockImplementation((id: string) => {
-      if (id === lead.id) return lead;
-      if (id === child.id) return child;
-      return null;
-    });
-    mockStoredAgentRecords(spies.agentStorage.get, [
-      createActiveStoredRecord({
-        id: lead.id,
-        cwd: lead.cwd,
-        workspaceId: lead.workspaceId,
-        roleBinding: lead.roleBinding,
-      }),
-    ]);
-    spies.agentManager.createAgent.mockResolvedValue(child);
-    const server = await createAgentMcpServer({
-      agentManager,
-      agentStorage,
-      providerSnapshotManager: createOpenCodeManager().manager,
-      callerAgentId: lead.id,
-      logger,
-    });
-    const tool = registeredTool(server, "create_agent");
-    expect((tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile).toBeDefined();
-
-    await tool.handler({
-      title: "Coverage review",
-      provider: "codex/gpt-5.4",
-      role: "peer",
-      executionProfile: "review",
-      settings: { modeId: "auto", thinkingOptionId: "medium" },
-      initialPrompt: "Review stable candidate abc123",
-    });
-
-    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: "codex",
-        model: "gpt-5.4",
-        modeId: "auto",
-        thinkingOptionId: "medium",
-      }),
-      undefined,
-      expect.objectContaining({
-        roleId: "peer",
-        executionProfileId: "review",
-        workspaceId: "wks_parent",
-      }),
-    );
-  });
-
   it("allows a role-bound Lead to create a role-bound Peer", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const caller = createManagedAgent({
@@ -1413,51 +1346,6 @@ describe("create_agent MCP tool", () => {
       }),
     );
   });
-
-  it.each(["peer", "supervisor"] as const)(
-    "does not project the private execution-profile field to an ordinary %s",
-    async (callerRole) => {
-      const { agentManager, agentStorage, spies } = createTestDeps();
-      const caller = createManagedAgent({
-        id: `${callerRole}-agent`,
-        cwd: existingCwd,
-        workspaceId: "wks_parent",
-        roleBinding: createTestRoleBinding(callerRole),
-      });
-      spies.agentManager.getAgent.mockReturnValue(caller);
-      mockStoredAgentRecords(spies.agentStorage.get, [
-        createActiveStoredRecord({
-          id: caller.id,
-          cwd: caller.cwd,
-          workspaceId: caller.workspaceId,
-          roleBinding: caller.roleBinding,
-        }),
-      ]);
-
-      const server = await createAgentMcpServer({
-        agentManager,
-        agentStorage,
-        providerSnapshotManager: createOpenCodeManager().manager,
-        callerAgentId: caller.id,
-        logger,
-      });
-      const tool = registeredTool(server, "create_agent");
-
-      expect(
-        (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile,
-      ).toBeUndefined();
-      await expect(
-        tool.handler({
-          title: "Coverage review",
-          provider: "codex/gpt-5.4",
-          role: "peer",
-          executionProfile: "review",
-          settings: { modeId: "auto", thinkingOptionId: "medium" },
-          initialPrompt: "Review stable candidate abc123",
-        }),
-      ).rejects.toThrow(/Unrecognized key/);
-    },
-  );
 
   it.each([
     { callerRole: "lead" as const, requestedRole: "lead" as const },

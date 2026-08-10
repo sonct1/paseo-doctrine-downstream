@@ -94,11 +94,6 @@ import {
   materializeLaunchContract,
   type PersistedLaunchContract,
 } from "./launch-contract.js";
-import {
-  assertFoundationExecutionProfileAuthority,
-  type FoundationExecutionProfileId,
-} from "./foundation-execution-profiles.js";
-
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
@@ -288,8 +283,6 @@ export interface CreateAgentOptions {
   workspaceId: string | undefined;
   owner?: AgentOwner;
   roleId?: PaseoRoleId;
-  /** Lead-only private specialization for a newly materialized role binding. */
-  executionProfileId?: FoundationExecutionProfileId;
   assignment?: AssignmentEnvelope;
   assignmentAssigner?: AssignmentAssignerReceipt;
   /** Internal storage reload path; callers must not materialize bindings. */
@@ -300,7 +293,6 @@ export interface CreateAgentOptions {
 
 interface RoleSessionInput {
   roleId?: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
   assignment?: AssignmentEnvelope;
   assignmentAssigner?: AssignmentAssignerReceipt;
   workspaceId?: string;
@@ -308,20 +300,7 @@ interface RoleSessionInput {
   launchContract?: PersistedLaunchContract;
 }
 
-function assertExecutionProfileSessionInput(role?: RoleSessionInput): void {
-  if (!role?.executionProfileId) {
-    return;
-  }
-  if (!role.roleId) {
-    throw new Error("Execution profile requires a new role-bound launch");
-  }
-  if (role.roleBinding || role.launchContract) {
-    throw new Error("Cannot override the execution profile of an existing launch contract");
-  }
-}
-
 function assertRoleSessionInput(config: AgentSessionConfig, role?: RoleSessionInput): void {
-  assertExecutionProfileSessionInput(role);
   if (role?.roleId && (role.roleBinding || role.launchContract)) {
     throw new Error("Cannot provide both roleId and an existing launch contract");
   }
@@ -1272,7 +1251,6 @@ export class AgentManager {
     const { storedConfig, launchConfig, paseoToolPolicy, roleBinding, launchContract } =
       await this.prepareSessionConfig(config, resolvedAgentId, options?.env, {
         roleId: options.roleId,
-        executionProfileId: options.executionProfileId,
         assignment: options.assignment,
         assignmentAssigner: options.assignmentAssigner,
         workspaceId: options.workspaceId,
@@ -4830,15 +4808,8 @@ export class AgentManager {
       );
     }
     if (!roleBinding && role?.roleId) {
-      if (role.executionProfileId) {
-        assertFoundationExecutionProfileAuthority({
-          profileId: role.executionProfileId,
-          roleId: role.roleId,
-        });
-      }
       roleBinding = await materializeRoleBinding({
         roleId: role.roleId,
-        executionProfileId: role.executionProfileId,
         provider: storedConfig.provider,
         providerBaseId,
         providerSupport: this.providerRoleBindingSupport.get(storedConfig.provider),
@@ -4945,9 +4916,6 @@ export class AgentManager {
             roleBinding: {
               roleId: roleBinding.roleId,
               instructions: roleBinding.instructions,
-              ...(roleBinding.executionProfile
-                ? { executionProfile: { id: roleBinding.executionProfile.id } }
-                : {}),
             },
           }
         : {}),

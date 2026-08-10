@@ -1,4 +1,4 @@
-# Mandatory thin protocol bootstrap và routing status
+# Optional protocol bootstrap và routing status
 
 Trạng thái: repository candidate; activation/qualification theo từng route
 Runtime snapshots: Paseo `0.2.5`; OpenCode `1.18.12`; OMP `17.2.1`;
@@ -9,11 +9,11 @@ Cursor Agent `2026.07.23-e383d2b`; Antigravity `1.1.10`; observed `2026-08-04`
 Foundation giữ đúng ba layer:
 
 1. standing role profile chứa identity và universal authority boundary;
-2. mandatory thin root `WORKSPACE_PROTOCOL.md` chứa material repository tactics hoặc explicit `none`/`unclassified` baseline;
+2. optional root `WORKSPACE_PROTOCOL.md` chỉ chứa material repository tactics cần sống qua task;
 3. bounded assignment chứa objective, disposition, lease, route, evidence, handback và stop.
 
-Repository chưa có material tactics delta vẫn materialize layer 2 bằng thin baseline; authority vẫn đến
-từ Human/Lead assignment. Bootstrap chỉ tạo repository artifact cho layer 2, không tạo instruction layer thứ tư, không tự cấp
+Repository không có material tactics delta bỏ qua layer 2; authority vẫn đến từ Human/Lead assignment.
+Bootstrap chỉ tạo optional artifact cho layer 2, không tạo instruction layer thứ tư, không tự cấp
 authority và không biến validator thành admission hoặc acceptance engine.
 
 Canonical template chỉ giữ chín repo-specific clauses. Universal role invariants ở standing profile,
@@ -21,24 +21,18 @@ engineering convention ở `AGENTS.md`/Project Harness, còn one-task lease và 
 route ở assignment. Không dùng line count cứng cho target repository; validator chỉ kiểm integrity của
 file hiện diện, không ép target theo taxonomy của template.
 
-## WebUI bootstrap và graduated admission
+## Optional bootstrap
 
-Không có root `WORKSPACE_PROTOCOL.md` là trạng thái `bootstrap-required`, không phải implicit zero delta.
-Paseo WebUI Project Settings phải hiển thị preview repository-specific để Human review rồi explicit
-bootstrap. Default admission yêu cầu file hợp lệ trước new material delegation hoặc protected/mutating
-work; không dùng một universal role-create gate làm proxy cho mọi task class. Exact Human exception chỉ
-được mở cho bounded read-only inspection, bootstrap hoặc recovery với reason, scope và expiry. Existing
-active work không bị auto-terminate; invalid, unreadable hoặc stale file fail closed tới correction path
-và không overwrite current bytes. Human không phải chạy command. CLI/MCP chỉ là automation surface cho
-AI agent; validator sau vẫn hữu ích cho agent và CI để kiểm nonempty, placeholder, conflict marker,
-marker identity và minimal identity:
+Không có root `WORKSPACE_PROTOCOL.md` nghĩa là repository khai báo zero delta; standing role,
+existing Harness và bounded assignment govern work. Khi owner tạo file vì có material recurring
+tactics, command sau kiểm nonempty, placeholder, conflict marker, marker identity và minimal identity:
 
 ```bash
 scripts/validate-foundation --check-protocol /path/to/repository
 ```
 
-File absent, present-invalid hoặc unreadable đều fail. File valid có thể chứa explicit `none` hoặc
-`unclassified` cho clause chưa có repo-specific delta. Kết quả pass chỉ là byte validity, không phải
+File absent trả pass với kết luận “no repository protocol delta”. File present nhưng invalid làm check
+fail để Lead không dùng corrupted/ambiguous tactics; kết quả pass chỉ là byte validity, không phải
 semantic review, role binding, authority hay project readiness. Supervisor chỉ create/audit file khi có
 exact governance mandate và không self-approve.
 

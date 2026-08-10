@@ -11,12 +11,12 @@ protocol. Boundary normative nằm trong
 
 Guidance này vận hành current role/authority contract. Nó không claim Paseo đã tự động hóa toàn bộ SLP:
 
-| Cơ chế                    | Trạng thái hiện tại                                                              |
-| ------------------------- | -------------------------------------------------------------------------------- |
-| Assignment stop condition | Manual contract do authority holder ghi và enforce                               |
-| Handback                  | Manual structured report; chưa có first-class RPC, receipt hoặc acceptance state |
-| Coordination signal       | Manual experimental slice; chưa là default hoặc runtime-qualified capability     |
-| Lead handoff/replacement  | Human-driven proposal/workflow; chưa có automated state machine                  |
+| Cơ chế                    | Trạng thái hiện tại                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Assignment stop condition | Immutable assignment contract ở role launch; authority holder vẫn định nghĩa exact stop condition                      |
+| Handback                  | Manual structured report; chưa có first-class engineering acceptance state                                             |
+| Coordination signal       | Candidate, integrated-runtime-qualified; chưa có release activation hoặc multi-day operational effect                  |
+| Lead handoff/replacement  | Candidate state machine với frozen packet, ordered receipts và Human gates; chưa có release activation/multi-day proof |
 
 Khi candidate signal unavailable, dùng current Human/Lead communication surface và record decision trong
 bounded assignment hoặc handback. Không coi lifecycle status là handback hoặc acceptance.
@@ -150,10 +150,10 @@ Ownership/lease: <released | retained with reason>
 `completed`, notification hoặc test pass chỉ đánh thức authority holder. Lead inspect current stable
 artifact và issue `ACCEPT`, `REOPEN`, `REJECT` hoặc `UNKNOWN` trong engineering boundary của mình.
 
-## Experimental manual coordination signal
+## Candidate coordination signal
 
-Current product code có một experimental durable advisory signal. Interface không interrupt active run
-và không chuyển authority:
+Current product code có durable advisory signal. Interface không interrupt active run và không chuyển
+authority:
 
 ```bash
 paseo agent signal <lead-id> \
@@ -161,12 +161,14 @@ paseo agent signal <lead-id> \
   --reason "Context dilution across repeated reopen"
 ```
 
-Role-bound Lead là manual target và delivery đợi idle boundary. Slice có protocol, daemon, CLI/tool và
-focused tests, nhưng chưa có end-to-end SLP qualification. Không dùng command trên như standing
+Role-bound Lead là manual target và delivery đợi idle boundary. Slice có protocol, persistence,
+CLI/client/tool, idle-boundary delivery và paid-provider integrated-runtime canary. Exact release chưa
+được activate và chưa có multi-day operational proof, nên không dùng command trên như standing
 production dependency.
 
-Automatic context pressure, compaction hoặc repeated-failure attention không được implement. Kể cả sau
-qualification, manual signal cũng không tự handoff, detach hoặc replace Lead.
+Native context pressure, compaction và repeated-failure attention đã có candidate routing/coalescing
+policy; missing telemetry fail closed. Các attention này và manual signal đều không tự handoff, detach,
+replace Lead hoặc đổi authority.
 
 ## Manual stop conditions
 

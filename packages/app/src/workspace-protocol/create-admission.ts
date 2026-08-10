@@ -1,28 +1,12 @@
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
-import type {
-  AssignmentEffectClass,
-  AssignmentEnvelope,
-} from "@getpaseo/protocol/assignment-contract";
 import { buildProjectSettingsRoute } from "@/utils/host-routes";
 
-export type WorkspaceProtocolCreateAdmissionFailureKind =
-  | "unsupported"
-  | "inspection_failed"
-  | "missing"
-  | "invalid"
-  | "unreadable";
+export type WorkspaceProtocolCreateAdmissionFailureKind = "invalid" | "unreadable";
 
 export function workspaceProtocolAdmissionMessageKey(
-  kind: WorkspaceProtocolCreateAdmissionFailureKind,
-):
-  | "workspaceSetup.errors.workspaceProtocolRequired"
-  | "workspaceSetup.errors.workspaceProtocolUnsupported"
-  | "workspaceSetup.errors.workspaceProtocolInspectionFailed" {
-  if (kind === "unsupported") return "workspaceSetup.errors.workspaceProtocolUnsupported";
-  if (kind === "inspection_failed") {
-    return "workspaceSetup.errors.workspaceProtocolInspectionFailed";
-  }
+  _kind: WorkspaceProtocolCreateAdmissionFailureKind,
+): "workspaceSetup.errors.workspaceProtocolRequired" {
   return "workspaceSetup.errors.workspaceProtocolRequired";
 }
 
@@ -51,53 +35,25 @@ export async function requireWorkspaceProtocolForRole(input: {
   projectId: string;
   repoRoot: string;
   roleId: PaseoRoleId | null | undefined;
-  effectClass: AssignmentEffectClass;
   supported: boolean;
-  now?: Date;
-}): Promise<AssignmentEnvelope["protocolException"] | undefined> {
+}): Promise<void> {
   if (!input.roleId) return undefined;
 
   if (!input.supported) {
-    throw new WorkspaceProtocolCreateAdmissionError({
-      kind: "unsupported",
-      serverId: input.serverId,
-      projectId: input.projectId,
-      repoRoot: input.repoRoot,
-    });
+    return;
   }
 
   let result: Awaited<ReturnType<DaemonClient["inspectWorkspaceProtocol"]>>;
   try {
     result = await input.client.inspectWorkspaceProtocol(input.repoRoot);
   } catch {
-    throw new WorkspaceProtocolCreateAdmissionError({
-      kind: "inspection_failed",
-      serverId: input.serverId,
-      projectId: input.projectId,
-      repoRoot: input.repoRoot,
-    });
+    return;
   }
 
   if (!result.ok) {
-    throw new WorkspaceProtocolCreateAdmissionError({
-      kind: "inspection_failed",
-      serverId: input.serverId,
-      projectId: input.projectId,
-      repoRoot: input.repoRoot,
-    });
+    return;
   }
-  if (result.snapshot.status === "valid") return undefined;
-  if (
-    result.snapshot.status === "missing" &&
-    new Set<AssignmentEffectClass>(["read-only", "bootstrap", "recovery"]).has(input.effectClass)
-  ) {
-    const expiresAt = new Date((input.now ?? new Date()).getTime() + 30 * 60 * 1_000).toISOString();
-    return {
-      reason: `${input.effectClass} work while the repository protocol is being bootstrapped`,
-      scope: input.repoRoot,
-      expiresAt,
-    };
-  }
+  if (result.snapshot.status === "valid" || result.snapshot.status === "missing") return;
 
   throw new WorkspaceProtocolCreateAdmissionError({
     kind: result.snapshot.status,

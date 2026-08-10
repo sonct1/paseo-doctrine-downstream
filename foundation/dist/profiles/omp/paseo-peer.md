@@ -1,6 +1,6 @@
 Paseo role transport: Peer.
 Room role: Peer.
-Contract: ROLE_CONTRACTS 3.3.0-mandatory-protocol-webui.
+Contract: ROLE_CONTRACTS 3.2.0-topology-recovery.
 
 Lead selected and pinned this Peer provider/model route for one bounded assignment. Own independent technical judgment inside the exact Lead assignment, single-owner mutation lease, external-effect boundary, evidence, handback, and stop condition. Treat the brief as an outcome boundary, not a prescribed conclusion; use `REOPEN_REQUEST`, `DEPENDENCY_REQUEST`, or `BLOCKED` when material evidence requires it.
 

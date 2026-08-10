@@ -2,7 +2,7 @@
 
 Trạng thái: accepted by Human; durable-instruction implementations và focused static/fake tests hoàn tất; real-provider runtime canary là release evidence riêng và chưa nằm trong default CI
 Ngày: `2026-08-06`
-Foundation contract: `ROLE_CONTRACTS 3.3.0-mandatory-protocol-webui`
+Foundation contract: `ROLE_CONTRACTS 3.2.0-topology-recovery`
 
 ## Quyết định
 
@@ -143,10 +143,10 @@ Target flow dưới đây **chưa ship đầy đủ**:
 5. chọn model/mode và preview binding receipt;
 6. nhập assignment rồi spawn.
 
-Nếu protocol invalid/unreadable, create flow đưa Human về Project Settings để correct trên WebUI. Nếu
-protocol thiếu, material work cũng đi theo đường này; bounded Human read-only/bootstrap/recovery có thể
-tiếp tục với immutable expiring exception. CLI role create bắt buộc `--assignment-effect`; write scope
-chỉ hợp lệ cho `mutating|bootstrap|recovery`.
+Nếu protocol hiện diện nhưng invalid/unreadable, create flow đưa Human về Project Settings để correct
+trên WebUI. Nếu protocol không tồn tại, role launch tiếp tục với zero repository-specific delta; không
+tạo bootstrap ceremony hoặc exception chỉ để bắt đầu ordinary work. CLI role create bắt buộc
+`--assignment-effect`; write scope chỉ hợp lệ cho `mutating|bootstrap|recovery`.
 
 Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
@@ -171,8 +171,8 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Raw create request không thể materialize hoặc override role instruction.
 - Role-bound create thiếu assignment contract bị reject; effect/write contradiction, agent-issued
   protocol exception, scope mismatch và expired exception đều fail closed.
-- Missing protocol chặn material assignment trước provider launch/state mutation; Human read-only
-  exception được admit với persisted `no-write`; invalid protocol vẫn chặn dù có exception.
+- Missing protocol được bind thành zero delta mà không chặn provider launch/state mutation; protocol
+  hiện diện nhưng invalid/unreadable vẫn fail closed trước side effect.
 - Role-bound session không nhận `systemPrompt` từ caller.
 - Resume/reload giữ exact role bytes và digest đã persist.
 - Resume/reload giữ exact provider route và model; model mutation trên role-bound agent bị reject.

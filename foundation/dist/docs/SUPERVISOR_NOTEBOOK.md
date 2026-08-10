@@ -190,21 +190,7 @@ Human sau đó authorize close `P-001` với yêu cầu mechanism phải work v�
 - `G-04/G-09` không được giả close: later-effect, protocol value theo task class và navigation effect
   còn ở `O-01/O-02/O-04`; portability còn `O-05`, route qualification theo need còn `O-03`.
 
-#### Supersession — `2026-08-08`
-
-Human supersede riêng kết luận absence/zero-delta của closure trên: mọi greenfield hoặc brownfield
-repository dùng SLP phải hội tụ về mandatory thin `WORKSPACE_PROTOCOL.md`; repository chưa có delta dùng
-explicit `baseline` với `none`/`unclassified`, repository có recurring tactics dùng `custom`. Missing là
-`bootstrap-required`, nhưng artifact requirement không restore universal role-create hard gate. Default
-admission áp trước new material delegation hoặc protected/mutating work; exact Human exception chỉ mở
-bounded read-only/bootstrap/recovery lane với reason, scope và expiry. Human review/bootstrap trên Paseo
-WebUI. Historical A/B evidence vẫn giữ nguyên để audit, nhưng không còn định nghĩa current admission
-policy. Current ruling nằm tại D-011, rationale tại
-[ADR-0001](adr/0001-mandatory-workspace-protocol-with-graduated-admission.md), execution sequence tại
-[Workspace Protocol admission plan](WORKSPACE_PROTOCOL_ADMISSION_PLAN.md). CLI/MCP là automation surface
-cho AI agent, không phải Human setup path.
-
-**Historical verification của closure episode:** `python3 -m py_compile scripts/validate_foundation.py scripts/codex-profile.py`,
+**Verification:** `python3 -m py_compile scripts/validate_foundation.py scripts/codex-profile.py`,
 `scripts/validate-foundation` và `git diff --check` pass. CLI counterfactual pass cho target absent và
 current present-valid; malformed present file fail đúng identity guard. Validator tự chạy directory và
 broken-symlink adversarial probes.

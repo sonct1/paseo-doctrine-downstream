@@ -1,65 +1,65 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.8",
+  "distributionVersion": "0.1.0-dev.9",
   "foundationSource": {
-    "commit": "50509fddef52f68e279c6d874a230ab40d86f9ed",
-    "ref": "foundation-v0.1.0-dev.8"
+    "commit": "8e84e8dc6008c3a09f7a8f67771701829064509b",
+    "ref": "foundation-v0.1.0-dev.9"
   },
   "files": [
     {
       "path": "AGENTS.md",
       "mode": "0644",
-      "sha256": "fd584bef604c7622063eee8cffc920f57ae9c46d57edd8e4930192a12ec7c8c9"
+      "sha256": "a9b9d4eacc2947b638a41e4094e7a0bfdf42de47f486f9f40deaf70cc0047eb0"
     },
     {
       "path": "docs/ASSIGNMENT_AND_HANDBACK.md",
       "mode": "0644",
-      "sha256": "48fe40311384be50405ea17e69210439464725827efb09d864c46c41a01b89a6"
+      "sha256": "2d56b6c4b0c20c1ce2c91ab5d15c9806828aacc60e2011bd03ed975f2d683a46"
     },
     {
       "path": "docs/PORTABLE_BOOTSTRAP_AND_ROUTING.md",
       "mode": "0644",
-      "sha256": "20a4bdd1f69a352c65454c5588fe22b9d74d2446c9d39c57f606d154b0792c57"
+      "sha256": "d87711e79959de7cf51da240259eb67309379a8bb408c3e71ff161e504144bd1"
     },
     {
       "path": "docs/ROLE_CONTRACTS.md",
       "mode": "0644",
-      "sha256": "8f383b7625c39371e69ea28ce4edfa0c7470847bdbb24105c530fe215954310b"
+      "sha256": "7f74ffcfd16f0110e79fea8e487b38cecf5a4a2255766f6e41259c556ac5fc1d"
     },
     {
       "path": "docs/ROLE_INSTRUCTION_BINDING.md",
       "mode": "0644",
-      "sha256": "971033f0e34b10e0db55c7e1c222ec3f4b4751738c1a89ae8cb212416f8af722"
+      "sha256": "69ef48f7096e364caa6ae565adb4a4947d9d2b4d2903d8453f81825ba8afe648"
     },
     {
       "path": "docs/SUPERVISOR_NOTEBOOK.md",
       "mode": "0644",
-      "sha256": "cca155d9dc1662fb7d2444d8e9a07325ca24db824024ae7af2f1bba009e0375a"
+      "sha256": "ed79252d96f76c94b6afd51618591cbb8af5953954fa75df20faf2cb1715bc2a"
     },
     {
       "path": "profiles/antigravity/agents/paseo-lead/agent.md",
       "mode": "0644",
-      "sha256": "91878daa120236e25d23a7658cdf55955d9c9eefb286c0a0f9508cdf173fca2f"
+      "sha256": "9cfb9339541c15315f26e5b54ed35ba069926438b12dba7245d1fda42527b8fc"
     },
     {
       "path": "profiles/antigravity/agents/paseo-peer/agent.md",
       "mode": "0644",
-      "sha256": "2016c17cfa1215193d4db6247c8ca22acef01a5628e701e637a9ad62b991fecc"
+      "sha256": "d350c351d439a094db648271443cac955141d4e853a1377a40f9de4378b5ce31"
     },
     {
       "path": "profiles/antigravity/agents/paseo-supervisor/agent.md",
       "mode": "0644",
-      "sha256": "b5643e08775a0c2e3b1234a4f38c2f7b9c9074326f7640833ea185a597f33b54"
+      "sha256": "f2fd0f971e692efdc72347182cdd4ddee55f39ae26f4cd264e793361c49dffa3"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "e0e2b2f03ef527f7dc1007edccd5192f9b28c772f7abeea791286b55ab9167b8"
+      "sha256": "e5ed5fa2a62b060c45108bb235e1c0d66bd48011af171d55935ff7c489110637"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
       "mode": "0644",
-      "sha256": "5baabc4a094d3517f583fcf96435ae72d20178041128d50f3848f00f799dcd76"
+      "sha256": "ab509c6252285ad5a2d8769c600ddf15d9cf0127cab803a4401d0400721e8219"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/skills/repo-refresh/SKILL.md",
@@ -79,12 +79,12 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "95788ce32d0d4096e1a478b5828628192b6d22146d3273a6f4e5a570730cd6e0"
+      "sha256": "d20bd564df117968cde705ba1532a32de9d0a544134e597318af70c7d323472a"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
       "mode": "0644",
-      "sha256": "3eda08bf637cf4fe2b452b480e703519d779c699babf374e4fccc6676a36c2dd"
+      "sha256": "6108444f7c76f25119150c1450d9780ee2188f7a6d41b4b03537df5e89f9f47d"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/skills/frontend-design/SKILL.md",
@@ -94,12 +94,12 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "11e4f69ea3f8f6b624ff23a29e6f31fefdbdb817f330e35668b431e9eba15fc4"
+      "sha256": "e4dfbcf3f899abd33c3201a204c3a6dc6460cc996dce0ecc6347c52f1f4ce8cc"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
       "mode": "0644",
-      "sha256": "747673c2f87097616332671756bf195aa6457fd979a22600bb2a7264b010c31a"
+      "sha256": "5c515995f30ee3d2a2d410704808f16e168086ee3f0ca0df85e0c80ef1b861b8"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/skills/architecture-premise-audit/SKILL.md",
@@ -129,32 +129,32 @@
     {
       "path": "profiles/claude/paseo-lead.md",
       "mode": "0644",
-      "sha256": "5baabc4a094d3517f583fcf96435ae72d20178041128d50f3848f00f799dcd76"
+      "sha256": "ab509c6252285ad5a2d8769c600ddf15d9cf0127cab803a4401d0400721e8219"
     },
     {
       "path": "profiles/claude/paseo-peer.md",
       "mode": "0644",
-      "sha256": "3eda08bf637cf4fe2b452b480e703519d779c699babf374e4fccc6676a36c2dd"
+      "sha256": "6108444f7c76f25119150c1450d9780ee2188f7a6d41b4b03537df5e89f9f47d"
     },
     {
       "path": "profiles/claude/paseo-supervisor.md",
       "mode": "0644",
-      "sha256": "747673c2f87097616332671756bf195aa6457fd979a22600bb2a7264b010c31a"
+      "sha256": "5c515995f30ee3d2a2d410704808f16e168086ee3f0ca0df85e0c80ef1b861b8"
     },
     {
       "path": "profiles/codex/lead.config.toml",
       "mode": "0644",
-      "sha256": "a1d8ad8e48e6e7fa330dc56a202f1665bdff5232b4e0dc7522b334e19dd460bd"
+      "sha256": "a2173ca61799ba5b9a3178c245db3a1176f089479120b23c30fbdb5ba6b05cfe"
     },
     {
       "path": "profiles/codex/peer.config.toml",
       "mode": "0644",
-      "sha256": "5990656cd9793f2c4c5444188e4d717227e75b8b516c96435b1134a37d4308a8"
+      "sha256": "e22044ef321e5ff572646e5c0adf6c19cefe0a9000244a234c3c2243da35bd75"
     },
     {
       "path": "profiles/codex/supervisor.config.toml",
       "mode": "0644",
-      "sha256": "aa3c130f531d8f49bba01d3d91715eb8d28d9d80f41a7ccedfbdd248979e6f76"
+      "sha256": "f24c0301fa3bf4e10a128dca87e193cca1b7f5fa8b478f007d8762626004c52c"
     },
     {
       "path": "profiles/cursor/paseo-lead/.cursor-plugin/plugin.json",
@@ -164,7 +164,7 @@
     {
       "path": "profiles/cursor/paseo-lead/rules/paseo-lead.mdc",
       "mode": "0644",
-      "sha256": "7f70c47a0c14364b2c4d54855136685a814b258c9953de6bc324a7646f4b11dd"
+      "sha256": "139e31f18b66171bf430def5bfde8046c626860ea2c1c66435160c117958c18d"
     },
     {
       "path": "profiles/cursor/paseo-lead/skills/repo-refresh/SKILL.md",
@@ -189,7 +189,7 @@
     {
       "path": "profiles/cursor/paseo-peer/rules/paseo-peer.mdc",
       "mode": "0644",
-      "sha256": "bc91f5596e460f3d959ddba00a168e2af869e6365a7bf66dc525173a78d36935"
+      "sha256": "802581d31e707bced0eef9639320880fdacba9f7021d45114b36a33873224080"
     },
     {
       "path": "profiles/cursor/paseo-peer/skills/frontend-design/SKILL.md",
@@ -204,7 +204,7 @@
     {
       "path": "profiles/cursor/paseo-supervisor/rules/paseo-supervisor.mdc",
       "mode": "0644",
-      "sha256": "bd72a291f737926416513b4a23c545f264628e33d46d71fbeb0411f5829175ad"
+      "sha256": "ad6a82911fc7f47013d4c53fdc7393a442d07d7830eefb2da9d9a2cec472e5d9"
     },
     {
       "path": "profiles/cursor/paseo-supervisor/skills/architecture-premise-audit/SKILL.md",
@@ -234,22 +234,22 @@
     {
       "path": "profiles/native/role-definitions.json",
       "mode": "0644",
-      "sha256": "87c7091a6c437050aef15a6863a7b6846d5292526f11590e4ea9c5f70e2601ae"
+      "sha256": "ae0d8b7563a2cdce1f5385045f267b25700036790814bdb8b9347ec84c306157"
     },
     {
       "path": "profiles/omp/paseo-lead.md",
       "mode": "0644",
-      "sha256": "379a6ca41d43ec76b409db17f9a70519fb42933cd3ec406d582b9d8bddbc6af2"
+      "sha256": "638654846c774dea5376312ede62a7b44774b8b3a54a0982bbc247d545e81aa6"
     },
     {
       "path": "profiles/omp/paseo-peer.md",
       "mode": "0644",
-      "sha256": "a589b259b4b375e11400fa920c5f5402b273896d9007982a7a501cf2715079bc"
+      "sha256": "576de213df53720bb7ceedf77c06d401df6725807277d1e0182d9e8509e92dc3"
     },
     {
       "path": "profiles/omp/paseo-supervisor.md",
       "mode": "0644",
-      "sha256": "ca97efb1f6d3fc99c328cc1ad190a2a73bd880eef6d44c6c5d121426413a7a11"
+      "sha256": "4665892a7db97d630414af5be6193dab488ca794dbd7cb505dee83dfeff239e4"
     },
     {
       "path": "profiles/omp/role.config.yml",
@@ -304,17 +304,17 @@
     {
       "path": "profiles/opencode/lead.config.json",
       "mode": "0644",
-      "sha256": "73eded13b19d7ed3642c21f80e1123ccca7fa757d9949f9f3311b84dcd01018d"
+      "sha256": "ce1664fa7b929964da05c91ee0092c0b71dbf497406ee033ff541db8f221c725"
     },
     {
       "path": "profiles/opencode/peer.config.json",
       "mode": "0644",
-      "sha256": "c41a8343e34606e3ef263f56410a40fcae9374ce9ab79941e1d729f38d422f4a"
+      "sha256": "ac002ac4cf173d4c4baf444dd85a755d7eca1ef75405b0e3bc37913ff7597b0c"
     },
     {
       "path": "profiles/opencode/supervisor.config.json",
       "mode": "0644",
-      "sha256": "70787c6be510cbeafb17f1034fe2c8928c97fa1ea837a18b8c701f843e1f8ea3"
+      "sha256": "31ae9c0c180b2a91e466eb2fd04d1d828f33d903e211763abef44813eac5f438"
     },
     {
       "path": "references/demonthorn-agent-orchestration-deep-dive.md",

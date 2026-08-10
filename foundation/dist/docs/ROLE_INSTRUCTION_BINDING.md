@@ -1,6 +1,6 @@
 # Bind role instruction vào Paseo
 
-Version: `3.3.0-mandatory-protocol-webui`
+Version: `3.2.0-topology-recovery`
 Trạng thái: current source contract; runtime activation/qualification được ghi ở exact operational record
 
 ## Layer boundary
@@ -8,10 +8,10 @@ Trạng thái: current source contract; runtime activation/qualification đượ
 | Layer | Chứa | Không chứa |
 |---|---|---|
 | Standing role profile | identity, universal authority boundary, anti-pattern guards | project routing/risk matrix, task file list |
-| mandatory thin `WORKSPACE_PROTOCOL.md` | material repo-specific tactics hoặc explicit `none`/`unclassified` baseline về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
+| optional `WORKSPACE_PROTOCOL.md` | material repo-specific delta về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
 | Assignment | objective, disposition, mutation boundary, bounded routing/effort override, evidence, handback, stop | toàn bộ organization manual |
 
-Full `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ
+Khi file hiện diện, full `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ
 inspect/create/audit/update khi governance assignment yêu cầu; Peer nhận extracted constraints và
 không load full protocol.
 
@@ -19,11 +19,11 @@ Standing profile giữ cross-repo identity nhưng không pin model. Human chọn
 và pin từng Peer provider/model/effort trong assignment với reason, `applies_to` và expiry. Route hết
 hiệu lực ở handback/stop, không sửa standing profile và không tự áp cho assignment kế tiếp.
 
-Repository chưa có material tactics delta vẫn cần thin root protocol để trạng thái admission không bị
-ẩn; các clause tương ứng khai báo `none` hoặc `unclassified`. Nếu file thiếu, invalid hoặc unreadable,
-route là `bootstrap-required`/blocked. Human review preview và bootstrap/correct bằng Paseo WebUI;
-CLI/MCP chỉ phục vụ AI automation. Validator kiểm byte/integrity, không quyết định semantic adequacy,
-authority hoặc engineering acceptance.
+Repository không có material tactics delta không cần root protocol: standing role, existing
+repository/Harness instructions và bounded assignment vẫn đủ để Human/Lead cấp authority. Khi repo có
+delta cần sống qua task, đúng owner có thể tạo/audit file bằng
+[optional bootstrap](PORTABLE_BOOTSTRAP_AND_ROUTING.md); validator chỉ kiểm artifact hiện diện, không
+quyết định semantic adequacy hoặc authority.
 
 Standing role profile phải được bind bằng native role selection cùng transport-only provider tương
 thích. Native role cấp canonical profile và role-scoped tool enablement; provider `paseoTools.enabled`
@@ -55,11 +55,6 @@ objective/evidence/handback/stop condition:
 ```
 
 `full-access` là runtime capability chung, không phải assignment. Nếu mutation boundary thiếu hoặc mâu thuẫn, agent dừng trước incompatible work và gửi structured request.
-
-Role-bound product launch đồng thời cần immutable Assignment Contract + redacted receipt; Supervisor
-cross-project observation cần exact Human-owned Portfolio Binding. Hai contract theo
-[product contract](ASSIGNMENT_RECEIPT_AND_SUPERVISOR_PORTFOLIO.md), không mở rộng standing role hoặc
-thay engineering/Human acceptance.
 
 ## Workspace title transport
 

@@ -38,7 +38,6 @@ import {
 import { importSessionFromPersistence } from "../provider-session-import.js";
 import type { Logger } from "pino";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
-import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -3447,16 +3446,13 @@ export class CodexAppServerAgentSession implements AgentSession {
     private readonly roleInstructions?: string,
     private readonly providerLaunchBinding?: ProviderLaunchBinding,
     roleId?: PaseoRoleId,
-    executionProfileId?: FoundationExecutionProfileId,
   ) {
     this.logger = logger.child({
       module: "agent",
       provider: CODEX_PROVIDER,
       agentId: this.agentId,
     });
-    this.foundationSkillPolicy = roleId
-      ? loadFoundationSkillPolicy(roleId, undefined, executionProfileId)
-      : null;
+    this.foundationSkillPolicy = roleId ? loadFoundationSkillPolicy(roleId) : null;
     this.productSkillPolicy = roleId
       ? loadProductSkillPolicy(roleId, this.deps.productSkillBundleRoot)
       : null;
@@ -7007,7 +7003,6 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
-      launchContext?.roleBinding?.executionProfile?.id,
     );
     await session.connect();
     return session;
@@ -7047,7 +7042,6 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
-      launchContext?.roleBinding?.executionProfile?.id,
     );
     await session.connect();
     return session;

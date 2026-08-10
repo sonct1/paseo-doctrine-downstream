@@ -16,26 +16,27 @@ import type {
 } from "@getpaseo/protocol/assignment-contract";
 import { z } from "zod";
 
-import {
-  ExecutionProfileBindingReceiptSchema,
-  foundationExecutionProfileDefinitionDigest,
-  getFoundationExecutionProfileDefinition,
-  type FoundationExecutionProfileId,
-} from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
 import {
   buildAssignmentInstruction,
   materializeAssignmentContract,
   PersistedAssignmentContractSchema,
-  type PersistedAssignmentContract,
 } from "./assignment-contract.js";
 
 export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 
+// COMPAT(privateExecutionProfile): keep parsing launch contracts written by
+// paseo-v0.3.1-paseo.1. New launches cannot request or materialize this field.
+const LegacyExecutionProfileBindingReceiptSchema = z.object({
+  id: z.literal("review"),
+  version: z.string().min(1),
+  definitionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
-  executionProfile: ExecutionProfileBindingReceiptSchema.optional(),
+  executionProfile: LegacyExecutionProfileBindingReceiptSchema.optional(),
   assignmentContract: PersistedAssignmentContractSchema.optional(),
 });
 
@@ -43,7 +44,6 @@ export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
 
 export interface MaterializeRoleBindingInput {
   roleId: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
   provider: string;
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
@@ -72,12 +72,6 @@ const SUPERVISOR_PASEO_TOOLS = [
   "signal_agent",
   "resolve_agent_signal",
 ] as const;
-
-const COUNCIL_LEAD_COMPATIBILITY_MARKER = [
-  "Council compatibility marker for the native Paseo Lead:",
-  "Room role: Root",
-  "This legacy marker admits Lead-only Council execution; it does not create another role or broaden the current lease.",
-].join("\n");
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -266,10 +260,9 @@ function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceip
 function requireWorkspaceProtocol(
   cwd: string,
   roleId: PaseoRoleId,
-  assignment: PersistedAssignmentContract,
 ): WorkspaceProtocolBindingReceipt {
   const snapshot = inspectWorkspaceProtocol(cwd);
-  if (snapshot.status === "missing" && assignment.envelope.protocolException) {
+  if (snapshot.status === "missing") {
     return {
       status: "missing",
       readership: protocolReadership(roleId),
@@ -334,19 +327,9 @@ export async function materializeRoleBinding(
     envelope: input.assignment,
     createdAt,
   });
-  const executionProfile = input.executionProfileId
-    ? getFoundationExecutionProfileDefinition(input.executionProfileId)
-    : null;
-  if (executionProfile && executionProfile.authorityRoleId !== input.roleId) {
-    throw new Error(
-      `Execution profile '${executionProfile.id}' requires role '${executionProfile.authorityRoleId}'`,
-    );
-  }
-  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId, assignmentContract);
+  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId);
   const instructions = [
     definition.instructions,
-    executionProfile?.instructions,
-    input.roleId === "lead" ? COUNCIL_LEAD_COMPATIBILITY_MARKER : null,
     buildProtocolInstruction(workspaceProtocol),
     buildAssignmentInstruction(assignmentContract),
   ]
@@ -366,15 +349,6 @@ export async function materializeRoleBinding(
     assignmentContract,
     createdAt: createdAt.toISOString(),
     instructions,
-    ...(executionProfile
-      ? {
-          executionProfile: {
-            id: executionProfile.id,
-            version: executionProfile.version,
-            definitionDigest: foundationExecutionProfileDefinitionDigest(executionProfile),
-          },
-        }
-      : {}),
   };
 }
 

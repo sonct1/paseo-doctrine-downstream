@@ -93,8 +93,7 @@ describe("native Foundation role materialization", () => {
     });
     expect(binding.workspaceProtocol.digest).toMatch(/^[a-f0-9]{64}$/u);
     expect(binding.instructions).toContain("Role: Lead");
-    expect(binding.instructions).toContain("Room role: Root");
-    expect(binding.instructions).toContain("does not create another role");
+    expect(binding.instructions).not.toContain("Council compatibility marker");
     expect(binding.instructions).toContain("Demonthorn Agent Orchestration Deep Dive");
     expect(binding.instructions).toContain("Giáo Án Herdr");
     expect(binding.instructions).toContain("runtime-issued PASEO_AGENT_ID");
@@ -134,104 +133,20 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).not.toContain("Room role: Root");
   });
 
-  test("materializes review privately on Peer and redacts it from public receipts", async () => {
-    const cwd = await createWorkspace();
-    await writeFile(
-      join(cwd, "WORKSPACE_PROTOCOL.md"),
-      buildWorkspaceProtocolTemplate(cwd),
-      "utf8",
-    );
-    const binding = await materializeRoleBinding({
-      roleId: "peer",
-      executionProfileId: "review",
-      provider: "codex",
-      cwd,
-      ...assignmentBinding("peer", cwd),
-    });
-
-    expect(binding.executionProfile).toMatchObject({
-      id: "review",
-      version: "1.0.0-foundation",
-    });
-    expect(binding.instructions).toContain("OCR-delegated exhaustive review");
-    expect(toRoleBindingReceipt(binding)).not.toHaveProperty("executionProfile");
-  });
-
-  test("rejects review under a non-Peer authority role", async () => {
-    const cwd = await createWorkspace();
-    await writeFile(
-      join(cwd, "WORKSPACE_PROTOCOL.md"),
-      buildWorkspaceProtocolTemplate(cwd),
-      "utf8",
-    );
-
-    await expect(
-      materializeRoleBinding({
-        roleId: "lead",
-        executionProfileId: "review",
-        provider: "codex",
-        cwd,
-        ...assignmentBinding("lead", cwd),
-      }),
-    ).rejects.toThrow("requires role 'peer'");
-  });
-
-  test.each([
-    ["codex", "codex-developer-instructions", undefined],
-    ["claude", "claude-system-prompt", undefined],
-    ["pi", "pi-before-agent-start", undefined],
-    ["omp", "omp-append-system-prompt", undefined],
-    [
-      "cursor-acp",
-      "cursor-project-rule-capsule",
-      { status: "supported", injectionMethod: "cursor-project-rule-capsule" },
-    ],
-    [
-      "antigravity-acp",
-      "antigravity-custom-agent",
-      { status: "supported", injectionMethod: "antigravity-custom-agent" },
-    ],
-  ] as const)(
-    "composes review through the SLP-supported %s durable role channel",
-    async (provider, injectionMethod, providerSupport) => {
-      const cwd = await createWorkspace();
-      await writeFile(
-        join(cwd, "WORKSPACE_PROTOCOL.md"),
-        buildWorkspaceProtocolTemplate(cwd),
-        "utf8",
-      );
-      const binding = await materializeRoleBinding({
-        roleId: "peer",
-        executionProfileId: "review",
-        provider,
-        providerSupport,
-        cwd,
-        ...assignmentBinding("peer", cwd),
-      });
-
-      expect(binding.injectionMethod).toBe(injectionMethod);
-      expect(binding.instructions).toContain("Role: Peer");
-      expect(binding.instructions).toContain(
-        "Review specialization: OCR-delegated exhaustive review.",
-      );
-      expect(binding.executionProfile?.id).toBe("review");
-    },
-  );
-
-  test("blocks material work when protocol is missing and every role when it is invalid", async () => {
+  test("treats a missing protocol as zero delta and rejects an invalid present file", async () => {
     const missing = await createWorkspace();
     const invalid = await createWorkspace();
     await writeFile(join(invalid, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
 
-    await expect(
-      materializeRoleBinding({
-        roleId: "lead",
-        provider: "codex",
-        cwd: missing,
-        ...assignmentBinding("lead", missing),
-        assignment: assignmentFor("lead", "mutating"),
-      }),
-    ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing`);
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd: missing,
+      ...assignmentBinding("lead", missing),
+      assignment: assignmentFor("lead", "mutating"),
+    });
+    expect(binding.workspaceProtocol.status).toBe("missing");
+    expect(binding.instructions).toContain("absent zero-delta");
     await expect(
       materializeRoleBinding({
         roleId: "peer",
