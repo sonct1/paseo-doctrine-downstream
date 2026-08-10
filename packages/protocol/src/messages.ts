@@ -71,6 +71,16 @@ import {
   BrowserAutomationExecuteRequestSchema,
   BrowserAutomationExecuteResponseSchema,
 } from "./browser-automation/rpc-schemas.js";
+import {
+  BeadsIssuesListRequestSchema,
+  BeadsIssueGetRequestSchema,
+  BeadsIssueCreateRequestSchema,
+  BeadsIssueCloseRequestSchema,
+  BeadsIssuesListResponseSchema,
+  BeadsIssueGetResponseSchema,
+  BeadsIssueCreateResponseSchema,
+  BeadsIssueCloseResponseSchema,
+} from "./beads/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
   PaseoConfigRawSchema,
@@ -2873,6 +2883,10 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectRequestSchema,
   LoopLogsRequestSchema,
   LoopStopRequestSchema,
+  BeadsIssuesListRequestSchema,
+  BeadsIssueGetRequestSchema,
+  BeadsIssueCreateRequestSchema,
+  BeadsIssueCloseRequestSchema,
 ]);
 
 export type SessionInboundMessage = z.infer<typeof SessionInboundMessageSchema>;
@@ -3142,6 +3156,8 @@ export const ServerInfoStatusPayloadSchema = z
         projectCustomIcon: z.boolean().optional(),
         // COMPAT(chatRooms): added in v0.2.6, remove gate after 2027-02-04.
         chatRooms: z.boolean().optional(),
+        // COMPAT(beadsIssues): added in v0.3.1-paseo.2, remove gate after 2027-02-10.
+        beadsIssues: z.boolean().optional(),
       })
       .optional(),
   })
@@ -5819,6 +5835,10 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   LoopInspectResponseSchema,
   LoopLogsResponseSchema,
   LoopStopResponseSchema,
+  BeadsIssuesListResponseSchema,
+  BeadsIssueGetResponseSchema,
+  BeadsIssueCreateResponseSchema,
+  BeadsIssueCloseResponseSchema,
   DaemonUpdateProgressMessageSchema,
   DaemonUpdateResponseSchema,
 ]);
@@ -6061,6 +6081,10 @@ export type LoopListRequest = z.infer<typeof LoopListRequestSchema>;
 export type LoopInspectRequest = z.infer<typeof LoopInspectRequestSchema>;
 export type LoopLogsRequest = z.infer<typeof LoopLogsRequestSchema>;
 export type LoopStopRequest = z.infer<typeof LoopStopRequestSchema>;
+export type BeadsIssuesListRequest = z.infer<typeof BeadsIssuesListRequestSchema>;
+export type BeadsIssueGetRequest = z.infer<typeof BeadsIssueGetRequestSchema>;
+export type BeadsIssueCreateRequest = z.infer<typeof BeadsIssueCreateRequestSchema>;
+export type BeadsIssueCloseRequest = z.infer<typeof BeadsIssueCloseRequestSchema>;
 export type ResumeAgentRequestMessage = z.infer<typeof ResumeAgentRequestMessageSchema>;
 export type DeleteAgentRequestMessage = z.infer<typeof DeleteAgentRequestMessageSchema>;
 export type UpdateAgentRequestMessage = z.infer<typeof UpdateAgentRequestMessageSchema>;

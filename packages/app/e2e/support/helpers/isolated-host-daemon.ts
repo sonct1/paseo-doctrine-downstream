@@ -12,6 +12,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { withDisabledE2ESpeechEnv } from "./speech-env";
 
+const REMOVE_TREE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 10,
+  retryDelay: 100,
+} as const;
+
 export interface IsolatedHostDaemon {
   serverId: string;
   port: number;
@@ -128,7 +135,7 @@ export async function startIsolatedHostDaemon(
         { cwd: publishedPackageRoot, stdio: "ignore" },
       );
     } catch (error) {
-      await rm(publishedPackageRoot, { recursive: true, force: true });
+      await rm(publishedPackageRoot, REMOVE_TREE_OPTIONS);
       throw error;
     }
   }
@@ -200,10 +207,10 @@ export async function startIsolatedHostDaemon(
     child = await spawnDaemon();
   } catch (error) {
     if (!options.preserveHome) {
-      await rm(paseoHome, { recursive: true, force: true });
+      await rm(paseoHome, REMOVE_TREE_OPTIONS);
     }
     if (publishedPackageRoot) {
-      await rm(publishedPackageRoot, { recursive: true, force: true });
+      await rm(publishedPackageRoot, REMOVE_TREE_OPTIONS);
     }
     throw error;
   }
@@ -224,10 +231,10 @@ export async function startIsolatedHostDaemon(
       closed = true;
       await stopProcess(child);
       if (!options.preserveHome) {
-        await rm(paseoHome, { recursive: true, force: true });
+        await rm(paseoHome, REMOVE_TREE_OPTIONS);
       }
       if (publishedPackageRoot) {
-        await rm(publishedPackageRoot, { recursive: true, force: true });
+        await rm(publishedPackageRoot, REMOVE_TREE_OPTIONS);
       }
     },
   };

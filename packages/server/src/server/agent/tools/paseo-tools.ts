@@ -89,6 +89,8 @@ import {
 } from "../../worktree/commands.js";
 import { registerBrowserTools } from "../../browser-tools/tools.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
+import { registerBeadsTools } from "../../beads/beads-tools.js";
+import type { BeadsNativeService } from "../../beads/beads-native-service.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -158,6 +160,7 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
+  beadsService?: BeadsNativeService | null;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
@@ -175,6 +178,21 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+function registerConfiguredBeadsTools(
+  options: PaseoToolHostDependencies,
+  registerTool: Parameters<typeof registerBeadsTools>[0]["registerTool"],
+): void {
+  if (!options.callerAgentId || !options.beadsService || !options.workspaceRegistry) return;
+  registerBeadsTools({
+    registerTool,
+    service: options.beadsService,
+    agentStorage: options.agentStorage,
+    workspaceRegistry: options.workspaceRegistry,
+    projectRegistry: options.projectRegistry,
+    callerAgentId: options.callerAgentId,
+  });
 }
 
 function projectFoundationLaunchReceipts(
@@ -1299,6 +1317,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       resolveCallerAgent,
     });
   }
+
+  registerConfiguredBeadsTools(options, registerTool);
 
   if (callerAgentId && options.chatService) {
     registerTool(

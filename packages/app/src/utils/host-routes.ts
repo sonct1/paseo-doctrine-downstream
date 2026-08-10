@@ -445,13 +445,35 @@ export function buildHostCouncilsRoute(serverId: string) {
   return `${base}/councils` as const;
 }
 
-export function buildHostCouncilRoute(serverId: string, caseId: string) {
+export function buildHostCouncilRoute(serverId: string, caseId: string, workspaceId?: string) {
   const base = buildHostCouncilsRoute(serverId);
   const normalizedCaseId = trimNonEmpty(caseId);
   if (base === "/" || !normalizedCaseId) {
     return base;
   }
-  return `${base}/${encodeSegment(normalizedCaseId)}` as const;
+  const route = `${base}/${encodeSegment(normalizedCaseId)}` as const;
+  const normalizedWorkspaceId = trimNonEmpty(workspaceId);
+  return normalizedWorkspaceId
+    ? (`${route}?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}` as const)
+    : route;
+}
+
+export function buildHostProjectIssuesRoute(serverId: string, projectId: string) {
+  const base = buildHostRootRoute(serverId);
+  const normalizedProjectId = trimNonEmpty(projectId);
+  if (base === "/" || !normalizedProjectId) {
+    return base;
+  }
+  return `${base}/issues/${encodeSegment(normalizedProjectId)}` as const;
+}
+
+export function buildHostProjectIssueRoute(serverId: string, projectId: string, issueId: string) {
+  const base = buildHostProjectIssuesRoute(serverId, projectId);
+  const normalizedIssueId = trimNonEmpty(issueId);
+  if (base === "/" || !normalizedIssueId) {
+    return base;
+  }
+  return `${base}/${encodeSegment(normalizedIssueId)}` as const;
 }
 
 export function buildSessionsRoute() {

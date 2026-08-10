@@ -263,10 +263,24 @@ describe("native Foundation role materialization", () => {
         disabledTools: ["list_agents"],
       }),
     ).toEqual({ enabled: true, disabledTools: ["list_agents"] });
-    expect(applyRolePaseoToolPolicy("peer", { enabled: true })).toEqual({ enabled: false });
+    expect(applyRolePaseoToolPolicy("peer", { enabled: true })).toEqual({
+      enabled: true,
+      allowedTools: expect.arrayContaining([
+        "beads_get",
+        "beads_claim",
+        "beads_update",
+        "beads_add_dependency",
+      ]),
+    });
+    expect(
+      applyRolePaseoToolPolicy("peer", {
+        enabled: true,
+        allowedTools: ["beads_get", "beads_close", "create_agent"],
+      }),
+    ).toEqual({ enabled: true, allowedTools: ["beads_get"] });
     expect(applyRolePaseoToolPolicy("supervisor", { enabled: false })).toEqual({
       enabled: true,
-      allowedTools: expect.arrayContaining(["get_agent_status", "list_agents"]),
+      allowedTools: expect.arrayContaining(["get_agent_status", "list_agents", "beads_get"]),
     });
     expect(
       applyRolePaseoToolPolicy("supervisor", {

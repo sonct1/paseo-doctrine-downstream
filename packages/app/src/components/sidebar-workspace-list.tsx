@@ -39,6 +39,7 @@ import * as Clipboard from "expo-clipboard";
 import {
   ExternalLink,
   GitPullRequest,
+  ListChecks,
   Settings,
   MoreVertical,
   Plus,
@@ -59,6 +60,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
 import {
   buildNewWorkspaceRoute,
+  buildHostProjectIssuesRoute,
   buildProjectSettingsRoute,
   parseHostWorkspaceRouteFromPathname,
 } from "@/utils/host-routes";
@@ -164,6 +166,7 @@ const ThemedPlus = withUnistyles(Plus);
 const ThemedMoreVertical = withUnistyles(MoreVertical);
 const ThemedTrash2 = withUnistyles(Trash2);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedListChecks = withUnistyles(ListChecks);
 
 const foregroundColorMapping = (theme: Theme) => ({
   color: theme.colors.foreground,
@@ -473,6 +476,7 @@ function ProjectRowTrailingActions({
 
 const trash2LeadingIcon = <ThemedTrash2 size={14} uniProps={foregroundMutedColorMapping} />;
 const settingsLeadingIcon = <ThemedSettings size={14} uniProps={foregroundMutedColorMapping} />;
+const issuesLeadingIcon = <ThemedListChecks size={14} uniProps={foregroundMutedColorMapping} />;
 const openInNewWindowLeadingIcon = (
   <ThemedExternalLink size={14} uniProps={foregroundMutedColorMapping} />
 );
@@ -561,6 +565,10 @@ function ProjectMenuItems({
     if (!settingsTarget) return;
     router.navigate(buildProjectSettingsRoute(settingsTarget.serverId, settingsTarget.projectId));
   }, [settingsTarget]);
+  const handleOpenProjectIssues = useCallback(() => {
+    if (!settingsTarget) return;
+    router.navigate(buildHostProjectIssuesRoute(settingsTarget.serverId, settingsTarget.projectId));
+  }, [settingsTarget]);
   const canOpenInNewWindow = getIsElectron() && projectPath.trim().length > 0;
   const handleOpenInNewWindow = useCallback(() => {
     const trimmedPath = projectPath.trim();
@@ -575,6 +583,16 @@ function ProjectMenuItems({
 
   return (
     <>
+      {settingsTarget ? (
+        <ProjectMenuItem
+          surface={surface}
+          testID={`sidebar-project-menu-open-issues-${projectViewKey}`}
+          leading={issuesLeadingIcon}
+          onSelect={handleOpenProjectIssues}
+        >
+          {t("sidebar.project.actions.openIssues")}
+        </ProjectMenuItem>
+      ) : null}
       {settingsTarget ? (
         <ProjectMenuItem
           surface={surface}

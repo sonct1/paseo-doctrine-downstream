@@ -88,6 +88,15 @@ skill projection is:
 See the [Foundation product guide](docs/foundation-product.md) for role contracts, provider projection,
 and the `inspect`, `plan`, `install`, `doctor`, and `rollback` commands.
 
+## Native Beads được bundle
+
+Artifact macOS bundle đúng `bd v1.1.2` như một internal runtime. Paseo giữ một durable issue graph
+cho mỗi daemon project và chia sẻ graph đó giữa các workspace của project. Installer không thêm
+binary vào user `PATH`; test từ source checkout phải truyền exact binary qua `PASEO_BEADS_BINARY`.
+
+Xem [Native Beads issue graph](docs/native-beads.md) để biết storage, authority, WebUI và agent-tool
+boundaries.
+
 ## Uninstall
 
 ```bash

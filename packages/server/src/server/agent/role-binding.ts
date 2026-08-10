@@ -71,6 +71,23 @@ const SUPERVISOR_PASEO_TOOLS = [
   "inspect_provider",
   "signal_agent",
   "resolve_agent_signal",
+  "beads_status",
+  "beads_ready",
+  "beads_list",
+  "beads_get",
+  "beads_prime",
+] as const;
+
+const PEER_PASEO_TOOLS = [
+  "beads_status",
+  "beads_ready",
+  "beads_list",
+  "beads_get",
+  "beads_create",
+  "beads_claim",
+  "beads_update",
+  "beads_add_dependency",
+  "beads_prime",
 ] as const;
 
 function sha256(value: string): string {
@@ -356,8 +373,11 @@ export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBinding
   return RoleBindingReceiptSchema.parse(binding);
 }
 
-function intersectSupervisorTools(providerPolicy: ProviderPaseoToolsPolicy | undefined): string[] {
-  let roleTools = [...SUPERVISOR_PASEO_TOOLS];
+function intersectRoleTools(
+  tools: readonly string[],
+  providerPolicy: ProviderPaseoToolsPolicy | undefined,
+): string[] {
+  let roleTools = [...tools];
   if (providerPolicy?.allowedTools) {
     const providerAllowed = new Set(providerPolicy.allowedTools);
     roleTools = roleTools.filter((tool) => providerAllowed.has(tool));
@@ -377,14 +397,17 @@ export function applyRolePaseoToolPolicy(
     return providerPolicy;
   }
   if (roleId === "peer") {
-    return { enabled: false };
+    return {
+      enabled: true,
+      allowedTools: intersectRoleTools(PEER_PASEO_TOOLS, providerPolicy),
+    };
   }
   if (roleId === "lead") {
     return providerPolicy ? { ...providerPolicy, enabled: true } : undefined;
   }
   return {
     enabled: true,
-    allowedTools: intersectSupervisorTools(providerPolicy),
+    allowedTools: intersectRoleTools(SUPERVISOR_PASEO_TOOLS, providerPolicy),
   };
 }
 

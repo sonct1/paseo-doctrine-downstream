@@ -965,6 +965,7 @@ export const zhCN: TranslationResources = {
     project: {
       actions: {
         menu: "Project 操作",
+        openIssues: "打开问题",
         openSettings: "打开 project 设置",
         openNewWindow: "在新窗口中打开",
         openNewWindowFailed: "无法打开新窗口",

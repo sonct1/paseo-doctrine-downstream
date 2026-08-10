@@ -3,6 +3,8 @@ import {
   buildHostAgentDetailRoute,
   buildHostCouncilRoute,
   buildHostCouncilsRoute,
+  buildHostProjectIssueRoute,
+  buildHostProjectIssuesRoute,
   buildHostRootRoute,
   buildHostRoomRoute,
   buildHostRoomsRoute,
@@ -105,6 +107,18 @@ describe("workspace route parsing", () => {
     expect(buildHostCouncilsRoute("local host")).toBe("/h/local%20host/councils");
     expect(buildHostCouncilRoute("local host", "case/one")).toBe(
       "/h/local%20host/councils/case%2Fone",
+    );
+    expect(buildHostCouncilRoute("local host", "case/one", "workspace/one")).toBe(
+      "/h/local%20host/councils/case%2Fone?workspaceId=workspace%2Fone",
+    );
+  });
+
+  it("builds host-scoped project issue routes with opaque IDs", () => {
+    expect(buildHostProjectIssuesRoute("local host", "project/one")).toBe(
+      "/h/local%20host/issues/project%2Fone",
+    );
+    expect(buildHostProjectIssueRoute("local host", "project/one", "issue/one")).toBe(
+      "/h/local%20host/issues/project%2Fone/issue%2Fone",
     );
   });
 

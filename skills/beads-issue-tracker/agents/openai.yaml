@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beads Issue Tracker"
+  short_description: "Use Paseo native Beads work graph safely"
+  default_prompt: "Use $beads-issue-tracker to inspect or update the current project issue graph within my assignment."

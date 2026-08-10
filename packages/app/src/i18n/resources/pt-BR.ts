@@ -996,6 +996,7 @@ export const ptBR: TranslationResources = {
     project: {
       actions: {
         menu: "Ações do projeto",
+        openIssues: "Abrir issues",
         openSettings: "Abrir configurações do projeto",
         openNewWindow: "Abrir em nova janela",
         openNewWindowFailed: "Não foi possível abrir uma nova janela",

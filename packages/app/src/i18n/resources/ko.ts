@@ -981,6 +981,7 @@ export const ko: TranslationResources = {
     project: {
       actions: {
         menu: "프로젝트 작업",
+        openIssues: "이슈 열기",
         openSettings: "프로젝트 설정 열기",
         openNewWindow: "새 창에서 열기",
         openNewWindowFailed: "새 창을 열 수 없습니다",

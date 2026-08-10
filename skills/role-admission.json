@@ -3,21 +3,24 @@
   "packages": {
     "council": {
       "provenance": "DEMONTHORN_EXACT"
+    },
+    "beads-issue-tracker": {
+      "provenance": "PASEO_NATIVE"
     }
   },
   "roles": {
     "lead": {
-      "active": ["council"],
+      "active": ["council", "beads-issue-tracker"],
       "explicitOnly": [],
       "packagedDisabled": []
     },
     "peer": {
-      "active": [],
+      "active": ["beads-issue-tracker"],
       "explicitOnly": [],
       "packagedDisabled": ["council"]
     },
     "supervisor": {
-      "active": [],
+      "active": ["beads-issue-tracker"],
       "explicitOnly": [],
       "packagedDisabled": ["council"]
     }

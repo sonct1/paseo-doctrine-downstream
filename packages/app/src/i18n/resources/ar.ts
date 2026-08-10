@@ -974,6 +974,7 @@ export const ar: TranslationResources = {
     project: {
       actions: {
         menu: "إجراءات المشروع",
+        openIssues: "فتح المشكلات",
         openSettings: "افتح إعدادات المشروع",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",

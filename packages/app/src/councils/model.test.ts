@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CouncilAgentSource } from "./model";
+import type { CouncilAgentSource, CouncilCase } from "./model";
 import { groupCouncilCases, isCouncilSeatReportReady } from "./model";
 
 function makeAgent(
@@ -52,6 +52,13 @@ const leadRoleBinding = {
   },
   createdAt: "2026-08-10T09:00:00.000Z",
 } as const;
+
+function summarizeCouncilWorkspace(council: CouncilCase) {
+  return {
+    workspaceId: council.workspaceId,
+    seats: council.seats.map((seat) => seat.agent.id),
+  };
+}
 
 describe("groupCouncilCases", () => {
   it("projects labeled seats into one ordered case and resolves its Lead", () => {
@@ -192,5 +199,24 @@ describe("groupCouncilCases", () => {
     expect(council?.parentAgentId).toBeNull();
     expect(council?.lead).toBeNull();
     expect(council?.verdictProvenance).toBe("unverified");
+  });
+
+  it("keeps the same case ID isolated across workspaces", () => {
+    const first = makeAgent("first", councilLabels("independent"), {
+      workspaceId: "workspace-1",
+      parentAgentId: "lead-1",
+    });
+    const second = makeAgent("second", councilLabels("challenger"), {
+      workspaceId: "workspace-2",
+      parentAgentId: "lead-2",
+    });
+
+    const councils = groupCouncilCases([first, second]);
+
+    expect(councils).toHaveLength(2);
+    expect(councils.map(summarizeCouncilWorkspace)).toEqual([
+      { workspaceId: "workspace-1", seats: ["first"] },
+      { workspaceId: "workspace-2", seats: ["second"] },
+    ]);
   });
 });

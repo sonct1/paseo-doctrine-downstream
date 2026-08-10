@@ -984,6 +984,7 @@ export const en = {
     project: {
       actions: {
         menu: "Project actions",
+        openIssues: "Open issues",
         openSettings: "Open project settings",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",

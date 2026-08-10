@@ -114,6 +114,16 @@ describe("wire schema compatibility", () => {
     expect(parsed.features?.chatRooms).toBe(true);
   });
 
+  test("server info accepts the optional native Beads issue feature flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "beads-server",
+      features: { beadsIssues: true },
+    });
+
+    expect(parsed.features?.beadsIssues).toBe(true);
+  });
+
   test("assistant timeline message ids are optional on the wire", () => {
     expect(
       AgentTimelineItemPayloadSchema.parse({

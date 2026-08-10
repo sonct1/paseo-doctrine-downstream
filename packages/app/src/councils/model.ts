@@ -133,6 +133,10 @@ function councilVerdictProvenance(
   return lead ? "lead-linked" : "unverified";
 }
 
+function councilCaseKey(agent: CouncilAgentSource, caseId: string): string {
+  return JSON.stringify([agent.serverId, agent.workspaceId ?? null, caseId]);
+}
+
 export function groupCouncilCases(
   agents: readonly CouncilAgentSource[],
   serverId?: string,
@@ -149,7 +153,7 @@ export function groupCouncilCases(
       continue;
     }
     const caseId = readLabel(agent.labels, "council.case_id");
-    const key = `${agent.serverId}:${caseId}`;
+    const key = councilCaseKey(agent, caseId);
     const seats = seatsByCase.get(key);
     if (seats) {
       seats.push(seat);

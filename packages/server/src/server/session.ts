@@ -172,6 +172,8 @@ import { WorkspaceFilesSession } from "./session/files/workspace-files-session.j
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
 import { WorkspaceProtocolSession } from "./session/workspace-protocol/workspace-protocol-session.js";
+import { BeadsSession, type BeadsSessionOptions } from "./session/beads/beads-session.js";
+import type { BeadsNativeService } from "./beads/beads-native-service.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
@@ -438,6 +440,21 @@ const nodeSessionFileSystem: SessionFileSystem = {
 // Stub types for features under development (modules not yet available)
 type AgentMcpTransportFactory = () => Promise<unknown>;
 
+function createBeadsSession(options: {
+  service: BeadsNativeService | undefined;
+  projectRegistry: BeadsSessionOptions["projectRegistry"];
+  clientId: string;
+  emit: (message: SessionOutboundMessage) => void;
+}): BeadsSession | null {
+  if (!options.service) return null;
+  return new BeadsSession({
+    host: { emit: options.emit },
+    service: options.service,
+    projectRegistry: options.projectRegistry,
+    clientId: options.clientId,
+  });
+}
+
 export interface SessionOptions {
   clientId: string;
   scopes: readonly string[];
@@ -459,6 +476,7 @@ export interface SessionOptions {
   agentStorage: AgentStorage;
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
+  beadsService?: BeadsNativeService;
   filesystem?: SessionFileSystem;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
@@ -689,6 +707,7 @@ export class Session {
   private readonly agentConfigSession: AgentConfigSession;
   private readonly projectConfigSession: ProjectConfigSession;
   private readonly workspaceProtocolSession: WorkspaceProtocolSession;
+  private readonly beadsSession: BeadsSession | null;
   private readonly daemonSession: DaemonSession;
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
@@ -716,6 +735,7 @@ export class Session {
       agentStorage,
       projectRegistry,
       workspaceRegistry,
+      beadsService,
       filesystem,
       chatService,
       scheduleService,
@@ -924,6 +944,12 @@ export class Session {
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
       logger: this.sessionLogger,
+    });
+    this.beadsSession = createBeadsSession({
+      service: beadsService,
+      projectRegistry: this.projectRegistry,
+      clientId: this.clientId,
+      emit: (message) => this.emit(message),
     });
     this.daemonSession = new DaemonSession({
       host: {
@@ -1875,6 +1901,7 @@ export class Session {
       this.dispatchAgentTimelineMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchAgentLifecycleMessage(msg) ??
+      this.dispatchBeadsMessage(msg) ??
       this.dispatchProjectConfigurationMessage(msg) ??
       this.dispatchAgentConfigMessage(msg) ??
       this.dispatchCheckoutMessage(msg) ??
@@ -2131,6 +2158,26 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private dispatchBeadsMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    switch (msg.type) {
+      case "beads.issues.list.request":
+        return this.requireBeadsSession().handleList(msg);
+      case "beads.issue.get.request":
+        return this.requireBeadsSession().handleGet(msg);
+      case "beads.issue.create.request":
+        return this.requireBeadsSession().handleCreate(msg);
+      case "beads.issue.close.request":
+        return this.requireBeadsSession().handleClose(msg);
+      default:
+        return undefined;
+    }
+  }
+
+  private requireBeadsSession(): BeadsSession {
+    if (!this.beadsSession) throw new Error("Native Beads service is unavailable");
+    return this.beadsSession;
   }
 
   // eslint-disable-next-line complexity

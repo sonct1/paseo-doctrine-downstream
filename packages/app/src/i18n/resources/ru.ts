@@ -996,6 +996,7 @@ export const ru: TranslationResources = {
     project: {
       actions: {
         menu: "Действия проекта",
+        openIssues: "Открыть задачи",
         openSettings: "Открыть настройки проекта",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",

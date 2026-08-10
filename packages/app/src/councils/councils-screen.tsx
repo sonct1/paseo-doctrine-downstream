@@ -39,6 +39,7 @@ import {
 interface CouncilsScreenProps {
   serverId: string;
   selectedCaseId: string | null;
+  selectedWorkspaceId?: string | null;
 }
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
@@ -59,14 +60,24 @@ const surfaceMapping = (theme: Theme) => ({ color: theme.colors.surface0 });
 const statusSuccessMapping = (theme: Theme) => ({ color: theme.colors.statusSuccess });
 const statusDangerMapping = (theme: Theme) => ({ color: theme.colors.statusDanger });
 
-export function CouncilsScreen({ serverId, selectedCaseId }: CouncilsScreenProps) {
+export function CouncilsScreen({
+  serverId,
+  selectedCaseId,
+  selectedWorkspaceId = null,
+}: CouncilsScreenProps) {
   const isCompact = useIsCompactFormFactor();
   const agentsResult = useAggregatedAgents({ includeArchived: true });
   const councils = useMemo(
     () => groupCouncilCases(agentsResult.agents, serverId),
     [agentsResult.agents, serverId],
   );
-  const selectedCouncil = councils.find((council) => council.id === selectedCaseId) ?? null;
+  const selectedCouncil = useMemo(() => {
+    const matchingCases = councils.filter((council) => council.id === selectedCaseId);
+    if (selectedWorkspaceId) {
+      return matchingCases.find((council) => council.workspaceId === selectedWorkspaceId) ?? null;
+    }
+    return matchingCases.length === 1 ? matchingCases[0] : null;
+  }, [councils, selectedCaseId, selectedWorkspaceId]);
 
   let content: ReactNode;
   if (agentsResult.isInitialLoad) {
@@ -80,13 +91,13 @@ export function CouncilsScreen({ serverId, selectedCaseId }: CouncilsScreenProps
         compact
       />
     ) : (
-      <CouncilList councils={councils} selectedCaseId={null} />
+      <CouncilList councils={councils} selectedCouncil={null} />
     );
   } else {
     content = (
       <View style={styles.desktopBody}>
         <View style={styles.desktopListPane}>
-          <CouncilList councils={councils} selectedCaseId={selectedCaseId} />
+          <CouncilList councils={councils} selectedCouncil={selectedCouncil} />
         </View>
         <View style={styles.desktopDetailPane}>
           {selectedCaseId ? (
@@ -142,10 +153,10 @@ function ScaleEmptyState() {
 
 function CouncilList({
   councils,
-  selectedCaseId,
+  selectedCouncil,
 }: {
   councils: CouncilCase[];
-  selectedCaseId: string | null;
+  selectedCouncil: CouncilCase | null;
 }) {
   if (councils.length === 0) {
     return <CouncilEmpty text="No councils yet" />;
@@ -156,9 +167,9 @@ function CouncilList({
       <View style={styles.councilList}>
         {councils.map((council) => (
           <CouncilRow
-            key={`${council.serverId}:${council.id}`}
+            key={JSON.stringify([council.serverId, council.workspaceId ?? null, council.id])}
             council={council}
-            selected={council.id === selectedCaseId}
+            selected={council === selectedCouncil}
           />
         ))}
       </View>
@@ -169,8 +180,8 @@ function CouncilList({
 function CouncilRow({ council, selected }: { council: CouncilCase; selected: boolean }) {
   const phaseLabel = councilCasePhaseLabel(council);
   const handlePress = useCallback(() => {
-    router.push(buildHostCouncilRoute(council.serverId, council.id));
-  }, [council.id, council.serverId]);
+    router.push(buildHostCouncilRoute(council.serverId, council.id, council.workspaceId));
+  }, [council.id, council.serverId, council.workspaceId]);
   const rowStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.councilRow,

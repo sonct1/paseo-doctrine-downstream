@@ -79,6 +79,7 @@ Anyone who builds software:
 - Scheduled agents (cron-style triggers) via app, CLI, and MCP
 - Candidate branch, not production-qualified: Project Settings can inspect, preview, bootstrap, correct, and save a repository-owned `WORKSPACE_PROTOCOL.md` without asking the user to run a command.
 - Candidate branch, not production-qualified: role-bound agent creation verifies that protocol in WebUI and again in the daemon before launch; recovery opens the exact active project or worktree target in Project Settings.
+- Candidate branch, chưa production-qualified: native Beads cung cấp một durable issue graph cho mỗi project, WebUI theo project và agent tools theo role mà không tiếp quản Paseo delegation hoặc acceptance.
 - Frequent releases (multiple per week)
 - Community contributions across packaging, providers, and bug fixes
 - Key UX: split panes, keybinding customization, workspace model, in-app browser

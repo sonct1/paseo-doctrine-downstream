@@ -38,6 +38,7 @@ Your code never leaves your machine. Paseo is local-first.
 - **CLI:** Terminal interface for agent workflows that can also start and manage the daemon.
 - **Desktop app:** Electron wrapper around the web app that bundles and auto-manages its own daemon.
 - **Relay:** Optional encrypted bridge for remote access without opening ports directly.
+- **Native Beads:** Daemon-owned, project-scoped issue graph cho durable work state; không sở hữu agent lifecycle hoặc engineering acceptance. Xem [native-beads.md](native-beads.md).
 
 ## Packages
 
@@ -78,6 +79,7 @@ not retain non-Git directories.
 | `server/schedule/`              | Cron-based scheduled agents                                                   |
 | `server/loop-service.ts`        | Looping agent runs that retry until an exit condition                         |
 | `server/chat/`                  | Chat rooms for agent-to-agent and human-to-agent messaging                    |
+| `server/beads/`                 | Beads adapter đã pin, project isolation, idempotency và tools theo role       |
 
 ### `packages/protocol` — Wire schemas and shared protocol types
 

@@ -1004,6 +1004,7 @@ export const fr: TranslationResources = {
     project: {
       actions: {
         menu: "Actions du projet",
+        openIssues: "Ouvrir les tickets",
         openSettings: "Ouvrir les paramètres du projet",
         openNewWindow: "Open in new window",
         openNewWindowFailed: "Couldn't open a new window",

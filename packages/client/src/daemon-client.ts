@@ -525,6 +525,22 @@ type ChatDeletePayload = Extract<
 type ChatPostPayload = Extract<SessionOutboundMessage, { type: "chat/post/response" }>["payload"];
 type ChatReadPayload = Extract<SessionOutboundMessage, { type: "chat/read/response" }>["payload"];
 type ChatWaitPayload = Extract<SessionOutboundMessage, { type: "chat/wait/response" }>["payload"];
+type BeadsIssuesListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "beads.issues.list.response" }
+>["payload"];
+type BeadsIssueGetPayload = Extract<
+  SessionOutboundMessage,
+  { type: "beads.issue.get.response" }
+>["payload"];
+type BeadsIssueCreatePayload = Extract<
+  SessionOutboundMessage,
+  { type: "beads.issue.create.response" }
+>["payload"];
+type BeadsIssueClosePayload = Extract<
+  SessionOutboundMessage,
+  { type: "beads.issue.close.response" }
+>["payload"];
 type LoopRunPayload = Extract<SessionOutboundMessage, { type: "loop/run/response" }>["payload"];
 type LoopListPayload = Extract<SessionOutboundMessage, { type: "loop/list/response" }>["payload"];
 type LoopInspectPayload = Extract<
@@ -748,6 +764,22 @@ export interface WaitForChatMessagesOptions {
   timeoutMs?: number;
   requestId?: string;
 }
+export type ListBeadsIssuesOptions = Omit<
+  Extract<SessionInboundMessage, { type: "beads.issues.list.request" }>,
+  "type" | "requestId"
+> & { requestId?: string };
+export type GetBeadsIssueOptions = Omit<
+  Extract<SessionInboundMessage, { type: "beads.issue.get.request" }>,
+  "type" | "requestId"
+> & { requestId?: string };
+export type CreateBeadsIssueOptions = Omit<
+  Extract<SessionInboundMessage, { type: "beads.issue.create.request" }>,
+  "type" | "requestId"
+> & { requestId?: string };
+export type CloseBeadsIssueOptions = Omit<
+  Extract<SessionInboundMessage, { type: "beads.issue.close.request" }>,
+  "type" | "requestId"
+> & { requestId?: string };
 export interface RunLoopOptions {
   prompt: string;
   cwd: string;
@@ -5203,6 +5235,62 @@ export class DaemonClient {
         ...(options.purpose ? { purpose: options.purpose } : {}),
       },
       responseType: "chat/create/response",
+    });
+  }
+
+  async listBeadsIssues(options: ListBeadsIssuesOptions): Promise<BeadsIssuesListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "beads.issues.list.request",
+        projectId: options.projectId,
+        ...(options.status ? { status: options.status } : {}),
+        ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      },
+      responseType: "beads.issues.list.response",
+    });
+  }
+
+  async getBeadsIssue(options: GetBeadsIssueOptions): Promise<BeadsIssueGetPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "beads.issue.get.request",
+        projectId: options.projectId,
+        issueId: options.issueId,
+      },
+      responseType: "beads.issue.get.response",
+    });
+  }
+
+  async createBeadsIssue(options: CreateBeadsIssueOptions): Promise<BeadsIssueCreatePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "beads.issue.create.request",
+        projectId: options.projectId,
+        title: options.title,
+        ...(options.description !== undefined ? { description: options.description } : {}),
+        issueType: options.issueType,
+        priority: options.priority,
+        ...(options.acceptance !== undefined ? { acceptance: options.acceptance } : {}),
+        idempotencyKey: options.idempotencyKey,
+      },
+      responseType: "beads.issue.create.response",
+    });
+  }
+
+  async closeBeadsIssue(options: CloseBeadsIssueOptions): Promise<BeadsIssueClosePayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "beads.issue.close.request",
+        projectId: options.projectId,
+        issueId: options.issueId,
+        reason: options.reason,
+        idempotencyKey: options.idempotencyKey,
+      },
+      responseType: "beads.issue.close.response",
     });
   }
 

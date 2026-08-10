@@ -985,6 +985,7 @@ export const ja: TranslationResources = {
     project: {
       actions: {
         menu: "プロジェクトアクション",
+        openIssues: "課題を開く",
         openSettings: "プロジェクト設定を開く",
         openNewWindow: "新しいウィンドウで開く",
         openNewWindowFailed: "新しいウィンドウを開けませんでした",

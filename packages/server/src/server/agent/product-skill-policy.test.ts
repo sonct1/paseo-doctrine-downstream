@@ -16,22 +16,26 @@ const temporaryRoots: string[] = [];
 function bundleRoot(manifestOverride?: unknown): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "paseo-product-skills-"));
   temporaryRoots.push(root);
-  mkdirSync(path.join(root, "council"), { recursive: true });
-  writeFileSync(path.join(root, "council", "SKILL.md"), "---\nname: council\n---\n");
-  writeFileSync(
-    path.join(root, "role-admission.json"),
-    `${JSON.stringify(
-      manifestOverride ?? {
-        schemaVersion: 1,
-        packages: { council: { provenance: "DEMONTHORN_EXACT" } },
-        roles: {
-          lead: { active: ["council"], explicitOnly: [], packagedDisabled: [] },
-          peer: { active: [], explicitOnly: [], packagedDisabled: ["council"] },
-          supervisor: { active: [], explicitOnly: [], packagedDisabled: ["council"] },
-        },
+  const manifest =
+    manifestOverride ??
+    ({
+      schemaVersion: 1,
+      packages: { council: { provenance: "DEMONTHORN_EXACT" } },
+      roles: {
+        lead: { active: ["council"], explicitOnly: [], packagedDisabled: [] },
+        peer: { active: [], explicitOnly: [], packagedDisabled: ["council"] },
+        supervisor: { active: [], explicitOnly: [], packagedDisabled: ["council"] },
       },
-    )}\n`,
-  );
+    } as const);
+  const packageNames =
+    manifest && typeof manifest === "object" && "packages" in manifest
+      ? Object.keys((manifest as { packages: Record<string, unknown> }).packages)
+      : ["council"];
+  for (const name of packageNames) {
+    mkdirSync(path.join(root, name), { recursive: true });
+    writeFileSync(path.join(root, name, "SKILL.md"), `---\nname: ${name}\n---\n`);
+  }
+  writeFileSync(path.join(root, "role-admission.json"), `${JSON.stringify(manifest)}\n`);
   return root;
 }
 
@@ -51,6 +55,43 @@ describe("product role skill policy", () => {
     expect(peer.enabledNames.size).toBe(0);
     expect(supervisor.enabledNames.size).toBe(0);
     expect(lead.skillPaths.get("council")).toBe(path.join(root, "council", "SKILL.md"));
+  });
+
+  test("admits the native Beads skill to every role while Council stays Lead-only", () => {
+    const root = bundleRoot({
+      schemaVersion: 1,
+      packages: { council: {}, "beads-issue-tracker": {} },
+      roles: {
+        lead: {
+          active: ["council", "beads-issue-tracker"],
+          explicitOnly: [],
+          packagedDisabled: [],
+        },
+        peer: {
+          active: ["beads-issue-tracker"],
+          explicitOnly: [],
+          packagedDisabled: ["council"],
+        },
+        supervisor: {
+          active: ["beads-issue-tracker"],
+          explicitOnly: [],
+          packagedDisabled: ["council"],
+        },
+      },
+    });
+
+    expect([...loadProductSkillPolicy("lead", root).enabledNames]).toEqual([
+      "council",
+      "beads-issue-tracker",
+    ]);
+    for (const role of ["peer", "supervisor"] as const) {
+      const policy = loadProductSkillPolicy(role, root);
+      expect([...policy.enabledNames]).toEqual(["beads-issue-tracker"]);
+      expect(claudeProductSkillDenyRules(policy)).toEqual([
+        "Skill(council)",
+        "Skill(council:council)",
+      ]);
+    }
   });
 
   test("fails closed when a role does not classify every package exactly once", () => {

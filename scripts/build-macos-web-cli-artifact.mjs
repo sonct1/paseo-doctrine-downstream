@@ -30,6 +30,17 @@ const PACK_ROOT = path.join(ARTIFACTS_ROOT, ".staging", "packs");
 const OUTPUT_DIR = path.join(ARTIFACTS_ROOT, BUNDLE_NAME);
 const OUTPUT_TARBALL = path.join(ARTIFACTS_ROOT, `${BUNDLE_NAME}.tar.gz`);
 const OUTPUT_CHECKSUM = `${OUTPUT_TARBALL}.sha256`;
+const BEADS_VERSION = "1.1.2";
+const BEADS_RELEASE = {
+  arm64: {
+    asset: `beads_${BEADS_VERSION}_darwin_arm64.tar.gz`,
+    sha256: "9b0137a83a2afd343e2abd2a506be72ea032721000f76669c2cf81729e78501d",
+  },
+  x64: {
+    asset: `beads_${BEADS_VERSION}_darwin_amd64.tar.gz`,
+    sha256: "0e94de9319c9d66cb7e0038bb17ebaf5dd2fe669e366a4b9153528b474a1a8f6",
+  },
+};
 const INTERNAL_PACKAGES = [
   "@getpaseo/highlight",
   "@getpaseo/relay",
@@ -168,6 +179,56 @@ function copyNodeRuntime(nodeRoot) {
   for (const name of ["LICENSE", "README.md"]) {
     const source = path.join(nodeRoot, name);
     if (existsSync(source)) copyFileSync(source, path.join(runtimeRoot, `NODE-${name}`));
+  }
+}
+
+function resolveBeadsArchive() {
+  const release = BEADS_RELEASE[ARCH];
+  if (!release) fail(`No pinned Beads release for macOS architecture ${ARCH}`);
+  const override = process.env.PASEO_RELEASE_BEADS_ARCHIVE;
+  const cacheRoot = path.join(ARTIFACTS_ROOT, ".cache", "beads", BEADS_VERSION);
+  const archive = override ? realpathSync(override) : path.join(cacheRoot, release.asset);
+  if (!override) {
+    mkdirSync(cacheRoot, { recursive: true });
+    if (existsSync(archive) && sha256(archive) !== release.sha256) rmSync(archive, { force: true });
+    if (!existsSync(archive)) {
+      run("/usr/bin/curl", [
+        "--fail",
+        "--location",
+        "--retry",
+        "3",
+        "--output",
+        archive,
+        `https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/${release.asset}`,
+      ]);
+    }
+  }
+  const digest = sha256(archive);
+  if (digest !== release.sha256) {
+    fail(`Pinned Beads archive checksum mismatch: expected ${release.sha256}, received ${digest}`);
+  }
+  return archive;
+}
+
+function copyBeadsRuntime() {
+  const archive = resolveBeadsArchive();
+  const extractRoot = path.join(ARTIFACTS_ROOT, ".staging", "beads-extract");
+  rmSync(extractRoot, { recursive: true, force: true });
+  mkdirSync(extractRoot, { recursive: true });
+  run("/usr/bin/tar", ["-xzf", archive, "-C", extractRoot, "./bd", "./LICENSE"]);
+  const sourceBinary = path.join(extractRoot, "bd");
+  const sourceLicense = path.join(extractRoot, "LICENSE");
+  if (!existsSync(sourceBinary) || !existsSync(sourceLicense)) {
+    fail("Pinned Beads archive is missing bd or LICENSE");
+  }
+  const runtimeRoot = path.join(STAGING_ROOT, "runtime");
+  const targetBinary = path.join(runtimeRoot, "bin", "bd");
+  copyFileSync(sourceBinary, targetBinary);
+  chmodSync(targetBinary, 0o755);
+  copyFileSync(sourceLicense, path.join(runtimeRoot, "BEADS-LICENSE"));
+  const version = run(targetBinary, ["version"], { capture: true });
+  if (!version.startsWith(`bd version ${BEADS_VERSION} `)) {
+    fail(`Bundled Beads validation failed: ${version || "no version output"}`);
   }
 }
 
@@ -531,6 +592,9 @@ function createManifest(nodeRoot) {
     webUiIncluded: true,
     cliIncluded: true,
     foundationIncluded: true,
+    beadsIncluded: true,
+    beadsVersion: BEADS_VERSION,
+    beadsBinarySha256: sha256(path.join(STAGING_ROOT, "runtime", "bin", "bd")),
     internalPackages: Object.fromEntries(
       INTERNAL_PACKAGES.map((name) => [
         name,
@@ -560,7 +624,9 @@ function validateStaging(nodeRoot) {
     manifest.arch !== ARCH ||
     manifest.electronIncluded !== false ||
     manifest.webUiIncluded !== true ||
-    manifest.cliIncluded !== true
+    manifest.cliIncluded !== true ||
+    manifest.beadsIncluded !== true ||
+    manifest.beadsVersion !== BEADS_VERSION
   ) {
     fail("Artifact manifest validation failed");
   }
@@ -571,6 +637,12 @@ function validateStaging(nodeRoot) {
     capture: true,
   });
   if (bundledNodeVersion !== sourceNodeVersion) fail("Bundled Node validation failed");
+  const bundledBeadsVersion = run(path.join(STAGING_ROOT, "runtime", "bin", "bd"), ["version"], {
+    capture: true,
+  });
+  if (!bundledBeadsVersion.startsWith(`bd version ${BEADS_VERSION} `)) {
+    fail("Bundled Beads validation failed");
+  }
 }
 
 function emitArtifact() {
@@ -598,6 +670,7 @@ function main() {
   const tarballs = packInternalPackages();
   installProductionPayload(nodeRoot, tarballs);
   copyNodeRuntime(nodeRoot);
+  copyBeadsRuntime();
   createLaunchers();
   createInstallScripts();
   createManifest(nodeRoot);

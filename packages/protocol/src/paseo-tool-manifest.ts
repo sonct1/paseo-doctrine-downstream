@@ -11,6 +11,7 @@ export type PaseoToolManifestGroup =
   | "Schedules"
   | "Providers"
   | "Rooms"
+  | "Issues"
   | "Browser";
 
 export interface PaseoToolManifestEntry {
@@ -216,6 +217,66 @@ export const PASEO_TOOL_MANIFEST = [
     description:
       "Post to a Paseo room as the calling agent, optionally replying to a message or mentioning another agent.",
     group: "Rooms",
+  },
+  {
+    id: "beads_status",
+    label: "Inspect native Beads",
+    description: "Check the pinned native Beads runtime bundled with Paseo.",
+    group: "Issues",
+  },
+  {
+    id: "beads_ready",
+    label: "List ready issues",
+    description: "List unblocked issues for the current Paseo project.",
+    group: "Issues",
+  },
+  {
+    id: "beads_list",
+    label: "List issues",
+    description: "Query the durable issue graph for the current Paseo project.",
+    group: "Issues",
+  },
+  {
+    id: "beads_get",
+    label: "Inspect issue",
+    description: "Read one durable issue and its dependency metadata.",
+    group: "Issues",
+  },
+  {
+    id: "beads_create",
+    label: "Create issue",
+    description: "Create a durable issue within the caller's assignment authority.",
+    group: "Issues",
+  },
+  {
+    id: "beads_claim",
+    label: "Claim issue",
+    description: "Atomically claim an issue as the calling Paseo agent.",
+    group: "Issues",
+  },
+  {
+    id: "beads_update",
+    label: "Update issue",
+    description: "Update an issue within the caller's assignment and ownership boundary.",
+    group: "Issues",
+  },
+  {
+    id: "beads_close",
+    label: "Close issue",
+    description: "Record Lead-owned issue closure with an evidence-based reason.",
+    group: "Issues",
+  },
+  {
+    id: "beads_add_dependency",
+    label: "Add issue dependency",
+    description: "Add one typed dependency edge to the current project graph.",
+    group: "Issues",
+  },
+  {
+    id: "beads_prime",
+    label: "Read Beads context",
+    description: "Read compact no-git workflow guidance for the current project graph.",
+    group: "Issues",
   },
   {
     id: "create_schedule",

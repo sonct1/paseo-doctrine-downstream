@@ -21,7 +21,7 @@ function leadAssignment(): AssignmentEnvelope {
   };
 }
 
-async function seedCouncilScenario() {
+async function seedCouncilScenario(caseTitle = CASE_TITLE) {
   const workspace = await seedWorkspace({ repoPrefix: "council-ui-" });
   try {
     const lead = await workspace.client.createAgent({
@@ -49,7 +49,7 @@ async function seedCouncilScenario() {
         labels: {
           [PARENT_AGENT_ID_LABEL]: lead.id,
           "council.case_id": CASE_ID,
-          "council.title": CASE_TITLE,
+          "council.title": caseTitle,
           "council.tier": "high-risk",
           "council.phase": "verdict",
           "council.role": role,
@@ -66,6 +66,7 @@ async function seedCouncilScenario() {
     return {
       leadId: lead.id,
       seatIds: seats.map((seat) => seat.id),
+      workspaceId: workspace.workspaceId,
       cleanup: workspace.cleanup,
     };
   } catch (error) {
@@ -81,7 +82,7 @@ test.describe("Council case surface", () => {
     try {
       await page.emulateMedia({ colorScheme: "dark" });
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID));
+      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID, scenario.workspaceId));
 
       const detail = page.getByTestId(`council-detail-${CASE_ID}`);
       await expect(detail).toBeVisible({ timeout: 30_000 });
@@ -124,6 +125,27 @@ test.describe("Council case surface", () => {
       });
     } finally {
       await scenario.cleanup();
+    }
+  });
+
+  test("keeps same-ID cases isolated across workspaces", async ({ page }) => {
+    test.setTimeout(120_000);
+    const first = await seedCouncilScenario("Workspace one Council");
+    const second = await seedCouncilScenario("Workspace two Council");
+    try {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID, second.workspaceId));
+
+      const detail = page.getByTestId(`council-detail-${CASE_ID}`);
+      await expect(detail).toBeVisible({ timeout: 30_000 });
+      await expect(detail.getByText("Workspace two Council", { exact: true })).toBeVisible();
+      await expect(detail.getByText("Workspace one Council", { exact: true })).toHaveCount(0);
+      await expect(detail.locator('[data-testid^="council-open-agent-"]')).toHaveCount(4);
+      const list = page.getByTestId("councils-list");
+      await expect(list.getByText("Workspace one Council", { exact: true })).toBeVisible();
+      await expect(list.getByText("Workspace two Council", { exact: true })).toBeVisible();
+    } finally {
+      await Promise.all([first.cleanup(), second.cleanup()]);
     }
   });
 });
