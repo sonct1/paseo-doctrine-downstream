@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
+        if: env.PASEO_BOT_APP_ID != '' && env.PASEO_BOT_APP_PRIVATE_KEY != ''
+        env:
+          PASEO_BOT_APP_ID: ${{ secrets.PASEO_BOT_APP_ID }}
+          PASEO_BOT_APP_PRIVATE_KEY: ${{ secrets.PASEO_BOT_APP_PRIVATE_KEY }}
         with:
           app-id: ${{ secrets.PASEO_BOT_APP_ID }}
           private-key: ${{ secrets.PASEO_BOT_APP_PRIVATE_KEY }}
@@ -33,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token || github.token }}
 
       - uses: actions/setup-node@v4
         with:
@@ -50,7 +54,12 @@ jobs:
       - name: Build Nix package
         run: nix build .#default -o result
 
+      - name: Verify hash and lockfile are current without bot credentials
+        if: steps.app-token.outputs.token == ''
+        run: git diff --exit-code package-lock.json nix/npm-deps.hash
+
       - name: Commit hash/lockfile updates
+        if: steps.app-token.outputs.token != ''
         run: |
           git diff --quiet package-lock.json nix/npm-deps.hash && exit 0
           git config user.name "paseo-ai[bot]"

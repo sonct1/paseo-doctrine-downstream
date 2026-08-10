@@ -7,6 +7,7 @@ const repoRoot = new URL("../", import.meta.url);
 const ciWorkflowPath = new URL(".github/workflows/ci.yml", repoRoot);
 const dockerWorkflowPath = new URL(".github/workflows/docker.yml", repoRoot);
 const nixWorkflowPath = new URL(".github/workflows/nix.yml", repoRoot);
+const nixUpdateHashWorkflowPath = new URL(".github/workflows/nix-update-hash.yml", repoRoot);
 const filtersPath = new URL(".github/ci-paths.yml", repoRoot);
 const serverTsconfigPath = new URL("packages/server/tsconfig.server.json", repoRoot);
 const desktopPackagePath = new URL("packages/desktop/package.json", repoRoot);
@@ -102,7 +103,6 @@ test("gated checks are statically named jobs with real job-level gating", () => 
     }
   }
 });
-
 test("change gating allows superseded workflow runs to cancel", () => {
   for (const workflowPath of [ciWorkflowPath, dockerWorkflowPath, nixWorkflowPath]) {
     const source = readFileSync(workflowPath, "utf8");
@@ -286,4 +286,21 @@ test("non-required Docker and Nix workflows avoid runners with workflow path fil
     assert.match(trigger, /^\s+paths:\s*$/m);
     assert.doesNotMatch(source, /dorny\/paths-filter/);
   }
+});
+
+test("Nix hash updates remain verifiable without upstream bot credentials", () => {
+  const source = readFileSync(nixUpdateHashWorkflowPath, "utf8");
+
+  assert.match(source, /PASEO_BOT_APP_ID: \$\{\{ secrets\.PASEO_BOT_APP_ID \}\}/);
+  assert.match(source, /PASEO_BOT_APP_PRIVATE_KEY: \$\{\{ secrets\.PASEO_BOT_APP_PRIVATE_KEY \}\}/);
+  assert.match(source, /if: env\.PASEO_BOT_APP_ID != '' && env\.PASEO_BOT_APP_PRIVATE_KEY != ''/);
+  assert.match(source, /token: \$\{\{ steps\.app-token\.outputs\.token \|\| github\.token \}\}/);
+  assert.match(
+    source,
+    /if: steps\.app-token\.outputs\.token == ''\s+run: git diff --exit-code package-lock\.json nix\/npm-deps\.hash/,
+  );
+  assert.match(
+    source,
+    /if: steps\.app-token\.outputs\.token != ''\s+run: \|\s+git diff --quiet package-lock\.json nix\/npm-deps\.hash/,
+  );
 });
