@@ -41,6 +41,24 @@ describe("readDaemonBuildProvenance", () => {
     });
   });
 
+  test("preserves explicit unknown source identity for archive builds", () => {
+    const artifact = {
+      schemaVersion: 1,
+      sourceRoot: "/tmp/paseo-src",
+      sourceCommit: null,
+      sourceDirty: null,
+      sourceFingerprint: null,
+      builtAt: "2026-08-10T00:00:00.000Z",
+    };
+    expect(readDaemonBuildProvenance(moduleUrlWithArtifact(artifact))).toEqual({
+      sourceRoot: artifact.sourceRoot,
+      sourceCommit: null,
+      sourceDirty: null,
+      sourceFingerprint: null,
+      builtAt: artifact.builtAt,
+    });
+  });
+
   test("fails closed when the artifact is absent or incomplete", () => {
     const unknown = {
       sourceRoot: null,

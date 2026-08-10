@@ -149,6 +149,7 @@ jobs:
           platforms: ${{ env.PLATFORMS }}
           build-args: |
             PASEO_VERSION=${{ needs.setup.outputs.install_version }}
+            PASEO_SOURCE_COMMIT=${{ github.sha }}
           tags: ${{ needs.setup.outputs.check_tag }}
           push: false
           provenance: false
@@ -182,6 +183,7 @@ jobs:
           platforms: ${{ env.PLATFORMS }}
           build-args: |
             PASEO_VERSION=${{ needs.setup.outputs.install_version }}
+            PASEO_SOURCE_COMMIT=${{ github.sha }}
           tags: ${{ needs.setup.outputs.publish_tags }}
           push: true
           provenance: false

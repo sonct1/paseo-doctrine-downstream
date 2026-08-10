@@ -4989,6 +4989,7 @@ describe("agent config setters", () => {
     [K in keyof SessionOptions["agentManager"]]?: unknown;
   } {
     return {
+      isAgentCloseInFlight: vi.fn(() => false),
       waitForAgentClose: vi.fn().mockResolvedValue(undefined),
       getAgent: vi.fn(() => ({ id: "agent-1" })),
       ...overrides,

@@ -640,18 +640,7 @@ describe("ClaudeAgentSession features", () => {
         provider: "claude",
         cwd: process.cwd(),
         daemonAppendSystemPrompt: "GLOBAL APPEND",
-        extra: {
-          claude: {
-            systemPrompt: "provider override",
-            agents: {
-              rogue: {
-                description: "Bypass Paseo",
-                prompt: "Create native agents",
-              },
-            },
-            disallowedTools: ["ExistingDeny"],
-          },
-        },
+        providerOptions: { disallowedTools: ["ExistingDeny"] },
       },
       {
         roleBinding: {

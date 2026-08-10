@@ -27,14 +27,6 @@ const roleOutputPath = resolve(
   packageRoot,
   "dist/server/server/agent/foundation-role-definitions.json",
 );
-const executionSpecializationSourcePath = resolve(
-  repositoryRoot,
-  "foundation/dist/profiles/native/execution-specializations.json",
-);
-const executionSpecializationOutputPath = resolve(
-  packageRoot,
-  "dist/server/server/agent/foundation-execution-specializations.json",
-);
 const productSkillsSourceRoot = resolve(repositoryRoot, "skills");
 const productSkillAdmissionSourcePath = resolve(productSkillsSourceRoot, "role-admission.json");
 const productSkillsOutputRoot = resolve(packageRoot, "dist/server/server/agent/product-skills");
@@ -100,37 +92,65 @@ function git(args, options = {}) {
   });
 }
 
-const sourceCommit = git(["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const trackedDiff = git(["diff", "--binary", "--no-ext-diff", "HEAD", "--"]);
-const untrackedOutput = git(["ls-files", "--others", "--exclude-standard", "-z"], {
-  encoding: "utf8",
-});
-const untrackedPaths = untrackedOutput.split("\0").filter(Boolean).sort();
-
-const fingerprint = createHash("sha256");
-fingerprint.update("paseo-source-fingerprint-v1\0");
-fingerprint.update(sourceCommit);
-fingerprint.update("\0tracked-diff\0");
-fingerprint.update(trackedDiff);
-for (const relativePath of untrackedPaths) {
-  const absolutePath = resolve(repositoryRoot, relativePath);
-  const stat = lstatSync(absolutePath);
-  fingerprint.update("\0untracked\0");
-  fingerprint.update(relativePath);
-  fingerprint.update("\0");
-  if (stat.isSymbolicLink()) {
-    fingerprint.update(`symlink:${readlinkSync(absolutePath)}`);
-  } else {
-    fingerprint.update(readFileSync(absolutePath));
+function sourceFingerprint(sourceCommit, trackedDiff, untrackedPaths) {
+  const fingerprint = createHash("sha256");
+  fingerprint.update("paseo-source-fingerprint-v1\0");
+  fingerprint.update(sourceCommit);
+  fingerprint.update("\0tracked-diff\0");
+  fingerprint.update(trackedDiff);
+  for (const relativePath of untrackedPaths) {
+    const absolutePath = resolve(repositoryRoot, relativePath);
+    const stat = lstatSync(absolutePath);
+    fingerprint.update("\0untracked\0");
+    fingerprint.update(relativePath);
+    fingerprint.update("\0");
+    if (stat.isSymbolicLink()) {
+      fingerprint.update(`symlink:${readlinkSync(absolutePath)}`);
+    } else {
+      fingerprint.update(readFileSync(absolutePath));
+    }
   }
+  return fingerprint.digest("hex");
 }
+
+function readSourceState() {
+  if (existsSync(resolve(repositoryRoot, ".git"))) {
+    const sourceCommit = git(["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const trackedDiff = git(["diff", "--binary", "--no-ext-diff", "HEAD", "--"]);
+    const untrackedOutput = git(["ls-files", "--others", "--exclude-standard", "-z"], {
+      encoding: "utf8",
+    });
+    const untrackedPaths = untrackedOutput.split("\0").filter(Boolean).sort();
+    return {
+      sourceCommit,
+      sourceDirty: trackedDiff.length > 0 || untrackedPaths.length > 0,
+      sourceFingerprint: sourceFingerprint(sourceCommit, trackedDiff, untrackedPaths),
+    };
+  }
+
+  const sourceCommit = process.env.PASEO_BUILD_SOURCE_COMMIT?.trim() || null;
+  if (sourceCommit && !/^[a-f0-9]{40,64}$/u.test(sourceCommit)) {
+    throw new Error("PASEO_BUILD_SOURCE_COMMIT must be a 40-64 character lowercase hex digest");
+  }
+  if (!sourceCommit) {
+    process.stderr.write(
+      "Paseo build provenance: source archive has no Git metadata or PASEO_BUILD_SOURCE_COMMIT; recording source identity as unknown.\n",
+    );
+    return { sourceCommit: null, sourceDirty: null, sourceFingerprint: null };
+  }
+  return {
+    sourceCommit,
+    sourceDirty: false,
+    sourceFingerprint: sourceFingerprint(sourceCommit, Buffer.alloc(0), []),
+  };
+}
+
+const sourceState = readSourceState();
 
 const provenance = {
   schemaVersion: 1,
   sourceRoot: repositoryRoot,
-  sourceCommit,
-  sourceDirty: trackedDiff.length > 0 || untrackedPaths.length > 0,
-  sourceFingerprint: fingerprint.digest("hex"),
+  ...sourceState,
   builtAt: new Date().toISOString(),
 };
 
@@ -138,9 +158,6 @@ mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
 mkdirSync(dirname(roleOutputPath), { recursive: true });
 copyFileSync(roleSourcePath, roleOutputPath);
-if (existsSync(executionSpecializationSourcePath)) {
-  copyFileSync(executionSpecializationSourcePath, executionSpecializationOutputPath);
-}
 
 const productRoleSkillPackages = readProductSkillAdmission();
 rmSync(productSkillsOutputRoot, { recursive: true, force: true });

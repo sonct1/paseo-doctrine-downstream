@@ -31,9 +31,9 @@ export function readDaemonBuildProvenance(moduleUrl = import.meta.url): DaemonBu
     if (
       candidate.schemaVersion !== 1 ||
       !isString(candidate.sourceRoot) ||
-      !isString(candidate.sourceCommit) ||
-      typeof candidate.sourceDirty !== "boolean" ||
-      !isString(candidate.sourceFingerprint) ||
+      !(candidate.sourceCommit === null || isString(candidate.sourceCommit)) ||
+      !(candidate.sourceDirty === null || typeof candidate.sourceDirty === "boolean") ||
+      !(candidate.sourceFingerprint === null || isString(candidate.sourceFingerprint)) ||
       !isString(candidate.builtAt)
     ) {
       return UNKNOWN_PROVENANCE;
