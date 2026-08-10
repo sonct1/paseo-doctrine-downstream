@@ -28,6 +28,8 @@ valknut-report.json
 **/.secrets
 **/node_modules
 **/dist
+!foundation/dist
+!foundation/dist/**
 **/build
 **/.cache
 **/.expo
