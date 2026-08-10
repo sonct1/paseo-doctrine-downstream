@@ -19,6 +19,7 @@ import assert from "node:assert";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { setTimeout as delay } from "timers/promises";
 import { runLocalPaseo } from "./helpers/local-cli.ts";
 
 console.log("=== Daemon Commands ===\n");
@@ -32,6 +33,22 @@ function daemonCommand(args: string[]) {
 }
 
 try {
+  await writeFile(
+    join(paseoHome, "config.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        daemon: {
+          listen: `127.0.0.1:${port}`,
+          relay: { enabled: false },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf-8",
+  );
+
   // Test 1: daemon --help shows subcommands
   {
     console.log("Test 1: daemon --help shows subcommands");
@@ -143,6 +160,33 @@ try {
     const pidContents = await readFile(pidPath, "utf-8");
     const pidInfo = JSON.parse(pidContents) as { pid: number };
     const expectedServerId = (await readFile(join(paseoHome, "server-id"), "utf-8")).trim();
+
+    const readyDeadline = Date.now() + 15_000;
+    let daemonReady = false;
+    let readinessDetails = "daemon status did not run";
+    while (Date.now() < readyDeadline) {
+      const candidate = await daemonCommand(["status", "--json"]);
+      readinessDetails = candidate.stderr || candidate.stdout;
+      if (candidate.exitCode === 0) {
+        const candidatePayload = JSON.parse(candidate.stdout) as {
+          connectedServerId: string | null;
+          relay: string;
+        };
+        if (
+          candidatePayload.connectedServerId === expectedServerId &&
+          candidatePayload.relay !== "disabled"
+        ) {
+          daemonReady = true;
+          break;
+        }
+      }
+      await delay(100);
+    }
+    assert(
+      daemonReady,
+      `IPC daemon should expose live identity and relay state: ${readinessDetails}`,
+    );
+
     await unlink(pidPath);
     const status = await daemonCommand(["status", "--json"]);
     const pairing = await daemonCommand(["pair", "--json"]);
