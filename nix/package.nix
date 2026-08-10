@@ -64,8 +64,9 @@ buildNpmPackage rec {
   nodejs = nodejs_22;
 
   # Default hash lives in nix/npm-deps.hash (see arg default above).
-  # CI auto-updates that file when package-lock.json changes (see .github/workflows/).
+  # CI verifies that file when package-lock.json changes (see .github/workflows/).
   inherit npmDepsHash;
+  npmDepsFetcherVersion = 2;
 
   # Prevent onnxruntime-node's install script from running during automatic
   # npm rebuild (it tries to download from api.nuget.org, which fails in the sandbox).

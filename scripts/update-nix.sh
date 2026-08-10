@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCK_FILE="$ROOT_DIR/package-lock.json"
 HASH_FILE="$ROOT_DIR/nix/npm-deps.hash"
+NPM_DEPS_FETCHER_VERSION=2
 
 CHECK_MODE=false
 if [[ "${1:-}" == "--check" ]]; then
@@ -20,7 +21,11 @@ fi
 # 1. Fix lockfile (add resolved/integrity for workspace-local entries)
 #    Workaround for https://github.com/npm/cli/issues/4460
 echo "Fixing lockfile..."
-node "$SCRIPT_DIR/fix-lockfile.mjs" "$LOCK_FILE"
+if $CHECK_MODE; then
+  node "$SCRIPT_DIR/fix-lockfile.mjs" "$LOCK_FILE" --check
+else
+  node "$SCRIPT_DIR/fix-lockfile.mjs" "$LOCK_FILE"
+fi
 
 # 2. Prefetch deps and compute hash
 echo "Prefetching npm dependencies..."
@@ -35,7 +40,7 @@ NIXPKGS_URL="$(node -p "
 STDERR_LOG="$(mktemp)"
 trap "rm -f '$STDERR_LOG'" EXIT
 
-if ! NEW_HASH="$(nix shell "${NIXPKGS_URL}#prefetch-npm-deps" -c prefetch-npm-deps "$LOCK_FILE" 2>"$STDERR_LOG")"; then
+if ! NEW_HASH="$(NPM_FETCHER_VERSION="$NPM_DEPS_FETCHER_VERSION" nix shell "${NIXPKGS_URL}#prefetch-npm-deps" -c prefetch-npm-deps "$LOCK_FILE" 2>"$STDERR_LOG")"; then
   echo "ERROR: prefetch-npm-deps failed:" >&2
   tail -20 "$STDERR_LOG" >&2
   exit 1
