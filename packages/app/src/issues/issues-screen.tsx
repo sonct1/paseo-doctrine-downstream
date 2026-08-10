@@ -512,7 +512,7 @@ function IssueDetail({
     <View style={styles.detail} testID={`issue-detail-${issueId}`}>
       {compact ? <BackHeader title={issueId} onBack={handleBack} /> : <DetailHeader />}
       <IssueDetailContent
-        key={issueQuery.data.id}
+        key={JSON.stringify([serverId, projectId, issueQuery.data.id])}
         issue={issueQuery.data}
         serverId={serverId}
         projectId={projectId}

@@ -80,7 +80,11 @@ export function CouncilsScreen({
   );
   const selectedCouncil = useMemo(() => {
     if (selectedWorkspaceId) {
-      return matchingCases.find((council) => council.workspaceId === selectedWorkspaceId) ?? null;
+      return (
+        matchingCases.find(
+          (council) => councilCaseScopeIdentity(council) === `workspace:${selectedWorkspaceId}`,
+        ) ?? null
+      );
     }
     if (selectedScopeId) {
       return (
@@ -208,7 +212,7 @@ function CouncilList({
       <View style={styles.councilList}>
         {councils.map((council) => (
           <CouncilRow
-            key={JSON.stringify([council.serverId, councilScopeIdentity(council), council.id])}
+            key={JSON.stringify([council.serverId, councilCaseScopeIdentity(council), council.id])}
             council={council}
             selected={council === selectedCouncil}
           />
@@ -218,23 +222,29 @@ function CouncilList({
   );
 }
 
-function councilScopeIdentity(council: CouncilCase): string {
-  return council.workspaceId ?? council.parentAgentId ?? council.seats[0]?.agent.id ?? "legacy";
+function councilScopeTestIdentity(council: CouncilCase): string {
+  const scopeId = councilCaseScopeIdentity(council);
+  const separator = scopeId.indexOf(":");
+  return separator >= 0 ? scopeId.slice(separator + 1) : scopeId;
 }
 
 function CouncilRow({ council, selected }: { council: CouncilCase; selected: boolean }) {
   const phaseLabel = councilCasePhaseLabel(council);
-  const scopeTestId = `${council.id}-${councilScopeIdentity(council)}`;
+  const scopeTestId = `${council.id}-${councilScopeTestIdentity(council)}`;
+  const scopeId = councilCaseScopeIdentity(council);
+  const workspaceScopeId = scopeId.startsWith("workspace:")
+    ? scopeId.slice("workspace:".length)
+    : undefined;
   const handlePress = useCallback(() => {
     router.push(
       buildHostCouncilRoute(
         council.serverId,
         council.id,
-        council.workspaceId,
-        council.workspaceId ? undefined : councilCaseScopeIdentity(council),
+        workspaceScopeId,
+        workspaceScopeId ? undefined : scopeId,
       ),
     );
-  }, [council]);
+  }, [council.id, council.serverId, scopeId, workspaceScopeId]);
   const rowStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.councilRow,

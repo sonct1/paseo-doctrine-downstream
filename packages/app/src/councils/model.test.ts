@@ -225,6 +225,24 @@ describe("groupCouncilCases", () => {
   });
 
   it("fails closed across legacy seats that lack workspace identity", () => {
+    const firstLead = makeAgent(
+      "lead-1",
+      {},
+      {
+        workspaceId: "shared-lead-workspace",
+        parentAgentId: null,
+        roleBinding: leadRoleBinding,
+      },
+    );
+    const secondLead = makeAgent(
+      "lead-2",
+      {},
+      {
+        workspaceId: "shared-lead-workspace",
+        parentAgentId: null,
+        roleBinding: leadRoleBinding,
+      },
+    );
     const first = makeAgent("first", councilLabels("independent"), {
       workspaceId: undefined,
       parentAgentId: "lead-1",
@@ -238,7 +256,7 @@ describe("groupCouncilCases", () => {
       parentAgentId: null,
     });
 
-    const councils = groupCouncilCases([first, second, unowned]);
+    const councils = groupCouncilCases([firstLead, secondLead, first, second, unowned]);
 
     expect(councils).toHaveLength(3);
     expect(councils.map(councilSeatAgentIds)).toEqual([["first"], ["second"], ["unowned"]]);
@@ -246,6 +264,11 @@ describe("groupCouncilCases", () => {
       "parent:lead-1",
       "parent:lead-2",
       "agent:unowned",
+    ]);
+    expect(councils.map((council) => council.workspaceId)).toEqual([
+      "shared-lead-workspace",
+      "shared-lead-workspace",
+      undefined,
     ]);
   });
 });

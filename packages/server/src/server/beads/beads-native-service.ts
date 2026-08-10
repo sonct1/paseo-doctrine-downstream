@@ -476,7 +476,13 @@ export class BeadsNativeService {
     guard?: BeadsMutationGuard,
   ): Promise<T> {
     return this.withProject(context.projectId, async () => {
-      await this.ensureProject(context);
+      if (guard) {
+        if (!(await this.projectInitialized(context.projectId))) {
+          throw new Error(`Beads project ${context.projectId} is not initialized`);
+        }
+      } else {
+        await this.ensureProject(context);
+      }
       const project = this.projectPaths(context.projectId);
       const store = await this.readIdempotencyStore(project.idempotencyFile);
       const receiptKey = sha256(`${context.actor}\u0000${operation}\u0000${idempotencyKey}`);

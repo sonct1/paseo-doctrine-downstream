@@ -221,6 +221,13 @@ describe("BeadsNativeService", () => {
       commandRunner: runner,
     });
     const context = { projectId: "project-a", actor: "paseo-agent-peer-1" };
+    await service.create(context, {
+      title: "Initialize guarded graph",
+      issueType: "task",
+      priority: 2,
+      idempotencyKey: "initialize-guarded-graph",
+    });
+    calls.length = 0;
 
     await expect(
       service.update(
@@ -236,6 +243,34 @@ describe("BeadsNativeService", () => {
       ),
     ).rejects.toThrow("cannot mutate closed issue ps123-abc");
     expect(calls.filter((call) => commandName(call.args) === "update")).toHaveLength(0);
+  });
+
+  it("does not initialize durable state for a guarded mutation without an existing graph", async () => {
+    const paseoHome = await tempRoot();
+    const calls: BeadsCommandInput[] = [];
+    const service = new BeadsNativeService({
+      paseoHome,
+      logger: createTestLogger(),
+      binaryPath: "/trusted/runtime/bd",
+      commandRunner: fakeRunner(calls),
+    });
+    const context = { projectId: "missing-project", actor: "paseo-agent-peer-1" };
+
+    await expect(
+      service.update(
+        context,
+        "ps123-abc",
+        { appendNotes: "must not initialize", idempotencyKey: "guarded-missing" },
+        undefined,
+        {
+          issueId: "ps123-abc",
+          expectedAssignee: context.actor,
+          requireNotClosed: true,
+        },
+      ),
+    ).rejects.toThrow("Beads project missing-project is not initialized");
+    expect(calls).toEqual([]);
+    expect(await readdir(paseoHome)).toEqual([]);
   });
 
   it("fails closed when indeterminate receipts exhaust the bounded store", async () => {

@@ -41,6 +41,7 @@ export interface CouncilSeat {
 
 export interface CouncilCase {
   id: string;
+  scopeId: string;
   title: string;
   tier: CouncilTier;
   phase: CouncilPhase;
@@ -56,10 +57,7 @@ export interface CouncilCase {
 }
 
 export function councilCaseScopeIdentity(council: CouncilCase): string {
-  if (council.workspaceId) return `workspace:${council.workspaceId}`;
-  if (council.parentAgentId) return `parent:${council.parentAgentId}`;
-  const seatId = council.seats[0]?.agent.id;
-  return seatId ? `agent:${seatId}` : "legacy";
+  return council.scopeId;
 }
 
 const PHASE_ORDER: Record<CouncilPhase, number> = {
@@ -140,14 +138,14 @@ function councilVerdictProvenance(
   return lead ? "lead-linked" : "unverified";
 }
 
+function councilAgentScopeIdentity(agent: CouncilAgentSource): string {
+  if (agent.workspaceId) return `workspace:${agent.workspaceId}`;
+  if (agent.parentAgentId) return `parent:${agent.parentAgentId}`;
+  return `agent:${agent.id}`;
+}
+
 function councilCaseKey(agent: CouncilAgentSource, caseId: string): string {
-  let scope = ["agent", agent.id];
-  if (agent.workspaceId) {
-    scope = ["workspace", agent.workspaceId];
-  } else if (agent.parentAgentId) {
-    scope = ["parent", agent.parentAgentId];
-  }
-  return JSON.stringify([agent.serverId, ...scope, caseId]);
+  return JSON.stringify([agent.serverId, councilAgentScopeIdentity(agent), caseId]);
 }
 
 export function groupCouncilCases(
@@ -207,6 +205,7 @@ export function groupCouncilCases(
 
     cases.push({
       id: caseId,
+      scopeId: councilAgentScopeIdentity(newest.agent),
       title,
       tier,
       phase,
