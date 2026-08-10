@@ -292,9 +292,13 @@ test("non-required Docker and Nix workflows avoid runners with workflow path fil
 test("Nix hash updates remain verifiable without upstream bot credentials", () => {
   const source = readFileSync(nixUpdateHashWorkflowPath, "utf8");
 
-  assert.match(source, /PASEO_BOT_APP_ID: \$\{\{ secrets\.PASEO_BOT_APP_ID \}\}/);
-  assert.match(source, /PASEO_BOT_APP_PRIVATE_KEY: \$\{\{ secrets\.PASEO_BOT_APP_PRIVATE_KEY \}\}/);
-  assert.match(source, /if: env\.PASEO_BOT_APP_ID != '' && env\.PASEO_BOT_APP_PRIVATE_KEY != ''/);
+  assert.match(
+    source,
+    /PASEO_BOT_CONFIGURED: \$\{\{ secrets\.PASEO_BOT_APP_ID != '' && secrets\.PASEO_BOT_APP_PRIVATE_KEY != '' \}\}/,
+  );
+  assert.match(source, /if: env\.PASEO_BOT_CONFIGURED == 'true'/);
+  assert.match(source, /app-id: \$\{\{ secrets\.PASEO_BOT_APP_ID \}\}/);
+  assert.match(source, /private-key: \$\{\{ secrets\.PASEO_BOT_APP_PRIVATE_KEY \}\}/);
   assert.match(source, /token: \$\{\{ steps\.app-token\.outputs\.token \|\| github\.token \}\}/);
   assert.match(
     source,

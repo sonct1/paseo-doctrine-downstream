@@ -23,13 +23,12 @@ permissions:
 jobs:
   update-hash:
     runs-on: ubuntu-latest
+    env:
+      PASEO_BOT_CONFIGURED: ${{ secrets.PASEO_BOT_APP_ID != '' && secrets.PASEO_BOT_APP_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
-        if: env.PASEO_BOT_APP_ID != '' && env.PASEO_BOT_APP_PRIVATE_KEY != ''
-        env:
-          PASEO_BOT_APP_ID: ${{ secrets.PASEO_BOT_APP_ID }}
-          PASEO_BOT_APP_PRIVATE_KEY: ${{ secrets.PASEO_BOT_APP_PRIVATE_KEY }}
+        if: env.PASEO_BOT_CONFIGURED == 'true'
         with:
           app-id: ${{ secrets.PASEO_BOT_APP_ID }}
           private-key: ${{ secrets.PASEO_BOT_APP_PRIVATE_KEY }}
