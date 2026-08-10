@@ -20,7 +20,7 @@ test.describe("Native Beads issue surface", () => {
 
       await expect(page.getByTestId("issues-screen")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByText("No issues yet", { exact: true })).toBeVisible();
-      await page.getByTestId("issues-create-button").click();
+      await page.getByTestId("issues-create-button").first().click();
       await page.getByTestId("issue-create-title").fill("Qualify native Beads in Paseo");
       await page
         .getByTestId("issue-create-description")
@@ -32,7 +32,7 @@ test.describe("Native Beads issue surface", () => {
       await page.getByRole("radio", { name: "P1" }).click();
       await page.getByTestId("issue-create-submit").click();
 
-      const detail = page.locator('[data-testid^="issue-detail-"]');
+      const detail = page.locator('[data-testid^="issue-detail-"]:visible');
       await expect(detail).toBeVisible({ timeout: 30_000 });
       await expect(
         detail.getByText("Qualify native Beads in Paseo", { exact: true }),
@@ -51,11 +51,34 @@ test.describe("Native Beads issue surface", () => {
       await expect(detail.getByText("Feature", { exact: true })).toBeVisible();
       await expect(detail.getByText("P1", { exact: true })).toBeVisible();
 
-      await page.getByTestId("issue-close-button").click();
-      await page
+      await page.getByRole("button", { name: "New issue" }).click();
+      await page.getByTestId("issue-create-title").fill("Preserve close draft isolation");
+      await page.getByTestId("issue-create-submit").click();
+      await expect(detail.getByText("Preserve close draft isolation", { exact: true })).toBeVisible(
+        {
+          timeout: 30_000,
+        },
+      );
+
+      const issuesList = page.getByTestId("issues-list");
+      await issuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }).click();
+      await detail.getByTestId("issue-close-button").click();
+      await detail
+        .getByTestId("issue-close-reason")
+        .fill("This draft belongs only to the first selected issue.");
+      await issuesList.getByRole("button", { name: /^Preserve close draft isolation,/u }).click();
+      await expect(detail.getByTestId("issue-close-form")).toHaveCount(0);
+      await expect(
+        detail.getByText("Preserve close draft isolation", { exact: true }),
+      ).toBeVisible();
+
+      await issuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }).click();
+      await expect(detail.getByTestId("issue-close-form")).toHaveCount(0);
+      await detail.getByTestId("issue-close-button").click();
+      await detail
         .getByTestId("issue-close-reason")
         .fill("E2E evidence recorded; Human closes work state.");
-      await page.getByTestId("issue-close-confirm").click();
+      await detail.getByTestId("issue-close-confirm").click();
       await expect(detail.getByTestId("issue-status-closed")).toBeVisible({ timeout: 30_000 });
       await expect(
         detail.getByText("E2E evidence recorded; Human closes work state.", { exact: true }),
@@ -66,9 +89,9 @@ test.describe("Native Beads issue surface", () => {
       });
 
       await page.goto(buildHostProjectIssuesRoute(getServerId(), second.projectId));
-      await expect(page.getByText("No issues yet", { exact: true })).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(
+        page.getByText("No issues yet", { exact: true }).filter({ visible: true }),
+      ).toBeVisible({ timeout: 30_000 });
       await expect(page.getByText("Qualify native Beads in Paseo", { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 390, height: 844 });

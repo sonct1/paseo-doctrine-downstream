@@ -111,6 +111,9 @@ describe("workspace route parsing", () => {
     expect(buildHostCouncilRoute("local host", "case/one", "workspace/one")).toBe(
       "/h/local%20host/councils/case%2Fone?workspaceId=workspace%2Fone",
     );
+    expect(buildHostCouncilRoute("local host", "case/one", undefined, "parent:lead/one")).toBe(
+      "/h/local%20host/councils/case%2Fone?scopeId=parent%3Alead%2Fone",
+    );
   });
 
   it("builds host-scoped project issue routes with opaque IDs", () => {

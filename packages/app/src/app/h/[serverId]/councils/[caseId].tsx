@@ -7,16 +7,19 @@ export default function HostCouncilDetailRoute() {
     serverId?: string;
     caseId?: string;
     workspaceId?: string;
+    scopeId?: string;
   }>();
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
   const caseId = typeof params.caseId === "string" ? params.caseId : "";
   const workspaceId = typeof params.workspaceId === "string" ? params.workspaceId : null;
+  const scopeId = typeof params.scopeId === "string" ? params.scopeId : null;
   return (
     <HostRouteBootstrapBoundary>
       <CouncilsScreen
         serverId={serverId}
         selectedCaseId={caseId}
         selectedWorkspaceId={workspaceId}
+        selectedScopeId={scopeId}
       />
     </HostRouteBootstrapBoundary>
   );

@@ -445,7 +445,12 @@ export function buildHostCouncilsRoute(serverId: string) {
   return `${base}/councils` as const;
 }
 
-export function buildHostCouncilRoute(serverId: string, caseId: string, workspaceId?: string) {
+export function buildHostCouncilRoute(
+  serverId: string,
+  caseId: string,
+  workspaceId?: string,
+  scopeId?: string,
+) {
   const base = buildHostCouncilsRoute(serverId);
   const normalizedCaseId = trimNonEmpty(caseId);
   if (base === "/" || !normalizedCaseId) {
@@ -453,8 +458,12 @@ export function buildHostCouncilRoute(serverId: string, caseId: string, workspac
   }
   const route = `${base}/${encodeSegment(normalizedCaseId)}` as const;
   const normalizedWorkspaceId = trimNonEmpty(workspaceId);
-  return normalizedWorkspaceId
-    ? (`${route}?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}` as const)
+  if (normalizedWorkspaceId) {
+    return `${route}?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}` as const;
+  }
+  const normalizedScopeId = trimNonEmpty(scopeId);
+  return normalizedScopeId
+    ? (`${route}?scopeId=${encodeURIComponent(normalizedScopeId)}` as const)
     : route;
 }
 

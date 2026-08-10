@@ -55,6 +55,13 @@ export interface CouncilCase {
   updatedAt: Date;
 }
 
+export function councilCaseScopeIdentity(council: CouncilCase): string {
+  if (council.workspaceId) return `workspace:${council.workspaceId}`;
+  if (council.parentAgentId) return `parent:${council.parentAgentId}`;
+  const seatId = council.seats[0]?.agent.id;
+  return seatId ? `agent:${seatId}` : "legacy";
+}
+
 const PHASE_ORDER: Record<CouncilPhase, number> = {
   sealed: 0,
   review: 1,

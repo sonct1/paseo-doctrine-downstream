@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CouncilAgentSource, CouncilCase } from "./model";
-import { groupCouncilCases, isCouncilSeatReportReady } from "./model";
+import { councilCaseScopeIdentity, groupCouncilCases, isCouncilSeatReportReady } from "./model";
 
 function makeAgent(
   id: string,
@@ -242,5 +242,10 @@ describe("groupCouncilCases", () => {
 
     expect(councils).toHaveLength(3);
     expect(councils.map(councilSeatAgentIds)).toEqual([["first"], ["second"], ["unowned"]]);
+    expect(councils.map(councilCaseScopeIdentity)).toEqual([
+      "parent:lead-1",
+      "parent:lead-2",
+      "agent:unowned",
+    ]);
   });
 });

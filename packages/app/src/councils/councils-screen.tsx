@@ -27,6 +27,7 @@ import {
 } from "@/utils/host-routes";
 import {
   councilCasePhaseLabel,
+  councilCaseScopeIdentity,
   councilRoleLabel,
   councilTierLabel,
   groupCouncilCases,
@@ -40,6 +41,7 @@ interface CouncilsScreenProps {
   serverId: string;
   selectedCaseId: string | null;
   selectedWorkspaceId?: string | null;
+  selectedScopeId?: string | null;
 }
 
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
@@ -64,6 +66,7 @@ export function CouncilsScreen({
   serverId,
   selectedCaseId,
   selectedWorkspaceId = null,
+  selectedScopeId = null,
 }: CouncilsScreenProps) {
   const isCompact = useIsCompactFormFactor();
   const agentsResult = useAggregatedAgents({ includeArchived: true });
@@ -79,9 +82,16 @@ export function CouncilsScreen({
     if (selectedWorkspaceId) {
       return matchingCases.find((council) => council.workspaceId === selectedWorkspaceId) ?? null;
     }
+    if (selectedScopeId) {
+      return (
+        matchingCases.find((council) => councilCaseScopeIdentity(council) === selectedScopeId) ??
+        null
+      );
+    }
     return matchingCases.length === 1 ? matchingCases[0] : null;
-  }, [matchingCases, selectedWorkspaceId]);
-  const isAmbiguous = Boolean(selectedCaseId) && !selectedWorkspaceId && matchingCases.length > 1;
+  }, [matchingCases, selectedScopeId, selectedWorkspaceId]);
+  const isAmbiguous =
+    Boolean(selectedCaseId) && !selectedWorkspaceId && !selectedScopeId && matchingCases.length > 1;
   const handleScopeChoiceBack = useCallback(() => {
     router.replace(buildHostCouncilsRoute(serverId));
   }, [serverId]);
@@ -216,8 +226,15 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
   const phaseLabel = councilCasePhaseLabel(council);
   const scopeTestId = `${council.id}-${councilScopeIdentity(council)}`;
   const handlePress = useCallback(() => {
-    router.push(buildHostCouncilRoute(council.serverId, council.id, council.workspaceId));
-  }, [council.id, council.serverId, council.workspaceId]);
+    router.push(
+      buildHostCouncilRoute(
+        council.serverId,
+        council.id,
+        council.workspaceId,
+        council.workspaceId ? undefined : councilCaseScopeIdentity(council),
+      ),
+    );
+  }, [council]);
   const rowStyle = useCallback(
     ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.councilRow,

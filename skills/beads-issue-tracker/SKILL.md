@@ -29,7 +29,9 @@ model.
 
 ## Mutation flow
 
-Dùng stable unique `idempotencyKey` cho từng logical mutation. Thực hiện một mutation rồi read back.
+Dùng stable unique `idempotencyKey` cho từng logical mutation. Giữ nguyên key khi retry một outcome chưa
+chắc chắn; chỉ đổi key khi input logical thay đổi hoặc mutation cũ đã được read back. Thực hiện một
+mutation rồi read back. Replay store bị bound theo project, không phải lịch sử vô hạn.
 
 - Lead: `beads_create`, `beads_update`, `beads_add_dependency`, và `beads_close` sau engineering
   verdict. Lead chỉ claim khi exact tiny-task direct path cho phép.

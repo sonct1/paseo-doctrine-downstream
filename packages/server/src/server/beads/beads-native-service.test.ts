@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -198,6 +198,88 @@ describe("BeadsNativeService", () => {
       await readFile(path.join(createCall!.cwd, "idempotency.json"), "utf8"),
     ) as { entries: Record<string, unknown> };
     expect(Object.values(persisted.entries)[0]).toMatchObject({ state: "pending" });
+  });
+
+  it("checks Peer ownership and closed state inside the project mutation lock", async () => {
+    const paseoHome = await tempRoot();
+    const calls: BeadsCommandInput[] = [];
+    const baseRunner = fakeRunner(calls);
+    const runner: BeadsCommandRunner = async (input) => {
+      if (commandName(input.args) === "show") {
+        calls.push(input);
+        return {
+          stdout: JSON.stringify([issue({ status: "closed", assignee: "paseo-agent-peer-1" })]),
+          stderr: "",
+        };
+      }
+      return baseRunner(input);
+    };
+    const service = new BeadsNativeService({
+      paseoHome,
+      logger: createTestLogger(),
+      binaryPath: "/trusted/runtime/bd",
+      commandRunner: runner,
+    });
+    const context = { projectId: "project-a", actor: "paseo-agent-peer-1" };
+
+    await expect(
+      service.update(
+        context,
+        "ps123-abc",
+        { appendNotes: "late mutation", idempotencyKey: "late-update" },
+        undefined,
+        {
+          issueId: "ps123-abc",
+          expectedAssignee: context.actor,
+          requireNotClosed: true,
+        },
+      ),
+    ).rejects.toThrow("cannot mutate closed issue ps123-abc");
+    expect(calls.filter((call) => commandName(call.args) === "update")).toHaveLength(0);
+  });
+
+  it("fails closed when indeterminate receipts exhaust the bounded store", async () => {
+    const paseoHome = await tempRoot();
+    const calls: BeadsCommandInput[] = [];
+    const service = new BeadsNativeService({
+      paseoHome,
+      logger: createTestLogger(),
+      binaryPath: "/trusted/runtime/bd",
+      commandRunner: fakeRunner(calls),
+    });
+    const context = { projectId: "project-a", actor: "paseo-agent-lead" };
+    await service.create(context, {
+      title: "Initialize graph",
+      issueType: "task",
+      priority: 2,
+      idempotencyKey: "initialize-graph",
+    });
+    const createCall = calls.find((call) => commandName(call.args) === "create");
+    const entries = Object.fromEntries(
+      Array.from({ length: 2_000 }, (_, index) => [
+        index.toString(16).padStart(64, "0"),
+        {
+          state: "pending",
+          fingerprint: "a".repeat(64),
+          createdAt: "2026-08-10T00:00:00.000Z",
+        },
+      ]),
+    );
+    await writeFile(
+      path.join(createCall!.cwd, "idempotency.json"),
+      JSON.stringify({ schemaVersion: 1, entries }),
+    );
+    calls.length = 0;
+
+    await expect(
+      service.create(context, {
+        title: "Must not dispatch",
+        issueType: "task",
+        priority: 2,
+        idempotencyKey: "capacity-exhausted",
+      }),
+    ).rejects.toThrow("idempotency capacity is exhausted");
+    expect(calls.filter((call) => commandName(call.args) === "create")).toHaveLength(0);
   });
 
   it("fails closed when the native binary is not the pinned Beads release", async () => {

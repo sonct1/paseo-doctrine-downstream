@@ -18,7 +18,7 @@ import {
   BeadsNativeService,
   BeadsWritableIssueStatusSchema,
   beadsActorForAgent,
-  type BeadsIssue,
+  type BeadsMutationGuard,
   type BeadsProjectContext,
 } from "./beads-native-service.js";
 
@@ -117,18 +117,26 @@ function requireWriteAuthority(caller: BeadsCaller): void {
   }
 }
 
-function requirePeerOwnership(caller: BeadsCaller, issue: BeadsIssue): void {
-  if (caller.roleId === "peer" && issue.assignee !== caller.project.actor) {
-    throw new Error(`Peer ${caller.project.actor} may mutate only an issue assigned to itself`);
-  }
-}
-
 function requirePeerIssueGrant(caller: BeadsCaller, issueId: string): void {
   if (caller.roleId !== "peer") return;
   const grants = caller.assignment.envelope.resourceGrants?.beadsIssueIds ?? [];
   if (!grants.includes(issueId)) {
     throw new Error(`Peer assignment does not grant Beads issue ${issueId}`);
   }
+}
+
+function peerMutationGuard(
+  caller: BeadsCaller,
+  issueId: string,
+  signal?: AbortSignal,
+): BeadsMutationGuard | undefined {
+  if (caller.roleId !== "peer") return undefined;
+  return {
+    issueId,
+    expectedAssignee: caller.project.actor,
+    requireNotClosed: true,
+    ...(signal ? { signal } : {}),
+  };
 }
 
 const UpdateInputSchema = z
@@ -245,14 +253,15 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
       }
       if (caller.roleId === "peer" && input.discoveredFrom) {
         requirePeerIssueGrant(caller, input.discoveredFrom);
-        const source = await options.service.get(
-          caller.project,
-          input.discoveredFrom,
-          execution.signal,
-        );
-        requirePeerOwnership(caller, source);
       }
-      const issue = await options.service.create(caller.project, input, execution.signal);
+      const issue = await options.service.create(
+        caller.project,
+        input,
+        execution.signal,
+        input.discoveredFrom
+          ? peerMutationGuard(caller, input.discoveredFrom, execution.signal)
+          : undefined,
+      );
       return toolResult({ projectId: caller.project.projectId, issue });
     },
   );
@@ -295,9 +304,13 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
       const caller = await resolveCaller(options);
       requireWriteAuthority(caller);
       requirePeerIssueGrant(caller, issueId);
-      const before = await options.service.get(caller.project, issueId, execution.signal);
-      requirePeerOwnership(caller, before);
-      const issue = await options.service.update(caller.project, issueId, input, execution.signal);
+      const issue = await options.service.update(
+        caller.project,
+        issueId,
+        input,
+        execution.signal,
+        peerMutationGuard(caller, issueId, execution.signal),
+      );
       return toolResult({ projectId: caller.project.projectId, issue });
     },
   );
@@ -353,8 +366,6 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
       const caller = await resolveCaller(options);
       requireWriteAuthority(caller);
       requirePeerIssueGrant(caller, issueId);
-      const issue = await options.service.get(caller.project, issueId, execution.signal);
-      requirePeerOwnership(caller, issue);
       const updated = await options.service.addDependency(
         caller.project,
         issueId,
@@ -362,6 +373,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
         dependencyType,
         idempotencyKey,
         execution.signal,
+        peerMutationGuard(caller, issueId, execution.signal),
       );
       return toolResult({ projectId: caller.project.projectId, issue: updated });
     },

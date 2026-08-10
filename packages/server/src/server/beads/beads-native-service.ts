@@ -46,6 +46,13 @@ export interface BeadsProjectContext {
   actor: string;
 }
 
+export interface BeadsMutationGuard {
+  issueId: string;
+  expectedAssignee: string;
+  requireNotClosed: boolean;
+  signal?: AbortSignal;
+}
+
 export interface BeadsCreateInput {
   title: string;
   description?: string;
@@ -308,24 +315,32 @@ export class BeadsNativeService {
     context: BeadsProjectContext,
     input: BeadsCreateInput,
     signal?: AbortSignal,
+    guard?: BeadsMutationGuard,
   ): Promise<BeadsIssue> {
-    return this.mutate(context, "create", input.idempotencyKey, input, async () => {
-      const args = [
-        "create",
-        "--title",
-        input.title,
-        "--type",
-        input.issueType,
-        "--priority",
-        String(input.priority),
-      ];
-      if (input.description !== undefined) args.push("--description", input.description);
-      if (input.acceptance !== undefined) args.push("--acceptance", input.acceptance);
-      if (input.labels?.length) args.push("--labels", input.labels.join(","));
-      if (input.discoveredFrom) args.push("--deps", `discovered-from:${input.discoveredFrom}`);
-      const result = await this.runJson(context, args, false, signal);
-      return parseOneIssue(result, "create");
-    });
+    return this.mutate(
+      context,
+      "create",
+      input.idempotencyKey,
+      input,
+      async () => {
+        const args = [
+          "create",
+          "--title",
+          input.title,
+          "--type",
+          input.issueType,
+          "--priority",
+          String(input.priority),
+        ];
+        if (input.description !== undefined) args.push("--description", input.description);
+        if (input.acceptance !== undefined) args.push("--acceptance", input.acceptance);
+        if (input.labels?.length) args.push("--labels", input.labels.join(","));
+        if (input.discoveredFrom) args.push("--deps", `discovered-from:${input.discoveredFrom}`);
+        const result = await this.runJson(context, args, false, signal);
+        return parseOneIssue(result, "create");
+      },
+      guard,
+    );
   }
 
   async claim(
@@ -345,19 +360,27 @@ export class BeadsNativeService {
     issueId: string,
     input: BeadsUpdateInput,
     signal?: AbortSignal,
+    guard?: BeadsMutationGuard,
   ): Promise<BeadsIssue> {
-    return this.mutate(context, "update", input.idempotencyKey, { issueId, ...input }, async () => {
-      const args = ["update", issueId];
-      if (input.title !== undefined) args.push("--title", input.title);
-      if (input.description !== undefined) args.push("--description", input.description);
-      if (input.priority !== undefined) args.push("--priority", String(input.priority));
-      if (input.status !== undefined) args.push("--status", input.status);
-      if (input.appendNotes !== undefined) args.push("--append-notes", input.appendNotes);
-      for (const label of input.addLabels ?? []) args.push("--add-label", label);
-      for (const label of input.removeLabels ?? []) args.push("--remove-label", label);
-      const result = await this.runJson(context, args, false, signal);
-      return parseOneIssue(result, "update");
-    });
+    return this.mutate(
+      context,
+      "update",
+      input.idempotencyKey,
+      { issueId, ...input },
+      async () => {
+        const args = ["update", issueId];
+        if (input.title !== undefined) args.push("--title", input.title);
+        if (input.description !== undefined) args.push("--description", input.description);
+        if (input.priority !== undefined) args.push("--priority", String(input.priority));
+        if (input.status !== undefined) args.push("--status", input.status);
+        if (input.appendNotes !== undefined) args.push("--append-notes", input.appendNotes);
+        for (const label of input.addLabels ?? []) args.push("--add-label", label);
+        for (const label of input.removeLabels ?? []) args.push("--remove-label", label);
+        const result = await this.runJson(context, args, false, signal);
+        return parseOneIssue(result, "update");
+      },
+      guard,
+    );
   }
 
   async close(
@@ -385,6 +408,7 @@ export class BeadsNativeService {
     dependencyType: z.infer<typeof BeadsDependencyTypeSchema>,
     idempotencyKey: string,
     signal?: AbortSignal,
+    guard?: BeadsMutationGuard,
   ): Promise<BeadsIssue> {
     return this.mutate(
       context,
@@ -400,6 +424,7 @@ export class BeadsNativeService {
         );
         return this.getUnlocked(context, issueId, signal);
       },
+      guard,
     );
   }
 
@@ -448,6 +473,7 @@ export class BeadsNativeService {
     idempotencyKey: string,
     request: unknown,
     action: () => Promise<T>,
+    guard?: BeadsMutationGuard,
   ): Promise<T> {
     return this.withProject(context.projectId, async () => {
       await this.ensureProject(context);
@@ -470,13 +496,20 @@ export class BeadsNativeService {
         return existing.result as T;
       }
 
+      if (guard) await this.assertMutationGuard(context, guard);
+
       const createdAt = new Date().toISOString();
+      this.pruneIdempotencyStore(store, MAX_IDEMPOTENCY_ENTRIES - 1);
+      if (Object.keys(store.entries).length >= MAX_IDEMPOTENCY_ENTRIES) {
+        throw new Error(
+          "Beads idempotency capacity is exhausted by indeterminate attempts; reconcile them before issuing a new key",
+        );
+      }
       store.entries[receiptKey] = {
         state: "pending",
         fingerprint,
         createdAt,
       };
-      this.pruneIdempotencyStore(store);
       await writeJsonFileAtomic(project.idempotencyFile, store);
 
       const result = await action();
@@ -489,6 +522,19 @@ export class BeadsNativeService {
       await writeJsonFileAtomic(project.idempotencyFile, store);
       return result;
     });
+  }
+
+  private async assertMutationGuard(
+    context: BeadsProjectContext,
+    guard: BeadsMutationGuard,
+  ): Promise<void> {
+    const issue = await this.getUnlocked(context, guard.issueId, guard.signal);
+    if (issue.assignee !== guard.expectedAssignee) {
+      throw new Error(`Peer ${guard.expectedAssignee} may mutate only an issue assigned to itself`);
+    }
+    if (guard.requireNotClosed && issue.status === "closed") {
+      throw new Error(`Peer ${guard.expectedAssignee} cannot mutate closed issue ${guard.issueId}`);
+    }
   }
 
   private async runJson(
@@ -677,14 +723,14 @@ export class BeadsNativeService {
     }
   }
 
-  private pruneIdempotencyStore(store: IdempotencyStore): void {
+  private pruneIdempotencyStore(store: IdempotencyStore, targetSize: number): void {
     const entries = Object.entries(store.entries);
-    if (entries.length <= MAX_IDEMPOTENCY_ENTRIES) return;
+    if (entries.length <= targetSize) return;
     const completed = entries
       .filter(([, entry]) => entry.state === "completed")
       .sort(([, left], [, right]) => left.createdAt.localeCompare(right.createdAt))
-      .slice(0, Math.max(0, entries.length - MAX_IDEMPOTENCY_ENTRIES));
+      .slice(0, Math.max(0, entries.length - targetSize));
     completed.forEach(([key]) => delete store.entries[key]);
-    this.logger.debug({ retained: MAX_IDEMPOTENCY_ENTRIES }, "pruned Beads idempotency receipts");
+    this.logger.debug({ retained: targetSize }, "pruned Beads idempotency receipts");
   }
 }

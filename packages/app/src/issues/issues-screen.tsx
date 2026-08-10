@@ -512,6 +512,7 @@ function IssueDetail({
     <View style={styles.detail} testID={`issue-detail-${issueId}`}>
       {compact ? <BackHeader title={issueId} onBack={handleBack} /> : <DetailHeader />}
       <IssueDetailContent
+        key={issueQuery.data.id}
         issue={issueQuery.data}
         serverId={serverId}
         projectId={projectId}
@@ -566,7 +567,7 @@ function IssueDetailContent({
       setReason("");
       setCloseKey(mutationKey("close"));
     } catch {
-      setCloseKey(mutationKey("close"));
+      // Keep the key: the daemon may have committed even when the response was lost.
     }
   }, [closeIssue, closeKey, issue.id, reason]);
   const handleClosePress = useCallback(() => {
@@ -784,9 +785,7 @@ function CreateIssuePanel({
       });
       if (mountedRef.current && activeScopeRef.current === submittedScope) onCreated(issue);
     } catch {
-      if (mountedRef.current && activeScopeRef.current === submittedScope) {
-        setSubmissionKey(mutationKey("create"));
-      }
+      // Keep the key: retrying the same draft must replay an uncertain prior attempt.
     }
   }, [createIssue, draft, onCreated, projectId, serverId, submissionKey]);
   const handleSubmitPress = useCallback(() => {

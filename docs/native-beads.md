@@ -16,7 +16,11 @@ và telemetry của Beads, serialize mutation theo project, rồi validate JSON 
 Paseo.
 
 Mutation bắt buộc có `idempotencyKey`. Receipt được scope theo actor, operation và key; cùng request
-được replay, còn cùng key với payload khác bị từ chối.
+được replay khi receipt còn trong bounded store, còn cùng key với payload khác bị từ chối. Daemon giữ
+tối đa 2.000 receipt mỗi project, ưu tiên giữ attempt có outcome chưa xác định và xóa completed receipt
+cũ nhất khi cần chỗ. Nếu toàn bộ capacity là indeterminate attempt, mutation mới fail closed thay vì làm
+file receipt tăng vô hạn. Caller phải giữ nguyên key khi retry một outcome chưa chắc chắn, read back ngay
+sau mutation và không coi idempotency store là lịch sử vô hạn.
 
 `status`, list trên project mới và các read bị từ chối không khởi tạo durable graph. Mutation đầu tiên
 mới tạo project-private Beads state. Runtime verification dùng temporary directory ngoài
@@ -34,8 +38,9 @@ dev hoặc E2E phải truyền exact binary qua `PASEO_BEADS_BINARY`.
 - Lead có toàn bộ native Beads tools cho project của assignment hiện tại.
 - Peer có thể đọc. Mutation chỉ dùng được với exact issue ID trong
   `assignment.resourceGrants.beadsIssueIds`; claim phải dùng granted ID, update/dependency còn đòi
-  issue đang assigned cho chính actor, và discovery phải có `discoveredFrom` trỏ tới granted,
-  self-assigned source issue. Peer không close issue.
+  issue đang assigned cho chính actor và chưa closed, và discovery phải có `discoveredFrom` trỏ tới
+  granted, self-assigned, non-closed source issue. Peer không close issue. Ownership/closed guard và
+  mutation chạy trong cùng project lock để Lead closure không bị Peer race rồi mở lại.
 - Supervisor chỉ đọc.
 
 Daemon derive `projectId`, actor và role từ session/assignment hiện tại cho agent tools. Caller không

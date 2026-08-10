@@ -9,7 +9,7 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "../agent/tools/types.js";
-import type { BeadsNativeService } from "./beads-native-service.js";
+import type { BeadsMutationGuard, BeadsNativeService } from "./beads-native-service.js";
 import { registerBeadsTools } from "./beads-tools.js";
 
 interface CapturedTool {
@@ -65,7 +65,22 @@ function createHarness(options: {
     get: vi.fn().mockResolvedValue(issue),
     create: vi.fn().mockResolvedValue(issue),
     claim: vi.fn().mockResolvedValue({ ...issue, assignee: "paseo-agent-peer-1" }),
-    update: vi.fn().mockResolvedValue(issue),
+    update: vi.fn(
+      async (
+        _project: unknown,
+        _issueId: string,
+        _input: unknown,
+        _signal: AbortSignal | undefined,
+        guard: BeadsMutationGuard | undefined,
+      ) => {
+        if (guard && issue.assignee !== guard.expectedAssignee) {
+          throw new Error(
+            `Peer ${guard.expectedAssignee} may mutate only an issue assigned to itself`,
+          );
+        }
+        return issue;
+      },
+    ),
     close: vi.fn().mockResolvedValue({ ...issue, status: "closed" }),
     addDependency: vi.fn().mockResolvedValue(issue),
     prime: vi.fn().mockResolvedValue("workflow"),
@@ -119,6 +134,11 @@ describe("native Beads Paseo tools", () => {
       "ps123-abc",
       { appendNotes: "Evidence", idempotencyKey: "update-evidence-1" },
       undefined,
+      {
+        issueId: "ps123-abc",
+        expectedAssignee: "paseo-agent-peer-1",
+        requireNotClosed: true,
+      },
     );
   });
 
@@ -135,7 +155,7 @@ describe("native Beads Paseo tools", () => {
         {},
       ),
     ).rejects.toThrow("may mutate only an issue assigned to itself");
-    expect(harness.service.update).not.toHaveBeenCalled();
+    expect(harness.service.update).toHaveBeenCalledOnce();
   });
 
   it("rejects Peer claim and mutation outside exact assignment issue grants", async () => {
