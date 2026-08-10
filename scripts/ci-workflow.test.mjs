@@ -315,8 +315,12 @@ test("website builds remain verifiable without Cloudflare credentials", () => {
   const build = "run: npm run build --workspace=@getpaseo/website";
   const deploy = "run: cd packages/website && npx wrangler deploy";
 
+  assert.match(
+    source,
+    /CLOUDFLARE_DEPLOY_CONFIGURED: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN != '' \}\}/,
+  );
+  assert.match(source, /if: env\.CLOUDFLARE_DEPLOY_CONFIGURED == 'true'/);
   assert.match(source, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
-  assert.match(source, /if: env\.CLOUDFLARE_API_TOKEN != ''/);
   assert.ok(source.includes(build));
   assert.ok(source.includes(deploy));
   assert.ok(source.indexOf(build) < source.indexOf(deploy));
