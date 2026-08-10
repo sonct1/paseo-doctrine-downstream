@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1-paseo.2 - 2026-08-10
+
+This downstream patch is based on upstream Paseo 0.3.1.
+
+### Improved
+
+- Keep Foundation as an optional role, skill, and policy overlay instead of a parallel orchestration plane, and remove private review/OCR execution profiles.
+- Treat a missing Workspace Protocol as zero repository-specific policy while continuing to fail closed when a present protocol is unreadable or invalid.
+- Keep ordinary workspace creation provider-neutral until a Foundation role is explicitly selected.
+- Keep Council as a Lead-governed projection over existing agent and lifecycle primitives, available from any workspace without introducing a second state engine.
+- Describe SLP by its demonstrated candidate qualification instead of claiming production completeness.
+
+### Fixed
+
+- Route blocked role-bound workspace creation to Project Settings and reject unsupported or unverified admission results.
+- Preserve truthful build provenance when source archives do not include Git metadata.
+- Keep Docker, Nix, macOS packaging, provider-browser tests, and release qualification portable across supported environments.
+- Verify downstream Nix hashes and website builds without upstream-only bot or deployment credentials while retaining the configured publishing paths.
+- Restore the supported macOS and Linux Tailwind native bindings omitted by npm optional-dependency lock generation.
+- Refresh the Factory Droid ACP package-runner pin.
+
 ## 0.3.1-paseo.1 - 2026-08-10
 
 This downstream release is based on upstream Paseo 0.3.1.
