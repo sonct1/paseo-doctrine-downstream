@@ -31,6 +31,10 @@ describe.skipIf(!binaryPath)("BeadsNativeService with pinned bd", () => {
     const leadA = { projectId: "project-a", actor: "paseo-agent-lead-a" };
     const peerA = { projectId: "project-a", actor: "paseo-agent-peer-a" };
     const leadB = { projectId: "project-b", actor: "paseo-agent-lead-b" };
+    const untouched = { projectId: "project-empty", actor: "paseo-agent-supervisor" };
+
+    await expect(service.list(untouched, { limit: 20 })).resolves.toEqual([]);
+    await expect(service.get(untouched, "missing-issue")).rejects.toThrow("is not initialized");
 
     const first = await service.create(leadA, {
       title: "Project A implementation",

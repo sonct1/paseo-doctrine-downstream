@@ -60,6 +60,10 @@ function summarizeCouncilWorkspace(council: CouncilCase) {
   };
 }
 
+function councilSeatAgentIds(council: CouncilCase): string[] {
+  return council.seats.map((seat) => seat.agent.id);
+}
+
 describe("groupCouncilCases", () => {
   it("projects labeled seats into one ordered case and resolves its Lead", () => {
     const lead = makeAgent(
@@ -218,5 +222,25 @@ describe("groupCouncilCases", () => {
       { workspaceId: "workspace-1", seats: ["first"] },
       { workspaceId: "workspace-2", seats: ["second"] },
     ]);
+  });
+
+  it("fails closed across legacy seats that lack workspace identity", () => {
+    const first = makeAgent("first", councilLabels("independent"), {
+      workspaceId: undefined,
+      parentAgentId: "lead-1",
+    });
+    const second = makeAgent("second", councilLabels("challenger"), {
+      workspaceId: undefined,
+      parentAgentId: "lead-2",
+    });
+    const unowned = makeAgent("unowned", councilLabels("verifier"), {
+      workspaceId: undefined,
+      parentAgentId: null,
+    });
+
+    const councils = groupCouncilCases([first, second, unowned]);
+
+    expect(councils).toHaveLength(3);
+    expect(councils.map(councilSeatAgentIds)).toEqual([["first"], ["second"], ["unowned"]]);
   });
 });

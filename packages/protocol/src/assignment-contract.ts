@@ -65,6 +65,21 @@ export const WorkspaceProtocolAdmissionExceptionSchema = z.object({
   expiresAt: z.string().datetime(),
 });
 
+const AssignmentBeadsIssueIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(128)
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
+
+/** Exact durable resources leased to this one-task assignment. */
+export const AssignmentResourceGrantsSchema = z
+  .object({
+    beadsIssueIds: z.array(AssignmentBeadsIssueIdSchema).max(100).optional(),
+  })
+  .strict();
+export type AssignmentResourceGrants = z.infer<typeof AssignmentResourceGrantsSchema>;
+
 /** Caller-authored one-task envelope. Cross-field authority checks remain daemon-owned. */
 export const AssignmentEnvelopeSchema = z.object({
   version: z.literal(PASEO_ASSIGNMENT_CONTRACT_VERSION),
@@ -75,6 +90,7 @@ export const AssignmentEnvelopeSchema = z.object({
   externalEffectBoundary: AssignmentExternalEffectBoundarySchema,
   evidence: z.string().trim().min(1),
   handbackAndStop: z.string().trim().min(1),
+  resourceGrants: AssignmentResourceGrantsSchema.optional(),
   expiresAt: z.string().datetime().optional(),
   protocolException: WorkspaceProtocolAdmissionExceptionSchema.optional(),
 });
@@ -100,6 +116,7 @@ export const AssignmentContractReceiptSchema = z.object({
   effectClass: AssignmentEffectClassSchema,
   mutationBoundary: AssignmentMutationBoundarySchema,
   externalEffectBoundary: AssignmentExternalEffectBoundarySchema,
+  resourceGrants: AssignmentResourceGrantsSchema.optional(),
   protocolExceptionExpiresAt: z.string().datetime().optional(),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime().optional(),

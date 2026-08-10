@@ -71,46 +71,73 @@ export function CouncilsScreen({
     () => groupCouncilCases(agentsResult.agents, serverId),
     [agentsResult.agents, serverId],
   );
+  const matchingCases = useMemo(
+    () => councils.filter((council) => council.id === selectedCaseId),
+    [councils, selectedCaseId],
+  );
   const selectedCouncil = useMemo(() => {
-    const matchingCases = councils.filter((council) => council.id === selectedCaseId);
     if (selectedWorkspaceId) {
       return matchingCases.find((council) => council.workspaceId === selectedWorkspaceId) ?? null;
     }
     return matchingCases.length === 1 ? matchingCases[0] : null;
-  }, [councils, selectedCaseId, selectedWorkspaceId]);
+  }, [matchingCases, selectedWorkspaceId]);
+  const isAmbiguous = Boolean(selectedCaseId) && !selectedWorkspaceId && matchingCases.length > 1;
+  const handleScopeChoiceBack = useCallback(() => {
+    router.replace(buildHostCouncilsRoute(serverId));
+  }, [serverId]);
 
   let content: ReactNode;
   if (agentsResult.isInitialLoad) {
     content = <CouncilLoading />;
   } else if (isCompact) {
-    content = selectedCaseId ? (
-      <CouncilDetail
-        council={selectedCouncil}
-        requestedCaseId={selectedCaseId}
-        serverId={serverId}
-        compact
-      />
-    ) : (
-      <CouncilList councils={councils} selectedCouncil={null} />
-    );
+    if (isAmbiguous) {
+      content = (
+        <View style={styles.detail} testID="council-scope-choice">
+          <BackHeader title="Choose workspace" onBack={handleScopeChoiceBack} />
+          <CouncilList councils={matchingCases} selectedCouncil={null} />
+        </View>
+      );
+    } else if (selectedCaseId) {
+      content = (
+        <CouncilDetail
+          council={selectedCouncil}
+          requestedCaseId={selectedCaseId}
+          serverId={serverId}
+          compact
+        />
+      );
+    } else {
+      content = <CouncilList councils={councils} selectedCouncil={null} />;
+    }
   } else {
+    let desktopDetail: ReactNode;
+    if (selectedCaseId && isAmbiguous) {
+      desktopDetail = (
+        <CouncilEmpty
+          text="Choose a workspace"
+          description="This case ID exists in more than one workspace. Select the exact scoped case from the list."
+        />
+      );
+    } else if (selectedCaseId) {
+      desktopDetail = (
+        <CouncilDetail
+          council={selectedCouncil}
+          requestedCaseId={selectedCaseId}
+          serverId={serverId}
+          compact={false}
+        />
+      );
+    } else {
+      desktopDetail = (
+        <CouncilEmpty text={councils.length === 0 ? "No councils yet" : "Select a council"} />
+      );
+    }
     content = (
       <View style={styles.desktopBody}>
         <View style={styles.desktopListPane}>
           <CouncilList councils={councils} selectedCouncil={selectedCouncil} />
         </View>
-        <View style={styles.desktopDetailPane}>
-          {selectedCaseId ? (
-            <CouncilDetail
-              council={selectedCouncil}
-              requestedCaseId={selectedCaseId}
-              serverId={serverId}
-              compact={false}
-            />
-          ) : (
-            <CouncilEmpty text={councils.length === 0 ? "No councils yet" : "Select a council"} />
-          )}
-        </View>
+        <View style={styles.desktopDetailPane}>{desktopDetail}</View>
       </View>
     );
   }
@@ -131,14 +158,18 @@ function CouncilLoading() {
   );
 }
 
-function CouncilEmpty({ text }: { text: string }) {
+function CouncilEmpty({
+  text,
+  description = "Council cases appear here when Lead launches seats with the council workflow.",
+}: {
+  text: string;
+  description?: string;
+}) {
   return (
     <View style={styles.centered}>
       <ScaleEmptyState />
       <Text style={styles.emptyTitle}>{text}</Text>
-      <Text style={styles.emptyDescription}>
-        Council cases appear here when Lead launches seats with the council workflow.
-      </Text>
+      <Text style={styles.emptyDescription}>{description}</Text>
     </View>
   );
 }
@@ -167,7 +198,7 @@ function CouncilList({
       <View style={styles.councilList}>
         {councils.map((council) => (
           <CouncilRow
-            key={JSON.stringify([council.serverId, council.workspaceId ?? null, council.id])}
+            key={JSON.stringify([council.serverId, councilScopeIdentity(council), council.id])}
             council={council}
             selected={council === selectedCouncil}
           />
@@ -177,8 +208,13 @@ function CouncilList({
   );
 }
 
+function councilScopeIdentity(council: CouncilCase): string {
+  return council.workspaceId ?? council.parentAgentId ?? council.seats[0]?.agent.id ?? "legacy";
+}
+
 function CouncilRow({ council, selected }: { council: CouncilCase; selected: boolean }) {
   const phaseLabel = councilCasePhaseLabel(council);
+  const scopeTestId = `${council.id}-${councilScopeIdentity(council)}`;
   const handlePress = useCallback(() => {
     router.push(buildHostCouncilRoute(council.serverId, council.id, council.workspaceId));
   }, [council.id, council.serverId, council.workspaceId]);
@@ -197,7 +233,7 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
       style={rowStyle}
       accessibilityRole="button"
       accessibilityLabel={`${council.title}, ${phaseLabel}, ${council.readyCount} of ${council.seats.length} reports ready`}
-      testID={`council-row-${council.id}`}
+      testID={`council-row-${scopeTestId}`}
     >
       <View style={styles.councilRowIcon}>
         <ThemedScale size={16} uniProps={foregroundMutedMapping} />
@@ -209,9 +245,12 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
         <Text
           style={styles.councilRowMeta}
           numberOfLines={1}
-          testID={`council-row-phase-${council.id}`}
+          testID={`council-row-phase-${scopeTestId}`}
         >
           {councilTierLabel(council.tier)} · {phaseLabel}
+        </Text>
+        <Text style={styles.councilRowMeta} numberOfLines={1}>
+          Workspace {council.workspaceId ?? "legacy scope"}
         </Text>
       </View>
       <View style={styles.councilRowCount}>

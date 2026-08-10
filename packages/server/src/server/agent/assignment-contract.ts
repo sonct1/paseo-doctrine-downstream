@@ -144,6 +144,7 @@ export function materializeAssignmentContract(input: {
     effectClass: envelope.effectClass,
     mutationBoundary: envelope.mutationBoundary,
     externalEffectBoundary: envelope.externalEffectBoundary,
+    ...(envelope.resourceGrants ? { resourceGrants: envelope.resourceGrants } : {}),
     ...(envelope.protocolException
       ? { protocolExceptionExpiresAt: envelope.protocolException.expiresAt }
       : {}),
@@ -163,10 +164,12 @@ export function buildAssignmentInstruction(contract: PersistedAssignmentContract
     envelope.externalEffectBoundary.mode === "bounded"
       ? `bounded (${envelope.externalEffectBoundary.scope})`
       : "denied";
+  const beadsIssueGrants = envelope.resourceGrants?.beadsIssueIds?.join(", ") || "none";
   return [
     `Assignment Contract: sha256=${receipt.assignmentDigest}; disposition=${envelope.disposition}; effect=${envelope.effectClass}.`,
     `Objective: ${envelope.objective}`,
     `Mutation boundary: ${writeScope}. External effects: ${externalScope}.`,
+    `Beads issue grants: ${beadsIssueGrants}.`,
     `Evidence: ${envelope.evidence}`,
     `Handback/stop: ${envelope.handbackAndStop}`,
   ].join("\n");

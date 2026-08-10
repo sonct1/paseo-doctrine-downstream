@@ -90,9 +90,9 @@ test.describe("Council case surface", () => {
       await expect(
         page.getByText("One accountable Lead. Independent seats. No vote."),
       ).toBeVisible();
-      await expect(page.getByTestId(`council-row-phase-${CASE_ID}`)).toContainText(
-        "Lead-linked verdict marker",
-      );
+      await expect(
+        page.getByTestId(`council-row-phase-${CASE_ID}-${scenario.workspaceId}`),
+      ).toContainText("Lead-linked verdict marker");
       await expect(page.getByTestId("council-phase-rail")).toContainText(
         "Lead-linked verdict marker",
       );
@@ -134,6 +134,13 @@ test.describe("Council case surface", () => {
     const second = await seedCouncilScenario("Workspace two Council");
     try {
       await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID));
+      await expect(page.getByText("Choose a workspace", { exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.getByTestId(`council-row-${CASE_ID}-${first.workspaceId}`)).toBeVisible();
+      await expect(page.getByTestId(`council-row-${CASE_ID}-${second.workspaceId}`)).toBeVisible();
+
       await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID, second.workspaceId));
 
       const detail = page.getByTestId(`council-detail-${CASE_ID}`);

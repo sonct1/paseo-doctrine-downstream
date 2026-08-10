@@ -18,6 +18,10 @@ Paseo.
 Mutation bắt buộc có `idempotencyKey`. Receipt được scope theo actor, operation và key; cùng request
 được replay, còn cùng key với payload khác bị từ chối.
 
+`status`, list trên project mới và các read bị từ chối không khởi tạo durable graph. Mutation đầu tiên
+mới tạo project-private Beads state. Runtime verification dùng temporary directory ngoài
+`$PASEO_HOME` rồi xóa ngay.
+
 ## Runtime
 
 Release macOS bundle đúng `bd v1.1.2` cùng license và SHA-256 đã pin. Binary nằm cạnh Node runtime
@@ -28,8 +32,10 @@ dev hoặc E2E phải truyền exact binary qua `PASEO_BEADS_BINARY`.
 
 - Human dùng project-scoped WebUI để list, inspect, create và close issue.
 - Lead có toàn bộ native Beads tools cho project của assignment hiện tại.
-- Peer có thể đọc, claim/update issue được assign và tạo discovery có `discoveredFrom`; Peer không
-  close issue.
+- Peer có thể đọc. Mutation chỉ dùng được với exact issue ID trong
+  `assignment.resourceGrants.beadsIssueIds`; claim phải dùng granted ID, update/dependency còn đòi
+  issue đang assigned cho chính actor, và discovery phải có `discoveredFrom` trỏ tới granted,
+  self-assigned source issue. Peer không close issue.
 - Supervisor chỉ đọc.
 
 Daemon derive `projectId`, actor và role từ session/assignment hiện tại cho agent tools. Caller không

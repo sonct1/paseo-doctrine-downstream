@@ -40,17 +40,21 @@ function materialize(input: {
 
 describe("immutable assignment contract", () => {
   test("materializes a stable receipt and durable authority instruction", () => {
-    const contract = materialize({ envelope: envelope() });
+    const contract = materialize({
+      envelope: envelope({ resourceGrants: { beadsIssueIds: ["ps123-abc"] } }),
+    });
 
     expect(contract.receipt).toMatchObject({
       roleId: "lead",
       assigner: { kind: "human-session" },
       effectClass: "read-only",
       mutationBoundary: { mode: "no-write" },
+      resourceGrants: { beadsIssueIds: ["ps123-abc"] },
       createdAt: now.toISOString(),
     });
     expect(contract.receipt.assignmentDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(buildAssignmentInstruction(contract)).toContain("Mutation boundary: no-write");
+    expect(buildAssignmentInstruction(contract)).toContain("Beads issue grants: ps123-abc");
   });
 
   test("fails closed when a role-bound create omits the assignment", () => {

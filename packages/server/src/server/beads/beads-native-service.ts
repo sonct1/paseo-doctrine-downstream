@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { constants as fsConstants, existsSync, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -160,10 +160,25 @@ function parseOneIssue(value: unknown, command: string): BeadsIssue {
   throw new Error(`Beads command '${command}' did not return exactly one valid issue`);
 }
 
-function defaultBinaryPath(): string {
+interface BeadsBinaryResolution {
+  binaryPath: string;
+  configurationError?: string;
+}
+
+function defaultBinaryResolution(): BeadsBinaryResolution {
   const override = process.env.PASEO_BEADS_BINARY?.trim();
-  if (override) return path.resolve(override);
-  return path.join(path.dirname(process.execPath), process.platform === "win32" ? "bd.exe" : "bd");
+  if (override) return { binaryPath: path.resolve(override) };
+  const binaryPath = path.join(
+    path.dirname(process.execPath),
+    process.platform === "win32" ? "bd.exe" : "bd",
+  );
+  const releaseMarker = path.join(path.dirname(path.dirname(binaryPath)), "BEADS-LICENSE");
+  if (existsSync(releaseMarker)) return { binaryPath };
+  return {
+    binaryPath,
+    configurationError:
+      "Native Beads is unavailable in a source checkout; set PASEO_BEADS_BINARY to the pinned bd 1.1.2 binary",
+  };
 }
 
 async function defaultCommandRunner(input: BeadsCommandInput): Promise<BeadsCommandOutput> {
@@ -222,6 +237,7 @@ export class BeadsNativeService {
   private readonly paseoHome: string;
   private readonly logger: Logger;
   private readonly binaryPath: string;
+  private readonly binaryConfigurationError: string | undefined;
   private readonly runCommand: BeadsCommandRunner;
   private readonly verifyBinaryAccess: boolean;
   private readonly initializedProjects = new Set<string>();
@@ -231,7 +247,11 @@ export class BeadsNativeService {
   constructor(options: BeadsNativeServiceOptions) {
     this.paseoHome = options.paseoHome;
     this.logger = options.logger.child({ module: "beads", component: "native-service" });
-    this.binaryPath = path.resolve(options.binaryPath ?? defaultBinaryPath());
+    const binary = options.binaryPath
+      ? { binaryPath: path.resolve(options.binaryPath) }
+      : defaultBinaryResolution();
+    this.binaryPath = binary.binaryPath;
+    this.binaryConfigurationError = binary.configurationError;
     this.runCommand = options.commandRunner ?? defaultCommandRunner;
     this.verifyBinaryAccess = options.commandRunner === undefined;
   }
@@ -277,7 +297,9 @@ export class BeadsNativeService {
     signal?: AbortSignal,
   ): Promise<BeadsIssue> {
     return this.withProject(context.projectId, async () => {
-      await this.ensureProject(context, signal);
+      if (!(await this.projectInitialized(context.projectId))) {
+        throw new Error(`Beads project ${context.projectId} is not initialized`);
+      }
       return this.getUnlocked(context, issueId, signal);
     });
   }
@@ -383,8 +405,10 @@ export class BeadsNativeService {
 
   async prime(context: BeadsProjectContext, signal?: AbortSignal): Promise<string> {
     return this.withProject(context.projectId, async () => {
-      await this.ensureProject(context, signal);
-      const output = await this.run(context, ["--readonly", "prime", "--stealth"], signal);
+      if (!(await this.projectInitialized(context.projectId))) {
+        throw new Error(`Beads project ${context.projectId} is not initialized`);
+      }
+      const output = await this.run(context, ["--readonly", "prime", "--stealth"], signal, "prime");
       return output.stdout.trim();
     });
   }
@@ -396,7 +420,7 @@ export class BeadsNativeService {
     signal?: AbortSignal,
   ): Promise<BeadsIssue[]> {
     return this.withProject(context.projectId, async () => {
-      await this.ensureProject(context, signal);
+      if (!(await this.projectInitialized(context.projectId))) return [];
       const parsed = z
         .array(BeadsIssueSchema)
         .safeParse(await this.runJson(context, args, true, signal));
@@ -475,7 +499,7 @@ export class BeadsNativeService {
   ): Promise<unknown> {
     const flags = ["--json", "--actor", context.actor, "--sandbox", "--dolt-auto-commit", "off"];
     if (readOnly) flags.push("--readonly");
-    const output = await this.run(context, [...flags, ...args], signal);
+    const output = await this.run(context, [...flags, ...args], signal, args[0] ?? "unknown");
     return parseJsonOutput(output.stdout, args[0] ?? "unknown");
   }
 
@@ -483,6 +507,7 @@ export class BeadsNativeService {
     context: BeadsProjectContext,
     args: string[],
     signal?: AbortSignal,
+    logicalCommand = args[0] ?? "unknown",
   ): Promise<BeadsCommandOutput> {
     await this.verifyBinary();
     const project = this.projectPaths(context.projectId);
@@ -500,7 +525,7 @@ export class BeadsNativeService {
           ? String((error as { stderr?: unknown }).stderr ?? "").trim()
           : "";
       const detail = stderr ? `: ${stderr.slice(0, 2_000)}` : "";
-      throw new Error(`Beads command '${args[0] ?? "unknown"}' failed${detail}`, { cause: error });
+      throw new Error(`Beads command '${logicalCommand}' failed${detail}`, { cause: error });
     }
   }
 
@@ -523,10 +548,23 @@ export class BeadsNativeService {
         "--skip-agents",
       ],
       signal,
+      "init",
     );
-    await this.run(context, ["--quiet", "metrics", "off"], signal);
-    await this.run(context, ["--quiet", "config", "set", "no-git-ops", "true"], signal);
+    await this.run(context, ["--quiet", "metrics", "off"], signal, "metrics");
+    await this.run(context, ["--quiet", "config", "set", "no-git-ops", "true"], signal, "config");
     this.initializedProjects.add(context.projectId);
+  }
+
+  private async projectInitialized(projectId: string): Promise<boolean> {
+    if (this.initializedProjects.has(projectId)) return true;
+    try {
+      await fs.access(this.projectPaths(projectId).beadsDir);
+      this.initializedProjects.add(projectId);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw error;
+    }
   }
 
   private projectPaths(projectId: string): ProjectPaths {
@@ -544,30 +582,34 @@ export class BeadsNativeService {
   private async verifyBinary(): Promise<void> {
     if (!this.binaryVerification) {
       this.binaryVerification = (async () => {
+        if (this.binaryConfigurationError) throw new Error(this.binaryConfigurationError);
         if (this.verifyBinaryAccess) {
           await fs.access(this.binaryPath, fsConstants.X_OK);
         }
-        const scratch = path.join(this.paseoHome, "beads", ".runtime-check");
-        await fs.mkdir(scratch, { recursive: true, mode: 0o700 });
-        const output = await this.runCommand({
-          binaryPath: this.binaryPath,
-          args: ["version"],
-          cwd: scratch,
-          env: {
-            HOME: scratch,
-            PATH: `${path.dirname(this.binaryPath)}${path.delimiter}${process.platform === "win32" ? "C:\\Windows\\System32" : "/usr/bin:/bin"}`,
-            DO_NOT_TRACK: "1",
-            NO_COLOR: "1",
-            TERM: "dumb",
-          },
-        });
-        const versionPattern = new RegExp(
-          `^bd version ${PASEO_BEADS_VERSION.replaceAll(".", "\\.")}(?:\\s|$)`,
-        );
-        if (!versionPattern.test(output.stdout.trim())) {
-          throw new Error(
-            `Paseo requires bd ${PASEO_BEADS_VERSION}; received '${output.stdout.trim() || "unknown"}'`,
+        const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "paseo-beads-runtime-"));
+        try {
+          const output = await this.runCommand({
+            binaryPath: this.binaryPath,
+            args: ["version"],
+            cwd: scratch,
+            env: {
+              HOME: scratch,
+              PATH: `${path.dirname(this.binaryPath)}${path.delimiter}${process.platform === "win32" ? "C:\\Windows\\System32" : "/usr/bin:/bin"}`,
+              DO_NOT_TRACK: "1",
+              NO_COLOR: "1",
+              TERM: "dumb",
+            },
+          });
+          const versionPattern = new RegExp(
+            `^bd version ${PASEO_BEADS_VERSION.replaceAll(".", "\\.")}(?:\\s|$)`,
           );
+          if (!versionPattern.test(output.stdout.trim())) {
+            throw new Error(
+              `Paseo requires bd ${PASEO_BEADS_VERSION}; received '${output.stdout.trim() || "unknown"}'`,
+            );
+          }
+        } finally {
+          await fs.rm(scratch, { recursive: true, force: true });
         }
       })().catch((error) => {
         this.binaryVerification = null;

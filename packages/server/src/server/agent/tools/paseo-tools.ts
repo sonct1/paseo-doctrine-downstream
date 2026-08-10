@@ -185,6 +185,8 @@ function registerConfiguredBeadsTools(
   registerTool: Parameters<typeof registerBeadsTools>[0]["registerTool"],
 ): void {
   if (!options.callerAgentId || !options.beadsService || !options.workspaceRegistry) return;
+  const caller = options.agentManager.getAgent(options.callerAgentId);
+  if (!caller?.roleBinding) return;
   registerBeadsTools({
     registerTool,
     service: options.beadsService,

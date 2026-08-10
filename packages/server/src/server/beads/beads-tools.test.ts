@@ -20,6 +20,7 @@ interface CapturedTool {
 function assignment(
   effectClass: "read-only" | "mutating" | "delegation" = "mutating",
   external: "denied" | "bounded" = "bounded",
+  beadsIssueIds: string[] = ["ps123-abc"],
 ): PersistedAssignmentContract {
   return {
     receipt: {
@@ -27,6 +28,7 @@ function assignment(
     },
     envelope: {
       effectClass,
+      resourceGrants: { beadsIssueIds },
       externalEffectBoundary:
         external === "bounded"
           ? { mode: "bounded", scope: "Beads issue graph for this project" }
@@ -136,6 +138,34 @@ describe("native Beads Paseo tools", () => {
     expect(harness.service.update).not.toHaveBeenCalled();
   });
 
+  it("rejects Peer claim and mutation outside exact assignment issue grants", async () => {
+    const peer = createHarness({
+      roleId: "peer",
+      assignment: assignment("mutating", "bounded", ["ps123-other"]),
+      assignee: "paseo-agent-peer-1",
+    });
+
+    await expect(
+      tool(peer, "beads_claim").handler(
+        { issueId: "ps123-abc", idempotencyKey: "claim-ungranted" },
+        {},
+      ),
+    ).rejects.toThrow("does not grant Beads issue ps123-abc");
+    await expect(
+      tool(peer, "beads_update").handler(
+        {
+          issueId: "ps123-abc",
+          appendNotes: "Out of scope",
+          idempotencyKey: "update-ungranted",
+        },
+        {},
+      ),
+    ).rejects.toThrow("does not grant Beads issue ps123-abc");
+    expect(peer.service.claim).not.toHaveBeenCalled();
+    expect(peer.service.get).not.toHaveBeenCalled();
+    expect(peer.service.update).not.toHaveBeenCalled();
+  });
+
   it("keeps binding closure Lead-owned and requires Peer discoveries to retain provenance", async () => {
     const peer = createHarness({ roleId: "peer", assignee: "paseo-agent-peer-1" });
 
@@ -156,6 +186,19 @@ describe("native Beads Paseo tools", () => {
         {},
       ),
     ).rejects.toThrow("must include discoveredFrom");
+    await expect(
+      tool(peer, "beads_create").handler(
+        {
+          title: "Discovered work",
+          issueType: "task",
+          priority: 2,
+          discoveredFrom: "ps123-ungranted",
+          idempotencyKey: "discover-ungranted",
+        },
+        {},
+      ),
+    ).rejects.toThrow("does not grant Beads issue ps123-ungranted");
+    expect(peer.service.create).not.toHaveBeenCalled();
   });
 
   it("lets a Supervisor read but rejects every write path", async () => {

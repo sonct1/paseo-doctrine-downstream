@@ -79,10 +79,17 @@ test "$HEALTHY" = "1"
 /bin/cat "$SMOKE_ROOT/health.json"
 /bin/echo
 
+mkdir -p "$SMOKE_ROOT/beads-project"
+PASEO_SMOKE_APP="$SMOKE_ROOT/install/current/app" \
+  PASEO_SMOKE_PORT="$PORT" \
+  PASEO_SMOKE_PROJECT="$SMOKE_ROOT/beads-project" \
+  "$SMOKE_ROOT/install/current/runtime/bin/node" \
+  "$REPO_ROOT/scripts/smoke-native-beads-rpc.mjs"
+
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
   "$SMOKE_ROOT/bin/paseo" daemon stop >/dev/null 2>&1 || true
 wait "$SMOKE_PID" >/dev/null 2>&1 || true
 SMOKE_PID=""
 
-printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok beads=ok daemon=ok webui=ok\n' "$HELP_FILES"
+printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok beads_rpc=ok daemon=ok webui=ok\n' "$HELP_FILES"
 printf 'SMOKE_ROOT=%s\n' "$SMOKE_ROOT"

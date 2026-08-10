@@ -123,6 +123,14 @@ function requirePeerOwnership(caller: BeadsCaller, issue: BeadsIssue): void {
   }
 }
 
+function requirePeerIssueGrant(caller: BeadsCaller, issueId: string): void {
+  if (caller.roleId !== "peer") return;
+  const grants = caller.assignment.envelope.resourceGrants?.beadsIssueIds ?? [];
+  if (!grants.includes(issueId)) {
+    throw new Error(`Peer assignment does not grant Beads issue ${issueId}`);
+  }
+}
+
 const UpdateInputSchema = z
   .object({
     issueId: IssueIdSchema,
@@ -235,6 +243,15 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
       if (caller.roleId === "peer" && !input.discoveredFrom) {
         throw new Error("A Peer-created issue must include discoveredFrom");
       }
+      if (caller.roleId === "peer" && input.discoveredFrom) {
+        requirePeerIssueGrant(caller, input.discoveredFrom);
+        const source = await options.service.get(
+          caller.project,
+          input.discoveredFrom,
+          execution.signal,
+        );
+        requirePeerOwnership(caller, source);
+      }
       const issue = await options.service.create(caller.project, input, execution.signal);
       return toolResult({ projectId: caller.project.projectId, issue });
     },
@@ -252,6 +269,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     async ({ issueId, idempotencyKey }, execution) => {
       const caller = await resolveCaller(options);
       requireWriteAuthority(caller);
+      requirePeerIssueGrant(caller, issueId);
       const issue = await options.service.claim(
         caller.project,
         issueId,
@@ -276,6 +294,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     async ({ issueId, ...input }, execution) => {
       const caller = await resolveCaller(options);
       requireWriteAuthority(caller);
+      requirePeerIssueGrant(caller, issueId);
       const before = await options.service.get(caller.project, issueId, execution.signal);
       requirePeerOwnership(caller, before);
       const issue = await options.service.update(caller.project, issueId, input, execution.signal);
@@ -333,6 +352,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     async ({ issueId, dependsOnId, dependencyType, idempotencyKey }, execution) => {
       const caller = await resolveCaller(options);
       requireWriteAuthority(caller);
+      requirePeerIssueGrant(caller, issueId);
       const issue = await options.service.get(caller.project, issueId, execution.signal);
       requirePeerOwnership(caller, issue);
       const updated = await options.service.addDependency(

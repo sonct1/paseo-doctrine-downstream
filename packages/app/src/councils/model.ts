@@ -134,7 +134,13 @@ function councilVerdictProvenance(
 }
 
 function councilCaseKey(agent: CouncilAgentSource, caseId: string): string {
-  return JSON.stringify([agent.serverId, agent.workspaceId ?? null, caseId]);
+  let scope = ["agent", agent.id];
+  if (agent.workspaceId) {
+    scope = ["workspace", agent.workspaceId];
+  } else if (agent.parentAgentId) {
+    scope = ["parent", agent.parentAgentId];
+  }
+  return JSON.stringify([agent.serverId, ...scope, caseId]);
 }
 
 export function groupCouncilCases(

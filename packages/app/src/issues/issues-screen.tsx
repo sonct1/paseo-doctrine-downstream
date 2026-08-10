@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { router } from "expo-router";
 import { ListChecks, Plus, RotateCw, ShieldCheck } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
@@ -556,14 +556,18 @@ function IssueDetailContent({
   const handleClose = useCallback(async () => {
     const trimmedReason = reason.trim();
     if (!trimmedReason) return;
-    await closeIssue({
-      issueId: issue.id,
-      reason: trimmedReason,
-      idempotencyKey: closeKey,
-    });
-    setClosing(false);
-    setReason("");
-    setCloseKey(mutationKey("close"));
+    try {
+      await closeIssue({
+        issueId: issue.id,
+        reason: trimmedReason,
+        idempotencyKey: closeKey,
+      });
+      setClosing(false);
+      setReason("");
+      setCloseKey(mutationKey("close"));
+    } catch {
+      setCloseKey(mutationKey("close"));
+    }
   }, [closeIssue, closeKey, issue.id, reason]);
   const handleClosePress = useCallback(() => {
     void handleClose();
@@ -571,6 +575,7 @@ function IssueDetailContent({
   const handleCancelClose = useCallback(() => {
     resetClose();
     setClosing(false);
+    setCloseKey(mutationKey("close"));
   }, [resetClose]);
   const handleOpenClose = useCallback(() => setClosing(true), []);
 
@@ -745,6 +750,16 @@ function CreateIssuePanel({
   );
   const [draft, setDraft] = useState<CreateDraft>(EMPTY_DRAFT);
   const [submissionKey, setSubmissionKey] = useState(() => mutationKey("create"));
+  const mountedRef = useRef(true);
+  const activeScopeRef = useRef("");
+  activeScopeRef.current = `${serverId}\u0000${projectId}`;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const updateDraft = useCallback(
     (patch: Partial<CreateDraft>) => {
@@ -757,16 +772,23 @@ function CreateIssuePanel({
   const handleSubmit = useCallback(async () => {
     const title = draft.title.trim();
     if (!title) return;
-    const issue = await createIssue({
-      title,
-      description: draft.description.trim() || undefined,
-      acceptance: draft.acceptance.trim() || undefined,
-      issueType: draft.issueType,
-      priority: draft.priority,
-      idempotencyKey: submissionKey,
-    });
-    onCreated(issue);
-  }, [createIssue, draft, onCreated, submissionKey]);
+    const submittedScope = `${serverId}\u0000${projectId}`;
+    try {
+      const issue = await createIssue({
+        title,
+        description: draft.description.trim() || undefined,
+        acceptance: draft.acceptance.trim() || undefined,
+        issueType: draft.issueType,
+        priority: draft.priority,
+        idempotencyKey: submissionKey,
+      });
+      if (mountedRef.current && activeScopeRef.current === submittedScope) onCreated(issue);
+    } catch {
+      if (mountedRef.current && activeScopeRef.current === submittedScope) {
+        setSubmissionKey(mutationKey("create"));
+      }
+    }
+  }, [createIssue, draft, onCreated, projectId, serverId, submissionKey]);
   const handleSubmitPress = useCallback(() => {
     void handleSubmit();
   }, [handleSubmit]);
