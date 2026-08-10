@@ -138,10 +138,13 @@ function readSourceState() {
     );
     return { sourceCommit: null, sourceDirty: null, sourceFingerprint: null };
   }
+  process.stderr.write(
+    "Paseo build provenance: source archive commit is asserted without Git metadata; recording cleanliness and fingerprint as unknown.\n",
+  );
   return {
     sourceCommit,
-    sourceDirty: false,
-    sourceFingerprint: sourceFingerprint(sourceCommit, Buffer.alloc(0), []),
+    sourceDirty: null,
+    sourceFingerprint: null,
   };
 }
 

@@ -78,18 +78,31 @@ describe("role create Workspace Protocol admission", () => {
     },
   );
 
-  test("does not turn an optional protocol capability into a launch gate", async () => {
+  test("fails closed when role admission capability or inspection is unavailable", async () => {
     const client = {
       inspectWorkspaceProtocol: vi.fn(async () => Promise.reject(new Error("down"))),
     };
 
     await expect(
       requireWorkspaceProtocolForRole({ ...baseInput, client, supported: false }),
-    ).resolves.toBeUndefined();
+    ).rejects.toMatchObject({ kind: "unsupported" });
     expect(client.inspectWorkspaceProtocol).not.toHaveBeenCalled();
 
+    await expect(requireWorkspaceProtocolForRole({ ...baseInput, client })).rejects.toMatchObject({
+      kind: "inspection_failed",
+    });
+
     await expect(
-      requireWorkspaceProtocolForRole({ ...baseInput, client }),
-    ).resolves.toBeUndefined();
+      requireWorkspaceProtocolForRole({
+        ...baseInput,
+        client: {
+          inspectWorkspaceProtocol: vi.fn(async () => ({
+            requestId: "inspect-1",
+            ok: false as const,
+            error: { code: "project_not_found" as const },
+          })),
+        },
+      }),
+    ).rejects.toMatchObject({ kind: "inspection_failed" });
   });
 });

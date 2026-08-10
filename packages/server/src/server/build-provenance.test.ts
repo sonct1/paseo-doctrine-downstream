@@ -59,6 +59,24 @@ describe("readDaemonBuildProvenance", () => {
     });
   });
 
+  test("does not turn an asserted archive commit into a clean-source claim", () => {
+    const artifact = {
+      schemaVersion: 1,
+      sourceRoot: "/tmp/paseo-src",
+      sourceCommit: "a".repeat(40),
+      sourceDirty: null,
+      sourceFingerprint: null,
+      builtAt: "2026-08-10T00:00:00.000Z",
+    };
+    expect(readDaemonBuildProvenance(moduleUrlWithArtifact(artifact))).toEqual({
+      sourceRoot: artifact.sourceRoot,
+      sourceCommit: artifact.sourceCommit,
+      sourceDirty: null,
+      sourceFingerprint: null,
+      builtAt: artifact.builtAt,
+    });
+  });
+
   test("fails closed when the artifact is absent or incomplete", () => {
     const unknown = {
       sourceRoot: null,

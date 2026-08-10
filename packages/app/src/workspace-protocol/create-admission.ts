@@ -2,11 +2,22 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import { buildProjectSettingsRoute } from "@/utils/host-routes";
 
-export type WorkspaceProtocolCreateAdmissionFailureKind = "invalid" | "unreadable";
+export type WorkspaceProtocolCreateAdmissionFailureKind =
+  | "unsupported"
+  | "inspection_failed"
+  | "invalid"
+  | "unreadable";
 
 export function workspaceProtocolAdmissionMessageKey(
-  _kind: WorkspaceProtocolCreateAdmissionFailureKind,
-): "workspaceSetup.errors.workspaceProtocolRequired" {
+  kind: WorkspaceProtocolCreateAdmissionFailureKind,
+):
+  | "workspaceSetup.errors.workspaceProtocolRequired"
+  | "workspaceSetup.errors.workspaceProtocolUnsupported"
+  | "workspaceSetup.errors.workspaceProtocolInspectionFailed" {
+  if (kind === "unsupported") return "workspaceSetup.errors.workspaceProtocolUnsupported";
+  if (kind === "inspection_failed") {
+    return "workspaceSetup.errors.workspaceProtocolInspectionFailed";
+  }
   return "workspaceSetup.errors.workspaceProtocolRequired";
 }
 
@@ -40,18 +51,33 @@ export async function requireWorkspaceProtocolForRole(input: {
   if (!input.roleId) return undefined;
 
   if (!input.supported) {
-    return;
+    throw new WorkspaceProtocolCreateAdmissionError({
+      kind: "unsupported",
+      serverId: input.serverId,
+      projectId: input.projectId,
+      repoRoot: input.repoRoot,
+    });
   }
 
   let result: Awaited<ReturnType<DaemonClient["inspectWorkspaceProtocol"]>>;
   try {
     result = await input.client.inspectWorkspaceProtocol(input.repoRoot);
   } catch {
-    return;
+    throw new WorkspaceProtocolCreateAdmissionError({
+      kind: "inspection_failed",
+      serverId: input.serverId,
+      projectId: input.projectId,
+      repoRoot: input.repoRoot,
+    });
   }
 
   if (!result.ok) {
-    return;
+    throw new WorkspaceProtocolCreateAdmissionError({
+      kind: "inspection_failed",
+      serverId: input.serverId,
+      projectId: input.projectId,
+      repoRoot: input.repoRoot,
+    });
   }
   if (result.snapshot.status === "valid" || result.snapshot.status === "missing") return;
 
