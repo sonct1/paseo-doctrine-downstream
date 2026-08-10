@@ -59,6 +59,7 @@ buildNpmPackage {
 
   nodejs = nodejs_22;
   inherit (paseo) npmDeps;
+  npmDepsFetcherVersion = 2;
 
   # Prevent onnxruntime-node's install script from running during automatic
   # npm rebuild. We manually rebuild only node-pty in buildPhase.
