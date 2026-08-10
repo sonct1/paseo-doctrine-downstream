@@ -57,8 +57,19 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
           injectionMethod: "codex-developer-instructions",
         },
       },
+      {
+        provider: "mock",
+        status: "ready",
+        enabled: true,
+        roleBinding: {
+          status: "unsupported",
+        },
+      },
     ],
-    providerDefinitions: [{ id: "codex", label: "Codex", modes: [{ id: "auto", label: "Auto" }] }],
+    providerDefinitions: [
+      { id: "codex", label: "Codex", modes: [{ id: "auto", label: "Auto" }] },
+      { id: "mock", label: "Mock", modes: [{ id: "auto", label: "Auto" }] },
+    ],
     providerDefinitionMap: new Map(),
     agentDefinition: undefined,
     modeOptions: [{ id: "auto", label: "Auto" }],
@@ -227,12 +238,13 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     expect(getLatest().composerState?.agentControls.selectedProvider).toBe("codex");
-    expect(getLatest().composerState?.selectedRole).toBe("lead");
+    expect(getLatest().composerState?.selectedRole).toBeNull();
     expect(getLatest().composerState?.selectedAssignmentEffect).toBe("read-only");
-    expect(getLatest().composerState?.agentControls.features).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "foundation_assignment_effect", value: "read-only" }),
-      ]),
+    expect(
+      getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
+    ).toEqual(["codex", "mock"]);
+    expect(getLatest().composerState?.agentControls.features).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "foundation_assignment_effect" })]),
     );
     expect(getLatest().composerState?.agentControls.roleOptions).toEqual(
       expect.arrayContaining([
@@ -243,6 +255,16 @@ describe("useAgentInputDraft live contract", () => {
     );
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("peer");
+    });
+    expect(
+      getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
+    ).toEqual(["codex"]);
+    expect(getLatest().composerState?.agentControls.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "foundation_assignment_effect", value: "read-only" }),
+      ]),
+    );
+    await act(async () => {
       getLatest().composerState?.agentControls.onSetFeature?.(
         "foundation_assignment_effect",
         "mutating",

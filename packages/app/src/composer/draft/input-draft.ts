@@ -96,7 +96,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
   );
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<PaseoRoleId>("lead");
+  const [selectedRole, setSelectedRole] = useState<PaseoRoleId | null>(null);
   const [selectedAssignmentEffect, setSelectedAssignmentEffect] =
     useState<AssignmentEffectClass>("read-only");
   const text = draft?.text ?? "";
@@ -205,6 +205,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const selectedProvider = formState.selectedProvider;
   const setProviderFromUser = formState.setProviderFromUser;
   useEffect(() => {
+    if (!selectedRole) {
+      return;
+    }
     const entries = allProviderEntries ?? [];
     if (!entries.some((entry) => entry.roleBinding !== undefined)) {
       return;
@@ -222,7 +225,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     if (compatible) {
       setProviderFromUser(compatible.provider);
     }
-  }, [allProviderEntries, selectedProvider, setProviderFromUser]);
+  }, [allProviderEntries, selectedProvider, selectedRole, setProviderFromUser]);
 
   const {
     features: draftFeatures,
@@ -237,17 +240,21 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     thinkingOptionId: effectiveThinkingOptionId,
     initialFeatureValues: composerOptions?.initialFeatureValues,
   });
-  const assignmentEffectFeature = useMemo<AgentFeature>(
-    () => ({
-      type: "select",
-      id: ASSIGNMENT_EFFECT_FEATURE_ID,
-      label: "Assignment authority",
-      description: "Explicit mutation/delegation class for the immutable assignment contract.",
-      value: selectedAssignmentEffect,
-      options: PASEO_ASSIGNMENT_EFFECT_SUMMARIES.filter((option) =>
-        isAssignmentEffectAllowedForRole(selectedRole, option.id),
-      ),
-    }),
+  const assignmentEffectFeature = useMemo<AgentFeature | null>(
+    () =>
+      selectedRole
+        ? {
+            type: "select",
+            id: ASSIGNMENT_EFFECT_FEATURE_ID,
+            label: "Assignment authority",
+            description:
+              "Explicit mutation/delegation class for the immutable assignment contract.",
+            value: selectedAssignmentEffect,
+            options: PASEO_ASSIGNMENT_EFFECT_SUMMARIES.filter((option) =>
+              isAssignmentEffectAllowedForRole(selectedRole, option.id),
+            ),
+          }
+        : null,
     [selectedAssignmentEffect, selectedRole],
   );
   const setRoleAndNormalizeEffect = useCallback(
@@ -263,7 +270,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     (featureId: string, value: unknown) => {
       if (featureId === ASSIGNMENT_EFFECT_FEATURE_ID) {
         const selected = PASEO_ASSIGNMENT_EFFECT_SUMMARIES.find((option) => option.id === value);
-        if (selected && isAssignmentEffectAllowedForRole(selectedRole, selected.id)) {
+        if (
+          selectedRole &&
+          selected &&
+          isAssignmentEffectAllowedForRole(selectedRole, selected.id)
+        ) {
           setSelectedAssignmentEffect(selected.id);
         }
         return;
@@ -307,17 +318,18 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         .filter((entry) => entry.roleBinding?.status === "supported")
         .map((entry) => entry.provider),
     );
-    const roleAwareFormState = roleBindingAvailable
-      ? {
-          ...formState,
-          providerDefinitions: formState.providerDefinitions.filter((definition) =>
-            compatibleProviderIds.has(definition.id),
-          ),
-          modelSelectorProviders: formState.modelSelectorProviders.filter((provider) =>
-            compatibleProviderIds.has(provider.id),
-          ),
-        }
-      : formState;
+    const roleAwareFormState =
+      roleBindingAvailable && selectedRole
+        ? {
+            ...formState,
+            providerDefinitions: formState.providerDefinitions.filter((definition) =>
+              compatibleProviderIds.has(definition.id),
+            ),
+            modelSelectorProviders: formState.modelSelectorProviders.filter((provider) =>
+              compatibleProviderIds.has(provider.id),
+            ),
+          }
+        : formState;
 
     return {
       ...roleAwareFormState,
@@ -330,9 +342,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         roleOptions: roleBindingAvailable ? PASEO_ROLE_SUMMARIES : [],
         selectedRole: roleBindingAvailable ? selectedRole : null,
         onSelectRole: setRoleAndNormalizeEffect,
-        features: roleBindingAvailable
-          ? [...(draftFeatures ?? []), assignmentEffectFeature]
-          : draftFeatures,
+        features:
+          roleBindingAvailable && assignmentEffectFeature
+            ? [...(draftFeatures ?? []), assignmentEffectFeature]
+            : draftFeatures,
         onSetFeature: setAgentControlFeature,
       }),
       commandDraftConfig,
