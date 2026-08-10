@@ -101,8 +101,10 @@ describe("groupCouncilCases", () => {
       parentAgentId: "lead-1",
       lead: { id: "lead-1" },
       verdictProvenance: "pending",
+      reportSeatCount: 3,
       readyCount: 2,
-      failedCount: 0,
+      unavailableCount: 0,
+      redundantCount: 0,
     });
     expect(council?.seats.map((seat) => seat.role)).toEqual([
       "independent",
@@ -130,8 +132,48 @@ describe("groupCouncilCases", () => {
     const council = groupCouncilCases([ready, failed, working])[0];
 
     expect(council?.readyCount).toBe(1);
-    expect(council?.failedCount).toBe(1);
+    expect(council?.unavailableCount).toBe(1);
     expect(council ? isCouncilSeatReportReady(council.seats[0]!) : false).toBe(true);
+  });
+
+  it("counts only usable reports while preserving redundant replacements for audit", () => {
+    const independent = makeAgent(
+      "independent",
+      councilLabels("independent", {
+        "council.phase": "verdict",
+        "council.integrity": "valid-native-provider-state",
+        "council.disposition": "partial",
+      }),
+    );
+    const challenger = makeAgent(
+      "challenger",
+      councilLabels("challenger", {
+        "council.phase": "verdict",
+        "council.integrity": "valid-codex-native",
+        "council.disposition": "partial",
+      }),
+    );
+    const replacement = makeAgent(
+      "replacement",
+      councilLabels("independent", {
+        "council.phase": "verdict",
+        "council.integrity": "redundant-aborted-replacement",
+        "council.disposition": "partial",
+      }),
+      { lastActivityAt: new Date("2026-08-10T10:04:00.000Z") },
+    );
+
+    const council = groupCouncilCases([independent, challenger, replacement])[0];
+
+    expect(council).toMatchObject({
+      disposition: "partial",
+      reportSeatCount: 2,
+      readyCount: 2,
+      unavailableCount: 0,
+      redundantCount: 1,
+    });
+    expect(council?.seats.map((seat) => seat.integrity)).toEqual(["valid", "redundant", "valid"]);
+    expect(council ? isCouncilSeatReportReady(council.seats[1]!) : true).toBe(false);
   });
 
   it("does not turn a forged seat verdict label into a Lead-authored decision claim", () => {

@@ -132,8 +132,24 @@ function peerMutationGuard(
 ): BeadsMutationGuard | undefined {
   if (caller.roleId !== "peer") return undefined;
   return {
+    kind: "owned-mutation",
     issueId,
-    expectedAssignee: caller.project.actor,
+    actor: caller.project.actor,
+    requireNotClosed: true,
+    ...(signal ? { signal } : {}),
+  };
+}
+
+function peerClaimGuard(
+  caller: BeadsCaller,
+  issueId: string,
+  signal?: AbortSignal,
+): BeadsMutationGuard | undefined {
+  if (caller.roleId !== "peer") return undefined;
+  return {
+    kind: "claim",
+    issueId,
+    actor: caller.project.actor,
     requireNotClosed: true,
     ...(signal ? { signal } : {}),
   };
@@ -284,6 +300,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
         issueId,
         idempotencyKey,
         execution.signal,
+        peerClaimGuard(caller, issueId, execution.signal),
       );
       if (issue.assignee !== caller.project.actor) {
         throw new Error(`Issue ${issueId} was not claimed by ${caller.project.actor}`);

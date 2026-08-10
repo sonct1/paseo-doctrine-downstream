@@ -32,6 +32,7 @@ import {
   councilTierLabel,
   groupCouncilCases,
   isCouncilSeatReportReady,
+  isCouncilSeatUnavailable,
   type CouncilCase,
   type CouncilPhase,
   type CouncilSeat,
@@ -259,7 +260,7 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
       onPress={handlePress}
       style={rowStyle}
       accessibilityRole="button"
-      accessibilityLabel={`${council.title}, ${phaseLabel}, ${council.readyCount} of ${council.seats.length} reports ready`}
+      accessibilityLabel={`${council.title}, ${phaseLabel}, ${council.readyCount} of ${council.reportSeatCount} reports ready${council.redundantCount > 0 ? `, ${council.redundantCount} replacement not counted` : ""}`}
       testID={`council-row-${scopeTestId}`}
     >
       <View style={styles.councilRowIcon}>
@@ -275,6 +276,7 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
           testID={`council-row-phase-${scopeTestId}`}
         >
           {councilTierLabel(council.tier)} · {phaseLabel}
+          {council.disposition ? ` · ${council.disposition}` : ""}
         </Text>
         <Text style={styles.councilRowMeta} numberOfLines={1}>
           Workspace {council.workspaceId ?? "legacy scope"}
@@ -282,7 +284,7 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
       </View>
       <View style={styles.councilRowCount}>
         <Text style={styles.councilRowCountValue}>
-          {council.readyCount}/{council.seats.length}
+          {council.readyCount}/{council.reportSeatCount}
         </Text>
         <Text style={styles.councilRowCountLabel}>ready</Text>
       </View>
@@ -354,6 +356,14 @@ function CouncilDetail({
 
 function CouncilHero({ council, compact }: { council: CouncilCase; compact: boolean }) {
   const tierLabel = councilTierLabel(council.tier);
+  const dispositionLabel = council.disposition?.replaceAll("-", " ") ?? null;
+  let reportMetricLabel = "reports ready";
+  if (council.unavailableCount > 0) {
+    const noun = council.unavailableCount === 1 ? "report" : "reports";
+    reportMetricLabel = `${council.unavailableCount} ${noun} unavailable`;
+  } else if (council.redundantCount > 0) {
+    reportMetricLabel = `reports ready · ${council.redundantCount} not counted`;
+  }
 
   return (
     <View style={styles.hero}>
@@ -368,6 +378,14 @@ function CouncilHero({ council, compact }: { council: CouncilCase; compact: bool
               )}
               <Text style={styles.tierBadgeText}>{tierLabel}</Text>
             </View>
+            {dispositionLabel ? (
+              <View style={[styles.tierBadge, styles.dispositionBadge]}>
+                <ThemedCircleAlert size={13} uniProps={statusWarningMapping} />
+                <Text style={[styles.tierBadgeText, styles.dispositionBadgeText]}>
+                  {dispositionLabel}
+                </Text>
+              </View>
+            ) : null}
             <Text style={styles.caseId} numberOfLines={1}>
               CASE {council.id}
             </Text>
@@ -377,11 +395,9 @@ function CouncilHero({ council, compact }: { council: CouncilCase; compact: bool
         </View>
         <View style={[styles.reportMetric, compact && styles.reportMetricCompact]}>
           <Text style={styles.reportMetricValue}>
-            {council.readyCount}/{council.seats.length}
+            {council.readyCount}/{council.reportSeatCount}
           </Text>
-          <Text style={styles.reportMetricLabel}>
-            {council.failedCount > 0 ? `${council.failedCount} seat failed` : "reports ready"}
-          </Text>
+          <Text style={styles.reportMetricLabel}>{reportMetricLabel}</Text>
         </View>
       </View>
     </View>
@@ -478,6 +494,15 @@ function councilSeatRoundLabel(round: string): string {
 }
 
 function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
+  if (seat.integrity === "compromised") {
+    return "Report excluded";
+  }
+  if (seat.integrity === "missing") {
+    return "Report missing";
+  }
+  if (seat.integrity === "redundant") {
+    return "Not counted";
+  }
   if (seat.agent.status === "error") {
     return "Seat failed";
   }
@@ -501,6 +526,15 @@ function councilSeatBodyLabel(seat: CouncilSeat): string {
 }
 
 function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: boolean): string {
+  if (seat.integrity === "compromised") {
+    return "Integrity review excluded this report. Open the agent to inspect the exact audit trail.";
+  }
+  if (seat.integrity === "missing") {
+    return "This seat did not produce a usable report. Open the agent to inspect the blocker.";
+  }
+  if (seat.integrity === "redundant") {
+    return "This replacement is preserved for audit but is not counted in the Council report total.";
+  }
   if (seat.agent.status === "error") {
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
   }
@@ -523,7 +557,12 @@ function CouncilSeatCard({
   compact: boolean;
 }) {
   const ready = isCouncilSeatReportReady(seat);
-  const failed = seat.agent.status === "error";
+  const unavailable = isCouncilSeatUnavailable(seat);
+  const redundant = seat.integrity === "redundant";
+  const failed =
+    seat.agent.status === "error" ||
+    seat.agent.attentionReason === "error" ||
+    seat.integrity === "compromised";
   const roleLabel = councilRoleLabel(seat.role);
   const roundLabel = councilSeatRoundLabel(seat.round);
   const modelLabel = seat.agent.model?.trim() || seat.agent.provider;
@@ -533,6 +572,8 @@ function CouncilSeatCard({
   let statusIcon: ReactNode = <ThemedClock size={15} uniProps={foregroundMutedMapping} />;
   if (failed) {
     statusIcon = <ThemedCircleAlert size={15} uniProps={statusDangerMapping} />;
+  } else if (unavailable || redundant) {
+    statusIcon = <ThemedCircleAlert size={15} uniProps={statusWarningMapping} />;
   } else if (ready) {
     statusIcon = <ThemedCheck size={16} uniProps={statusSuccessMapping} strokeWidth={2.5} />;
   }
@@ -572,6 +613,7 @@ function CouncilSeatCard({
               styles.seatStatusText,
               ready && styles.seatStatusReady,
               failed && styles.seatStatusFailed,
+              !failed && (unavailable || redundant) && styles.seatStatusWarning,
             ]}
           >
             {statusLabel}
@@ -598,9 +640,10 @@ function CouncilSeatCard({
 
 function councilVerdictCopy(council: CouncilCase): { title: string; text: string } {
   if (council.verdictProvenance === "lead-linked") {
+    const disposition = council.disposition?.replaceAll("-", " ");
     return {
-      title: "Lead-linked verdict marker",
-      text: "Seat labels indicate verdict, and the case link resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.",
+      title: disposition ? `Lead-linked verdict · ${disposition}` : "Lead-linked verdict marker",
+      text: `${disposition ? `The Lead recorded a ${disposition} disposition. ` : ""}Seat labels indicate verdict, and the case link resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.`,
     };
   }
   if (council.phase === "verdict") {
@@ -861,6 +904,12 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: theme.fontWeight.medium,
     textTransform: "capitalize",
   },
+  dispositionBadge: {
+    borderColor: theme.colors.statusWarning,
+  },
+  dispositionBadgeText: {
+    color: theme.colors.statusWarning,
+  },
   caseId: {
     flexShrink: 1,
     color: theme.colors.foregroundMuted,
@@ -1075,6 +1124,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   seatStatusFailed: {
     color: theme.colors.statusDanger,
+  },
+  seatStatusWarning: {
+    color: theme.colors.statusWarning,
   },
   seatBody: {
     flex: 1,

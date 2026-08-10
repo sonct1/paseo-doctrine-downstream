@@ -236,14 +236,66 @@ describe("BeadsNativeService", () => {
         { appendNotes: "late mutation", idempotencyKey: "late-update" },
         undefined,
         {
+          kind: "owned-mutation",
           issueId: "ps123-abc",
-          expectedAssignee: context.actor,
+          actor: context.actor,
           requireNotClosed: true,
         },
       ),
     ).rejects.toThrow("cannot mutate closed issue ps123-abc");
     expect(calls.filter((call) => commandName(call.args) === "update")).toHaveLength(0);
   });
+
+  it.each([
+    {
+      name: "closed",
+      issueState: issue({ status: "closed" }),
+      error: "cannot claim closed issue ps123-abc",
+    },
+    {
+      name: "already assigned",
+      issueState: issue({ status: "in_progress", assignee: "paseo-agent-peer-other" }),
+      error: "cannot claim issue ps123-abc assigned to paseo-agent-peer-other",
+    },
+  ])(
+    "rejects a Peer claim on an $name issue before native mutation",
+    async ({ issueState, error }) => {
+      const paseoHome = await tempRoot();
+      const calls: BeadsCommandInput[] = [];
+      const baseRunner = fakeRunner(calls);
+      const runner: BeadsCommandRunner = async (input) => {
+        if (commandName(input.args) === "show") {
+          calls.push(input);
+          return { stdout: JSON.stringify([issueState]), stderr: "" };
+        }
+        return baseRunner(input);
+      };
+      const service = new BeadsNativeService({
+        paseoHome,
+        logger: createTestLogger(),
+        binaryPath: "/trusted/runtime/bd",
+        commandRunner: runner,
+      });
+      const context = { projectId: "project-a", actor: "paseo-agent-peer-1" };
+      await service.create(context, {
+        title: "Initialize guarded graph",
+        issueType: "task",
+        priority: 2,
+        idempotencyKey: "initialize-claim-guarded-graph",
+      });
+      calls.length = 0;
+
+      await expect(
+        service.claim(context, "ps123-abc", "guarded-claim", undefined, {
+          kind: "claim",
+          issueId: "ps123-abc",
+          actor: context.actor,
+          requireNotClosed: true,
+        }),
+      ).rejects.toThrow(error);
+      expect(calls.filter((call) => commandName(call.args) === "update")).toHaveLength(0);
+    },
+  );
 
   it("does not initialize durable state for a guarded mutation without an existing graph", async () => {
     const paseoHome = await tempRoot();
@@ -263,8 +315,9 @@ describe("BeadsNativeService", () => {
         { appendNotes: "must not initialize", idempotencyKey: "guarded-missing" },
         undefined,
         {
+          kind: "owned-mutation",
           issueId: "ps123-abc",
-          expectedAssignee: context.actor,
+          actor: context.actor,
           requireNotClosed: true,
         },
       ),

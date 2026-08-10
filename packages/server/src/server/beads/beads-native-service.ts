@@ -47,8 +47,9 @@ export interface BeadsProjectContext {
 }
 
 export interface BeadsMutationGuard {
+  kind: "owned-mutation" | "claim";
   issueId: string;
-  expectedAssignee: string;
+  actor: string;
   requireNotClosed: boolean;
   signal?: AbortSignal;
 }
@@ -348,11 +349,19 @@ export class BeadsNativeService {
     issueId: string,
     idempotencyKey: string,
     signal?: AbortSignal,
+    guard?: BeadsMutationGuard,
   ): Promise<BeadsIssue> {
-    return this.mutate(context, "claim", idempotencyKey, { issueId }, async () => {
-      const result = await this.runJson(context, ["update", issueId, "--claim"], false, signal);
-      return parseOneIssue(result, "update --claim");
-    });
+    return this.mutate(
+      context,
+      "claim",
+      idempotencyKey,
+      { issueId },
+      async () => {
+        const result = await this.runJson(context, ["update", issueId, "--claim"], false, signal);
+        return parseOneIssue(result, "update --claim");
+      },
+      guard,
+    );
   }
 
   async update(
@@ -535,11 +544,20 @@ export class BeadsNativeService {
     guard: BeadsMutationGuard,
   ): Promise<void> {
     const issue = await this.getUnlocked(context, guard.issueId, guard.signal);
-    if (issue.assignee !== guard.expectedAssignee) {
-      throw new Error(`Peer ${guard.expectedAssignee} may mutate only an issue assigned to itself`);
-    }
     if (guard.requireNotClosed && issue.status === "closed") {
-      throw new Error(`Peer ${guard.expectedAssignee} cannot mutate closed issue ${guard.issueId}`);
+      const action = guard.kind === "claim" ? "claim" : "mutate";
+      throw new Error(`Peer ${guard.actor} cannot ${action} closed issue ${guard.issueId}`);
+    }
+    if (guard.kind === "claim") {
+      if (issue.assignee) {
+        throw new Error(
+          `Peer ${guard.actor} cannot claim issue ${guard.issueId} assigned to ${issue.assignee}`,
+        );
+      }
+      return;
+    }
+    if (issue.assignee !== guard.actor) {
+      throw new Error(`Peer ${guard.actor} may mutate only an issue assigned to itself`);
     }
   }
 

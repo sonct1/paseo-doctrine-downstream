@@ -73,10 +73,8 @@ function createHarness(options: {
         _signal: AbortSignal | undefined,
         guard: BeadsMutationGuard | undefined,
       ) => {
-        if (guard && issue.assignee !== guard.expectedAssignee) {
-          throw new Error(
-            `Peer ${guard.expectedAssignee} may mutate only an issue assigned to itself`,
-          );
+        if (guard?.kind === "owned-mutation" && issue.assignee !== guard.actor) {
+          throw new Error(`Peer ${guard.actor} may mutate only an issue assigned to itself`);
         }
         return issue;
       },
@@ -135,8 +133,31 @@ describe("native Beads Paseo tools", () => {
       { appendNotes: "Evidence", idempotencyKey: "update-evidence-1" },
       undefined,
       {
+        kind: "owned-mutation",
         issueId: "ps123-abc",
-        expectedAssignee: "paseo-agent-peer-1",
+        actor: "paseo-agent-peer-1",
+        requireNotClosed: true,
+      },
+    );
+  });
+
+  it("guards a granted Peer claim before the native mutation", async () => {
+    const harness = createHarness({ roleId: "peer", assignee: null });
+
+    await tool(harness, "beads_claim").handler(
+      { issueId: "ps123-abc", idempotencyKey: "claim-granted" },
+      {},
+    );
+
+    expect(harness.service.claim).toHaveBeenCalledWith(
+      { projectId: "project-1", actor: "paseo-agent-peer-1" },
+      "ps123-abc",
+      "claim-granted",
+      undefined,
+      {
+        kind: "claim",
+        issueId: "ps123-abc",
+        actor: "paseo-agent-peer-1",
         requireNotClosed: true,
       },
     );

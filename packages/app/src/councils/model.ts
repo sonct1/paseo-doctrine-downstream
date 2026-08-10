@@ -14,6 +14,12 @@ export const COUNCIL_ROLES = [
 export type CouncilTier = (typeof COUNCIL_TIERS)[number];
 export type CouncilPhase = (typeof COUNCIL_PHASES)[number];
 export type CouncilRole = (typeof COUNCIL_ROLES)[number];
+export type CouncilSeatIntegrity =
+  | "unspecified"
+  | "valid"
+  | "compromised"
+  | "missing"
+  | "redundant";
 
 export interface CouncilAgentSource {
   id: string;
@@ -37,6 +43,7 @@ export interface CouncilSeat {
   role: CouncilRole;
   round: string;
   phase: CouncilPhase;
+  integrity: CouncilSeatIntegrity;
 }
 
 export interface CouncilCase {
@@ -50,9 +57,12 @@ export interface CouncilCase {
   parentAgentId: string | null;
   lead: CouncilAgentSource | null;
   verdictProvenance: "pending" | "lead-linked" | "unverified";
+  disposition: string | null;
   seats: CouncilSeat[];
+  reportSeatCount: number;
   readyCount: number;
-  failedCount: number;
+  unavailableCount: number;
+  redundantCount: number;
   updatedAt: Date;
 }
 
@@ -91,6 +101,19 @@ function readLabel(labels: Readonly<Record<string, string>>, key: string): strin
   return labels[key]?.trim() ?? "";
 }
 
+function councilSeatIntegrity(agent: CouncilAgentSource): CouncilSeatIntegrity {
+  const integrity = readLabel(agent.labels, "council.integrity").toLowerCase();
+  if (integrity.startsWith("valid")) return "valid";
+  if (integrity.startsWith("compromised")) return "compromised";
+  if (integrity.startsWith("missing")) return "missing";
+  if (integrity.startsWith("redundant")) return "redundant";
+  return "unspecified";
+}
+
+function councilDisposition(agent: CouncilAgentSource): string | null {
+  return readLabel(agent.labels, "council.disposition") || null;
+}
+
 function parseCouncilSeat(agent: CouncilAgentSource): CouncilSeat | null {
   const caseId = readLabel(agent.labels, "council.case_id");
   const tier = readLabel(agent.labels, "council.tier");
@@ -104,6 +127,7 @@ function parseCouncilSeat(agent: CouncilAgentSource): CouncilSeat | null {
     role,
     phase,
     round: readLabel(agent.labels, "council.round") || "1",
+    integrity: councilSeatIntegrity(agent),
   };
 }
 
@@ -123,9 +147,26 @@ function latestSeat(seats: readonly CouncilSeat[]): CouncilSeat {
 
 export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
   return (
+    seat.integrity !== "compromised" &&
+    seat.integrity !== "missing" &&
+    seat.integrity !== "redundant" &&
     (seat.agent.status === "idle" || seat.agent.status === "closed") &&
     seat.agent.attentionReason !== "error"
   );
+}
+
+export function isCouncilSeatUnavailable(seat: CouncilSeat): boolean {
+  return (
+    seat.integrity !== "redundant" &&
+    (seat.integrity === "compromised" ||
+      seat.integrity === "missing" ||
+      seat.agent.status === "error" ||
+      seat.agent.attentionReason === "error")
+  );
+}
+
+function isCouncilSeatReportExpected(seat: CouncilSeat): boolean {
+  return seat.integrity !== "redundant";
 }
 
 function councilVerdictProvenance(
@@ -202,6 +243,7 @@ export function groupCouncilCases(
         ? linkedOwner
         : null;
     const verdictProvenance = councilVerdictProvenance(phase, lead);
+    const reportSeats = seats.filter(isCouncilSeatReportExpected);
 
     cases.push({
       id: caseId,
@@ -215,9 +257,12 @@ export function groupCouncilCases(
       parentAgentId,
       lead,
       verdictProvenance,
+      disposition: councilDisposition(newest.agent),
       seats,
-      readyCount: seats.filter(isCouncilSeatReportReady).length,
-      failedCount: seats.filter((seat) => seat.agent.status === "error").length,
+      reportSeatCount: reportSeats.length,
+      readyCount: reportSeats.filter(isCouncilSeatReportReady).length,
+      unavailableCount: reportSeats.filter(isCouncilSeatUnavailable).length,
+      redundantCount: seats.length - reportSeats.length,
       updatedAt: newest.agent.lastActivityAt,
     });
   }

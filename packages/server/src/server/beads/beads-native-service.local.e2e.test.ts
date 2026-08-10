@@ -81,6 +81,44 @@ describe.skipIf(!binaryPath)("BeadsNativeService with pinned bd", () => {
       "lead-a-close",
     );
     expect(closed.status).toBe("closed");
+    await expect(
+      service.claim(peerA, first.id, "peer-a-closed-reclaim", undefined, {
+        kind: "claim",
+        issueId: first.id,
+        actor: peerA.actor,
+        requireNotClosed: true,
+      }),
+    ).rejects.toThrow(`cannot claim closed issue ${first.id}`);
+    await expect(service.get(leadA, first.id)).resolves.toMatchObject({
+      status: "closed",
+      assignee: peerA.actor,
+    });
+
+    const ownership = await service.create(leadA, {
+      title: "Project A ownership guard",
+      issueType: "task",
+      priority: 2,
+      idempotencyKey: "create-project-a-ownership-guard",
+    });
+    await service.claim(peerA, ownership.id, "peer-a-ownership-claim", undefined, {
+      kind: "claim",
+      issueId: ownership.id,
+      actor: peerA.actor,
+      requireNotClosed: true,
+    });
+    const peerB = { projectId: "project-a", actor: "paseo-agent-peer-b" };
+    await expect(
+      service.claim(peerB, ownership.id, "peer-b-ownership-steal", undefined, {
+        kind: "claim",
+        issueId: ownership.id,
+        actor: peerB.actor,
+        requireNotClosed: true,
+      }),
+    ).rejects.toThrow(`cannot claim issue ${ownership.id} assigned to ${peerA.actor}`);
+    await expect(service.get(leadA, ownership.id)).resolves.toMatchObject({
+      status: "in_progress",
+      assignee: peerA.actor,
+    });
 
     const otherProject = await service.create(leadB, {
       title: "Project B implementation",
@@ -94,5 +132,5 @@ describe.skipIf(!binaryPath)("BeadsNativeService with pinned bd", () => {
     expect(projectA.map((issue) => issue.id)).not.toContain(otherProject.id);
     expect(projectB.map((issue) => issue.id)).toEqual([otherProject.id]);
     await expect(service.prime(leadA)).resolves.toContain("Beads Workflow Context");
-  }, 30_000);
+  }, 60_000);
 });
