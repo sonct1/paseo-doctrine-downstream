@@ -78,6 +78,7 @@ export const BeadsIssuesListResponseSchema = z.object({
     projectId: z.string(),
     runtime: BeadsRuntimeStatusSchema,
     issues: z.array(BeadsIssueSchema),
+    truncated: z.boolean().default(false),
     error: z.string().nullable(),
   }),
 });

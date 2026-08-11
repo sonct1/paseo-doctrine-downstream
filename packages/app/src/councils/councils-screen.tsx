@@ -503,11 +503,17 @@ function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
   if (seat.integrity === "redundant") {
     return "Not counted";
   }
-  if (seat.agent.status === "error") {
+  if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "Seat failed";
   }
   if (ready) {
     return "Report ready";
+  }
+  if (
+    seat.integrity === "unspecified" &&
+    (seat.agent.status === "idle" || seat.agent.status === "closed")
+  ) {
+    return "Awaiting Lead audit";
   }
   if (seat.agent.status === "initializing") {
     return "Starting";
@@ -535,11 +541,17 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
   if (seat.integrity === "redundant") {
     return "This replacement is preserved for audit but is not counted in the Council report total.";
   }
-  if (seat.agent.status === "error") {
+  if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
   }
   if (ready) {
     return "The report is ready in the agent timeline. Open the agent to inspect its complete evidence.";
+  }
+  if (
+    seat.integrity === "unspecified" &&
+    (seat.agent.status === "idle" || seat.agent.status === "closed")
+  ) {
+    return "The seat finished, but the Lead has not marked its report as valid. Inspect the timeline before counting it.";
   }
   if (casePhase === "sealed") {
     return "Independent analysis is still sealed. The report becomes inspectable after the seat finishes.";

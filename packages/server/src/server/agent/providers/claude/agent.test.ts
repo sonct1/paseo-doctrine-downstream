@@ -659,7 +659,13 @@ describe("ClaudeAgentSession features", () => {
         append: "GLOBAL APPEND\n\nPASEO ROLE PEER",
       });
       expect(launches[0]?.options.agents).toEqual({});
-      expect(launches[0]?.options.plugins).toEqual([]);
+      expect(launches[0]?.options.plugins).toEqual([
+        {
+          type: "local",
+          path: expect.stringMatching(/[\\/]skills[\\/]beads-issue-tracker$/u),
+          skipMcpDiscovery: true,
+        },
+      ]);
       expect(launches[0]?.options.disallowedTools).toEqual(
         expect.arrayContaining([
           "ExistingDeny",
@@ -698,6 +704,11 @@ describe("ClaudeAgentSession features", () => {
       await session.startTurn("/council test the session-local projection");
 
       expect(launches[0]?.options.plugins).toEqual([
+        {
+          type: "local",
+          path: expect.stringMatching(/[\\/]skills[\\/]beads-issue-tracker$/u),
+          skipMcpDiscovery: true,
+        },
         {
           type: "local",
           path: expect.stringMatching(/[\\/]skills[\\/]council$/u),

@@ -179,14 +179,30 @@ provider: <resolved configured provider>
 settings:
   modeId: <configured mode, if any>
   thinkingOptionId: <configured thinking, if any>
+assignment:
+  version: 1
+  disposition: independent-review
+  objective: <bounded objective for this one seat>
+  effectClass: read-only
+  mutationBoundary:
+    mode: no-write
+  externalEffectBoundary:
+    mode: denied
+  evidence: <exact report and activity evidence the Lead will inspect>
+  handbackAndStop: <return the case-fit report, then stop>
 labels:
   council.case_id: <stable URL-safe case ID>
   council.title: <short human-readable title>
   council.tier: <tier>
   council.phase: sealed
+  council.integrity: pending-lead-audit
   council.role: <independent|challenger|specialist>
   council.round: "1"
 ```
+
+This child assignment is mandatory for every role-bound Council seat, including Verifiers and
+Auditors. Never omit it, copy the Lead assignment, or reuse the Lead's `delegation` effect: Council
+seats are role-bound Peers and therefore use a fresh `independent-review` + `read-only` envelope.
 
 Use a fresh provider session for every seat. Preserve every returned Paseo agent ID. Do not end
 the launch turn until all required seat IDs have been returned. Then report the launched
@@ -242,9 +258,18 @@ After every required Round 1 seat reaches a terminal state:
 2. audit for Paseo orchestration/discovery calls, attempts to inspect another seat, and workspace
    writes;
 3. compare the mutable-source snapshot where practical;
-4. mark a violating seat `COMPROMISED` and do not silently use its report;
-5. update valid case seats to `council.phase=review`;
+4. mark a violating seat with `council.integrity=compromised-<reason>` and do not silently use its
+   report;
+5. update each activity-audited, usable seat with both `council.phase=review` and
+   `council.integrity=valid-audited-report`; terminal status or a plausible-looking report alone is
+   never enough to set `valid`;
 6. collect complete valid reports only after all required seats have finished.
+
+Use the same prefix taxonomy for every seat kind: `valid-*` for a Lead-audited usable report,
+`compromised-*` for a provenance or boundary violation, `missing-*` when no usable report exists,
+and `redundant-*` for a preserved superseded attempt. These labels are runtime proof consumed by
+the Council UI, not decorative metadata. Do not leave a report that contributes to the verdict at
+`pending-lead-audit` or with no integrity label.
 
 If unexpected workspace mutation changes decision-relevant source and the authorized snapshot
 cannot be reconstructed, stop the affected review. Drift outside the authorized/material source
@@ -258,6 +283,8 @@ Failure policy:
 - for a format-only failure, ask the same seat once for only the missing decision-relevant
   content; do not demand cosmetic conformance;
 - for infrastructure failure or a compromised seat, create one fresh replacement;
+- label a terminal attempt without a usable report `missing-<reason>` and a superseded attempt
+  `redundant-<reason>` before continuing;
 - `lens` cannot issue a Council verdict without its only seat;
 - `debate` and `debate-with-proof` may continue with one missing core seat only as explicitly
   `DEGRADED`;
@@ -410,7 +437,8 @@ set, preserve an explicit disposition for every finding.
 
 State whether the run used soft isolation, became degraded, encountered incomplete coverage, or
 skipped optional audit. After issuing the verdict, update every case seat to
-`council.phase=verdict`. Keep the verdict body in the Lead timeline, not in labels.
+`council.phase=verdict` while preserving its audited `council.integrity` classification. Keep the
+verdict body in the Lead timeline, not in labels.
 
 Council ends at the decision and handoff contract. Council seats do not implement. A later
 Implementer should receive the verdict, required action, do-not-touch boundaries, and validation

@@ -43,6 +43,7 @@ export class BeadsSession {
           projectId: message.projectId,
           runtime,
           issues: [],
+          truncated: false,
           error: runtime.reason ?? "Native Beads is unavailable",
         },
       });
@@ -50,9 +51,10 @@ export class BeadsSession {
     }
     try {
       await this.requireActiveProject(message.projectId);
+      const limit = message.limit ?? 100;
       const issues = await this.options.service.list(
         { projectId: message.projectId, actor: this.actor },
-        { status: message.status, limit: message.limit ?? 100 },
+        { status: message.status, limit: limit + 1 },
       );
       this.options.host.emit({
         type: "beads.issues.list.response",
@@ -60,7 +62,8 @@ export class BeadsSession {
           requestId: message.requestId,
           projectId: message.projectId,
           runtime,
-          issues,
+          issues: issues.slice(0, limit),
+          truncated: issues.length > limit,
           error: null,
         },
       });
@@ -72,6 +75,7 @@ export class BeadsSession {
           projectId: message.projectId,
           runtime,
           issues: [],
+          truncated: false,
           error: errorMessage(error),
         },
       });

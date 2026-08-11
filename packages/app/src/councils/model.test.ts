@@ -79,14 +79,19 @@ describe("groupCouncilCases", () => {
       status: "running",
       lastActivityAt: new Date("2026-08-10T10:02:00.000Z"),
     });
-    const independent = makeAgent("independent", councilLabels("independent"), {
-      lastActivityAt: new Date("2026-08-10T10:01:00.000Z"),
-    });
+    const independent = makeAgent(
+      "independent",
+      councilLabels("independent", { "council.integrity": "valid-round-1" }),
+      {
+        lastActivityAt: new Date("2026-08-10T10:01:00.000Z"),
+      },
+    );
     const verifier = makeAgent(
       "verifier",
       councilLabels("verifier", {
         "council.phase": "review",
         "council.round": "verify",
+        "council.integrity": "valid-verification",
       }),
       { lastActivityAt: new Date("2026-08-10T10:03:00.000Z") },
     );
@@ -124,16 +129,27 @@ describe("groupCouncilCases", () => {
     expect(groupCouncilCases([missingRole, unknownTier, otherHost], "local")).toEqual([]);
   });
 
-  it("does not count failed or still-running seats as report ready", () => {
-    const ready = makeAgent("ready", councilLabels("independent"));
+  it("requires explicit Lead-audited integrity before counting a finished report", () => {
+    const ready = makeAgent(
+      "ready",
+      councilLabels("independent", { "council.integrity": "valid-audited-report" }),
+    );
+    const awaitingAudit = makeAgent("awaiting-audit", councilLabels("specialist"));
     const failed = makeAgent("failed", councilLabels("challenger"), { status: "error" });
     const working = makeAgent("working", councilLabels("verifier"), { status: "running" });
 
-    const council = groupCouncilCases([ready, failed, working])[0];
+    const council = groupCouncilCases([ready, awaitingAudit, failed, working])[0];
 
     expect(council?.readyCount).toBe(1);
     expect(council?.unavailableCount).toBe(1);
     expect(council ? isCouncilSeatReportReady(council.seats[0]!) : false).toBe(true);
+    expect(
+      council
+        ? isCouncilSeatReportReady(
+            council.seats.find((seat) => seat.agent.id === "awaiting-audit")!,
+          )
+        : true,
+    ).toBe(false);
   });
 
   it("counts only usable reports while preserving redundant replacements for audit", () => {

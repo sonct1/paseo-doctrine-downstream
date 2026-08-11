@@ -104,7 +104,9 @@ Role bundle là canonical admission source; provider adapter chỉ là transport
 - Codex nhận exact `skills.config` với Foundation package ngoài bundle bị disable;
 - Council dùng product role-admission manifest riêng nhưng cùng nguyên tắc: Codex command inventory lấy
   từ daemon bundle và inject exact `SKILL.md` vào đúng invocation `/council`; `skills.config` đồng thời
-  disable stale/caller-supplied Council path. Cách này không phụ thuộc global discovery của Codex;
+  disable stale/caller-supplied Council path. Package mang provenance `PASEO_DERIVATIVE`: giữ lineage
+  Demonthorn nhưng có Paseo role/assignment guard, nên không được gọi là `DEMONTHORN_EXACT`. Cách này
+  không phụ thuộc global discovery của Codex;
 - Claude nhận Council như session-local single-skill plugin chỉ ở Lead; Peer/Supervisor vừa strip local
   plugin path, deny `Skill(council)` và hide plain/namespaced command khỏi inventory;
 - Codex và Claude là hai provider adapter được qualify trong release này. Provider khác giữ
@@ -130,8 +132,9 @@ Foundation repository, rồi:
 7. kiểm manifest/checksum, provider projection và fresh role-visible canary.
 
 Exact Demonthorn package giữ exact bytes. Derivative phải ghi rõ thay đổi và lineage. Product workflow
-skill dưới root [`skills/`](../skills/) có lifecycle riêng và không được thêm vào Foundation role bundle
-chỉ vì tên hoặc chức năng gần nhau.
+skill dưới root [`skills/`](../skills/) có lifecycle riêng, dùng provenance `PASEO_DERIVATIVE` hoặc
+`PASEO_NATIVE` tương ứng, và không được thêm vào Foundation role bundle chỉ vì tên hoặc chức năng gần
+nhau.
 
 ## Checklist sử dụng
 

@@ -90,12 +90,8 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
   const supportsIssues = useHostFeature(serverId, "beadsIssues");
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState<IssueStatusFilter>("all");
-  const issuesQuery = useIssuesQuery(serverId, projectId, supportsIssues);
+  const issuesQuery = useIssuesQuery(serverId, projectId, filter, supportsIssues);
   const issues = issuesQuery.data?.issues ?? EMPTY_ISSUES;
-  const filteredIssues = useMemo(
-    () => (filter === "all" ? issues : issues.filter((issue) => issue.status === filter)),
-    [filter, issues],
-  );
 
   const handleCreate = useCallback(() => setCreating(true), []);
   const handleCancelCreate = useCallback(() => setCreating(false), []);
@@ -143,8 +139,8 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
         selectedIssueId={selectedIssueId}
         serverId={serverId}
         projectId={projectId}
-        issues={filteredIssues}
-        totalCount={issues.length}
+        issues={issues}
+        truncated={issuesQuery.data?.truncated ?? false}
         filter={filter}
         onFilterChange={setFilter}
         isLoading={issuesQuery.isLoading}
@@ -178,7 +174,7 @@ interface AvailableIssuesSurfaceProps {
   serverId: string;
   projectId: string;
   issues: BeadsIssue[];
-  totalCount: number;
+  truncated: boolean;
   filter: IssueStatusFilter;
   onFilterChange: (filter: IssueStatusFilter) => void;
   isLoading: boolean;
@@ -221,6 +217,11 @@ function CompactIssuesSurface(props: AvailableIssuesSurfaceProps) {
 }
 
 function DesktopIssuesSurface(props: AvailableIssuesSurfaceProps) {
+  let emptyTitle = "Select an issue";
+  if (props.issues.length === 0) {
+    emptyTitle = props.filter === "all" ? "No issues yet" : "No matching issues";
+  }
+
   let detail: ReactNode;
   if (props.creating) {
     detail = (
@@ -244,7 +245,7 @@ function DesktopIssuesSurface(props: AvailableIssuesSurfaceProps) {
   } else {
     detail = (
       <IssuesEmpty
-        title={props.totalCount === 0 ? "No issues yet" : "Select an issue"}
+        title={emptyTitle}
         description="This is the durable project work graph shared across Paseo workspaces."
       />
     );
@@ -262,7 +263,7 @@ function DesktopIssuesSurface(props: AvailableIssuesSurfaceProps) {
 
 function IssuesList({
   issues,
-  totalCount,
+  truncated,
   filter,
   onFilterChange,
   selectedIssueId,
@@ -275,7 +276,7 @@ function IssuesList({
   onCreate,
 }: {
   issues: BeadsIssue[];
-  totalCount: number;
+  truncated: boolean;
   filter: IssueStatusFilter;
   onFilterChange: (filter: IssueStatusFilter) => void;
   selectedIssueId: string | null;
@@ -313,16 +314,24 @@ function IssuesList({
           ))}
         </View>
       </ScrollView>
+      {truncated ? (
+        <View style={styles.truncationNotice} testID="issues-truncation-notice">
+          <Text style={styles.truncationText}>
+            Showing the first {issues.length} matching issues. Refine the status filter to narrow
+            the list.
+          </Text>
+        </View>
+      ) : null}
       {issues.length === 0 ? (
         <IssuesEmpty
-          title={totalCount === 0 ? "No issues yet" : "No matching issues"}
+          title={filter === "all" ? "No issues yet" : "No matching issues"}
           description={
-            totalCount === 0
+            filter === "all"
               ? "Create the first durable work item for this project."
               : "Try another status filter."
           }
         >
-          {totalCount === 0 ? (
+          {filter === "all" ? (
             <Button size="sm" variant="default" leftIcon={Plus} onPress={onCreate}>
               New issue
             </Button>
@@ -1037,6 +1046,18 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
     paddingHorizontal: theme.spacing[2],
     paddingVertical: theme.spacing[2],
+  },
+  truncationNotice: {
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface2,
+  },
+  truncationText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    lineHeight: 18,
   },
   filterButton: {
     minHeight: 30,

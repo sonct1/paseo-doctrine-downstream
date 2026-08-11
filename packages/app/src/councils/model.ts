@@ -147,9 +147,7 @@ function latestSeat(seats: readonly CouncilSeat[]): CouncilSeat {
 
 export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
   return (
-    seat.integrity !== "compromised" &&
-    seat.integrity !== "missing" &&
-    seat.integrity !== "redundant" &&
+    seat.integrity === "valid" &&
     (seat.agent.status === "idle" || seat.agent.status === "closed") &&
     seat.agent.attentionReason !== "error"
   );

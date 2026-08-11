@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -44,6 +44,33 @@ afterEach(() => {
 });
 
 describe("product role skill policy", () => {
+  test("pins every Council seat to a fresh read-only Peer assignment", () => {
+    const councilSkill = readFileSync(
+      path.resolve(import.meta.dirname, "../../../../../skills/council/SKILL.md"),
+      "utf8",
+    );
+    const admission = JSON.parse(
+      readFileSync(
+        path.resolve(import.meta.dirname, "../../../../../skills/role-admission.json"),
+        "utf8",
+      ),
+    ) as { packages: { council: { provenance: string } } };
+
+    expect(admission.packages.council.provenance).toBe("PASEO_DERIVATIVE");
+    expect(councilSkill).toContain("disposition: independent-review");
+    expect(councilSkill).toContain("effectClass: read-only");
+    expect(councilSkill).toContain("mutationBoundary:\n    mode: no-write");
+    expect(councilSkill).toContain("externalEffectBoundary:\n    mode: denied");
+    expect(councilSkill).toContain("council.integrity: pending-lead-audit");
+    expect(councilSkill).toContain("council.integrity=valid-audited-report");
+    expect(councilSkill).toContain(
+      "terminal status or a plausible-looking report alone is\n   never enough to set `valid`",
+    );
+    expect(councilSkill).toContain(
+      "Never omit it, copy the Lead assignment, or reuse the Lead's `delegation` effect",
+    );
+  });
+
   test("admits Council only to Lead from one canonical manifest", () => {
     const root = bundleRoot();
     const lead = loadProductSkillPolicy("lead", root);

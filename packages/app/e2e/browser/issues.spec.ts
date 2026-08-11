@@ -83,6 +83,27 @@ test.describe("Native Beads issue surface", () => {
       await expect(
         detail.getByText("E2E evidence recorded; Human closes work state.", { exact: true }),
       ).toBeVisible();
+      const visibleIssuesList = page.locator('[data-testid="issues-list"]:visible');
+      await page.getByRole("button", { name: "Closed", exact: true }).click();
+      await expect(
+        visibleIssuesList.getByRole("button", {
+          name: /^Qualify native Beads in Paseo, Closed,/u,
+        }),
+      ).toBeVisible();
+      await expect(
+        visibleIssuesList.getByRole("button", { name: /^Preserve close draft isolation,/u }),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "Open", exact: true }).click();
+      await expect(
+        visibleIssuesList.getByRole("button", {
+          name: /^Preserve close draft isolation, Open,/u,
+        }),
+      ).toBeVisible();
+      await expect(
+        visibleIssuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }),
+      ).toHaveCount(0);
+      await expect(page.locator('[data-testid="issues-truncation-notice"]:visible')).toHaveCount(0);
+      await page.getByRole("button", { name: "All", exact: true }).click();
       await page.screenshot({
         path: testInfo.outputPath("beads-issue-desktop.png"),
         animations: "disabled",

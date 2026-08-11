@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packages": {
     "council": {
-      "provenance": "DEMONTHORN_EXACT"
+      "provenance": "PASEO_DERIVATIVE"
     },
     "beads-issue-tracker": {
       "provenance": "PASEO_NATIVE"

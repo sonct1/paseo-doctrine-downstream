@@ -20,7 +20,12 @@ export const issueQueryKeys = {
     ["beadsIssue", serverId, projectId, issueId] as const,
 };
 
-export function useIssuesQuery(serverId: string, projectId: string, enabled = true) {
+export function useIssuesQuery(
+  serverId: string,
+  projectId: string,
+  status: IssueStatusFilter,
+  enabled = true,
+) {
   const client = useHostRuntimeClient(serverId);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const runtimeSnapshot = useHostRuntimeSnapshot(serverId);
@@ -28,11 +33,16 @@ export function useIssuesQuery(serverId: string, projectId: string, enabled = tr
   return useFetchQuery({
     queryKey: [
       ...issueQueryKeys.project(serverId, projectId),
+      status,
       runtimeSnapshot?.clientGeneration ?? 0,
     ],
     queryFn: async () => {
       if (!client) throw new Error("Host client unavailable");
-      const response = await client.listBeadsIssues({ projectId, limit: ISSUE_LIST_LIMIT });
+      const response = await client.listBeadsIssues({
+        projectId,
+        limit: ISSUE_LIST_LIMIT,
+        ...(status === "all" ? {} : { status: [status] }),
+      });
       if (response.error) throw new Error(response.error);
       return response;
     },

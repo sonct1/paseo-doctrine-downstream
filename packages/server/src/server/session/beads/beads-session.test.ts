@@ -15,7 +15,13 @@ function issue() {
   };
 }
 
-function harness(options: { projectActive?: boolean; runtimeAvailable?: boolean } = {}) {
+function harness(
+  options: {
+    projectActive?: boolean;
+    runtimeAvailable?: boolean;
+    listedIssues?: ReturnType<typeof issue>[];
+  } = {},
+) {
   const messages: SessionOutboundMessage[] = [];
   const service = {
     status: vi
@@ -25,7 +31,7 @@ function harness(options: { projectActive?: boolean; runtimeAvailable?: boolean 
           ? { available: false, version: "1.1.2", reason: "missing runtime" }
           : { available: true, version: "1.1.2" },
       ),
-    list: vi.fn().mockResolvedValue([issue()]),
+    list: vi.fn().mockResolvedValue(options.listedIssues ?? [issue()]),
     get: vi.fn().mockResolvedValue(issue()),
     create: vi.fn().mockResolvedValue(issue()),
     close: vi.fn().mockResolvedValue({ ...issue(), status: "closed" }),
@@ -64,10 +70,62 @@ describe("BeadsSession", () => {
           projectId: "project-1",
           runtime: { available: false, version: "1.1.2", reason: "missing runtime" },
           issues: [],
+          truncated: false,
           error: "missing runtime",
         },
       },
     ]);
+  });
+
+  it("filters in Beads and reports when the requested window is truncated", async () => {
+    const listedIssues = Array.from({ length: 101 }, (_, index) => ({
+      ...issue(),
+      id: `ps123-${index.toString().padStart(3, "0")}`,
+      status: "closed" as const,
+    }));
+    const test = harness({ listedIssues });
+
+    await test.session.handleList({
+      type: "beads.issues.list.request",
+      requestId: "list-closed",
+      projectId: "project-1",
+      status: ["closed"],
+      limit: 100,
+    });
+
+    expect(test.service.list).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project-1" }),
+      { status: ["closed"], limit: 101 },
+    );
+    expect(test.messages.at(-1)).toMatchObject({
+      type: "beads.issues.list.response",
+      payload: {
+        projectId: "project-1",
+        issues: listedIssues.slice(0, 100),
+        truncated: true,
+        error: null,
+      },
+    });
+  });
+
+  it("does not report truncation when the requested window is complete", async () => {
+    const listedIssues = Array.from({ length: 100 }, (_, index) => ({
+      ...issue(),
+      id: `ps123-${index.toString().padStart(3, "0")}`,
+    }));
+    const test = harness({ listedIssues });
+
+    await test.session.handleList({
+      type: "beads.issues.list.request",
+      requestId: "list-complete",
+      projectId: "project-1",
+      limit: 100,
+    });
+
+    expect(test.messages.at(-1)).toMatchObject({
+      type: "beads.issues.list.response",
+      payload: { issues: listedIssues, truncated: false, error: null },
+    });
   });
 
   it("rejects a client-selected archived or unknown project", async () => {

@@ -21,7 +21,7 @@ function leadAssignment(): AssignmentEnvelope {
   };
 }
 
-async function seedCouncilScenario(caseTitle = CASE_TITLE) {
+async function seedCouncilScenario(caseTitle = CASE_TITLE, options: { integrity?: string } = {}) {
   const workspace = await seedWorkspace({ repoPrefix: "council-ui-" });
   try {
     const lead = await workspace.client.createAgent({
@@ -54,6 +54,7 @@ async function seedCouncilScenario(caseTitle = CASE_TITLE) {
           "council.phase": "verdict",
           "council.role": role,
           "council.round": round,
+          ...(options.integrity ? { "council.integrity": options.integrity } : {}),
         },
       });
 
@@ -78,7 +79,9 @@ async function seedCouncilScenario(caseTitle = CASE_TITLE) {
 test.describe("Council case surface", () => {
   test("projects labeled seats at desktop and compact viewports", async ({ page }, testInfo) => {
     test.setTimeout(120_000);
-    const scenario = await seedCouncilScenario();
+    const scenario = await seedCouncilScenario(CASE_TITLE, {
+      integrity: "valid-browser-report",
+    });
     try {
       await page.emulateMedia({ colorScheme: "dark" });
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -123,6 +126,28 @@ test.describe("Council case surface", () => {
         path: testInfo.outputPath("council-compact.png"),
         animations: "disabled",
       });
+    } finally {
+      await scenario.cleanup();
+    }
+  });
+
+  test("does not call a finished but unaudited seat report ready", async ({ page }) => {
+    test.setTimeout(120_000);
+    const scenario = await seedCouncilScenario();
+    try {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(buildHostCouncilRoute(getServerId(), CASE_ID, scenario.workspaceId));
+
+      const detail = page.getByTestId(`council-detail-${CASE_ID}`);
+      await expect(detail).toBeVisible({ timeout: 30_000 });
+      await expect(detail.getByText("Awaiting Lead audit", { exact: true })).toHaveCount(4);
+      await expect(detail.getByText("Report ready", { exact: true })).toHaveCount(0);
+      await expect(
+        detail.getByText(
+          "The seat finished, but the Lead has not marked its report as valid. Inspect the timeline before counting it.",
+          { exact: true },
+        ),
+      ).toHaveCount(4);
     } finally {
       await scenario.cleanup();
     }

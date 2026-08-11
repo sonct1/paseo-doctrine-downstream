@@ -406,9 +406,19 @@ describe("Codex app-server provider", () => {
           enabled: true,
         }),
       );
+      expect(skillConfig).toContainEqual(
+        expect.objectContaining({
+          path: expect.stringMatching(/[\\/]skills[\\/]beads-issue-tracker[\\/]SKILL\.md$/u),
+          enabled: true,
+        }),
+      );
       expect(
         skillConfig
-          .filter((entry) => !/[\\/]council[\\/]SKILL\.md$/u.test(entry.path))
+          .filter(
+            (entry) =>
+              !/[\\/]council[\\/]SKILL\.md$/u.test(entry.path) &&
+              !/[\\/]beads-issue-tracker[\\/]SKILL\.md$/u.test(entry.path),
+          )
           .every((entry) => entry.enabled === false),
       ).toBe(true);
       expect(turnStartParams?.input).toEqual(

@@ -326,6 +326,8 @@ describe("agent MCP end-to-end (offline)", () => {
 
       const peerClient = await createMcpClient(`${mcpUrl}?callerAgentId=${peerOneId}`);
       clients.push(peerClient);
+      const peerRecordCountBefore = (await daemon.agentStorage.list()).length;
+      const peerLaunchCountBefore = recorder.recordedLaunches.length;
       await expectMcpToolRejection(
         () =>
           peerClient.callTool({
@@ -337,8 +339,13 @@ describe("agent MCP end-to-end (offline)", () => {
               initialPrompt: "Must not launch",
             },
           }),
-        "Server does not support tools",
+        "Tool create_agent not found",
       );
+      expect((await daemon.agentStorage.list()).length).toBe(peerRecordCountBefore);
+      expect(recorder.recordedLaunches).toHaveLength(peerLaunchCountBefore);
+
+      const supervisorRecordCountBefore = (await daemon.agentStorage.list()).length;
+      const supervisorLaunchCountBefore = recorder.recordedLaunches.length;
       await expectMcpToolRejection(
         () =>
           supervisorClient.callTool({
@@ -350,8 +357,10 @@ describe("agent MCP end-to-end (offline)", () => {
               initialPrompt: "Must not launch",
             },
           }),
-        "create_agent",
+        "Tool create_agent not found",
       );
+      expect((await daemon.agentStorage.list()).length).toBe(supervisorRecordCountBefore);
+      expect(recorder.recordedLaunches).toHaveLength(supervisorLaunchCountBefore);
 
       const allowedPrompt = await leadOneClient.callTool({
         name: "send_agent_prompt",
