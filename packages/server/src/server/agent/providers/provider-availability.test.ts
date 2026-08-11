@@ -61,44 +61,47 @@ describe("default provider availability", () => {
     await expect(client.isAvailable()).resolves.toBe(false);
   });
 
-  test("Codex reports available from a Microsoft Store install path when PATH misses codex", async () => {
-    const originalPlatform = process.platform;
-    const originalLocalAppData = process.env.LOCALAPPDATA;
-    const root = makeTempDir("provider-availability-codex-store-");
-    const emptyPathDir = join(root, "empty-path");
-    const codexBinDir = join(
-      root,
-      "Packages",
-      "OpenAI.Codex_abc123",
-      "LocalCache",
-      "Local",
-      "OpenAI",
-      "Codex",
-      "bin",
-    );
-    const codexExe = join(codexBinDir, "codex.exe");
-    mkdirSync(emptyPathDir, { recursive: true });
-    mkdirSync(codexBinDir, { recursive: true });
-    copyFileSync(process.execPath, codexExe);
-    Object.defineProperty(process, "platform", { value: "win32", writable: true });
-    process.env.LOCALAPPDATA = root;
-    isolatePathTo(emptyPathDir);
-    process.env.PATHEXT = ".EXE";
+  test.runIf(process.platform === "win32")(
+    "Codex reports available from a Microsoft Store install path when PATH misses codex",
+    async () => {
+      const originalPlatform = process.platform;
+      const originalLocalAppData = process.env.LOCALAPPDATA;
+      const root = makeTempDir("provider-availability-codex-store-");
+      const emptyPathDir = join(root, "empty-path");
+      const codexBinDir = join(
+        root,
+        "Packages",
+        "OpenAI.Codex_abc123",
+        "LocalCache",
+        "Local",
+        "OpenAI",
+        "Codex",
+        "bin",
+      );
+      const codexExe = join(codexBinDir, "codex.exe");
+      mkdirSync(emptyPathDir, { recursive: true });
+      mkdirSync(codexBinDir, { recursive: true });
+      copyFileSync(process.execPath, codexExe);
+      Object.defineProperty(process, "platform", { value: "win32", writable: true });
+      process.env.LOCALAPPDATA = root;
+      isolatePathTo(emptyPathDir);
+      process.env.PATHEXT = ".EXE";
 
-    try {
-      const client = new CodexAppServerAgentClient(createTestLogger());
+      try {
+        const client = new CodexAppServerAgentClient(createTestLogger());
 
-      await expect(findDefaultCodexBinary()).resolves.toBe(codexExe);
-      await expect(client.isAvailable()).resolves.toBe(true);
-    } finally {
-      Object.defineProperty(process, "platform", { value: originalPlatform, writable: true });
-      if (originalLocalAppData === undefined) {
-        delete process.env.LOCALAPPDATA;
-      } else {
-        process.env.LOCALAPPDATA = originalLocalAppData;
+        await expect(findDefaultCodexBinary()).resolves.toBe(codexExe);
+        await expect(client.isAvailable()).resolves.toBe(true);
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform, writable: true });
+        if (originalLocalAppData === undefined) {
+          delete process.env.LOCALAPPDATA;
+        } else {
+          process.env.LOCALAPPDATA = originalLocalAppData;
+        }
       }
-    }
-  });
+    },
+  );
 
   test("Claude reports unavailable when the default command cannot be resolved", async () => {
     const binDir = makeTempDir("provider-availability-claude-");

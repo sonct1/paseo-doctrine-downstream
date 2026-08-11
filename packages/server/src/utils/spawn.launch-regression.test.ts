@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChildProcess } from "node:child_process";
@@ -46,7 +46,13 @@ function makeFixture(): {
   tempDirs.push(root);
 
   const fakeDaemonNode = path.join(root, "Fake Paseo.exe");
-  copyFileSync(process.execPath, fakeDaemonNode);
+  if (isPlatform("win32")) {
+    copyFileSync(process.execPath, fakeDaemonNode);
+  } else {
+    // Homebrew Node resolves libnode relative to its installed executable.
+    // A byte copy in /tmp therefore aborts before exercising spawnProcess.
+    symlinkSync(process.execPath, fakeDaemonNode);
+  }
 
   const expectedArgs = ["--config", JSON_ARG];
   const assertScript = path.join(root, "assert-argv.js");
