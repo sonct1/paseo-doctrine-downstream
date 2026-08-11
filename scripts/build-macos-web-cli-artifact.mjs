@@ -454,7 +454,20 @@ plutil -lint "$PLIST" >/dev/null
 
 if [ "$START" -eq 1 ]; then
   launchctl bootout "gui/$USER_ID/$LABEL" >/dev/null 2>&1 || true
-  launchctl bootstrap "gui/$USER_ID" "$PLIST"
+  BOOTSTRAPPED=0
+  BOOTSTRAP_ERROR=""
+  for _attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if BOOTSTRAP_ERROR=$(launchctl bootstrap "gui/$USER_ID" "$PLIST" 2>&1); then
+      BOOTSTRAPPED=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$BOOTSTRAPPED" -ne 1 ]; then
+    [ -z "$BOOTSTRAP_ERROR" ] || printf '%s\n' "$BOOTSTRAP_ERROR" >&2
+    echo "Installed the release, but launchd activation remained unavailable after retries." >&2
+    exit 1
+  fi
   launchctl kickstart -k "gui/$USER_ID/$LABEL"
   READY=0
   for _attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do

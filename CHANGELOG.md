@@ -21,6 +21,7 @@ This downstream patch is based on upstream Paseo 0.3.1.
 - Enforce Beads project scope, idempotent issue mutations, close receipts, and Peer write boundaries at the daemon service layer.
 - Keep compromised, missing, redundant, and claim-mismatched Council evidence out of report-ready counts.
 - Keep platform-specific launch and package probes honest when tests run on a different host OS.
+- Retry launchd activation during an idle-daemon upgrade when macOS is still unregistering the previous job.
 
 ## 0.3.1-paseo.2 - 2026-08-10
 

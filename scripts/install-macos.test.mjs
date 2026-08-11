@@ -104,7 +104,15 @@ function createArtifactFixture(existingPaseoSource) {
   mkdirSync(oldBin);
   writeExecutable(path.join(bundle, "install.sh"), renderArtifactInstaller());
   writeExecutable(path.join(bundle, "uninstall.sh"), "#!/bin/sh\nexit 0\n");
-  writeExecutable(path.join(bundle, "bin", "paseo"), "#!/bin/sh\nexit 0\n");
+  writeExecutable(
+    path.join(bundle, "bin", "paseo"),
+    `#!/bin/sh
+case "$1 $2" in
+  'daemon status') echo '{"localDaemon":"running","connectedDaemon":"reachable"}' ;;
+esac
+exit 0
+`,
+  );
   writeExecutable(
     path.join(bundle, "bin", "paseo-foundation"),
     '#!/bin/sh\n[ "${1:-}" != inspect ] || echo \'{"status":"inactive"}\'\nexit 0\n',
@@ -121,7 +129,7 @@ function createArtifactFixture(existingPaseoSource) {
   };
 }
 
-function runArtifactFixture(fixture, args) {
+function runArtifactFixture(fixture, args, extraEnv = {}) {
   mkdirSync(fixture.home);
   return spawnSync("/bin/sh", [path.join(fixture.bundle, "install.sh"), ...args], {
     encoding: "utf8",
@@ -130,6 +138,7 @@ function runArtifactFixture(fixture, args) {
       HOME: fixture.home,
       PATH: `${fixture.oldBin}:/usr/bin:/bin`,
       EXISTING_PASEO_MARKER: fixture.marker,
+      ...extraEnv,
     },
   });
 }
@@ -241,6 +250,64 @@ exit 99
     assert.equal(result.status, 0, result.stderr);
     assert.equal(existsSync(fixture.marker), false);
     assert.equal(existsSync(path.join(fixture.prefix, "current", "bin", "paseo")), true);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("artifact installer retries launchd bootstrap after an idle-daemon takeover race", () => {
+  const fixture = createArtifactFixture(`#!/bin/sh
+printf '%s\\n' "$*" >> "$EXISTING_PASEO_MARKER"
+case "$1 $2" in
+  'daemon status')
+    if [ -f "$EXISTING_PASEO_STOPPED" ]; then
+      echo '{"localDaemon":"stopped"}'
+    else
+      echo '{"localDaemon":"running"}'
+    fi
+    ;;
+  'ls --global') echo '[]' ;;
+  'workspace ls') echo '[]' ;;
+  'daemon stop') : > "$EXISTING_PASEO_STOPPED"; echo '{}' ;;
+  *) exit 2 ;;
+esac
+`);
+  const launchctlLog = path.join(fixture.root, "launchctl.log");
+  const bootstrapFailed = path.join(fixture.root, "bootstrap-failed");
+  writeExecutable(
+    path.join(fixture.oldBin, "launchctl"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$LAUNCHCTL_LOG"
+case "$1" in
+  bootout|kickstart) exit 0 ;;
+  bootstrap)
+    if [ ! -f "$LAUNCHCTL_BOOTSTRAP_FAILED" ]; then
+      : > "$LAUNCHCTL_BOOTSTRAP_FAILED"
+      exit 5
+    fi
+    exit 0
+    ;;
+  *) exit 2 ;;
+esac
+`,
+  );
+  try {
+    const result = runArtifactFixture(
+      fixture,
+      ["--prefix", fixture.prefix, "--bin-dir", fixture.binDir, "--skip-foundation"],
+      {
+        EXISTING_PASEO_STOPPED: path.join(fixture.root, "existing-paseo-stopped"),
+        LAUNCHCTL_LOG: launchctlLog,
+        LAUNCHCTL_BOOTSTRAP_FAILED: bootstrapFailed,
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const launchctlCalls = readFileSync(launchctlLog, "utf8").trim().split("\n");
+    assert.equal(launchctlCalls.filter((line) => line.startsWith("bootstrap ")).length, 2);
+    assert.equal(
+      launchctlCalls.some((line) => line.startsWith("kickstart -k ")),
+      true,
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
