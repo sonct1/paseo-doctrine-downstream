@@ -8,10 +8,10 @@ Trạng thái: current source contract; runtime activation/qualification đượ
 | Layer | Chứa | Không chứa |
 |---|---|---|
 | Standing role profile | identity, universal authority boundary, anti-pattern guards | project routing/risk matrix, task file list |
-| optional `WORKSPACE_PROTOCOL.md` | material repo-specific delta về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
+| mandatory `WORKSPACE_PROTOCOL.md` | fixed Beads Central invariant và thin repo-specific delta về risk, topology, ownership, routing default, review/evidence và exceptions | universal role laws, `AGENTS.md`, one-task lease |
 | Assignment | objective, disposition, mutation boundary, bounded routing/effort override, evidence, handback, stop | toàn bộ organization manual |
 
-Khi file hiện diện, full `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ
+Full required `WORKSPACE_PROTOCOL.md` chỉ được bind cho Lead. Supervisor chỉ
 inspect/create/audit/update khi governance assignment yêu cầu; Peer nhận extracted constraints và
 không load full protocol.
 
@@ -19,11 +19,10 @@ Standing profile giữ cross-repo identity nhưng không pin model. Human chọn
 và pin từng Peer provider/model/effort trong assignment với reason, `applies_to` và expiry. Route hết
 hiệu lực ở handback/stop, không sửa standing profile và không tự áp cho assignment kế tiếp.
 
-Repository không có material tactics delta không cần root protocol: standing role, existing
-repository/Harness instructions và bounded assignment vẫn đủ để Human/Lead cấp authority. Khi repo có
-delta cần sống qua task, đúng owner có thể tạo/audit file bằng
-[optional bootstrap](PORTABLE_BOOTSTRAP_AND_ROUTING.md); validator chỉ kiểm artifact hiện diện, không
-quyết định semantic adequacy hoặc authority.
+Repository không có material tactics delta vẫn cần generated thin root protocol vì mandatory Beads
+Central invariant phải được bind cho mọi role. Đúng owner tạo/audit file bằng
+[bounded bootstrap](PORTABLE_BOOTSTRAP_AND_ROUTING.md); validator kiểm artifact và mandatory clause,
+không quyết định engineering adequacy, assignment authority hoặc acceptance.
 
 Standing role profile phải được bind bằng native role selection cùng transport-only provider tương
 thích. Native role cấp canonical profile và role-scoped tool enablement; provider `paseoTools.enabled`
@@ -84,9 +83,9 @@ Codex role profile đồng thời pin `skills.config` theo exact installed path.
 
 | Role | Enabled skill |
 |---|---|
-| Lead | `repo-refresh`, `triple-review` (đều `explicit-only`) |
-| Peer | `frontend-design` |
-| Supervisor | `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` |
+| Lead | `beads-issue-tracker`; `repo-refresh`, `triple-review` (`explicit-only`) |
+| Peer | `beads-issue-tracker`, `frontend-design` |
+| Supervisor | `beads-issue-tracker`, `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` |
 
 Mọi package ngoài bundle của role phải có `enabled=false`; global symlink hoặc package presence không
 được biến thành role eligibility. [`skills/role-bundles.json`](../skills/role-bundles.json) là canonical

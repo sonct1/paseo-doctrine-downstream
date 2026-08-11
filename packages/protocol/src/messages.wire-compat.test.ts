@@ -114,7 +114,7 @@ describe("wire schema compatibility", () => {
     expect(parsed.features?.chatRooms).toBe(true);
   });
 
-  test("server info accepts the optional native Beads issue feature flag", () => {
+  test("server info accepts the Beads Central issue capability flag", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",
       serverId: "beads-server",

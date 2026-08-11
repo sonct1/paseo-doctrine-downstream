@@ -24,6 +24,16 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function trackerCheckpointForRole(roleId: PaseoRoleId): string {
+  if (roleId === "lead") {
+    return "Mandatory Beads Central checkpoint: call beads_status at assignment start; inspect or create the durable issue before material routing/work; update authoritative evidence at handoff; close only after your engineering verdict. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+  }
+  if (roleId === "peer") {
+    return "Mandatory Beads Central checkpoint: call beads_status and inspect the granted issue at assignment start; claim before owned mutation, update evidence/blockers before handoff, and never close. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+  }
+  return "Mandatory Beads Central checkpoint: call beads_status and read the relevant issue graph at supervision start and material handoff; remain read-only. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+}
+
 function requireFuture(iso: string | undefined, now: Date, field: string): void {
   if (iso !== undefined && Date.parse(iso) <= now.getTime()) {
     throw new Error(`${ASSIGNMENT_CONTRACT_INVALID_ERROR}: ${field} must be in the future`);
@@ -165,11 +175,13 @@ export function buildAssignmentInstruction(contract: PersistedAssignmentContract
       ? `bounded (${envelope.externalEffectBoundary.scope})`
       : "denied";
   const beadsIssueGrants = envelope.resourceGrants?.beadsIssueIds?.join(", ") || "none";
+  const trackerCheckpoint = trackerCheckpointForRole(receipt.roleId);
   return [
     `Assignment Contract: sha256=${receipt.assignmentDigest}; disposition=${envelope.disposition}; effect=${envelope.effectClass}.`,
     `Objective: ${envelope.objective}`,
     `Mutation boundary: ${writeScope}. External effects: ${externalScope}.`,
     `Beads issue grants: ${beadsIssueGrants}.`,
+    trackerCheckpoint,
     `Evidence: ${envelope.evidence}`,
     `Handback/stop: ${envelope.handbackAndStop}`,
   ].join("\n");

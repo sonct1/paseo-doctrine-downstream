@@ -9,7 +9,11 @@ import {
 } from "./agent/provider-launch-config.js";
 import type { AgentProviderRuntimeSettingsMap } from "./agent/provider-launch-config.js";
 import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.js";
-import { FoundationCredentialRefSchema, TerminalProfileSchema } from "@getpaseo/protocol/messages";
+import {
+  BeadsCentralEndpointSchema,
+  FoundationCredentialRefSchema,
+  TerminalProfileSchema,
+} from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -253,6 +257,13 @@ export const PersistedConfigSchema = z
         browserTools: z
           .object({
             enabled: z.boolean().optional(),
+          })
+          .passthrough()
+          .optional(),
+        beadsCentral: z
+          .object({
+            endpoint: BeadsCentralEndpointSchema.optional(),
+            credentialRef: FoundationCredentialRefSchema.optional(),
           })
           .passthrough()
           .optional(),

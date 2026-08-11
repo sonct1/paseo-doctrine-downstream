@@ -220,8 +220,8 @@ export const PASEO_TOOL_MANIFEST = [
   },
   {
     id: "beads_status",
-    label: "Inspect native Beads",
-    description: "Check the pinned native Beads runtime bundled with Paseo.",
+    label: "Inspect Beads Central",
+    description: "Check the mandatory Beads Central service and pinned API/runtime versions.",
     group: "Issues",
   },
   {

@@ -26,6 +26,27 @@ describe("server config", () => {
     expect(standaloneConfig.desktopManaged).toBe(false);
   });
 
+  test("resolves Central-only defaults and launch overrides", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-central-"));
+    roots.push(paseoHome);
+
+    expect(loadConfig(paseoHome, { env: {} }).beadsCentral).toEqual({
+      endpoint: "http://127.0.0.1:8080",
+      credentialRef: "beads-central",
+    });
+    expect(
+      loadConfig(paseoHome, {
+        env: {
+          PASEO_BEADS_CENTRAL_URL: " https://central.example.internal/paseo ",
+          PASEO_BEADS_CENTRAL_CREDENTIAL_REF: " central-production ",
+        },
+      }).beadsCentral,
+    ).toEqual({
+      endpoint: "https://central.example.internal/paseo",
+      credentialRef: "central-production",
+    });
+  });
+
   test("resolves bundled web UI path from source-tree modules", () => {
     const root = path.parse(process.cwd()).root;
     expect(

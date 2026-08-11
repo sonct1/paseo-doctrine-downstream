@@ -81,20 +81,21 @@ The artifact installs the Foundation distribution and supported provider role bi
 skill projection is:
 
 - Lead: no standing audit skill; `repo-refresh` is explicit-only.
-- Peer: `frontend-design`.
-- Supervisor: `paseo-supervisor`, `architecture-premise-audit`, and `test-proof-debt-audit`.
+- Peer: `beads-issue-tracker`, `frontend-design`.
+- Supervisor: `beads-issue-tracker`, `paseo-supervisor`, `architecture-premise-audit`, and `test-proof-debt-audit`.
+- Lead also receives the mandatory `beads-issue-tracker`.
 - `ultra-review` is packaged but disabled for every standing role.
 
 See the [Foundation product guide](docs/foundation-product.md) for role contracts, provider projection,
 and the `inspect`, `plan`, `install`, `doctor`, and `rollback` commands.
 
-## Native Beads được bundle
+## Beads Central
 
-Artifact macOS bundle đúng `bd v1.1.2` như một internal runtime. Paseo giữ một durable issue graph
-cho mỗi daemon project và chia sẻ graph đó giữa các workspace của project. Installer không thêm
-binary vào user `PATH`; test từ source checkout phải truyền exact binary qua `PASEO_BEADS_BINARY`.
+Paseo dùng external Beads Central `1.2.0` làm durable issue graph duy nhất. Daemon persist một stable
+`workGraphId` cho mỗi project, pin actor từ role-bound session và enforce Lead/Peer/Supervisor authority
+trước khi gọi Central. Artifact không bundle native `bd` và không có backend switch/fallback.
 
-Xem [Native Beads issue graph](docs/native-beads.md) để biết storage, authority, WebUI và agent-tool
+Xem [Beads Central issue graph](docs/beads-central.md) để biết binding, authority, WebUI và agent-tool
 boundaries.
 
 ## Uninstall

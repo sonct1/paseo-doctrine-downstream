@@ -48,22 +48,41 @@ describe("workspace protocol file", () => {
         "unresolved_placeholder",
         "conflict_marker",
         "missing_identity",
+        "missing_issue_tracker",
       ]),
     );
   });
 
-  test("accepts canonical legacy v1 and loose protocols during mandatory admission", () => {
+  test("rejects legacy, markerless, and trackerless protocols during mandatory admission", () => {
     const loose =
       "# Quy ước làm việc\nowner: project owner\napplies_to: repository root\nversion: 1\n";
-    expect(validateWorkspaceProtocol(loose)).toEqual([]);
+    expect(validateWorkspaceProtocol(loose)).toEqual(
+      expect.arrayContaining(["missing_title", "missing_version_marker", "missing_issue_tracker"]),
+    );
     expect(
       validateWorkspaceProtocol(`${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->\n`),
-    ).toEqual([]);
+    ).toEqual(
+      expect.arrayContaining(["missing_title", "unsupported_version", "missing_issue_tracker"]),
+    );
     expect(
       validateWorkspaceProtocol(
-        `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->\n`,
+        `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n`,
       ),
     ).toContain("duplicate_version_marker");
+  });
+
+  test("requires one complete mandatory Beads Central role clause", () => {
+    const complete = buildWorkspaceProtocolTemplate(makeRoot());
+    expect(validateWorkspaceProtocol(complete)).toEqual([]);
+    expect(
+      validateWorkspaceProtocol(complete.replace("- issue tracker:", "- work graph:")),
+    ).toContain("missing_issue_tracker");
+    expect(
+      validateWorkspaceProtocol(complete.replace("Supervisor read-only", "Supervisor writes")),
+    ).toContain("missing_issue_tracker");
+    expect(validateWorkspaceProtocol(`${complete}- issue tracker: duplicate\n`)).toContain(
+      "missing_issue_tracker",
+    );
   });
 
   test("bootstraps only from the missing revision and returns a digest receipt", () => {

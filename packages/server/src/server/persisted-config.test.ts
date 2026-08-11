@@ -58,6 +58,37 @@ describe("PersistedConfigSchema daemon browser tools config", () => {
   });
 });
 
+describe("PersistedConfigSchema Beads Central config", () => {
+  test("accepts a credential reference and an HTTP(S) endpoint", () => {
+    const parsed = PersistedConfigSchema.parse({
+      daemon: {
+        beadsCentral: {
+          endpoint: "https://central.example.internal/paseo",
+          credentialRef: "beads-production",
+        },
+      },
+    });
+
+    expect(parsed.daemon?.beadsCentral).toEqual({
+      endpoint: "https://central.example.internal/paseo",
+      credentialRef: "beads-production",
+    });
+  });
+
+  test("rejects non-HTTP or credential-bearing Central endpoints", () => {
+    expect(
+      PersistedConfigSchema.safeParse({
+        daemon: { beadsCentral: { endpoint: "file:///tmp/central" } },
+      }).success,
+    ).toBe(false);
+    expect(
+      PersistedConfigSchema.safeParse({
+        daemon: { beadsCentral: { endpoint: "https://secret@example.internal" } },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("PersistedConfigSchema daemon relay config", () => {
   test("accepts optional relay TLS setting", () => {
     const parsed = PersistedConfigSchema.parse({

@@ -46,16 +46,14 @@ HOME="$SMOKE_ROOT/home" "$BUNDLE/install.sh" \
 
 HOME="$SMOKE_ROOT/home" "$SMOKE_ROOT/bin/paseo" --version
 HOME="$SMOKE_ROOT/home" "$SMOKE_ROOT/bin/paseo-foundation" doctor --json >/dev/null
-BEADS_VERSION=$($SMOKE_ROOT/install/current/runtime/bin/bd version)
-case "$BEADS_VERSION" in
-  "bd version 1.1.2 "*) ;;
-  *) echo "Unexpected bundled Beads version: $BEADS_VERSION" >&2; exit 1 ;;
-esac
+test ! -e "$SMOKE_ROOT/install/current/runtime/bin/bd"
 "$SMOKE_ROOT/install/current/runtime/bin/node" -e '
 const fs = require("fs");
 const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-if (manifest.beadsIncluded !== true || manifest.beadsVersion !== "1.1.2") process.exit(1);
-if (!/^[a-f0-9]{64}$/.test(manifest.beadsBinarySha256)) process.exit(1);
+if (manifest.beadsBackend !== "central") process.exit(1);
+if (manifest.beadsCentralClientIncluded !== true) process.exit(1);
+if (manifest.beadsCentralRequiredVersion !== "1.2.0") process.exit(1);
+if (manifest.bundledBeadsBinary !== false) process.exit(1);
 ' "$SMOKE_ROOT/install/current/manifest.json"
 
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
@@ -79,17 +77,10 @@ test "$HEALTHY" = "1"
 /bin/cat "$SMOKE_ROOT/health.json"
 /bin/echo
 
-mkdir -p "$SMOKE_ROOT/beads-project"
-PASEO_SMOKE_APP="$SMOKE_ROOT/install/current/app" \
-  PASEO_SMOKE_PORT="$PORT" \
-  PASEO_SMOKE_PROJECT="$SMOKE_ROOT/beads-project" \
-  "$SMOKE_ROOT/install/current/runtime/bin/node" \
-  "$REPO_ROOT/scripts/smoke-native-beads-rpc.mjs"
-
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
   "$SMOKE_ROOT/bin/paseo" daemon stop >/dev/null 2>&1 || true
 wait "$SMOKE_PID" >/dev/null 2>&1 || true
 SMOKE_PID=""
 
-printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok beads_rpc=ok daemon=ok webui=ok\n' "$HELP_FILES"
+printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok central_client=ok native_bd=absent daemon=ok webui=ok\n' "$HELP_FILES"
 printf 'SMOKE_ROOT=%s\n' "$SMOKE_ROOT"

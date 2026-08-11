@@ -15,12 +15,12 @@ import {
   BeadsDependencyTypeSchema,
   BeadsIssueStatusSchema,
   BeadsIssueTypeSchema,
-  BeadsNativeService,
   BeadsWritableIssueStatusSchema,
   beadsActorForAgent,
   type BeadsMutationGuard,
   type BeadsProjectContext,
-} from "./beads-native-service.js";
+  type BeadsService,
+} from "./beads-service.js";
 
 const IssueIdSchema = z
   .string()
@@ -28,7 +28,7 @@ const IssueIdSchema = z
   .min(1)
   .max(128)
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u);
-const IdempotencyKeySchema = z.string().trim().min(1).max(128);
+const IdempotencyKeySchema = z.string().trim().min(8).max(128);
 const TitleSchema = z.string().trim().min(1).max(300);
 const LongTextSchema = z.string().max(100_000);
 const LabelSchema = z
@@ -57,11 +57,12 @@ export interface RegisterBeadsToolsOptions {
       context: PaseoToolExecutionContext,
     ) => Promise<PaseoToolResult>,
   ) => void;
-  service: BeadsNativeService;
+  service: BeadsService;
   agentStorage: AgentStorage;
   workspaceRegistry: Pick<WorkspaceRegistry, "get">;
   projectRegistry?: Pick<ProjectRegistry, "get">;
   callerAgentId: string;
+  roleId: PaseoRoleId;
 }
 
 function toolResult(payload: Record<string, unknown>): PaseoToolResult {
@@ -77,11 +78,14 @@ async function resolveCaller(options: RegisterBeadsToolsOptions): Promise<BeadsC
   const agent = await options.agentStorage.get(options.callerAgentId);
   if (!agent) throw new Error(`Caller agent ${options.callerAgentId} is unavailable`);
   const binding = agent.roleBinding;
-  if (!binding) throw new Error("Native Beads tools require a durable Paseo role binding");
+  if (!binding) throw new Error("Beads Central tools require a durable Paseo role binding");
+  if (binding.roleId !== options.roleId) {
+    throw new Error("The caller role changed after its Beads Central tool catalog was created");
+  }
   const assignment = binding.assignmentContract;
-  if (!assignment) throw new Error("Native Beads tools require a durable assignment contract");
+  if (!assignment) throw new Error("Beads Central tools require a durable assignment contract");
   if (assignmentHasExpired(assignment)) throw new Error("The caller assignment has expired");
-  if (!agent.workspaceId) throw new Error("Native Beads tools require a current workspace");
+  if (!agent.workspaceId) throw new Error("Beads Central tools require a current workspace");
   const workspace = await options.workspaceRegistry.get(agent.workspaceId);
   if (!workspace || workspace.archivedAt) {
     throw new Error(`Workspace ${agent.workspaceId} is unavailable or archived`);
@@ -184,11 +188,11 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
   options.registerTool(
     "beads_status",
     {
-      title: "Inspect native Beads",
-      description: "Check whether Paseo's pinned native Beads runtime is available.",
+      title: "Inspect Beads Central",
+      description: "Check whether Paseo's mandatory Beads Central tracker is available.",
       inputSchema: z.object({}).strict(),
     },
-    async () => toolResult(await options.service.status()),
+    async () => toolResult({ ...(await options.service.status()) }),
   );
 
   options.registerTool(
@@ -242,159 +246,166 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     },
   );
 
-  options.registerTool(
-    "beads_create",
-    {
-      title: "Create issue",
-      description:
-        "Create a durable project issue. A Peer must link it to the issue that exposed it with discoveredFrom.",
-      inputSchema: z
-        .object({
-          title: TitleSchema,
-          description: LongTextSchema.optional(),
-          issueType: BeadsIssueTypeSchema.default("task"),
-          priority: PrioritySchema.default(2),
-          labels: z.array(LabelSchema).max(32).optional(),
-          acceptance: LongTextSchema.optional(),
-          discoveredFrom: IssueIdSchema.optional(),
-          idempotencyKey: IdempotencyKeySchema,
-        })
-        .strict(),
-    },
-    async (input, execution) => {
-      const caller = await resolveCaller(options);
-      requireWriteAuthority(caller);
-      if (caller.roleId === "peer" && !input.discoveredFrom) {
-        throw new Error("A Peer-created issue must include discoveredFrom");
-      }
-      if (caller.roleId === "peer" && input.discoveredFrom) {
-        requirePeerIssueGrant(caller, input.discoveredFrom);
-      }
-      const issue = await options.service.create(
-        caller.project,
-        input,
-        execution.signal,
-        input.discoveredFrom
-          ? peerMutationGuard(caller, input.discoveredFrom, execution.signal)
-          : undefined,
-      );
-      return toolResult({ projectId: caller.project.projectId, issue });
-    },
-  );
+  if (options.roleId !== "supervisor") {
+    options.registerTool(
+      "beads_create",
+      {
+        title: "Create issue",
+        description:
+          "Create a durable project issue. A Peer must link it to the issue that exposed it with discoveredFrom.",
+        inputSchema: z
+          .object({
+            title: TitleSchema,
+            description: LongTextSchema.optional(),
+            issueType: BeadsIssueTypeSchema.default("task"),
+            priority: PrioritySchema.default(2),
+            labels: z.array(LabelSchema).max(32).optional(),
+            acceptance: LongTextSchema.optional(),
+            discoveredFrom: IssueIdSchema.optional(),
+            idempotencyKey: IdempotencyKeySchema,
+          })
+          .strict(),
+      },
+      async (input, execution) => {
+        const caller = await resolveCaller(options);
+        requireWriteAuthority(caller);
+        if (caller.roleId === "peer" && !input.discoveredFrom) {
+          throw new Error("A Peer-created issue must include discoveredFrom");
+        }
+        if (caller.roleId === "peer" && input.discoveredFrom) {
+          requirePeerIssueGrant(caller, input.discoveredFrom);
+        }
+        const issue = await options.service.create(
+          caller.project,
+          input,
+          execution.signal,
+          input.discoveredFrom
+            ? peerMutationGuard(caller, input.discoveredFrom, execution.signal)
+            : undefined,
+        );
+        return toolResult({ projectId: caller.project.projectId, issue });
+      },
+    );
 
-  options.registerTool(
-    "beads_claim",
-    {
-      title: "Claim issue",
-      description: "Atomically assign an open issue to the calling Paseo agent and start it.",
-      inputSchema: z
-        .object({ issueId: IssueIdSchema, idempotencyKey: IdempotencyKeySchema })
-        .strict(),
-    },
-    async ({ issueId, idempotencyKey }, execution) => {
-      const caller = await resolveCaller(options);
-      requireWriteAuthority(caller);
-      requirePeerIssueGrant(caller, issueId);
-      const issue = await options.service.claim(
-        caller.project,
-        issueId,
-        idempotencyKey,
-        execution.signal,
-        peerClaimGuard(caller, issueId, execution.signal),
-      );
-      if (issue.assignee !== caller.project.actor) {
-        throw new Error(`Issue ${issueId} was not claimed by ${caller.project.actor}`);
-      }
-      return toolResult({ projectId: caller.project.projectId, issue });
-    },
-  );
+    options.registerTool(
+      "beads_claim",
+      {
+        title: "Claim issue",
+        description: "Atomically assign an open issue to the calling Paseo agent and start it.",
+        inputSchema: z
+          .object({ issueId: IssueIdSchema, idempotencyKey: IdempotencyKeySchema })
+          .strict(),
+      },
+      async ({ issueId, idempotencyKey }, execution) => {
+        const caller = await resolveCaller(options);
+        requireWriteAuthority(caller);
+        requirePeerIssueGrant(caller, issueId);
+        const issue = await options.service.claim(
+          caller.project,
+          issueId,
+          idempotencyKey,
+          execution.signal,
+          peerClaimGuard(caller, issueId, execution.signal),
+        );
+        if (issue.assignee !== caller.project.actor) {
+          throw new Error(`Issue ${issueId} was not claimed by ${caller.project.actor}`);
+        }
+        return toolResult({ projectId: caller.project.projectId, issue });
+      },
+    );
 
-  options.registerTool(
-    "beads_update",
-    {
-      title: "Update issue",
-      description:
-        "Update issue evidence or lifecycle fields. A Peer may update only its currently assigned issue.",
-      inputSchema: UpdateInputSchema,
-    },
-    async ({ issueId, ...input }, execution) => {
-      const caller = await resolveCaller(options);
-      requireWriteAuthority(caller);
-      requirePeerIssueGrant(caller, issueId);
-      const issue = await options.service.update(
-        caller.project,
-        issueId,
-        input,
-        execution.signal,
-        peerMutationGuard(caller, issueId, execution.signal),
-      );
-      return toolResult({ projectId: caller.project.projectId, issue });
-    },
-  );
+    options.registerTool(
+      "beads_update",
+      {
+        title: "Update issue",
+        description:
+          "Update issue evidence or lifecycle fields. A Peer may update only its currently assigned issue.",
+        inputSchema: UpdateInputSchema,
+      },
+      async ({ issueId, ...input }, execution) => {
+        const caller = await resolveCaller(options);
+        requireWriteAuthority(caller);
+        requirePeerIssueGrant(caller, issueId);
+        const issue = await options.service.update(
+          caller.project,
+          issueId,
+          input,
+          execution.signal,
+          peerMutationGuard(caller, issueId, execution.signal),
+        );
+        return toolResult({ projectId: caller.project.projectId, issue });
+      },
+    );
+  }
 
-  options.registerTool(
-    "beads_close",
-    {
-      title: "Close issue",
-      description:
-        "Close an issue with an evidence-based reason. Binding closure remains Lead-owned; Peers hand back instead.",
-      inputSchema: z
-        .object({
-          issueId: IssueIdSchema,
-          reason: z.string().trim().min(1).max(10_000),
-          idempotencyKey: IdempotencyKeySchema,
-        })
-        .strict(),
-    },
-    async ({ issueId, reason, idempotencyKey }, execution) => {
-      const caller = await resolveCaller(options);
-      requireWriteAuthority(caller);
-      if (caller.roleId !== "lead") throw new Error("Only the role-bound Lead may close an issue");
-      const issue = await options.service.close(
-        caller.project,
-        issueId,
-        reason,
-        idempotencyKey,
-        execution.signal,
-      );
-      return toolResult({ projectId: caller.project.projectId, issue });
-    },
-  );
+  if (options.roleId === "lead") {
+    options.registerTool(
+      "beads_close",
+      {
+        title: "Close issue",
+        description:
+          "Close an issue with an evidence-based reason. Binding closure remains Lead-owned; Peers hand back instead.",
+        inputSchema: z
+          .object({
+            issueId: IssueIdSchema,
+            reason: z.string().trim().min(1).max(10_000),
+            idempotencyKey: IdempotencyKeySchema,
+          })
+          .strict(),
+      },
+      async ({ issueId, reason, idempotencyKey }, execution) => {
+        const caller = await resolveCaller(options);
+        requireWriteAuthority(caller);
+        if (caller.roleId !== "lead")
+          throw new Error("Only the role-bound Lead may close an issue");
+        const issue = await options.service.close(
+          caller.project,
+          issueId,
+          reason,
+          idempotencyKey,
+          execution.signal,
+        );
+        return toolResult({ projectId: caller.project.projectId, issue });
+      },
+    );
+  }
 
-  options.registerTool(
-    "beads_add_dependency",
-    {
-      title: "Add issue dependency",
-      description:
-        "Add one typed dependency edge. A Peer may change only the graph rooted at its assigned issue.",
-      inputSchema: z
-        .object({
-          issueId: IssueIdSchema,
-          dependsOnId: IssueIdSchema,
-          dependencyType: BeadsDependencyTypeSchema.default("blocks"),
-          idempotencyKey: IdempotencyKeySchema,
-        })
-        .strict()
-        .refine((input) => input.issueId !== input.dependsOnId, {
-          message: "An issue cannot depend on itself",
-        }),
-    },
-    async ({ issueId, dependsOnId, dependencyType, idempotencyKey }, execution) => {
-      const caller = await resolveCaller(options);
-      requireWriteAuthority(caller);
-      requirePeerIssueGrant(caller, issueId);
-      const updated = await options.service.addDependency(
-        caller.project,
-        issueId,
-        dependsOnId,
-        dependencyType,
-        idempotencyKey,
-        execution.signal,
-        peerMutationGuard(caller, issueId, execution.signal),
-      );
-      return toolResult({ projectId: caller.project.projectId, issue: updated });
-    },
-  );
+  if (options.roleId !== "supervisor") {
+    options.registerTool(
+      "beads_add_dependency",
+      {
+        title: "Add issue dependency",
+        description:
+          "Add one typed dependency edge. A Peer may change only the graph rooted at its assigned issue.",
+        inputSchema: z
+          .object({
+            issueId: IssueIdSchema,
+            dependsOnId: IssueIdSchema,
+            dependencyType: BeadsDependencyTypeSchema.default("blocks"),
+            idempotencyKey: IdempotencyKeySchema,
+          })
+          .strict()
+          .refine((input) => input.issueId !== input.dependsOnId, {
+            message: "An issue cannot depend on itself",
+          }),
+      },
+      async ({ issueId, dependsOnId, dependencyType, idempotencyKey }, execution) => {
+        const caller = await resolveCaller(options);
+        requireWriteAuthority(caller);
+        requirePeerIssueGrant(caller, issueId);
+        const updated = await options.service.addDependency(
+          caller.project,
+          issueId,
+          dependsOnId,
+          dependencyType,
+          idempotencyKey,
+          execution.signal,
+          peerMutationGuard(caller, issueId, execution.signal),
+        );
+        return toolResult({ projectId: caller.project.projectId, issue: updated });
+      },
+    );
+  }
 
   options.registerTool(
     "beads_prime",

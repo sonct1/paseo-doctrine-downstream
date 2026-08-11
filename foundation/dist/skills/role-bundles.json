@@ -9,7 +9,7 @@
     "beads-issue-tracker": {
       "provenance": "FOUNDATION_AUTHORED",
       "source": "skills/beads-issue-tracker/SKILL.md",
-      "admission": "packaged-disabled"
+      "admission": "active"
     },
     "frontend-design": {
       "provenance": "DEMONTHORN_EXACT",
@@ -39,23 +39,24 @@
   },
   "roles": {
     "lead": {
-      "active": [],
+      "active": ["beads-issue-tracker"],
       "explicitOnly": ["repo-refresh", "triple-review"],
-      "packagedDisabled": ["beads-issue-tracker"]
+      "packagedDisabled": []
     },
     "peer": {
-      "active": ["frontend-design"],
+      "active": ["beads-issue-tracker", "frontend-design"],
       "explicitOnly": [],
-      "packagedDisabled": ["beads-issue-tracker", "triple-review"]
+      "packagedDisabled": ["triple-review"]
     },
     "supervisor": {
       "active": [
         "architecture-premise-audit",
+        "beads-issue-tracker",
         "paseo-supervisor",
         "test-proof-debt-audit"
       ],
       "explicitOnly": [],
-      "packagedDisabled": ["beads-issue-tracker", "triple-review"]
+      "packagedDisabled": ["triple-review"]
     }
   }
 }

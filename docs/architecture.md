@@ -38,7 +38,7 @@ Your code never leaves your machine. Paseo is local-first.
 - **CLI:** Terminal interface for agent workflows that can also start and manage the daemon.
 - **Desktop app:** Electron wrapper around the web app that bundles and auto-manages its own daemon.
 - **Relay:** Optional encrypted bridge for remote access without opening ports directly.
-- **Native Beads:** Daemon-owned, project-scoped issue graph cho durable work state; không sở hữu agent lifecycle hoặc engineering acceptance. Xem [native-beads.md](native-beads.md).
+- **Beads Central client:** Daemon-mediated, stable-project issue graph cho durable work state; Central là external single backend, còn Paseo giữ role policy/lifecycle và engineering acceptance. Xem [beads-central.md](beads-central.md).
 
 ## Packages
 

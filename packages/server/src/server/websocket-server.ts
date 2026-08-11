@@ -89,7 +89,9 @@ import {
   type BrowserAutomationHostCapability,
 } from "@getpaseo/protocol/browser-automation/capabilities";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
-import { BeadsNativeService } from "./beads/beads-native-service.js";
+import { BeadsCentralService } from "./beads/beads-central-service.js";
+import type { BeadsService } from "./beads/beads-service.js";
+import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
@@ -271,6 +273,7 @@ function createNoopProjectRegistry(): ProjectRegistry {
       kind: input.kind,
       displayName: input.displayName,
       projectKey: input.projectKey ?? null,
+      workGraphId: null,
       customName: null,
       customIconRevision: null,
       createdAt: input.timestamp,
@@ -562,7 +565,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly providerUsageService: ProviderUsageService;
   private unsubscribeTerminalActivity: (() => void) | null = null;
   private readonly browserToolsBroker: BrowserToolsBroker | null;
-  private readonly beadsService: BeadsNativeService;
+  private readonly beadsService: BeadsService;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private readonly browserToolsRegistrations = new Map<string, BrowserToolsRegistration>();
   private acceptingConnections = true;
@@ -614,7 +617,7 @@ export class VoiceAssistantWebSocketServer {
     browserToolsBroker?: BrowserToolsBroker | null,
     hubRelationships?: HubRelationshipManagement | null,
     workspaceSetupRuntime: WorkspaceSetupRuntime = new WorkspaceSetupRuntime(),
-    beadsService?: BeadsNativeService,
+    beadsService?: BeadsService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -627,12 +630,19 @@ export class VoiceAssistantWebSocketServer {
     this.daemonVersion = daemonVersion.trim();
     this.daemonRuntimeConfig = daemonRuntimeConfig;
     this.browserToolsBroker = browserToolsBroker ?? null;
-    this.beadsService = beadsService ?? new BeadsNativeService({ paseoHome, logger });
+    this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
+    this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
+    this.beadsService =
+      beadsService ??
+      new BeadsCentralService({
+        logger,
+        getConfig: () => daemonConfigStore.get().beadsCentral,
+        credentialStore: new FoundationCredentialStore(paseoHome),
+        projectRegistry: this.projectRegistry,
+      });
     this.hubRelationships = hubRelationships ?? null;
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
-    this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
-    this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     const requiredServices = requireWebSocketServices({
       chatService,
       loopService,

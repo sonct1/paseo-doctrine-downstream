@@ -211,6 +211,25 @@ const MutableRelayConfigSchema = z
     enabled: z.boolean(),
   })
   .passthrough();
+export const FoundationCredentialRefSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
+export const BeadsCentralEndpointSchema = z.url().superRefine((value, context) => {
+  const endpoint = new URL(value);
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    context.addIssue({ code: "custom", message: "Beads Central endpoint must use http or https" });
+  }
+  if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+    context.addIssue({
+      code: "custom",
+      message: "Beads Central endpoint must not contain credentials, query, or fragment",
+    });
+  }
+});
+const MutableBeadsCentralConfigSchema = z
+  .object({
+    endpoint: BeadsCentralEndpointSchema.default("http://127.0.0.1:8080"),
+    credentialRef: FoundationCredentialRefSchema.default("beads-central"),
+  })
+  .passthrough();
 export const MutableDaemonConfigSchema = z
   .object({
     // COMPAT(relayConfig): added in v0.2.6, remove after 2027-01-31 when old daemons are unsupported.
@@ -221,6 +240,10 @@ export const MutableDaemonConfigSchema = z
       })
       .passthrough(),
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
+    beadsCentral: MutableBeadsCentralConfigSchema.default({
+      endpoint: "http://127.0.0.1:8080",
+      credentialRef: "beads-central",
+    }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
@@ -235,6 +258,7 @@ export const MutableDaemonConfigPatchSchema = z
     relay: MutableRelayConfigSchema.partial().optional(),
     mcp: MutableDaemonConfigSchema.shape.mcp.partial().optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
+    beadsCentral: MutableBeadsCentralConfigSchema.partial().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
@@ -1313,8 +1337,6 @@ export const SetDaemonConfigRequestMessageSchema = z.object({
   requestId: z.string(),
   config: MutableDaemonConfigPatchSchema,
 });
-
-export const FoundationCredentialRefSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 
 export const FoundationCredentialsGetStatusRequestSchema = z.object({
   type: z.literal("foundation.credentials.get_status.request"),

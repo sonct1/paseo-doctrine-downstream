@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { SessionInboundMessage, SessionOutboundMessage } from "@getpaseo/protocol/messages";
 
-import type { BeadsNativeService } from "../../beads/beads-native-service.js";
+import type { BeadsService } from "../../beads/beads-service.js";
 import type { ProjectRegistry } from "../../workspace-registry.js";
 
 interface BeadsSessionHost {
@@ -11,7 +11,7 @@ interface BeadsSessionHost {
 
 export interface BeadsSessionOptions {
   host: BeadsSessionHost;
-  service: BeadsNativeService;
+  service: BeadsService;
   projectRegistry: Pick<ProjectRegistry, "get">;
   clientId: string;
 }
@@ -44,7 +44,7 @@ export class BeadsSession {
           runtime,
           issues: [],
           truncated: false,
-          error: runtime.reason ?? "Native Beads is unavailable",
+          error: runtime.reason ?? "Beads Central is unavailable",
         },
       });
       return;

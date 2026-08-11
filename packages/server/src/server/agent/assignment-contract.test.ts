@@ -55,6 +55,25 @@ describe("immutable assignment contract", () => {
     expect(contract.receipt.assignmentDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(buildAssignmentInstruction(contract)).toContain("Mutation boundary: no-write");
     expect(buildAssignmentInstruction(contract)).toContain("Beads issue grants: ps123-abc");
+    expect(buildAssignmentInstruction(contract)).toContain(
+      "Mandatory Beads Central checkpoint: call beads_status",
+    );
+  });
+
+  test("injects role-specific mandatory tracker behavior", () => {
+    const peer = materialize({
+      roleId: "peer",
+      envelope: envelope({ disposition: "peer-execution" }),
+    });
+    const supervisor = materialize({
+      roleId: "supervisor",
+      envelope: envelope({ disposition: "supervision" }),
+    });
+
+    expect(buildAssignmentInstruction(peer)).toContain("claim before owned mutation");
+    expect(buildAssignmentInstruction(peer)).toContain("never close");
+    expect(buildAssignmentInstruction(supervisor)).toContain("remain read-only");
+    expect(buildAssignmentInstruction(supervisor)).toContain("material handoff");
   });
 
   test("fails closed when a role-bound create omits the assignment", () => {

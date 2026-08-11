@@ -277,9 +277,13 @@ function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceip
 function requireWorkspaceProtocol(
   cwd: string,
   roleId: PaseoRoleId,
+  allowMissing: boolean,
 ): WorkspaceProtocolBindingReceipt {
   const snapshot = inspectWorkspaceProtocol(cwd);
   if (snapshot.status === "missing") {
+    if (!allowMissing) {
+      throw new Error(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing: ${snapshot.path}`);
+    }
     return {
       status: "missing",
       readership: protocolReadership(roleId),
@@ -306,12 +310,12 @@ function requireWorkspaceProtocol(
 function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): string {
   if (receipt.status === "missing") {
     if (receipt.readership === "assignment-only") {
-      return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. Do not load that path; no repository-specific protocol constraints are bound, so follow the standing role and bounded assignment.`;
+      return `Workspace Protocol binding: temporarily missing under an exact Human bootstrap exception at ${receipt.path}. Do not load that path; remain inside the read-only/bootstrap assignment and stop at its expiry.`;
     }
     if (receipt.readership === "governance-only") {
-      return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. No repository-specific protocol is bound; create, audit, or update one only under an exact Human governance mandate.`;
+      return `Workspace Protocol binding: temporarily missing under an exact Human governance exception at ${receipt.path}. Create, audit, or update it only inside that bounded mandate and stop at its expiry.`;
     }
-    return `Workspace Protocol binding: absent zero-delta at ${receipt.path}. Proceed under the standing Lead role and bounded assignment; no repository-specific policy delta is active.`;
+    return `Workspace Protocol binding: temporarily missing under an exact Human bootstrap exception at ${receipt.path}. Bootstrap only the bounded governance artifact and stop at the assignment expiry.`;
   }
   if (receipt.readership === "assignment-only") {
     return `Workspace Protocol binding: assignment-only. Do not load ${receipt.path}; receive only relevant constraints in the Lead assignment.`;
@@ -344,7 +348,11 @@ export async function materializeRoleBinding(
     envelope: input.assignment,
     createdAt,
   });
-  const workspaceProtocol = requireWorkspaceProtocol(input.cwd, input.roleId);
+  const workspaceProtocol = requireWorkspaceProtocol(
+    input.cwd,
+    input.roleId,
+    assignmentContract.envelope.protocolException !== undefined,
+  );
   const instructions = [
     definition.instructions,
     buildProtocolInstruction(workspaceProtocol),

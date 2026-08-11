@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 
-import type { BeadsNativeService } from "../../beads/beads-native-service.js";
+import type { BeadsService } from "../../beads/beads-service.js";
 import { BeadsSession } from "./beads-session.js";
 
 function issue() {
@@ -38,7 +38,7 @@ function harness(
   };
   const session = new BeadsSession({
     host: { emit: (message) => messages.push(message) },
-    service: service as unknown as BeadsNativeService,
+    service: service as unknown as BeadsService,
     projectRegistry: {
       get: vi
         .fn()

@@ -22,6 +22,14 @@ const PersistedProjectRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  // Durable identity of this project's single issue/work graph. It is minted
+  // once from the current project key and never follows later path/remote drift.
+  workGraphId: z
+    .string()
+    .regex(/^pg-[a-f0-9]{32}$/u)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   // User-set override layered over the derived displayName. Reconciliation
   // never touches this. Null means "use the derived name". Added for #987.
   customName: z
@@ -521,6 +529,7 @@ export function createPersistedProjectRecord(input: {
   displayName: string;
   customName?: string | null;
   projectKey?: string | null;
+  workGraphId?: string | null;
   customIconRevision?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -530,6 +539,7 @@ export function createPersistedProjectRecord(input: {
     ...input,
     customName: input.customName ?? null,
     projectKey: input.projectKey ?? null,
+    workGraphId: input.workGraphId ?? null,
     customIconRevision: input.customIconRevision ?? null,
     archivedAt: input.archivedAt ?? null,
   });

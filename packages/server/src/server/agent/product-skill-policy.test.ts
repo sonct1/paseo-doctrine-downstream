@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -84,40 +84,24 @@ describe("product role skill policy", () => {
     expect(lead.skillPaths.get("council")).toBe(path.join(root, "council", "SKILL.md"));
   });
 
-  test("admits the native Beads skill to every role while Council stays Lead-only", () => {
-    const root = bundleRoot({
-      schemaVersion: 1,
-      packages: { council: {}, "beads-issue-tracker": {} },
-      roles: {
-        lead: {
-          active: ["council", "beads-issue-tracker"],
-          explicitOnly: [],
-          packagedDisabled: [],
-        },
-        peer: {
-          active: ["beads-issue-tracker"],
-          explicitOnly: [],
-          packagedDisabled: ["council"],
-        },
-        supervisor: {
-          active: ["beads-issue-tracker"],
-          explicitOnly: [],
-          packagedDisabled: ["council"],
-        },
-      },
-    });
+  test("keeps the mandatory Beads skill in Foundation instead of duplicating Product source", () => {
+    const repositoryRoot = path.resolve(import.meta.dirname, "../../../../../");
+    const productAdmission = JSON.parse(
+      readFileSync(path.join(repositoryRoot, "skills/role-admission.json"), "utf8"),
+    ) as { packages: Record<string, unknown> };
+    const foundationAdmission = JSON.parse(
+      readFileSync(path.join(repositoryRoot, "foundation/dist/skills/role-bundles.json"), "utf8"),
+    ) as {
+      roles: Record<"lead" | "peer" | "supervisor", { active: string[] }>;
+    };
 
-    expect([...loadProductSkillPolicy("lead", root).enabledNames]).toEqual([
-      "council",
-      "beads-issue-tracker",
-    ]);
-    for (const role of ["peer", "supervisor"] as const) {
-      const policy = loadProductSkillPolicy(role, root);
-      expect([...policy.enabledNames]).toEqual(["beads-issue-tracker"]);
-      expect(claudeProductSkillDenyRules(policy)).toEqual([
-        "Skill(council)",
-        "Skill(council:council)",
-      ]);
+    expect(productAdmission.packages).not.toHaveProperty("beads-issue-tracker");
+    expect(existsSync(path.join(repositoryRoot, "skills/beads-issue-tracker"))).toBe(false);
+    expect(
+      existsSync(path.join(repositoryRoot, "foundation/dist/skills/beads-issue-tracker/SKILL.md")),
+    ).toBe(true);
+    for (const role of ["lead", "peer", "supervisor"] as const) {
+      expect(foundationAdmission.roles[role].active).toContain("beads-issue-tracker");
     }
   });
 

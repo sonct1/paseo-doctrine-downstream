@@ -12,7 +12,7 @@
         "task": "deny",
         "skill": {
           "architecture-premise-audit": "deny",
-          "beads-issue-tracker": "deny",
+          "beads-issue-tracker": "allow",
           "frontend-design": "allow",
           "paseo-supervisor": "deny",
           "repo-refresh": "deny",

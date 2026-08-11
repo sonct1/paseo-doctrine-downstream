@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
-const KNOWN_PRODUCT_ROLE_SKILLS = ["council", "beads-issue-tracker"] as const;
+const KNOWN_PRODUCT_ROLE_SKILLS = ["council"] as const;
 
 interface RoleAdmissionRecord {
   active: string[];

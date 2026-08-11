@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 import { connectDaemonClient } from "./daemon-client-loader";
 import { withProjectOwnership } from "./project-ownership";
 import { createTempDirectory, createTempGitRepo } from "./workspace";
@@ -30,6 +31,7 @@ interface SeedProjectDescriptor {
 export interface SeedDaemonClient {
   connect(): Promise<void>;
   close(): Promise<void>;
+  getDaemonConfig(): Promise<{ requestId: string; config: MutableDaemonConfig }>;
   addProject(cwd: string): Promise<{
     project: {
       projectId: string;

@@ -173,7 +173,7 @@ import { AgentConfigSession } from "./session/agent-config/agent-config-session.
 import { ProjectConfigSession } from "./session/project-config/project-config-session.js";
 import { WorkspaceProtocolSession } from "./session/workspace-protocol/workspace-protocol-session.js";
 import { BeadsSession, type BeadsSessionOptions } from "./session/beads/beads-session.js";
-import type { BeadsNativeService } from "./beads/beads-native-service.js";
+import type { BeadsService } from "./beads/beads-service.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
@@ -441,7 +441,7 @@ const nodeSessionFileSystem: SessionFileSystem = {
 type AgentMcpTransportFactory = () => Promise<unknown>;
 
 function createBeadsSession(options: {
-  service: BeadsNativeService | undefined;
+  service: BeadsService | undefined;
   projectRegistry: BeadsSessionOptions["projectRegistry"];
   clientId: string;
   emit: (message: SessionOutboundMessage) => void;
@@ -476,7 +476,7 @@ export interface SessionOptions {
   agentStorage: AgentStorage;
   projectRegistry: ProjectRegistry;
   workspaceRegistry: WorkspaceRegistry;
-  beadsService?: BeadsNativeService;
+  beadsService?: BeadsService;
   filesystem?: SessionFileSystem;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
@@ -2176,7 +2176,7 @@ export class Session {
   }
 
   private requireBeadsSession(): BeadsSession {
-    if (!this.beadsSession) throw new Error("Native Beads service is unavailable");
+    if (!this.beadsSession) throw new Error("Beads Central service is unavailable");
     return this.beadsSession;
   }
 

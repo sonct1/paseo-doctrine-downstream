@@ -30,17 +30,7 @@ const PACK_ROOT = path.join(ARTIFACTS_ROOT, ".staging", "packs");
 const OUTPUT_DIR = path.join(ARTIFACTS_ROOT, BUNDLE_NAME);
 const OUTPUT_TARBALL = path.join(ARTIFACTS_ROOT, `${BUNDLE_NAME}.tar.gz`);
 const OUTPUT_CHECKSUM = `${OUTPUT_TARBALL}.sha256`;
-const BEADS_VERSION = "1.1.2";
-const BEADS_RELEASE = {
-  arm64: {
-    asset: `beads_${BEADS_VERSION}_darwin_arm64.tar.gz`,
-    sha256: "9b0137a83a2afd343e2abd2a506be72ea032721000f76669c2cf81729e78501d",
-  },
-  x64: {
-    asset: `beads_${BEADS_VERSION}_darwin_amd64.tar.gz`,
-    sha256: "0e94de9319c9d66cb7e0038bb17ebaf5dd2fe669e366a4b9153528b474a1a8f6",
-  },
-};
+const BEADS_CENTRAL_VERSION = "1.2.0";
 const INTERNAL_PACKAGES = [
   "@getpaseo/highlight",
   "@getpaseo/relay",
@@ -179,56 +169,6 @@ function copyNodeRuntime(nodeRoot) {
   for (const name of ["LICENSE", "README.md"]) {
     const source = path.join(nodeRoot, name);
     if (existsSync(source)) copyFileSync(source, path.join(runtimeRoot, `NODE-${name}`));
-  }
-}
-
-function resolveBeadsArchive() {
-  const release = BEADS_RELEASE[ARCH];
-  if (!release) fail(`No pinned Beads release for macOS architecture ${ARCH}`);
-  const override = process.env.PASEO_RELEASE_BEADS_ARCHIVE;
-  const cacheRoot = path.join(ARTIFACTS_ROOT, ".cache", "beads", BEADS_VERSION);
-  const archive = override ? realpathSync(override) : path.join(cacheRoot, release.asset);
-  if (!override) {
-    mkdirSync(cacheRoot, { recursive: true });
-    if (existsSync(archive) && sha256(archive) !== release.sha256) rmSync(archive, { force: true });
-    if (!existsSync(archive)) {
-      run("/usr/bin/curl", [
-        "--fail",
-        "--location",
-        "--retry",
-        "3",
-        "--output",
-        archive,
-        `https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/${release.asset}`,
-      ]);
-    }
-  }
-  const digest = sha256(archive);
-  if (digest !== release.sha256) {
-    fail(`Pinned Beads archive checksum mismatch: expected ${release.sha256}, received ${digest}`);
-  }
-  return archive;
-}
-
-function copyBeadsRuntime() {
-  const archive = resolveBeadsArchive();
-  const extractRoot = path.join(ARTIFACTS_ROOT, ".staging", "beads-extract");
-  rmSync(extractRoot, { recursive: true, force: true });
-  mkdirSync(extractRoot, { recursive: true });
-  run("/usr/bin/tar", ["-xzf", archive, "-C", extractRoot, "./bd", "./LICENSE"]);
-  const sourceBinary = path.join(extractRoot, "bd");
-  const sourceLicense = path.join(extractRoot, "LICENSE");
-  if (!existsSync(sourceBinary) || !existsSync(sourceLicense)) {
-    fail("Pinned Beads archive is missing bd or LICENSE");
-  }
-  const runtimeRoot = path.join(STAGING_ROOT, "runtime");
-  const targetBinary = path.join(runtimeRoot, "bin", "bd");
-  copyFileSync(sourceBinary, targetBinary);
-  chmodSync(targetBinary, 0o755);
-  copyFileSync(sourceLicense, path.join(runtimeRoot, "BEADS-LICENSE"));
-  const version = run(targetBinary, ["version"], { capture: true });
-  if (!version.startsWith(`bd version ${BEADS_VERSION} `)) {
-    fail(`Bundled Beads validation failed: ${version || "no version output"}`);
   }
 }
 
@@ -431,7 +371,6 @@ fi
 DAEMON_ENTRY="$CURRENT_LINK/app/node_modules/@getpaseo/cli/dist/index.js"
 DAEMON_NODE_XML=$(escape_xml "$DAEMON_NODE")
 DAEMON_ENTRY_XML=$(escape_xml "$DAEMON_ENTRY")
-BEADS_BINARY_XML=$(escape_xml "$CURRENT_LINK/runtime/bin/bd")
 LISTEN_XML=$(escape_xml "$LISTEN")
 PATH_XML=$(escape_xml "$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
 LOG_DIR="$HOME/Library/Logs/Paseo"
@@ -451,7 +390,6 @@ cat > "$PLIST" <<PLIST
   <key>EnvironmentVariables</key><dict>
     <key>HOME</key><string>$(escape_xml "$HOME")</string>
     <key>PATH</key><string>$PATH_XML</string>
-    <key>PASEO_BEADS_BINARY</key><string>$BEADS_BINARY_XML</string>
     <key>PASEO_DICTATION_ENABLED</key><string>0</string>
     <key>PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD</key><string>0</string>
     <key>PASEO_VOICE_MODE_ENABLED</key><string>0</string>
@@ -618,9 +556,10 @@ function createManifest(nodeRoot) {
     webUiIncluded: true,
     cliIncluded: true,
     foundationIncluded: true,
-    beadsIncluded: true,
-    beadsVersion: BEADS_VERSION,
-    beadsBinarySha256: sha256(path.join(STAGING_ROOT, "runtime", "bin", "bd")),
+    beadsBackend: "central",
+    beadsCentralClientIncluded: true,
+    beadsCentralRequiredVersion: BEADS_CENTRAL_VERSION,
+    bundledBeadsBinary: false,
     internalPackages: Object.fromEntries(
       INTERNAL_PACKAGES.map((name) => [
         name,
@@ -651,8 +590,10 @@ function validateStaging(nodeRoot) {
     manifest.electronIncluded !== false ||
     manifest.webUiIncluded !== true ||
     manifest.cliIncluded !== true ||
-    manifest.beadsIncluded !== true ||
-    manifest.beadsVersion !== BEADS_VERSION
+    manifest.beadsBackend !== "central" ||
+    manifest.beadsCentralClientIncluded !== true ||
+    manifest.beadsCentralRequiredVersion !== BEADS_CENTRAL_VERSION ||
+    manifest.bundledBeadsBinary !== false
   ) {
     fail("Artifact manifest validation failed");
   }
@@ -663,11 +604,8 @@ function validateStaging(nodeRoot) {
     capture: true,
   });
   if (bundledNodeVersion !== sourceNodeVersion) fail("Bundled Node validation failed");
-  const bundledBeadsVersion = run(path.join(STAGING_ROOT, "runtime", "bin", "bd"), ["version"], {
-    capture: true,
-  });
-  if (!bundledBeadsVersion.startsWith(`bd version ${BEADS_VERSION} `)) {
-    fail("Bundled Beads validation failed");
+  if (existsSync(path.join(STAGING_ROOT, "runtime", "bin", "bd"))) {
+    fail("Central-only artifact must not bundle a native bd binary");
   }
 }
 
@@ -696,7 +634,6 @@ function main() {
   const tarballs = packInternalPackages();
   installProductionPayload(nodeRoot, tarballs);
   copyNodeRuntime(nodeRoot);
-  copyBeadsRuntime();
   createLaunchers();
   createInstallScripts();
   createManifest(nodeRoot);

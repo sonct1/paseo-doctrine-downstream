@@ -133,20 +133,20 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).not.toContain("Room role: Root");
   });
 
-  test("treats a missing protocol as zero delta and rejects an invalid present file", async () => {
+  test("rejects a missing or invalid mandatory protocol", async () => {
     const missing = await createWorkspace();
     const invalid = await createWorkspace();
     await writeFile(join(invalid, "WORKSPACE_PROTOCOL.md"), "# Workspace Protocol\n", "utf8");
 
-    const binding = await materializeRoleBinding({
-      roleId: "lead",
-      provider: "codex",
-      cwd: missing,
-      ...assignmentBinding("lead", missing),
-      assignment: assignmentFor("lead", "mutating"),
-    });
-    expect(binding.workspaceProtocol.status).toBe("missing");
-    expect(binding.instructions).toContain("absent zero-delta");
+    await expect(
+      materializeRoleBinding({
+        roleId: "lead",
+        provider: "codex",
+        cwd: missing,
+        ...assignmentBinding("lead", missing),
+        assignment: assignmentFor("lead", "mutating"),
+      }),
+    ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing`);
     await expect(
       materializeRoleBinding({
         roleId: "peer",
@@ -177,6 +177,9 @@ describe("native Foundation role materialization", () => {
     });
 
     expect(binding.workspaceProtocol.status).toBe("missing");
+    expect(binding.instructions).toContain(
+      "temporarily missing under an exact Human bootstrap exception",
+    );
     expect(binding.assignment?.protocolExceptionExpiresAt).toBe("2026-08-05T01:00:00.000Z");
     const receiptJson = JSON.stringify(toRoleBindingReceipt(binding));
     expect(receiptJson).not.toContain("Inspect repository facts needed for bootstrap");

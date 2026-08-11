@@ -8,7 +8,7 @@ Doctrine: [`../references/demonthorn-agent-orchestration-deep-dive.md`](../refer
 
 ```text
 standing role profile
-  + optional WORKSPACE_PROTOCOL.md for Lead when repo tactics differ materially
+  + mandatory WORKSPACE_PROTOCOL.md with the Beads Central invariant and thin repo tactics
   + exact role/disposition/lease
   + bounded objective, scope, routing/effort override, evidence, handback, stop condition
 ```
@@ -26,6 +26,7 @@ Provider/profile/mode chỉ transport capability. Authority đến từ current 
 - Creator đặt workspace title theo objective. Title không cấp authority.
 - Sau thay đổi chạm daemon/runtime, chỉ build và reload/restart main Paseo daemon khi fresh authoritative readback chứng minh không có agent `running`/`starting` và không có workspace script đang chạy. Nếu state active hoặc không xác định chắc thì không restart; activation phải giữ nguyên home/listen/relay/WebUI settings trừ khi Human yêu cầu đổi.
 - Provider/model/effort được discover rồi đúng authority pin cho assignment; route không cấp authority và không silent fallback.
+- Beads Central là durable issue/work graph bắt buộc. Mỗi role gọi `beads_status` ở assignment start và material handoff; unavailable thì `BLOCKED`, không fallback native `bd`/tracker khác. Lead giữ graph/closure trong lease, Peer dùng exact granted issue, Supervisor read-only.
 
 ## Lead
 
@@ -36,7 +37,7 @@ Lead phải:
 - bind own Paseo identity và workspace từ runtime-authenticated self context trước broad discovery;
   absence trong broad agent inventory không phải counterevidence vì internal workers có thể bị ẩn;
 - resolve Human objective và exact Lead-of-record lease;
-- đọc full `WORKSPACE_PROTOCOL.md` khi file hiện diện và trích relevant constraints cho Peer;
+- đọc full required `WORKSPACE_PROTOCOL.md` trước orchestration và trích relevant constraints cho Peer;
 - sửa title generic của workspace mình trước first delegation;
 - giao neutral outcome brief thay vì pre-solve rồi yêu cầu Peer confirm;
 - giữ một Owner cho mỗi moving/coupled scope;

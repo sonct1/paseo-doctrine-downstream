@@ -20,15 +20,16 @@ Khi conflict material, đọc exact source. Memory, status, provider ID, runtime
 ## Instruction và authority
 
 - **Role profile:** identity và universal role invariants.
-- **Workspace Protocol:** optional policy delta cho repository có tactics điều phối material và lặp lại.
+- **Workspace Protocol:** mandatory repository contract; luôn giữ fixed Beads Central clause và chỉ thêm thin repo-specific tactics delta.
 - **Assignment:** bounded objective với exact lease, scope, handback và stop condition.
 
-Khi có material repo-specific delta, Workspace Protocol giữ nó trong khoảng mười semantic clauses và
-không lặp universal role invariants, `AGENTS.md` hay one-task details. Repository không có delta dùng
-standing role, existing Harness và bounded assignment; thiếu file không tự block work. Provider/model/
-effort được discover rồi pin trong bounded assignment, không mutate standing role profile.
+Workspace Protocol giữ khoảng mười semantic clauses, không lặp universal role invariants, `AGENTS.md`
+hay one-task details. Mọi repository role-bound phải có root file v3 với issue-tracker clause bắt buộc;
+repo không có tactics riêng vẫn dùng generated thin default. Thiếu/invalid file block ordinary role
+launch; chỉ exact Human-issued bounded bootstrap exception mới được tạo/sửa file. Provider/model/effort
+được discover rồi pin trong bounded assignment, không mutate standing role profile.
 
-Khi file hiện diện, Lead là execution reader duy nhất và đọc trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà chỉ nhận relevant constraints trong assignment.
+Lead là execution reader duy nhất và đọc file bắt buộc trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà nhận relevant constraints, gồm mandatory issue-tracker checkpoint, trong assignment.
 
 Paseo là delegation/lifecycle plane duy nhất; Codex-native và Claude-native agents bị disable. Runtime `full-access` chỉ là capability, không mở rộng lease, ownership, external effects hoặc acceptance authority. Base/generated Codex profiles phải giữ `multi_agent=false`, `multi_agent_v2=false`; role profiles còn có `agents.enabled=false`.
 

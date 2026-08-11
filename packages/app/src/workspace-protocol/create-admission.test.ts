@@ -39,23 +39,21 @@ describe("role create Workspace Protocol admission", () => {
     expect(client.inspectWorkspaceProtocol).not.toHaveBeenCalled();
   });
 
-  test.each(["valid", "missing"] as const)(
-    "admits %s protocol state at the exact workspace root",
-    async (status) => {
-      const client = {
-        inspectWorkspaceProtocol: vi.fn(async () => ({
-          requestId: "inspect-1",
-          ok: true as const,
-          snapshot: snapshot(status),
-        })),
-      };
+  test("admits only a valid protocol at the exact workspace root", async () => {
+    const status = "valid" as const;
+    const client = {
+      inspectWorkspaceProtocol: vi.fn(async () => ({
+        requestId: "inspect-1",
+        ok: true as const,
+        snapshot: snapshot(status),
+      })),
+    };
 
-      await requireWorkspaceProtocolForRole({ ...baseInput, client });
-      expect(client.inspectWorkspaceProtocol).toHaveBeenCalledWith("/repo/worktree");
-    },
-  );
+    await requireWorkspaceProtocolForRole({ ...baseInput, client });
+    expect(client.inspectWorkspaceProtocol).toHaveBeenCalledWith("/repo/worktree");
+  });
 
-  test.each(["invalid", "unreadable"] as const)(
+  test.each(["missing", "invalid", "unreadable"] as const)(
     "routes an existing %s protocol to project settings",
     async (status) => {
       const client = {

@@ -380,6 +380,11 @@ function mergeMutableConfigIntoPersistedConfig(params: {
         ...persisted.daemon?.browserTools,
         enabled: browserToolsEnabled,
       },
+      beadsCentral: {
+        ...persisted.daemon?.beadsCentral,
+        endpoint: mutable.beadsCentral.endpoint,
+        credentialRef: mutable.beadsCentral.credentialRef,
+      },
       autoArchiveAfterMerge: mutable.autoArchiveAfterMerge,
       enableTerminalAgentHooks: mutable.enableTerminalAgentHooks,
       appendSystemPrompt: mutable.appendSystemPrompt,

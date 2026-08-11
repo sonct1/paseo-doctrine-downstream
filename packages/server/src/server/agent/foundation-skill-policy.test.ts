@@ -52,6 +52,18 @@ afterEach(() => {
 });
 
 describe("Foundation skill policy", () => {
+  test("admits the imported mandatory Beads tracker to every Paseo role", () => {
+    const importedManifest = path.resolve(
+      import.meta.dirname,
+      "../../../../../foundation/dist/skills/role-bundles.json",
+    );
+    for (const role of ["lead", "peer", "supervisor"] as const) {
+      expect(loadFoundationSkillPolicy(role, importedManifest).enabledNames).toContain(
+        "beads-issue-tracker",
+      );
+    }
+  });
+
   test("loads exact active and explicit-only role admission", () => {
     const source = manifestPath();
     expect([...loadFoundationSkillPolicy("lead", source).enabledNames]).toEqual(["repo-refresh"]);

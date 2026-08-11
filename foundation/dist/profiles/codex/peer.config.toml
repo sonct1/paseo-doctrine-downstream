@@ -45,4 +45,4 @@ enabled = true
 
 [[skills.config]]
 path = "~/.codex/skills/beads-issue-tracker/SKILL.md"
-enabled = false
+enabled = true

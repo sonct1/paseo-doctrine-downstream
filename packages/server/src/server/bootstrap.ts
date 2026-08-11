@@ -160,7 +160,8 @@ import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-sto
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
-import { BeadsNativeService } from "./beads/beads-native-service.js";
+import { BeadsCentralService } from "./beads/beads-central-service.js";
+import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 import { resolveWorkspaceIdForPath } from "./resolve-workspace-id-for-path.js";
 import {
@@ -406,6 +407,10 @@ export interface PaseoDaemonConfig {
   mcpEnabled?: boolean;
   mcpInjectIntoAgents?: boolean;
   browserToolsEnabled?: boolean;
+  beadsCentral?: {
+    endpoint: string;
+    credentialRef: string;
+  };
   git?: {
     maxProcessesPerSecond: number;
     maxProcessConcurrency: number;
@@ -560,6 +565,10 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     relay: { enabled: config.relayEnabled ?? true },
     mcp: { injectIntoAgents: config.mcpInjectIntoAgents ?? true },
     browserTools: { enabled: config.browserToolsEnabled ?? false },
+    beadsCentral: config.beadsCentral ?? {
+      endpoint: "http://127.0.0.1:8080",
+      credentialRef: "beads-central",
+    },
     providers,
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
@@ -826,11 +835,16 @@ export async function createPaseoDaemon(
   }
 
   const agentStorage = new AgentStorage(config.agentStoragePath, logger);
-  const beadsService = new BeadsNativeService({ paseoHome: config.paseoHome, logger });
   const projectRegistry = new FileBackedProjectRegistry(
     path.join(config.paseoHome, "projects", "projects.json"),
     logger,
   );
+  const beadsService = new BeadsCentralService({
+    logger,
+    getConfig: () => daemonConfigStore.get().beadsCentral,
+    credentialStore: new FoundationCredentialStore(config.paseoHome),
+    projectRegistry,
+  });
   workspaceRegistry = new FileBackedWorkspaceRegistry(
     path.join(config.paseoHome, "projects", "workspaces.json"),
     logger,

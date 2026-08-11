@@ -5,6 +5,7 @@ import { buildProjectSettingsRoute } from "@/utils/host-routes";
 export type WorkspaceProtocolCreateAdmissionFailureKind =
   | "unsupported"
   | "inspection_failed"
+  | "missing"
   | "invalid"
   | "unreadable";
 
@@ -79,7 +80,7 @@ export async function requireWorkspaceProtocolForRole(input: {
       repoRoot: input.repoRoot,
     });
   }
-  if (result.snapshot.status === "valid" || result.snapshot.status === "missing") return;
+  if (result.snapshot.status === "valid") return;
 
   throw new WorkspaceProtocolCreateAdmissionError({
     kind: result.snapshot.status,

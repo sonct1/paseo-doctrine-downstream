@@ -1,0 +1,4 @@
+interface:
+  display_name: "Beads Issue Tracker"
+  short_description: "Use mandatory Paseo Beads Central safely"
+  default_prompt: "Use $beads-issue-tracker to bind this assignment to its durable Beads Central issue and update it within the current role lease."

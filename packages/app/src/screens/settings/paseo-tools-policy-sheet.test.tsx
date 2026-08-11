@@ -175,6 +175,7 @@ function makeConfig(overrides: Partial<MutableDaemonConfig> = {}): MutableDaemon
     relay: { enabled: false },
     mcp: { injectIntoAgents: true },
     browserTools: { enabled: false },
+    beadsCentral: { endpoint: "http://127.0.0.1:8080", credentialRef: "beads-central" },
     providers: {},
     metadataGeneration: { providers: [] },
     autoArchiveAfterMerge: false,

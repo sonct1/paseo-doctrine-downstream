@@ -23,6 +23,7 @@ export const WorkspaceProtocolIssueSchema = z.enum([
   "missing_review_evidence",
   "missing_escalation",
   "missing_exceptions",
+  "missing_issue_tracker",
   "too_large",
 ]);
 

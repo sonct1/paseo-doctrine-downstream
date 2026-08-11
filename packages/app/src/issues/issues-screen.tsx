@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { router } from "expo-router";
-import { ListChecks, Plus, RotateCw, ShieldCheck } from "lucide-react-native";
+import { ListChecks, Plus, RotateCw, Settings2, ShieldCheck } from "lucide-react-native";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import type {
@@ -18,8 +18,10 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostFeature } from "@/runtime/host-features";
 import { useHostRuntimeIsConnected } from "@/runtime/host-runtime";
+import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import type { Theme } from "@/styles/theme";
 import { buildHostProjectIssueRoute, buildHostProjectIssuesRoute } from "@/utils/host-routes";
+import { BeadsCentralConnectionSheet } from "./beads-central-connection-sheet";
 import { useIssueMutations, useIssueQuery, useIssuesQuery, type IssueStatusFilter } from "./data";
 
 interface IssuesScreenProps {
@@ -89,7 +91,9 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsIssues = useHostFeature(serverId, "beadsIssues");
   const [creating, setCreating] = useState(false);
+  const [connectionOpen, setConnectionOpen] = useState(false);
   const [filter, setFilter] = useState<IssueStatusFilter>("all");
+  const daemonConfig = useDaemonConfig(serverId);
   const issuesQuery = useIssuesQuery(serverId, projectId, filter, supportsIssues);
   const issues = issuesQuery.data?.issues ?? EMPTY_ISSUES;
 
@@ -105,20 +109,38 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
   const handleRetry = useCallback(() => {
     void issuesQuery.refetch();
   }, [issuesQuery]);
+  const handleOpenConnection = useCallback(() => setConnectionOpen(true), []);
+  const handleCloseConnection = useCallback(() => setConnectionOpen(false), []);
+  const handleConnectionSaved = useCallback(() => {
+    void issuesQuery.refetch();
+  }, [issuesQuery]);
 
   const headerAction = useMemo(
     () => (
-      <Button
-        size="sm"
-        variant="default"
-        leftIcon={Plus}
-        onPress={handleCreate}
-        testID="issues-create-button"
-      >
-        New issue
-      </Button>
+      <View style={styles.headerActions}>
+        <Button
+          size="sm"
+          variant="outline"
+          leftIcon={Settings2}
+          onPress={handleOpenConnection}
+          disabled={daemonConfig.isLoading || !daemonConfig.config}
+          testID="beads-central-configure-button"
+          accessibilityLabel="Configure Beads Central"
+        >
+          {isCompact ? null : "Central"}
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
+          leftIcon={Plus}
+          onPress={handleCreate}
+          testID="issues-create-button"
+        >
+          New issue
+        </Button>
+      </View>
     ),
-    [handleCreate],
+    [daemonConfig.config, daemonConfig.isLoading, handleCreate, handleOpenConnection, isCompact],
   );
 
   let content: ReactNode;
@@ -128,7 +150,7 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
     content = (
       <IssuesEmpty
         title="Update this host to use Issues"
-        description="This Paseo daemon does not advertise the native Beads issue capability."
+        description="This Paseo daemon does not advertise the Beads Central issue capability."
       />
     );
   } else {
@@ -147,6 +169,7 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
         error={issuesQuery.error}
         runtimeVersion={issuesQuery.data?.runtime.version ?? null}
         onRetry={handleRetry}
+        onConfigure={handleOpenConnection}
         onCreate={handleCreate}
         onCancelCreate={handleCancelCreate}
         onCreated={handleCreated}
@@ -163,6 +186,16 @@ export function IssuesScreen({ serverId, projectId, selectedIssueId }: IssuesScr
         />
       )}
       {content}
+      {connectionOpen && daemonConfig.config ? (
+        <BeadsCentralConnectionSheet
+          key={`${daemonConfig.config.beadsCentral.endpoint}:${daemonConfig.config.beadsCentral.credentialRef}`}
+          serverId={serverId}
+          endpoint={daemonConfig.config.beadsCentral.endpoint}
+          credentialRef={daemonConfig.config.beadsCentral.credentialRef}
+          onClose={handleCloseConnection}
+          onSaved={handleConnectionSaved}
+        />
+      ) : null}
     </View>
   );
 }
@@ -181,6 +214,7 @@ interface AvailableIssuesSurfaceProps {
   error: unknown;
   runtimeVersion: string | null;
   onRetry: () => void;
+  onConfigure: () => void;
   onCreate: () => void;
   onCancelCreate: () => void;
   onCreated: (issue: BeadsIssue) => void;
@@ -273,6 +307,7 @@ function IssuesList({
   error,
   runtimeVersion,
   onRetry,
+  onConfigure,
   onCreate,
 }: {
   issues: BeadsIssue[];
@@ -286,15 +321,27 @@ function IssuesList({
   error: unknown;
   runtimeVersion: string | null;
   onRetry: () => void;
+  onConfigure: () => void;
   onCreate: () => void;
 }) {
   if (isLoading) return <CenteredLoading />;
   if (error) {
     return (
       <IssuesEmpty title="Issue graph unavailable" description={errorText(error)}>
-        <Button size="sm" leftIcon={RotateCw} onPress={onRetry} testID="issues-retry-button">
-          Retry
-        </Button>
+        <View style={styles.errorActions}>
+          <Button
+            size="sm"
+            variant="outline"
+            leftIcon={Settings2}
+            onPress={onConfigure}
+            testID="issues-error-configure-button"
+          >
+            Configure Central
+          </Button>
+          <Button size="sm" leftIcon={RotateCw} onPress={onRetry} testID="issues-retry-button">
+            Retry
+          </Button>
+        </View>
       </IssuesEmpty>
     );
   }
@@ -353,7 +400,7 @@ function IssuesList({
         </ScrollView>
       )}
       {runtimeVersion ? (
-        <Text style={styles.runtimeLabel}>Native Beads v{runtimeVersion} · project scoped</Text>
+        <Text style={styles.runtimeLabel}>Beads Central v{runtimeVersion} · project scoped</Text>
       ) : null}
     </View>
   );
@@ -981,6 +1028,18 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minHeight: 0,
     backgroundColor: theme.colors.surface0,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  errorActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing[2],
   },
   desktopBody: {
     flex: 1,

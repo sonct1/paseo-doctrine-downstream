@@ -9,7 +9,7 @@ import type {
   PaseoToolExecutionContext,
   PaseoToolResult,
 } from "../agent/tools/types.js";
-import type { BeadsMutationGuard, BeadsNativeService } from "./beads-native-service.js";
+import type { BeadsMutationGuard, BeadsService } from "./beads-service.js";
 import { registerBeadsTools } from "./beads-tools.js";
 
 interface CapturedTool {
@@ -86,7 +86,7 @@ function createHarness(options: {
   const tools = new Map<string, CapturedTool>();
   registerBeadsTools({
     registerTool: (name, config, handler) => tools.set(name, { config, handler }),
-    service: service as unknown as BeadsNativeService,
+    service: service as unknown as BeadsService,
     agentStorage: {
       get: vi.fn().mockResolvedValue(agent),
     } as unknown as AgentStorage,
@@ -101,6 +101,7 @@ function createHarness(options: {
       get: vi.fn().mockResolvedValue({ projectId: "project-1", archivedAt: null }),
     },
     callerAgentId: "peer-1",
+    roleId: options.roleId,
   });
   return { tools, service, issue };
 }
@@ -111,7 +112,7 @@ function tool(harness: ReturnType<typeof createHarness>, name: string): Captured
   return registered;
 }
 
-describe("native Beads Paseo tools", () => {
+describe("Beads Central Paseo tools", () => {
   it("derives project and actor from the caller instead of accepting client-selected identity", async () => {
     const harness = createHarness({
       roleId: "peer",
@@ -141,7 +142,7 @@ describe("native Beads Paseo tools", () => {
     );
   });
 
-  it("guards a granted Peer claim before the native mutation", async () => {
+  it("guards a granted Peer claim before the Central mutation", async () => {
     const harness = createHarness({ roleId: "peer", assignee: null });
 
     await tool(harness, "beads_claim").handler(
@@ -207,15 +208,10 @@ describe("native Beads Paseo tools", () => {
     expect(peer.service.update).not.toHaveBeenCalled();
   });
 
-  it("keeps binding closure Lead-owned and requires Peer discoveries to retain provenance", async () => {
+  it("omits binding closure for a Peer and requires discoveries to retain provenance", async () => {
     const peer = createHarness({ roleId: "peer", assignee: "paseo-agent-peer-1" });
 
-    await expect(
-      tool(peer, "beads_close").handler(
-        { issueId: "ps123-abc", reason: "done", idempotencyKey: "close-1" },
-        {},
-      ),
-    ).rejects.toThrow("Only the role-bound Lead may close");
+    expect(peer.tools.has("beads_close")).toBe(false);
     await expect(
       tool(peer, "beads_create").handler(
         {
@@ -242,18 +238,17 @@ describe("native Beads Paseo tools", () => {
     expect(peer.service.create).not.toHaveBeenCalled();
   });
 
-  it("lets a Supervisor read but rejects every write path", async () => {
+  it("gives a Supervisor only the read-only tracker surface", async () => {
     const supervisor = createHarness({ roleId: "supervisor", assignee: null });
 
     await expect(
       tool(supervisor, "beads_get").handler({ issueId: "ps123-abc" }, {}),
     ).resolves.toMatchObject({ structuredContent: { projectId: "project-1" } });
-    await expect(
-      tool(supervisor, "beads_claim").handler(
-        { issueId: "ps123-abc", idempotencyKey: "claim-1" },
-        {},
-      ),
-    ).rejects.toThrow("Supervisor may inspect Beads but cannot mutate");
+    expect(supervisor.tools.has("beads_create")).toBe(false);
+    expect(supervisor.tools.has("beads_claim")).toBe(false);
+    expect(supervisor.tools.has("beads_update")).toBe(false);
+    expect(supervisor.tools.has("beads_close")).toBe(false);
+    expect(supervisor.tools.has("beads_add_dependency")).toBe(false);
     expect(supervisor.service.claim).not.toHaveBeenCalled();
   });
 

@@ -63,13 +63,6 @@ jobs:
       - name: Build downstream WebUI + CLI artifact
         run: npm run build:macos-web-cli-artifact
 
-      - name: Test native Beads service against bundled runtime
-        shell: bash
-        run: |
-          version=$(node -p "require('./package.json').version")
-          PASEO_BEADS_BINARY="$PWD/artifacts/paseo-web-cli-$version-macos-${{ matrix.arch }}/runtime/bin/bd" \
-            npx vitest run packages/server/src/server/beads/beads-native-service.local.e2e.test.ts --bail=1
-
       - name: Smoke artifact
         run: npm run test:macos-web-cli-artifact
 

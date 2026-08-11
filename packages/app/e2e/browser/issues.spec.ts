@@ -3,14 +3,22 @@ import { expect, test } from "../support/fixtures";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 
-test.describe("Native Beads issue surface", () => {
+test.describe("Beads Central issue surface", () => {
   test.skip(
-    !process.env.PASEO_BEADS_BINARY,
-    "Requires an explicitly pinned native Beads binary for the isolated daemon.",
+    !process.env.PASEO_BEADS_CENTRAL_URL || !process.env.PASEO_BEADS_CENTRAL_TOKEN,
+    "Requires an explicitly pinned Beads Central endpoint and credential for the isolated daemon.",
   );
 
-  test("creates, reads, closes, and isolates project issue graphs", async ({ page }, testInfo) => {
+  test("creates, reads, closes, and isolates project issue graphs", async ({
+    page,
+    e2eWorkerClient,
+  }, testInfo) => {
     test.setTimeout(120_000);
+    const daemonConfig = await e2eWorkerClient.getDaemonConfig();
+    expect(daemonConfig.config.beadsCentral).toEqual({
+      endpoint: process.env.PASEO_BEADS_CENTRAL_URL,
+      credentialRef: "beads-central",
+    });
     const first = await seedWorkspace({ repoPrefix: "beads-ui-one-" });
     const second = await seedWorkspace({ repoPrefix: "beads-ui-two-" });
     try {
@@ -20,8 +28,22 @@ test.describe("Native Beads issue surface", () => {
 
       await expect(page.getByTestId("issues-screen")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByText("No issues yet", { exact: true })).toBeVisible();
+      await page.getByTestId("beads-central-configure-button").click();
+      const connectionSheet = page.getByTestId("beads-central-connection-sheet");
+      await expect(connectionSheet).toBeVisible();
+      await expect(
+        connectionSheet.getByText("There is no native backend or fallback.", { exact: false }),
+      ).toBeVisible();
+      await expect(
+        connectionSheet.getByTestId("beads-central-endpoint").getByRole("textbox"),
+      ).not.toHaveValue("");
+      await expect(
+        connectionSheet.getByTestId("beads-central-credential-ref").getByRole("textbox"),
+      ).toHaveValue("beads-central");
+      await connectionSheet.getByRole("button", { name: "Cancel" }).click();
+      await expect(connectionSheet).toHaveCount(0);
       await page.getByTestId("issues-create-button").first().click();
-      await page.getByTestId("issue-create-title").fill("Qualify native Beads in Paseo");
+      await page.getByTestId("issue-create-title").fill("Qualify Beads Central in Paseo");
       await page
         .getByTestId("issue-create-description")
         .fill("Exercise the Human WebUI against the daemon-owned project graph.");
@@ -35,7 +57,7 @@ test.describe("Native Beads issue surface", () => {
       const detail = page.locator('[data-testid^="issue-detail-"]:visible');
       await expect(detail).toBeVisible({ timeout: 30_000 });
       await expect(
-        detail.getByText("Qualify native Beads in Paseo", { exact: true }),
+        detail.getByText("Qualify Beads Central in Paseo", { exact: true }),
       ).toBeVisible();
       await expect(
         detail.getByText("Exercise the Human WebUI against the daemon-owned project graph.", {
@@ -61,7 +83,7 @@ test.describe("Native Beads issue surface", () => {
       );
 
       const issuesList = page.getByTestId("issues-list");
-      await issuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }).click();
+      await issuesList.getByRole("button", { name: /^Qualify Beads Central in Paseo,/u }).click();
       await detail.getByTestId("issue-close-button").click();
       await detail
         .getByTestId("issue-close-reason")
@@ -72,7 +94,7 @@ test.describe("Native Beads issue surface", () => {
         detail.getByText("Preserve close draft isolation", { exact: true }),
       ).toBeVisible();
 
-      await issuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }).click();
+      await issuesList.getByRole("button", { name: /^Qualify Beads Central in Paseo,/u }).click();
       await expect(detail.getByTestId("issue-close-form")).toHaveCount(0);
       await detail.getByTestId("issue-close-button").click();
       await detail
@@ -87,7 +109,7 @@ test.describe("Native Beads issue surface", () => {
       await page.getByRole("button", { name: "Closed", exact: true }).click();
       await expect(
         visibleIssuesList.getByRole("button", {
-          name: /^Qualify native Beads in Paseo, Closed,/u,
+          name: /^Qualify Beads Central in Paseo, Closed,/u,
         }),
       ).toBeVisible();
       await expect(
@@ -100,7 +122,7 @@ test.describe("Native Beads issue surface", () => {
         }),
       ).toBeVisible();
       await expect(
-        visibleIssuesList.getByRole("button", { name: /^Qualify native Beads in Paseo,/u }),
+        visibleIssuesList.getByRole("button", { name: /^Qualify Beads Central in Paseo,/u }),
       ).toHaveCount(0);
       await expect(page.locator('[data-testid="issues-truncation-notice"]:visible')).toHaveCount(0);
       await page.getByRole("button", { name: "All", exact: true }).click();
@@ -113,16 +135,28 @@ test.describe("Native Beads issue surface", () => {
       await expect(
         page.getByText("No issues yet", { exact: true }).filter({ visible: true }),
       ).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByText("Qualify native Beads in Paseo", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Qualify Beads Central in Paseo", { exact: true })).toHaveCount(
+        0,
+      );
 
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(buildHostProjectIssuesRoute(getServerId(), first.projectId));
       await expect(page.getByTestId("issues-list")).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByText("Qualify native Beads in Paseo", { exact: true })).toBeVisible();
+      await expect(page.getByText("Qualify Beads Central in Paseo", { exact: true })).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("beads-issue-compact.png"),
         animations: "disabled",
       });
+      await page.getByTestId("beads-central-configure-button").click();
+      await expect(connectionSheet).toBeVisible();
+      const compactSave = page.getByRole("button", { name: "Save and retry" });
+      await compactSave.scrollIntoViewIfNeeded();
+      await expect(compactSave).toBeVisible();
+      await page.screenshot({
+        path: testInfo.outputPath("beads-central-connection-compact.png"),
+        animations: "disabled",
+      });
+      await page.getByRole("button", { name: "Cancel" }).click();
     } finally {
       await Promise.all([first.cleanup(), second.cleanup()]);
     }

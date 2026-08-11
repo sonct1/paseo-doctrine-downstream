@@ -90,7 +90,7 @@ import {
 import { registerBrowserTools } from "../../browser-tools/tools.js";
 import type { BrowserToolsBroker } from "../../browser-tools/broker.js";
 import { registerBeadsTools } from "../../beads/beads-tools.js";
-import type { BeadsNativeService } from "../../beads/beads-native-service.js";
+import type { BeadsService } from "../../beads/beads-service.js";
 import type {
   PaseoToolCatalog,
   PaseoToolConfig,
@@ -160,7 +160,7 @@ export interface PaseoToolHostDependencies {
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
-  beadsService?: BeadsNativeService | null;
+  beadsService?: BeadsService | null;
   paseoToolPolicy?: ProviderPaseoToolsPolicy;
   paseoHome?: string;
   worktreesRoot?: string;
@@ -194,6 +194,7 @@ function registerConfiguredBeadsTools(
     workspaceRegistry: options.workspaceRegistry,
     projectRegistry: options.projectRegistry,
     callerAgentId: options.callerAgentId,
+    roleId: caller.roleBinding.roleId,
   });
 }
 

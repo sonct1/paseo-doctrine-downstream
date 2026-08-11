@@ -87,6 +87,38 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.relay?.enabled).toBe(true);
   });
 
+  test("patch persists the Central endpoint and credential reference without a secret", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-central-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      beadsCentral: {
+        endpoint: "http://127.0.0.1:8080",
+        credentialRef: "beads-central",
+      },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({
+      beadsCentral: {
+        endpoint: "https://central.example.internal/paseo",
+        credentialRef: "beads-production",
+      },
+    });
+
+    expect(loadPersistedConfig(paseoHome).daemon?.beadsCentral).toEqual({
+      endpoint: "https://central.example.internal/paseo",
+      credentialRef: "beads-production",
+    });
+    expect(JSON.stringify(store.get())).not.toContain("token");
+  });
+
   test("materializes only a credential file path in provider runtime env", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

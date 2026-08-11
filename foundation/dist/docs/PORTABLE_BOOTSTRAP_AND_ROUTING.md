@@ -1,4 +1,4 @@
-# Optional protocol bootstrap và routing status
+# Mandatory protocol bootstrap và routing status
 
 Trạng thái: repository candidate; activation/qualification theo từng route
 Runtime snapshots: Paseo `0.2.5`; OpenCode `1.18.12`; OMP `17.2.1`;
@@ -9,32 +9,32 @@ Cursor Agent `2026.07.23-e383d2b`; Antigravity `1.1.10`; observed `2026-08-04`
 Foundation giữ đúng ba layer:
 
 1. standing role profile chứa identity và universal authority boundary;
-2. optional root `WORKSPACE_PROTOCOL.md` chỉ chứa material repository tactics cần sống qua task;
+2. mandatory root `WORKSPACE_PROTOCOL.md` giữ fixed Beads Central invariant và thin repository tactics;
 3. bounded assignment chứa objective, disposition, lease, route, evidence, handback và stop.
 
-Repository không có material tactics delta bỏ qua layer 2; authority vẫn đến từ Human/Lead assignment.
-Bootstrap chỉ tạo optional artifact cho layer 2, không tạo instruction layer thứ tư, không tự cấp
-authority và không biến validator thành admission hoặc acceptance engine.
+Repository không có material tactics riêng vẫn cần layer 2 vì issue tracker là protocol invariant;
+authority vẫn đến từ Human/Lead assignment. Bootstrap chỉ tạo mandatory root artifact, không tạo
+instruction layer thứ tư, không tự cấp authority và không biến validator thành acceptance engine.
 
-Canonical template chỉ giữ chín repo-specific clauses. Universal role invariants ở standing profile,
+Canonical template giữ chín repo-specific clauses cộng một fixed issue-tracker clause. Universal role invariants ở standing profile,
 engineering convention ở `AGENTS.md`/Project Harness, còn one-task lease và provider/model/effort
 route ở assignment. Không dùng line count cứng cho target repository; validator chỉ kiểm integrity của
-file hiện diện, không ép target theo taxonomy của template.
+file, v3 marker và mandatory tracker clause; không ép target theo wording của các repo-specific clauses.
 
-## Optional bootstrap
+## Bounded bootstrap
 
-Không có root `WORKSPACE_PROTOCOL.md` nghĩa là repository khai báo zero delta; standing role,
-existing Harness và bounded assignment govern work. Khi owner tạo file vì có material recurring
-tactics, command sau kiểm nonempty, placeholder, conflict marker, marker identity và minimal identity:
+Không có hoặc invalid root `WORKSPACE_PROTOCOL.md` block ordinary role launch. Chỉ exact
+Human-issued bootstrap exception với scope/expiry mới cho phép bounded creation/repair. Command sau kiểm
+nonempty, placeholder, conflict marker, v3 marker, minimal identity và mandatory Beads Central clause:
 
 ```bash
 scripts/validate-foundation --check-protocol /path/to/repository
 ```
 
-File absent trả pass với kết luận “no repository protocol delta”. File present nhưng invalid làm check
-fail để Lead không dùng corrupted/ambiguous tactics; kết quả pass chỉ là byte validity, không phải
-semantic review, role binding, authority hay project readiness. Supervisor chỉ create/audit file khi có
-exact governance mandate và không self-approve.
+File absent hoặc invalid đều fail. Kết quả pass chỉ là byte validity, không phải semantic review, role
+binding, assignment authority, engineering readiness hay acceptance. Supervisor chỉ create/audit file
+khi có exact governance mandate và không self-approve. Bootstrap exception hết hiệu lực ở declared stop
+hoặc expiry; ordinary work cần fresh valid binding.
 
 ## OpenCode role candidates
 
