@@ -420,7 +420,17 @@ escape_xml() {
   printf '%s' "$1" | sed -e 's/&/\\&amp;/g' -e 's/</\\&lt;/g' -e 's/>/\\&gt;/g' -e 's/"/\\&quot;/g' -e "s/'/\\&apos;/g"
 }
 
-PASEO_BIN=$(escape_xml "$CURRENT_LINK/bin/paseo")
+DAEMON_NODE="$CURRENT_LINK/runtime/bin/node"
+HOST_NODE=$(command -v node 2>/dev/null || true)
+if [ -n "$HOST_NODE" ] && [ -x "$HOST_NODE" ] &&
+   "$HOST_NODE" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' >/dev/null 2>&1; then
+  # A compatible user-installed Node retains macOS privacy grants that may not
+  # carry over to the relocated bundled binary when launchd opens Desktop or Documents workspaces.
+  DAEMON_NODE="$HOST_NODE"
+fi
+DAEMON_ENTRY="$CURRENT_LINK/app/node_modules/@getpaseo/cli/dist/index.js"
+DAEMON_NODE_XML=$(escape_xml "$DAEMON_NODE")
+DAEMON_ENTRY_XML=$(escape_xml "$DAEMON_ENTRY")
 LISTEN_XML=$(escape_xml "$LISTEN")
 PATH_XML=$(escape_xml "$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
 LOG_DIR="$HOME/Library/Logs/Paseo"
@@ -432,7 +442,8 @@ cat > "$PLIST" <<PLIST
 <plist version="1.0"><dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key><array>
-    <string>$PASEO_BIN</string><string>daemon</string><string>start</string>
+    <string>$DAEMON_NODE_XML</string><string>$DAEMON_ENTRY_XML</string>
+    <string>daemon</string><string>start</string>
     <string>--foreground</string><string>--listen</string><string>$LISTEN_XML</string>
     <string>--web-ui</string><string>--no-relay</string>
   </array>

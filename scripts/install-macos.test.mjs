@@ -255,6 +255,44 @@ exit 99
   }
 });
 
+test("artifact installer prefers a compatible host Node for the launchd daemon", () => {
+  const fixture = createArtifactFixture("#!/bin/sh\nexit 99\n");
+  const hostNode = path.join(fixture.oldBin, "node");
+  writeExecutable(
+    hostNode,
+    `#!/bin/sh
+case "$1" in
+  -e) exit 0 ;;
+  *) exit 2 ;;
+esac
+`,
+  );
+  try {
+    const result = runArtifactFixture(fixture, [
+      "--prefix",
+      fixture.prefix,
+      "--bin-dir",
+      fixture.binDir,
+      "--no-start",
+      "--skip-foundation",
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const plist = readFileSync(
+      path.join(fixture.home, "Library", "LaunchAgents", "com.paseo.web-cli.plist"),
+      "utf8",
+    );
+    assert.match(plist, new RegExp(`<string>${hostNode}</string>`));
+    assert.match(
+      plist,
+      new RegExp(
+        `<string>${fixture.prefix}/current/app/node_modules/@getpaseo/cli/dist/index.js</string>`,
+      ),
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("artifact installer retries launchd bootstrap after an idle-daemon takeover race", () => {
   const fixture = createArtifactFixture(`#!/bin/sh
 printf '%s\\n' "$*" >> "$EXISTING_PASEO_MARKER"
