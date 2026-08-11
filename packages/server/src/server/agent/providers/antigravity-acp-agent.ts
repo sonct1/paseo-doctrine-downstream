@@ -5,12 +5,7 @@ import { isAbsolute, join } from "node:path";
 import type { Logger } from "pino";
 
 import { findExecutable } from "../../../executable-resolution/executable-resolution.js";
-import type {
-  AgentLaunchContext,
-  AgentSessionConfig,
-  FetchCatalogOptions,
-  ProviderCatalog,
-} from "../agent-sdk-types.js";
+import type { AgentLaunchContext, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { ACPSessionLaunchPreparation, SessionStateResponse } from "./acp-agent.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
@@ -232,11 +227,6 @@ export class AntigravityACPAgentClient extends GenericACPAgentClient {
     this.roleProfileRoot = options.roleProfileRoot;
     this.roleTemporaryRoot = options.roleTemporaryRoot;
     this.resolveRoleExecutable = options.resolveExecutable;
-  }
-
-  override async fetchCatalog(options: FetchCatalogOptions): Promise<ProviderCatalog> {
-    const catalog = await super.fetchCatalog(options);
-    return catalog.modes.length === 0 ? { ...catalog, defaultModeId: null } : catalog;
   }
 
   protected override async prepareSessionLaunch(
