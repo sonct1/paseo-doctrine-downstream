@@ -6,6 +6,11 @@
       "source": "references/demonthorn-skills-refs/architecture-premise-audit.md",
       "admission": "active"
     },
+    "beads-issue-tracker": {
+      "provenance": "FOUNDATION_AUTHORED",
+      "source": "skills/beads-issue-tracker/SKILL.md",
+      "admission": "packaged-disabled"
+    },
     "frontend-design": {
       "provenance": "DEMONTHORN_EXACT",
       "source": "references/demonthorn-skills-refs/frontend-design/SKILL.md",
@@ -26,22 +31,22 @@
       "source": "references/demonthorn-skills-refs/test-proof-debt-audit/SKILL.md",
       "admission": "active"
     },
-    "ultra-review": {
-      "provenance": "DEMONTHORN_EXACT",
-      "source": "references/demonthorn-skills-refs/ultra-review/SKILL.md",
-      "admission": "packaged-disabled"
+    "triple-review": {
+      "provenance": "FOUNDATION_AUTHORED",
+      "source": "skills/triple-review/SKILL.md",
+      "admission": "explicit-only"
     }
   },
   "roles": {
     "lead": {
       "active": [],
-      "explicitOnly": ["repo-refresh"],
-      "packagedDisabled": ["ultra-review"]
+      "explicitOnly": ["repo-refresh", "triple-review"],
+      "packagedDisabled": ["beads-issue-tracker"]
     },
     "peer": {
       "active": ["frontend-design"],
       "explicitOnly": [],
-      "packagedDisabled": []
+      "packagedDisabled": ["beads-issue-tracker", "triple-review"]
     },
     "supervisor": {
       "active": [
@@ -50,7 +55,7 @@
         "test-proof-debt-audit"
       ],
       "explicitOnly": [],
-      "packagedDisabled": []
+      "packagedDisabled": ["beads-issue-tracker", "triple-review"]
     }
   }
 }

@@ -67,7 +67,10 @@ describe("Foundation skill policy", () => {
     const policy = loadFoundationSkillPolicy("peer", "/missing/role-bundles.json");
     expect(policy.status).toBe("missing-or-invalid");
     expect(policy.enabledNames.size).toBe(0);
+    expect(policy.packageNames).toContain("beads-issue-tracker");
     expect(policy.packageNames).toContain("paseo-supervisor");
+    expect(policy.packageNames).toContain("triple-review");
+    expect(policy.packageNames).toContain("ultra-review");
   });
 
   test("replaces only Foundation entries in Codex skills.config", () => {

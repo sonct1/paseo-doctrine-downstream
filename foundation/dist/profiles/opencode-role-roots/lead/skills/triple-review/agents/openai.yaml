@@ -1,0 +1,4 @@
+interface:
+  display_name: "Triple Review"
+  short_description: "Run sealed semantic and private coverage review lanes"
+  default_prompt: "Use $triple-review to review one stable candidate through two semantic seats and the private provider-neutral review coverage seat."

@@ -34,9 +34,13 @@ path = "~/.codex/skills/repo-refresh/SKILL.md"
 enabled = true
 
 [[skills.config]]
-path = "~/.codex/skills/ultra-review/SKILL.md"
-enabled = false
+path = "~/.codex/skills/triple-review/SKILL.md"
+enabled = true
 
 [[skills.config]]
 path = "~/.codex/skills/frontend-design/SKILL.md"
+enabled = false
+
+[[skills.config]]
+path = "~/.codex/skills/beads-issue-tracker/SKILL.md"
 enabled = false

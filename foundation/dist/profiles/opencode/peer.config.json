@@ -12,11 +12,12 @@
         "task": "deny",
         "skill": {
           "architecture-premise-audit": "deny",
+          "beads-issue-tracker": "deny",
           "frontend-design": "allow",
           "paseo-supervisor": "deny",
           "repo-refresh": "deny",
           "test-proof-debt-audit": "deny",
-          "ultra-review": "deny"
+          "triple-review": "deny"
         }
       }
     }

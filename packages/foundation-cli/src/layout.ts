@@ -25,10 +25,13 @@ export interface InstallLayout {
 
 export const FOUNDATION_SKILL_NAMES = [
   "architecture-premise-audit",
+  "beads-issue-tracker",
   "frontend-design",
   "paseo-supervisor",
   "repo-refresh",
   "test-proof-debt-audit",
+  "triple-review",
+  // Retained for migration/uninstall compatibility with older distributions.
   "ultra-review",
 ] as const;
 

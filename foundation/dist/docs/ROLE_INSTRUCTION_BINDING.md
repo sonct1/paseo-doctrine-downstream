@@ -84,7 +84,7 @@ Codex role profile đồng thời pin `skills.config` theo exact installed path.
 
 | Role | Enabled skill |
 |---|---|
-| Lead | `repo-refresh` (`explicit-only`) |
+| Lead | `repo-refresh`, `triple-review` (đều `explicit-only`) |
 | Peer | `frontend-design` |
 | Supervisor | `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` |
 
@@ -94,9 +94,30 @@ package provenance/admission map; provider projection phải derive từ file n�
 Exact Demonthorn package giữ exact bytes. `architecture-premise-audit` là
 `FOUNDATION_DERIVATIVE`: active package bỏ dependency MMO không liên quan nhưng historical source vẫn
 giữ nguyên để audit lineage. `repo-refresh` chỉ được explicit invocation trong exact Lead lease;
-`frontend-design` chỉ dùng khi target owner yêu cầu rendered UI work. Exact `ultra-review` được ship
-nhưng `packaged-disabled`; chỉ một Foundation-authored adaptation đã thay native subagent/provider/path
-hard-code và có complete receive/verification path mới có thể xin admission riêng.
+`frontend-design` chỉ dùng khi target owner yêu cầu rendered UI work. Historical exact `ultra-review`
+chỉ còn trong `references/` để giữ provenance; Foundation-authored `triple-review` giữ một explicit-only
+Lead route gồm ba sealed Paseo lane, private `review` specialization và Lead-owned verdict.
+Peer/Supervisor không được admit skill này.
+
+[`profiles/native/execution-specializations.json`](../profiles/native/execution-specializations.json) là
+provider-neutral SLP overlay trên Peer, không phải bản copy full provider config của nguồn tham khảo và
+không phải role thứ tư. Standing specialization chỉ giữ adapted review behavior và `foundationSkills=none`;
+provider/model/effort/mode được Lead pin trong private bounded assignment, rồi existing provider adapter
+inject cùng immutable role bytes qua native durable channel. Specialization kế thừa nguyên provider
+support của role-bound Peer trong SLP; nó không có provider allowlist, model preference hoặc qualification
+layer riêng. Internal selector dependency chỉ tồn tại trong private specialization instructions và được
+exact seat tự kiểm tra sau routing; ordinary Lead/Peer handback không expose executable hoặc command.
+
+Quy tắc này áp dụng cho mọi execution specialization tương lai, không riêng `review`: thêm một canonical
+registry entry dưới authority role hiện có, compose qua common `RoleBinding`, rồi kế thừa toàn bộ provider
+support của role đó. Không tạo `profiles/codex/<specialization>`, provider alias, launcher hay prompt copy.
+Checklist bắt buộc gồm authority/discoverability boundary, exact-byte persistence qua resume, common-channel
+tests và validator provider-neutrality. [`D-031`](CURRENT_DECISIONS.md#d-031--execution-specialization-là-native-role-overlay-không-phải-provider-profile)
+giữ durable decision; provider-specific config được cung cấp chỉ là behavioral reference.
+
+Product dist hiện hành có thể dùng một digest-pinned compatibility fallback khi imported immutable
+Foundation release chưa chứa registry. Đây là migration exception ngoài provider adapters, không nhận
+specialization mới và phải bị xóa ở clean import kế tiếp có canonical artifact.
 
 Provider-native không đồng nghĩa user-global. Codex dùng global package link cộng `skills.config`
 theo role. Claude dùng role plugin được chọn bằng `--plugin-dir`; OpenCode dùng isolated role config

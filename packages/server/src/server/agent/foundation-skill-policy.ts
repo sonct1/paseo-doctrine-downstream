@@ -6,10 +6,14 @@ import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
 const KNOWN_FOUNDATION_SKILLS = [
   "architecture-premise-audit",
+  "beads-issue-tracker",
   "frontend-design",
   "paseo-supervisor",
   "repo-refresh",
   "test-proof-debt-audit",
+  "triple-review",
+  // Retired package name kept here so missing/invalid manifests disable stale
+  // user-global copies instead of leaking them into a role inventory.
   "ultra-review",
 ] as const;
 
