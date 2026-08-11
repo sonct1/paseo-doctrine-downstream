@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.1-paseo.3 - 2026-08-11
+
+This downstream patch is based on upstream Paseo 0.3.1.
+
+### Added
+
+- Add a native, project-scoped Beads work graph with WebUI create, inspect, and close flows plus role-scoped agent tools.
+- Import Foundation 0.1.0-dev.10 with explicit optional Beads issue-tracker and independent-review specializations.
+
+### Improved
+
+- Keep Council as a workspace-portable projection over existing agents while isolating cases by daemon, workspace, and accountable parent Lead.
+- Show Council report readiness, seat integrity, disposition, and Lead-linked verdict provenance without introducing a second lifecycle engine or vote.
+- Preserve native provider identity and immutable role-binding receipts across Codex, Claude, Cursor ACP, Gemini Antigravity ACP, and custom Codex routes.
+- Report provider modes and model labels from discovered runtime metadata instead of inventing fallback values.
+
+### Fixed
+
+- Enforce Beads project scope, idempotent issue mutations, close receipts, and Peer write boundaries at the daemon service layer.
+- Keep compromised, missing, redundant, and claim-mismatched Council evidence out of report-ready counts.
+- Keep platform-specific launch and package probes honest when tests run on a different host OS.
+
 ## 0.3.1-paseo.2 - 2026-08-10
 
 This downstream patch is based on upstream Paseo 0.3.1.
