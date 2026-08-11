@@ -431,6 +431,7 @@ fi
 DAEMON_ENTRY="$CURRENT_LINK/app/node_modules/@getpaseo/cli/dist/index.js"
 DAEMON_NODE_XML=$(escape_xml "$DAEMON_NODE")
 DAEMON_ENTRY_XML=$(escape_xml "$DAEMON_ENTRY")
+BEADS_BINARY_XML=$(escape_xml "$CURRENT_LINK/runtime/bin/bd")
 LISTEN_XML=$(escape_xml "$LISTEN")
 PATH_XML=$(escape_xml "$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
 LOG_DIR="$HOME/Library/Logs/Paseo"
@@ -450,6 +451,7 @@ cat > "$PLIST" <<PLIST
   <key>EnvironmentVariables</key><dict>
     <key>HOME</key><string>$(escape_xml "$HOME")</string>
     <key>PATH</key><string>$PATH_XML</string>
+    <key>PASEO_BEADS_BINARY</key><string>$BEADS_BINARY_XML</string>
     <key>PASEO_DICTATION_ENABLED</key><string>0</string>
     <key>PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD</key><string>0</string>
     <key>PASEO_VOICE_MODE_ENABLED</key><string>0</string>

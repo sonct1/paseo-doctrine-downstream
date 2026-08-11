@@ -288,6 +288,12 @@ esac
         `<string>${fixture.prefix}/current/app/node_modules/@getpaseo/cli/dist/index.js</string>`,
       ),
     );
+    assert.match(
+      plist,
+      new RegExp(
+        `<key>PASEO_BEADS_BINARY</key><string>${fixture.prefix}/current/runtime/bin/bd</string>`,
+      ),
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
