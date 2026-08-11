@@ -2079,6 +2079,7 @@ describe("ACPAgentClient sessionResponseTransformer", () => {
       client.fetchCatalog({ scope: "workspace", cwd: "/tmp/acp-modes", force: false }),
     ).resolves.toEqual({
       models: [],
+      defaultModeId: "review",
       modes: [
         {
           id: "review",

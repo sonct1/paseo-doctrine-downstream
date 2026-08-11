@@ -6,7 +6,7 @@ import type { Logger } from "pino";
 
 import { findExecutable } from "../../../executable-resolution/executable-resolution.js";
 import type { AgentLaunchContext, AgentSessionConfig } from "../agent-sdk-types.js";
-import type { ACPSessionLaunchPreparation } from "./acp-agent.js";
+import type { ACPSessionLaunchPreparation, SessionStateResponse } from "./acp-agent.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 interface AntigravityACPAgentClientOptions {
@@ -19,6 +19,46 @@ interface AntigravityACPAgentClientOptions {
   roleProfileRoot?: string;
   roleTemporaryRoot?: string;
   resolveExecutable?: (name: string) => Promise<string | null>;
+}
+
+function splitAntigravityModelValue(value: string): { value: string; label: string | null } {
+  const separator = value.indexOf("\t");
+  if (separator < 0) {
+    return { value: value.trim(), label: null };
+  }
+  const id = value.slice(0, separator).trim();
+  const label = value.slice(separator + 1).trim();
+  return {
+    value: id || value.trim(),
+    label: label || null,
+  };
+}
+
+export function transformAntigravitySessionResponse(
+  response: SessionStateResponse,
+): SessionStateResponse {
+  if (!response.models) {
+    return response;
+  }
+
+  return {
+    ...response,
+    models: {
+      ...response.models,
+      currentModelId: response.models.currentModelId
+        ? splitAntigravityModelValue(response.models.currentModelId).value
+        : response.models.currentModelId,
+      availableModels: response.models.availableModels.map((model) => {
+        const modelId = splitAntigravityModelValue(model.modelId);
+        const modelName = splitAntigravityModelValue(model.name);
+        return {
+          ...model,
+          modelId: modelId.value,
+          name: modelName.label ?? modelId.label ?? modelName.value,
+        };
+      }),
+    },
+  };
 }
 
 function sha256(value: string): string {
@@ -179,7 +219,10 @@ export class AntigravityACPAgentClient extends GenericACPAgentClient {
   private readonly resolveRoleExecutable?: (name: string) => Promise<string | null>;
 
   constructor(options: AntigravityACPAgentClientOptions) {
-    super(options);
+    super({
+      ...options,
+      sessionResponseTransformer: transformAntigravitySessionResponse,
+    });
     this.roleCommand = options.command;
     this.roleProfileRoot = options.roleProfileRoot;
     this.roleTemporaryRoot = options.roleTemporaryRoot;

@@ -27,6 +27,18 @@ function getStaticProviders(): ProviderListItem[] {
   return PROVIDERS;
 }
 
+export function toProviderListItem(entry: ProviderSnapshotEntry): ProviderListItem {
+  const modes = entry.modes ?? [];
+  return {
+    provider: entry.provider,
+    label: entry.label ?? entry.provider,
+    status: entry.status === "ready" ? "available" : entry.status,
+    enabled: !entry.enabled ? "Disabled" : "Enabled",
+    defaultMode: entry.defaultModeId ?? "-",
+    modes: modes.length > 0 ? modes.map((mode) => mode.label).join(", ") : "-",
+  };
+}
+
 /** Schema for provider ls output */
 export const providerLsSchema: OutputSchema<ProviderListItem> = {
   idField: "provider",
@@ -73,14 +85,7 @@ export async function runLsCommand(
     const snapshot = await client.getProvidersSnapshot();
     return {
       type: "list",
-      data: snapshot.entries.map((entry) => ({
-        provider: entry.provider,
-        label: entry.label ?? entry.provider,
-        status: entry.status === "ready" ? "available" : entry.status,
-        enabled: !entry.enabled ? "Disabled" : "Enabled",
-        defaultMode: entry.defaultModeId ?? "default",
-        modes: (entry.modes ?? []).map((mode) => mode.label).join(", "),
-      })),
+      data: snapshot.entries.map(toProviderListItem),
       schema: providerLsSchema,
     };
   } catch {

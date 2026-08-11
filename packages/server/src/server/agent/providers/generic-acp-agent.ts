@@ -10,6 +10,7 @@ import {
   type ACPConfigFeatureOption,
   DEFAULT_ACP_CAPABILITIES,
   type ACPExtensionCommandsParser,
+  type SessionStateResponse,
 } from "./acp-agent.js";
 import {
   buildBinaryDiagnosticRows,
@@ -51,6 +52,7 @@ interface GenericACPAgentClientOptions {
   configFeatureOptions?: ACPConfigFeatureOption[];
   extensionCommandsParser?: ACPExtensionCommandsParser;
   catalogModelResolver?: ACPCatalogModelResolver;
+  sessionResponseTransformer?: (response: SessionStateResponse) => SessionStateResponse;
 }
 
 export class GenericACPAgentClient extends ACPAgentClient {
@@ -76,6 +78,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       configFeatureOptions: options.configFeatureOptions,
       extensionCommandsParser: options.extensionCommandsParser,
       catalogModelResolver: options.catalogModelResolver,
+      sessionResponseTransformer: options.sessionResponseTransformer,
     });
 
     this.command = options.command;

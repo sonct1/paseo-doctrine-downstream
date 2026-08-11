@@ -5,9 +5,113 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 
-import { materializeAntigravityRoleLaunch } from "./antigravity-acp-agent.js";
+import type { SpawnedACPProcess, SessionStateResponse } from "./acp-agent.js";
+import {
+  AntigravityACPAgentClient,
+  materializeAntigravityRoleLaunch,
+  transformAntigravitySessionResponse,
+} from "./antigravity-acp-agent.js";
+import { createTestLogger } from "../../../test-utils/test-logger.js";
 
 const execFile = promisify(execFileCallback);
+
+describe("Antigravity model metadata", () => {
+  class TestAntigravityACPAgentClient extends AntigravityACPAgentClient {
+    constructor(private readonly response: SessionStateResponse) {
+      super({ logger: createTestLogger(), command: ["agy-acp"] });
+    }
+
+    protected override async spawnProcess(): Promise<SpawnedACPProcess> {
+      return {
+        child: { kill: () => true, exitCode: 0, signalCode: null, once: () => undefined },
+        connection: {
+          newSession: async () => this.response,
+        },
+        initialize: { agentCapabilities: {} },
+      } as SpawnedACPProcess;
+    }
+
+    protected override async closeProbe(): Promise<void> {}
+  }
+
+  test("normalizes bridge-delimited model ids for catalog and runtime selection", () => {
+    expect(
+      transformAntigravitySessionResponse({
+        sessionId: "session-1",
+        models: {
+          currentModelId: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+          availableModels: [
+            {
+              modelId: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+              name: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+              description: null,
+            },
+          ],
+        },
+        configOptions: [],
+      }),
+    ).toMatchObject({
+      models: {
+        currentModelId: "gemini-3.6-flash-low",
+        availableModels: [
+          {
+            modelId: "gemini-3.6-flash-low",
+            name: "Gemini 3.6 Flash (Low)",
+          },
+        ],
+      },
+    });
+  });
+
+  test("preserves already-normal ACP model metadata", () => {
+    const response = {
+      sessionId: "session-1",
+      models: {
+        currentModelId: "gemini-3.6-pro",
+        availableModels: [
+          {
+            modelId: "gemini-3.6-pro",
+            name: "Gemini 3.6 Pro",
+            description: null,
+          },
+        ],
+      },
+      configOptions: [],
+    };
+
+    expect(transformAntigravitySessionResponse(response)).toEqual(response);
+  });
+
+  test("applies normalization through the provider catalog", async () => {
+    const client = new TestAntigravityACPAgentClient({
+      sessionId: "session-1",
+      models: {
+        currentModelId: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+        availableModels: [
+          {
+            modelId: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+            name: "gemini-3.6-flash-low\tGemini 3.6 Flash (Low)",
+            description: null,
+          },
+        ],
+      },
+      modes: null,
+      configOptions: [],
+    });
+
+    await expect(
+      client.fetchCatalog({ scope: "workspace", cwd: "/tmp/antigravity", force: false }),
+    ).resolves.toMatchObject({
+      models: [
+        {
+          id: "gemini-3.6-flash-low",
+          label: "Gemini 3.6 Flash (Low)",
+          isDefault: true,
+        },
+      ],
+    });
+  });
+});
 
 describe("Antigravity native role binding", () => {
   test.skipIf(process.platform === "win32")(

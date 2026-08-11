@@ -1011,6 +1011,7 @@ export class ACPAgentClient implements AgentClient {
         return {
           models: this.modelTransformer ? this.modelTransformer(models) : models,
           modes: modeInfo.modes,
+          ...(modeInfo.currentModeId ? { defaultModeId: modeInfo.currentModeId } : {}),
         };
       })();
 
