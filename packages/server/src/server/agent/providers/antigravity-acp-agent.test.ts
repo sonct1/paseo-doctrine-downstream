@@ -101,14 +101,20 @@ describe("Antigravity model metadata", () => {
 
     await expect(
       client.fetchCatalog({ scope: "workspace", cwd: "/tmp/antigravity", force: false }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       models: [
         {
+          provider: "acp",
           id: "gemini-3.6-flash-low",
           label: "Gemini 3.6 Flash (Low)",
+          description: undefined,
           isDefault: true,
+          thinkingOptions: undefined,
+          defaultThinkingOptionId: undefined,
         },
       ],
+      modes: [],
+      defaultModeId: null,
     });
   });
 });
