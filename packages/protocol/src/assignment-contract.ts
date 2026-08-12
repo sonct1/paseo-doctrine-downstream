@@ -85,10 +85,12 @@ export type AssignmentExternalEffectBoundary = z.infer<
   typeof AssignmentExternalEffectBoundarySchema
 >;
 
+const AssignmentTimestampSchema = z.string().datetime({ offset: true });
+
 export const WorkspaceProtocolAdmissionExceptionSchema = z.object({
   reason: z.string().trim().min(1),
   scope: z.string().trim().min(1),
-  expiresAt: z.string().datetime(),
+  expiresAt: AssignmentTimestampSchema,
 });
 
 const AssignmentBeadsIssueIdSchema = z
@@ -117,7 +119,7 @@ export const AssignmentEnvelopeSchema = z.object({
   evidence: z.string().trim().min(1),
   handbackAndStop: z.string().trim().min(1),
   resourceGrants: AssignmentResourceGrantsSchema.optional(),
-  expiresAt: z.string().datetime().optional(),
+  expiresAt: AssignmentTimestampSchema.optional(),
   protocolException: WorkspaceProtocolAdmissionExceptionSchema.optional(),
 });
 export type AssignmentEnvelope = z.infer<typeof AssignmentEnvelopeSchema>;
@@ -143,8 +145,8 @@ export const AssignmentContractReceiptSchema = z.object({
   mutationBoundary: AssignmentMutationBoundarySchema,
   externalEffectBoundary: AssignmentExternalEffectBoundarySchema,
   resourceGrants: AssignmentResourceGrantsSchema.optional(),
-  protocolExceptionExpiresAt: z.string().datetime().optional(),
-  createdAt: z.string().datetime(),
-  expiresAt: z.string().datetime().optional(),
+  protocolExceptionExpiresAt: AssignmentTimestampSchema.optional(),
+  createdAt: AssignmentTimestampSchema,
+  expiresAt: AssignmentTimestampSchema.optional(),
 });
 export type AssignmentContractReceipt = z.infer<typeof AssignmentContractReceiptSchema>;

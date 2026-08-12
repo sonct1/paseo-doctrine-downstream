@@ -60,6 +60,14 @@ describe("immutable assignment contract", () => {
     );
   });
 
+  test("accepts an RFC 3339 offset timestamp for assignment expiry", () => {
+    const contract = materialize({
+      envelope: envelope({ expiresAt: "2026-08-08T08:00:00+07:00" }),
+    });
+
+    expect(contract.receipt.expiresAt).toBe("2026-08-08T08:00:00+07:00");
+  });
+
   test("injects role-specific mandatory tracker behavior", () => {
     const peer = materialize({
       roleId: "peer",
