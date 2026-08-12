@@ -683,7 +683,15 @@ describe("agent MCP end-to-end (offline)", () => {
       agentId = typeof payload?.agentId === "string" ? payload.agentId : null;
       expect(agentId).toBeTruthy();
 
-      const injectedMcp = recorder.recordedLaunches.at(-1)?.mcpServers?.paseo;
+      const matchingLaunches = recorder.recordedLaunches.filter((launch) => {
+        const paseoMcp = launch.mcpServers?.paseo;
+        return (
+          paseoMcp?.type === "http" &&
+          new URL(paseoMcp.url).searchParams.get("callerAgentId") === agentId
+        );
+      });
+      expect(matchingLaunches).toHaveLength(1);
+      const injectedMcp = matchingLaunches[0]?.mcpServers?.paseo;
       expect(injectedMcp?.type).toBe("http");
       const injectedUrl = new URL(injectedMcp?.type === "http" ? injectedMcp.url : "");
       expect(`${injectedUrl.origin}${injectedUrl.pathname}`).toBe(
@@ -710,7 +718,11 @@ describe("agent MCP end-to-end (offline)", () => {
         typeof disabledPayload?.agentId === "string" ? disabledPayload.agentId : null;
       expect(disabledAgentId).toBeTruthy();
 
-      expect(disabledRecorder.recordedLaunches.at(-1)?.mcpServers?.paseo).toBeUndefined();
+      const disabledLaunches = disabledRecorder.recordedLaunches.filter(
+        (launch) => launch.title === "No injected MCP",
+      );
+      expect(disabledLaunches).toHaveLength(1);
+      expect(disabledLaunches[0]?.mcpServers?.paseo).toBeUndefined();
       const disabledAgent = disabledDaemon.agentManager.getAgent(disabledAgentId!);
       expect(disabledAgent?.config.mcpServers?.paseo).toBeUndefined();
     } finally {
@@ -725,12 +737,22 @@ describe("agent MCP end-to-end (offline)", () => {
       }
       await disabledClient.close();
       await disabledDaemon.stop();
-      await rm(disabledPaseoHome, { recursive: true, force: true });
+      await rm(disabledPaseoHome, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 20,
+      });
       await rm(disabledStaticDir, { recursive: true, force: true });
       await rm(disabledAgentCwd, { recursive: true, force: true });
       await client.close();
       await daemon.stop();
-      await rm(paseoHome, { recursive: true, force: true });
+      await rm(paseoHome, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 20,
+      });
       await rm(staticDir, { recursive: true, force: true });
       await rm(agentCwd, { recursive: true, force: true });
     }
