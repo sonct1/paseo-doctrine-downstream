@@ -206,6 +206,12 @@ export const PASEO_TOOL_MANIFEST = [
     group: "Terminals",
   },
   {
+    id: "create_room",
+    label: "Create room",
+    description: "Create a Paseo room for bounded agent coordination.",
+    group: "Rooms",
+  },
+  {
     id: "read_room",
     label: "Read room",
     description: "Read recent messages from a Paseo room by name or ID.",

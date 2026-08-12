@@ -61,7 +61,7 @@ import {
 } from "../mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
-import { ChatMessageSchema } from "@getpaseo/protocol/chat/types";
+import { ChatMessageSchema, ChatRoomDetailSchema } from "@getpaseo/protocol/chat/types";
 import { LaunchContractReceiptSchema } from "@getpaseo/protocol/launch-contract";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import { postChatMessageWithMentions } from "../../chat/post.js";
@@ -1395,6 +1395,31 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   registerConfiguredBeadsTools(options, registerTool);
 
   if (callerAgentId && options.chatService) {
+    if (callerRoleId === "lead") {
+      registerTool(
+        "create_room",
+        {
+          title: "Create room",
+          description:
+            "Lead-only: create a Paseo room for bounded coordination and return its exact identity.",
+          inputSchema: {
+            name: z.string().trim().min(1),
+            purpose: z.string().trim().min(1).optional(),
+          },
+          outputSchema: {
+            room: ChatRoomDetailSchema,
+          },
+        },
+        async ({ name, purpose }) => {
+          const room = await options.chatService!.createRoom({ name, purpose });
+          return {
+            content: [],
+            structuredContent: ensureValidJson({ room }),
+          };
+        },
+      );
+    }
+
     registerTool(
       "read_room",
       {
