@@ -15,6 +15,7 @@ export const WorkspaceProtocolIssueSchema = z.enum([
   "unresolved_placeholder",
   "conflict_marker",
   "missing_identity",
+  "mismatched_identity_scope",
   "missing_risk",
   "missing_topology",
   "missing_ownership",

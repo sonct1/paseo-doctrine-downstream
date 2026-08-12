@@ -65,14 +65,31 @@ export const ProviderRoleBindingSupportSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("supported"),
     injectionMethod: RoleBindingInjectionMethodSchema,
+    // COMPAT(providerRoleIds): added in v0.3.1-paseo.2; absence means all roles for old daemons.
+    roleIds: z.array(PaseoRoleIdSchema).min(1).optional(),
     notice: z.string().optional(),
   }),
   z.object({
     status: z.literal("unsupported"),
     reason: z.string(),
+    // An unavailable provider can still declare its policy admission set so
+    // callers distinguish role denial from a separate transport blocker.
+    roleIds: z.array(PaseoRoleIdSchema).min(1).optional(),
   }),
 ]);
 export type ProviderRoleBindingSupport = z.infer<typeof ProviderRoleBindingSupportSchema>;
+
+export function isProviderRoleBindingSupportedForRole(
+  support: ProviderRoleBindingSupport | null | undefined,
+  roleId: PaseoRoleId | null | undefined,
+): boolean {
+  return (
+    roleId !== null &&
+    roleId !== undefined &&
+    support?.status === "supported" &&
+    (support.roleIds === undefined || support.roleIds.includes(roleId))
+  );
+}
 
 const Sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 

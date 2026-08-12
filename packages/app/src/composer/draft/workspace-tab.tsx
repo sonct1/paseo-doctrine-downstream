@@ -57,6 +57,7 @@ import {
   WorkspaceProtocolCreateAdmissionError,
 } from "@/workspace-protocol/create-admission";
 import { buildAssignmentEnvelope } from "@/workspace-protocol/assignment-envelope";
+import { useIssuesQuery } from "@/issues/data";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
@@ -146,6 +147,7 @@ function buildRoleCreateFields(input: {
   effectClass: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
   objective: string;
   cwd: string;
+  beadsIssueIds: readonly string[];
 }): {
   roleId?: import("@getpaseo/protocol/role-binding").PaseoRoleId;
   assignment?: AssignmentEnvelope;
@@ -158,6 +160,7 @@ function buildRoleCreateFields(input: {
       effectClass: input.effectClass,
       objective: input.objective,
       cwd: input.cwd,
+      beadsIssueIds: input.beadsIssueIds,
     }),
   };
 }
@@ -181,6 +184,7 @@ async function submitDraftCreateRequest(input: {
     effectiveModelId: string | null;
     effectiveThinkingOptionId: string | null;
     featureValues: Record<string, unknown> | undefined;
+    selectedBeadsIssueIds: string[];
   };
   hostDisconnectedMessage: string;
   selectModelMessage: string;
@@ -233,6 +237,7 @@ async function submitDraftCreateRequest(input: {
       effectClass: composerState.selectedAssignmentEffect,
       objective: text,
       cwd: workspaceDirectory,
+      beadsIssueIds: composerState.selectedBeadsIssueIds,
     }),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
@@ -361,6 +366,23 @@ function resolveImportPillPress(
   return onOpenImportSheet ?? null;
 }
 
+function useOpenBeadsIssueOptions(serverId: string, projectId: string | undefined) {
+  const resolvedProjectId = projectId ?? "";
+  const issuesQuery = useIssuesQuery(
+    serverId,
+    resolvedProjectId,
+    "all",
+    resolvedProjectId.length > 0,
+  );
+  return useMemo(
+    () =>
+      (issuesQuery.data?.issues ?? [])
+        .filter((issue) => issue.status !== "closed")
+        .map((issue) => ({ id: issue.id, label: `${issue.id} — ${issue.title}` })),
+    [issuesQuery.data?.issues],
+  );
+}
+
 export function WorkspaceDraftAgentTab({
   serverId,
   workspaceId,
@@ -382,6 +404,7 @@ export function WorkspaceDraftAgentTab({
     projectId: w.projectId,
   }));
   const supportsWorkspaceProtocol = useHostFeature(serverId, "workspaceProtocolEditing");
+  const beadsIssueOptions = useOpenBeadsIssueOptions(serverId, workspaceFields?.projectId);
   const workspaceDirectory = workspaceFields?.workspaceDirectory || null;
   const draftSetup = initialSetup ?? null;
   const draftWorkingDirectory = resolveDraftWorkingDirectory({
@@ -411,6 +434,7 @@ export function WorkspaceDraftAgentTab({
       isVisible: true,
       onlineServerIds,
       lockedWorkingDir: draftWorkingDirectory ?? undefined,
+      beadsIssueOptions,
     },
   });
   const composerState = draftInput.composerState;

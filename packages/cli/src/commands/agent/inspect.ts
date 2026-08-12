@@ -36,6 +36,7 @@ interface AgentInspect {
     EffectClass: string;
     MutationBoundary: string;
     ExternalEffectBoundary: string;
+    BeadsIssueGrants: string[];
     ProtocolExceptionExpiresAt: string | null;
     CreatedAt: string;
     ExpiresAt: string | null;
@@ -198,6 +199,7 @@ function buildAssignment(snapshot: AgentSnapshotPayload): AgentInspect["Assignme
     EffectClass: assignment.effectClass,
     MutationBoundary: formatBoundary(assignment.mutationBoundary),
     ExternalEffectBoundary: formatBoundary(assignment.externalEffectBoundary),
+    BeadsIssueGrants: assignment.resourceGrants?.beadsIssueIds ?? [],
     ProtocolExceptionExpiresAt: assignment.protocolExceptionExpiresAt ?? null,
     CreatedAt: assignment.createdAt,
     ExpiresAt: assignment.expiresAt ?? null,
@@ -285,7 +287,7 @@ function toInspectRows(agent: AgentInspect): InspectRow[] {
   if (agent.Assignment) {
     rows.push({
       key: "Assignment",
-      value: `Version: ${agent.Assignment.Version}, Digest: ${agent.Assignment.Digest}, Role: ${agent.Assignment.Role}, Disposition: ${agent.Assignment.Disposition}, Assigner: ${agent.Assignment.Assigner}, WorkspaceId: ${agent.Assignment.WorkspaceId}, Cwd: ${agent.Assignment.Cwd}, Effect: ${agent.Assignment.EffectClass}, Mutation: ${agent.Assignment.MutationBoundary}, External: ${agent.Assignment.ExternalEffectBoundary}, ProtocolExceptionExpiresAt: ${agent.Assignment.ProtocolExceptionExpiresAt ?? "null"}, CreatedAt: ${agent.Assignment.CreatedAt}, ExpiresAt: ${agent.Assignment.ExpiresAt ?? "null"}`,
+      value: `Version: ${agent.Assignment.Version}, Digest: ${agent.Assignment.Digest}, Role: ${agent.Assignment.Role}, Disposition: ${agent.Assignment.Disposition}, Assigner: ${agent.Assignment.Assigner}, WorkspaceId: ${agent.Assignment.WorkspaceId}, Cwd: ${agent.Assignment.Cwd}, Effect: ${agent.Assignment.EffectClass}, Mutation: ${agent.Assignment.MutationBoundary}, External: ${agent.Assignment.ExternalEffectBoundary}, BeadsIssueGrants: ${agent.Assignment.BeadsIssueGrants.join(", ") || "none"}, ProtocolExceptionExpiresAt: ${agent.Assignment.ProtocolExceptionExpiresAt ?? "null"}, CreatedAt: ${agent.Assignment.CreatedAt}, ExpiresAt: ${agent.Assignment.ExpiresAt ?? "null"}`,
     });
   }
 

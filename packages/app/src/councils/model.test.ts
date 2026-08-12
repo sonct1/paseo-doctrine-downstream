@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CouncilAgentSource, CouncilCase } from "./model";
-import { councilCaseScopeIdentity, groupCouncilCases, isCouncilSeatReportReady } from "./model";
+import {
+  councilCaseScopeIdentity,
+  councilRoleLabel,
+  groupCouncilCases,
+  isCouncilSeatReportReady,
+} from "./model";
 
 function makeAgent(
   id: string,
@@ -116,6 +121,17 @@ describe("groupCouncilCases", () => {
       "challenger",
       "verifier",
     ]);
+  });
+
+  it("recognizes the native Solution Architect and Reviewer Council seats", () => {
+    const reviewer = makeAgent("reviewer", councilLabels("reviewer"));
+    const architect = makeAgent("architect", councilLabels("architect"));
+
+    const council = groupCouncilCases([reviewer, architect])[0];
+
+    expect(council?.seats.map((seat) => seat.role)).toEqual(["architect", "reviewer"]);
+    expect(councilRoleLabel("architect")).toBe("Solution Architect");
+    expect(councilRoleLabel("reviewer")).toBe("Reviewer");
   });
 
   it("ignores malformed labels instead of inventing Council semantics", () => {

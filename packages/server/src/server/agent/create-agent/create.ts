@@ -21,6 +21,7 @@ import type {
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
+import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
 import { buildAgentPrompt } from "../prompt-attachments.js";
@@ -88,6 +89,7 @@ export interface CreateAgentFromMcpInput {
   kind: "mcp";
   provider: string;
   roleId?: PaseoRoleId;
+  executionProfileId?: FoundationExecutionProfileId;
   assignment?: AssignmentEnvelope;
   title: string;
   initialPrompt?: string;
@@ -267,7 +269,11 @@ async function resolveSessionCreateAgent(
     requestedMode: builtSessionConfig.modeId,
     featureValues: builtSessionConfig.featureValues,
     parent: null,
-    unattended: false,
+    // Standing Paseo roles run without provider approval prompts. The
+    // assignment/role contract remains the authority boundary; unattended is
+    // only the provider execution capability. Ordinary interactive sessions
+    // keep the provider default unless their caller requests a mode explicitly.
+    unattended: input.roleId !== undefined,
   });
   const sessionConfig: AgentSessionConfig = {
     ...builtSessionConfig,
@@ -374,6 +380,7 @@ async function resolveMcpCreateAgent(
       ...(input.roleId
         ? {
             roleId: input.roleId,
+            ...(input.executionProfileId ? { executionProfileId: input.executionProfileId } : {}),
             assignment: input.assignment,
             assignmentAssigner: input.callerAgentId
               ? { kind: "agent", agentId: input.callerAgentId }
@@ -418,7 +425,10 @@ async function resolveMcpProviderCreateConfig(params: {
     requestedMode: params.input.mode ?? passthroughConfig?.modeId,
     featureValues: params.input.features ?? passthroughConfig?.featureValues,
     parent: params.parentAgent,
-    unattended: params.input.unattended ?? false,
+    // A role-bound child must not silently fall back to an approval-bearing
+    // provider default when a caller omits `unattended`. Explicit mode remains
+    // authoritative inside the bounded assignment.
+    unattended: params.input.unattended ?? params.input.roleId !== undefined,
   });
 }
 

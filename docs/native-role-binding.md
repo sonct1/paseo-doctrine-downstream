@@ -11,18 +11,21 @@ Foundation contract: `ROLE_CONTRACTS 3.2.0-topology-recovery`
 Một agent được tạo từ bốn layer độc lập, sau đó được compose thành một launch contract bất biến:
 
 ```text
-RoleDefinition + Provider + Workspace Protocol + Assignment
+RoleDefinition + optional ExecutionSpecialization + Provider + Workspace Protocol + Assignment
 ```
 
 - `RoleDefinition` giữ identity, universal authority boundary và anti-pattern guards.
 - `Provider` chỉ giữ transport, credentials, endpoint, model catalog và runtime capability.
-- `WORKSPACE_PROTOCOL.md` vẫn là optional policy delta do repository sở hữu; Paseo quản lý path, digest, byte-validity state và readership. File vắng mặt là zero-delta hợp lệ.
+- Root `WORKSPACE_PROTOCOL.md` v3 là mandatory repository contract; Paseo quản lý path, digest,
+  byte-validity state và readership. Missing/invalid file block ordinary role launch; chỉ exact bounded
+  Human bootstrap/governance exception mới được materialize.
 - `Assignment` giữ bounded objective, disposition, lease, scope, evidence, handback và stop condition.
 
-Một Lead có thể thêm private execution specialization vào Peer binding khi repository protocol yêu cầu
-một method lặp lại nhưng không cấp authority mới. Provider-neutral `review` là slice đầu tiên; xem
-[triple-lane review](review-lanes.md). Profile ID không đi vào generic Peer catalog hoặc public role
-receipt.
+Một Lead có thể thêm private execution specialization vào Peer binding khi repository protocol hoặc
+bounded routing cần một method lặp lại nhưng không cấp authority mới. Provider-neutral
+`solution-architect` và `reviewer` là hai Council/Lead-routing method; `review` là OCR exhaustive-review
+method riêng cho [triple-lane review](review-lanes.md). Profile ID chỉ xuất hiện trong Lead-scoped
+`create_agent` và private create receipt, không đi vào generic Peer catalog hoặc public role receipt.
 
 ## Vì sao không dùng initial prompt
 
@@ -65,11 +68,11 @@ Role và provider chỉ ghép được khi adapter có native durable instructio
 - Claude: Agent SDK `systemPrompt` append; đồng thời deny native delegation tools sau khi merge provider extras.
 - Pi append exact binding bằng generated `before_agent_start` extension trên create/resume.
 - OMP append exact binding bằng native `--append-system-prompt` trên create/resume.
-- Cursor ACP materialize một stable private role capsule dưới Paseo state, ghi exact binding vào `.cursor/rules/paseo-role.mdc` với `alwaysApply: true`, rồi launch `cursor-agent --workspace <capsule> --add-dir <repo> acp`. Caller-supplied `--workspace` bị reject. Không dùng `--plugin-dir`: installed runtime đã chứng minh local plugin có thể bị silent-ignore. Exact direct marker, repo-access, ACP create và ACP resume canary đều pass trên `cursor-agent 2026.08.04-aaa8809`.
-- Antigravity ACP materialize một unique per-agent custom-agent profile và exact wrapper pin `agy --agent`; profile được create/verify/cleanup theo exact bytes. Official `agy` custom-agent registration, marker và resume canary pass; wrapper args cho discovery/prompt/resume và caller `--agent` override có focused executable tests. Driver chạy trên macOS/Linux. Live `agy models` là provider-catalog diagnostic riêng và có thể timeout độc lập với role binding.
+- Cursor ACP materialize một stable private role capsule dưới Paseo state, ghi exact binding vào `.cursor/rules/paseo-role.mdc` với `alwaysApply: true`, rồi launch role-bound route bằng `--force --approve-mcps --trust --sandbox disabled`, private `--workspace <capsule>` và `--add-dir <repo>` trước `acp`. ACP `auto_accept` cũng được pin làm fallback. Caller-supplied workspace hoặc permission-policy flag bị reject để route không có hai nguồn policy. Không dùng `--plugin-dir`: installed runtime đã chứng minh local plugin có thể bị silent-ignore. Exact direct marker, repo-access, ACP create và ACP resume canary đều pass trên `cursor-agent 2026.08.04-aaa8809`.
+- Antigravity chỉ được admit cho role `Peer`. ACP driver materialize một unique per-agent custom-agent profile và exact wrapper pin `agy --agent`; profile được create/verify/cleanup theo exact bytes. Driver chạy trên macOS/Linux. Current Level-1 `agy-acp 0.1.0` reject non-empty `mcpServers`, nên provider config `supportsMcpServers: false` bị fail closed trước role launch vì Peer không thể thực hiện mandatory Beads checkpoint. Không dùng Antigravity cho Lead/Supervisor và không gọi một Peer thiếu tracker là qualified. Muốn mở lại cần bridge có role-scoped Paseo-tool transport và fresh runtime qualification.
 - Generic ACP không có standardized system-instruction field nên mặc định `unsupported`. Paseo chỉ auto-detect hai exact transport shape trên; custom ACP khác phải có provider-native driver riêng và qualification evidence trước khi được chọn cho role-bound spawn.
 
-Capability có hai trạng thái: `supported` nghĩa adapter có implementation method mà role-first picker có thể dùng; `unsupported` nghĩa không có native durable channel hoặc launch shape hợp lệ. `supported` không tự chứng minh current-host runtime qualification; evidence đó phải đến từ fresh canary/readback riêng. Không fallback sang initial prompt hoặc generic ACP. Cursor và Antigravity hiện là implementation-supported; legacy `cursor-plugin` fail closed với migration notice.
+Capability có hai trạng thái: `supported` nghĩa adapter có implementation method mà role-first picker có thể dùng; `unsupported` nghĩa không có native durable channel hoặc launch shape hợp lệ. Supported receipt có thể mang allowlist `roleIds`; absence giữ compatibility với daemon cũ và nghĩa là mọi role. `supported` không tự chứng minh current-host runtime qualification hoặc mandatory tool transport; evidence đó phải đến từ fresh canary/readback riêng. Không fallback sang initial prompt hoặc generic ACP. Cursor là implementation-supported cho ba role; Antigravity chỉ có durable-instruction support cho Peer và current Level-1 bridge vẫn bị tracker gate chặn; legacy `cursor-plugin` fail closed với migration notice.
 
 `agy-acp` là third-party transport. Technical role support không thay user-account policy: provider detail phải hiện notice yêu cầu review current [Google Antigravity authentication terms](https://antigravity.google/terms). Qualification trong branch dùng official `agy` cho model calls và fake binary cho bridge pinning, không dùng OAuth account qua third-party bridge.
 
@@ -91,6 +94,14 @@ subscription giữ Codex auth store; custom dùng private Paseo credential store
 `CODEX_HOME` chỉ để tách API key; chỉ cần `CODEX_HOME` riêng nếu Human thật sự muốn hai Codex login store độc
 lập.
 
+Current native-resume qualification còn một hard boundary: trên reproduced custom
+`openai-compatible` Codex route, app-server transport vẫn list/call được Paseo MCP nhưng model catalog của
+thread đã resume không còn expose mandatory Paseo selectors. Adapter không được tự gọi `beads_status` để
+biến transport preflight thành model checkpoint. Vì vậy interactive resume của một role-bound custom
+Codex agent hiện fail closed và yêu cầu fresh role-bound replacement; history readback vẫn được phép.
+Built-in Codex subscription, Claude và Cursor resume có fresh runtime canary riêng. Mở lại custom resume
+chỉ sau model-visible selector canary qua daemon restart, không dựa vào app-server `tools/list` một mình.
+
 ## Tool policy và authority
 
 Role-bound session lấy tool enablement từ role; `paseoTools.enabled` chỉ là default cho session không
@@ -98,15 +109,24 @@ bind role. Provider `allowedTools` hoặc `disabledTools` vẫn có thể thu h�
 Supervisor nhưng không thể mở rộng role authority. Global `daemon.mcp.injectIntoAgents=false` vẫn tắt
 toàn bộ projection.
 
-- Lead có Paseo delegation/lifecycle tools trong Human lease.
-- Peer không có orchestration tools.
-- Supervisor chỉ có observation/governance subset; recovery/replacement vẫn cần exact Human lease.
+- Cả ba role phải có `beads_status` và `beads_get`; thiếu MCP/native Paseo-tool transport là launch
+  blocker, không phải lý do bỏ checkpoint hoặc dùng direct Central.
+- Một successful `beads_status` receipt được bind với exact assignment digest; mọi Beads operation khác
+  bị runtime từ chối cho tới khi receipt đó tồn tại. Final prose không chữa được checkpoint sai thứ tự.
+- Lead có Paseo delegation/lifecycle và Beads mutation tools trong Human lease.
+- Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
+  Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;
+  Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
+- Supervisor chỉ có observation/governance và Beads read-only subset; recovery/replacement vẫn cần exact Human lease.
 
 `full-access` là runtime capability, không phải write lease, ownership, external-effect hoặc acceptance authority.
 
 ## Workspace Protocol
 
-Paseo không copy protocol vào global config. Repository tiếp tục sở hữu bytes tại root. Protocol vắng mặt không chặn role-bound launch; standing role và bounded assignment vẫn đủ authority. Protocol hiện diện nhưng blank, unresolved, conflict, malformed identity hoặc unreadable thì fail closed trước provider launch. Paseo ghi nhận:
+Paseo không copy protocol vào global config. Repository tiếp tục sở hữu exact root
+`WORKSPACE_PROTOCOL.md` v3. File thiếu, blank, unresolved, conflict, thiếu fixed Beads Central clause,
+malformed identity hoặc unreadable đều fail closed trước ordinary role launch. Chỉ exact Human-issued
+bounded bootstrap exception mới cho phép tạo file v3; exception không mở ordinary work. Paseo ghi nhận:
 
 - resolved path;
 - content digest và binding state (`bound|missing`) sau byte-validity gate;
@@ -120,12 +140,12 @@ dùng revision gồm digest để không overwrite thay đổi ngoài Paseo; con
 
 Admission kiểm exact active project/workspace root, kể cả Paseo-owned worktree. Role-bound create
 preflight trên WebUI và daemon kiểm lại trước provider launch hoặc state mutation. `invalid|unreadable`
-luôn fail closed. `missing` mặc định fail closed cho `mutating|delegation`; chỉ exact Human-issued
-`read-only|bootstrap|recovery` assignment mới được mang exception có reason, exact cwd scope và expiry.
+luôn fail closed. `missing` fail closed cho ordinary work; chỉ exact Human-issued
+`read-only|bootstrap|recovery` bootstrap/governance assignment mới được mang exception có reason,
+exact cwd scope và expiry.
 Bootstrap từ WebUI chỉ nhận bounded write scope tại root `WORKSPACE_PROTOCOL.md`; recovery chỉ có write
 khi caller nêu exact scope. Exception không hợp thức hóa protocol invalid, không mở external effects và
-không biến runtime `full-access` thành authority. Loose/v1 protocol hợp lệ vẫn được nhận để không khóa
-repository cũ; bootstrap mới sinh v2.
+không biến runtime `full-access` thành authority. Bootstrap mới sinh v3 với fixed issue-tracker clause.
 
 Lead được bind full protocol trước orchestration. Peer không đọc full protocol và chỉ nhận relevant constraints trong assignment. Supervisor chỉ được bind full protocol khi governance assignment yêu cầu create/audit/update.
 
@@ -144,11 +164,11 @@ Target flow dưới đây **chưa ship đầy đủ**:
 6. nhập assignment rồi spawn.
 
 Nếu protocol hiện diện nhưng invalid/unreadable, create flow đưa Human về Project Settings để correct
-trên WebUI. Nếu protocol không tồn tại, role launch tiếp tục với zero repository-specific delta; không
-tạo bootstrap ceremony hoặc exception chỉ để bắt đầu ordinary work. CLI role create bắt buộc
+trên WebUI. Nếu protocol không tồn tại, ordinary role launch dừng trước side effect và đưa Human về
+Project Settings; chỉ exact bounded bootstrap/governance exception mới được tạo để repair. CLI role create bắt buộc
 `--assignment-effect`; write scope chỉ hợp lệ cho `mutating|bootstrap|recovery`.
 
-Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Các provider alias như `codex-lead` là migration input, không phải product model mới.
+Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Unsupported Antigravity receipt vẫn giữ `roleIds: ["peer"]`, để non-Peer bị từ chối bởi policy trước và Peer nhận exact transport blocker. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
 Trong migration window, daemon nhận diện **exact legacy wrapper command** như `codex-profile <role>`, `codex-cliproxy-profile <role>` hoặc `claude --agent paseo-<role>`. Các route này bị loại khỏi native role-first picker và bị reject trước state mutation/session launch; Paseo không suy role từ provider ID tùy ý. Transport-only alias kế thừa Codex/Claude vẫn tương thích.
 
@@ -171,10 +191,13 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Raw create request không thể materialize hoặc override role instruction.
 - Role-bound create thiếu assignment contract bị reject; effect/write contradiction, agent-issued
   protocol exception, scope mismatch và expired exception đều fail closed.
-- Missing protocol được bind thành zero delta mà không chặn provider launch/state mutation; protocol
-  hiện diện nhưng invalid/unreadable vẫn fail closed trước side effect.
+- Missing/invalid/unreadable protocol đều fail closed trước side effect; chỉ exact unexpired
+  Human-issued bootstrap/governance exception được bind cho bounded repair.
 - Role-bound session không nhận `systemPrompt` từ caller.
-- Resume/reload giữ exact role bytes và digest đã persist.
+- Mỗi admitted resume/reload route giữ exact role bytes và digest đã persist; route chưa chứng minh
+  model-visible mandatory Paseo tools phải fail closed trước interactive model turn.
+- Execution specialization chỉ được role-bound Lead chọn cho fresh Peer, giữ exact profile receipt/bytes
+  qua LaunchContract và resume, và bị redacted khỏi generic role receipt.
 - Resume/reload giữ exact provider route và model; model mutation trên role-bound agent bị reject.
 - Codex/Claude provider extras không thể ghi đè role instruction hoặc native-delegation guards.
 - Built-in Codex chỉ launch khi native account readback là ChatGPT subscription.

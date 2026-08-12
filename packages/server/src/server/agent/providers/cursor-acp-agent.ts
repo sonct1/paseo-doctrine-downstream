@@ -5,7 +5,12 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 
 import type { AgentLaunchContext, AgentSessionConfig } from "../agent-sdk-types.js";
-import type { ACPConfigFeatureOption, ACPSessionLaunchPreparation } from "./acp-agent.js";
+import {
+  ACP_AUTO_ACCEPT_FEATURE_ID,
+  type ACPConfigFeatureOption,
+  type ACPSessionLaunchPreparation,
+  type ACPToolSnapshot,
+} from "./acp-agent.js";
 import { GenericACPAgentClient } from "./generic-acp-agent.js";
 
 interface CursorACPAgentClientOptions {
@@ -22,6 +27,13 @@ const CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS = 10_000;
 const CURSOR_CLIENT_CAPABILITY_META = {
   parameterizedModelPicker: true,
 };
+const CURSOR_ROLE_UNATTENDED_ARGS = [
+  "--force",
+  "--approve-mcps",
+  "--trust",
+  "--sandbox",
+  "disabled",
+] as const;
 
 export const CURSOR_FAST_FEATURE_OPTION: ACPConfigFeatureOption = {
   id: "fast",
@@ -31,6 +43,36 @@ export const CURSOR_FAST_FEATURE_OPTION: ACPConfigFeatureOption = {
   tooltip: "Select Cursor fast mode",
   icon: "zap",
 };
+
+export function isCursorOpaqueMcpToolSnapshot(snapshot: ACPToolSnapshot): boolean {
+  if (snapshot.kind != null && snapshot.kind !== "other") {
+    return false;
+  }
+  const title = snapshot.title.trim().toLowerCase();
+  if (title === "mcp: tool") {
+    return true;
+  }
+  if (snapshot.title.trim() !== snapshot.toolCallId.trim()) {
+    return false;
+  }
+  if (snapshot.rawInput !== undefined && snapshot.rawInput !== null) {
+    return false;
+  }
+  return (
+    snapshot.rawOutput != null &&
+    typeof snapshot.rawOutput === "object" &&
+    !Array.isArray(snapshot.rawOutput) &&
+    Object.keys(snapshot.rawOutput).length === 1 &&
+    (snapshot.rawOutput as Record<string, unknown>).success === true
+  );
+}
+
+export function markCursorOpaqueMcpToolSnapshot(snapshot: ACPToolSnapshot): ACPToolSnapshot {
+  return {
+    ...snapshot,
+    transportShadow: isCursorOpaqueMcpToolSnapshot(snapshot) ? "cursor-opaque-mcp" : undefined,
+  };
+}
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -45,15 +87,27 @@ function roleCapsuleCommand(
   const hasCallerWorkspace = command.some(
     (argument) => argument === "--workspace" || argument.startsWith("--workspace="),
   );
-  if (acpIndexes.length !== 1 || hasCallerWorkspace) {
+  const hasCallerPermissionPolicy = command.some(
+    (argument) =>
+      argument === "-f" ||
+      argument === "--force" ||
+      argument === "--yolo" ||
+      argument === "--auto-review" ||
+      argument === "--approve-mcps" ||
+      argument === "--trust" ||
+      argument === "--sandbox" ||
+      argument.startsWith("--sandbox="),
+  );
+  if (acpIndexes.length !== 1 || hasCallerWorkspace || hasCallerPermissionPolicy) {
     throw new Error(
-      "Cursor role binding requires exact 'cursor-agent ... acp' launch without a caller-supplied --workspace",
+      "Cursor role binding requires exact 'cursor-agent ... acp' launch without caller-supplied workspace or permission-policy flags",
     );
   }
   const acpIndex = acpIndexes[0];
   return [
     command[0],
     ...command.slice(1, acpIndex),
+    ...CURSOR_ROLE_UNATTENDED_ARGS,
     "--workspace",
     capsuleDirectory,
     "--add-dir",
@@ -102,6 +156,7 @@ export async function materializeCursorRoleCapsule(input: {
   await writeExclusiveOrVerify(rulePath, content);
   return {
     command: roleCapsuleCommand(input.command, directory, input.cwd),
+    featureValues: { [ACP_AUTO_ACCEPT_FEATURE_ID]: true },
   };
 }
 
@@ -122,6 +177,11 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       initialCommandsWaitTimeoutMs: CURSOR_INITIAL_COMMANDS_WAIT_TIMEOUT_MS,
       clientCapabilityMeta: CURSOR_CLIENT_CAPABILITY_META,
       configFeatureOptions: [CURSOR_FAST_FEATURE_OPTION],
+      // Cursor ACP intentionally redacts MCP tool identity as `MCP: tool` (or
+      // omits the title) with empty input and `{ success: true }` output. Keep
+      // the canonical transport event for audit, mark it, and let projection
+      // collapse it only when an adjacent authoritative Paseo receipt exists.
+      toolSnapshotTransformer: markCursorOpaqueMcpToolSnapshot,
     });
     this.roleCommand = options.command;
     this.roleCapsuleRoot = options.roleCapsuleRoot;

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
@@ -40,6 +42,7 @@ const LabelSchema = z
     message: "Labels cannot contain commas",
   });
 const PrioritySchema = z.number().int().min(0).max(4);
+const BeadsGetViewSchema = z.enum(["full", "checkpoint"]).default("full");
 
 interface BeadsCaller {
   roleId: PaseoRoleId;
@@ -69,12 +72,77 @@ function toolResult(payload: Record<string, unknown>): PaseoToolResult {
   return { content: [], structuredContent: ensureValidJson(payload) };
 }
 
+type BeadsIssue = Awaited<ReturnType<BeadsService["get"]>>;
+
+const beadsStatusQueues = new Map<string, Promise<unknown>>();
+
+function serializeBeadsStatus<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = beadsStatusQueues.get(agentId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  beadsStatusQueues.set(agentId, current);
+  const cleanup = (): void => {
+    if (beadsStatusQueues.get(agentId) === current) beadsStatusQueues.delete(agentId);
+  };
+  void current.then(cleanup, cleanup);
+  return current;
+}
+
+function omittedNarrativeMetadata(value: unknown): { characters: number; sha256: string | null } {
+  if (typeof value !== "string") return { characters: 0, sha256: null };
+  return {
+    characters: value.length,
+    sha256: createHash("sha256").update(value).digest("hex"),
+  };
+}
+
+function checkpointIssueReceipt(issue: BeadsIssue): Record<string, unknown> {
+  const title = omittedNarrativeMetadata(issue.title);
+  const description = omittedNarrativeMetadata(issue.description);
+  const acceptanceCriteria = omittedNarrativeMetadata(issue.acceptance_criteria);
+  const notes = omittedNarrativeMetadata(issue.notes);
+  const closeReason = omittedNarrativeMetadata(issue.close_reason);
+  const receipt: Record<string, unknown> = {
+    id: issue.id,
+    status: issue.status,
+    priority: issue.priority,
+    issue_type: issue.issue_type,
+    narrativeOmitted: {
+      titleCharacters: title.characters,
+      titleSha256: title.sha256,
+      descriptionCharacters: description.characters,
+      descriptionSha256: description.sha256,
+      acceptanceCriteriaCharacters: acceptanceCriteria.characters,
+      acceptanceCriteriaSha256: acceptanceCriteria.sha256,
+      notesCharacters: notes.characters,
+      notesSha256: notes.sha256,
+      closeReasonCharacters: closeReason.characters,
+      closeReasonSha256: closeReason.sha256,
+    },
+  };
+  for (const key of ["assignee", "created_at", "updated_at", "closed_at"] as const) {
+    const value = issue[key];
+    if (typeof value === "string" || value === null) receipt[key] = value;
+  }
+  for (const key of ["dependent_count", "dependency_count", "comment_count"] as const) {
+    const value = issue[key];
+    if (typeof value === "number" && Number.isFinite(value)) receipt[key] = value;
+  }
+  if (Array.isArray(issue.labels)) {
+    const labels = issue.labels.filter((label): label is string => typeof label === "string");
+    receipt.labelCount = labels.length;
+  }
+  return receipt;
+}
+
 function assignmentHasExpired(assignment: PersistedAssignmentContract): boolean {
   const expiresAt = assignment.receipt.expiresAt;
   return expiresAt !== undefined && Date.parse(expiresAt) <= Date.now();
 }
 
-async function resolveCaller(options: RegisterBeadsToolsOptions): Promise<BeadsCaller> {
+async function resolveCaller(
+  options: RegisterBeadsToolsOptions,
+  requireStatusCheckpoint = true,
+): Promise<BeadsCaller> {
   const agent = await options.agentStorage.get(options.callerAgentId);
   if (!agent) throw new Error(`Caller agent ${options.callerAgentId} is unavailable`);
   const binding = agent.roleBinding;
@@ -85,6 +153,14 @@ async function resolveCaller(options: RegisterBeadsToolsOptions): Promise<BeadsC
   const assignment = binding.assignmentContract;
   if (!assignment) throw new Error("Beads Central tools require a durable assignment contract");
   if (assignmentHasExpired(assignment)) throw new Error("The caller assignment has expired");
+  if (
+    requireStatusCheckpoint &&
+    agent.beadsStatusCheckpoint?.assignmentDigest !== assignment.receipt.assignmentDigest
+  ) {
+    throw new Error(
+      "beads_status must succeed for the current assignment before calling another Beads tool",
+    );
+  }
   if (!agent.workspaceId) throw new Error("Beads Central tools require a current workspace");
   const workspace = await options.workspaceRegistry.get(agent.workspaceId);
   if (!workspace || workspace.archivedAt) {
@@ -192,7 +268,20 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
       description: "Check whether Paseo's mandatory Beads Central tracker is available.",
       inputSchema: z.object({}).strict(),
     },
-    async () => toolResult({ ...(await options.service.status()) }),
+    async () =>
+      serializeBeadsStatus(options.callerAgentId, async () => {
+        const caller = await resolveCaller(options, false);
+        await options.agentStorage.setBeadsStatusCheckpoint(options.callerAgentId, null);
+        const status = await options.service.status();
+        if (status.available) {
+          await options.agentStorage.setBeadsStatusCheckpoint(options.callerAgentId, {
+            assignmentDigest: caller.assignment.receipt.assignmentDigest,
+            version: status.version,
+            checkedAt: new Date().toISOString(),
+          });
+        }
+        return toolResult({ ...status });
+      }),
   );
 
   options.registerTool(
@@ -236,12 +325,20 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     "beads_get",
     {
       title: "Inspect issue",
-      description: "Read one issue and its current dependency metadata from the project graph.",
-      inputSchema: z.object({ issueId: IssueIdSchema }).strict(),
+      description:
+        "Read one issue and its current dependency metadata. The required issue key is issueId (not id). Use view=checkpoint for a bounded identity/lifecycle receipt with omitted narrative lengths and digests.",
+      inputSchema: z.object({ issueId: IssueIdSchema, view: BeadsGetViewSchema }).strict(),
     },
-    async ({ issueId }, execution) => {
+    async ({ issueId, view }, execution) => {
       const caller = await resolveCaller(options);
       const issue = await options.service.get(caller.project, issueId, execution.signal);
+      if (view === "checkpoint") {
+        return toolResult({
+          projectId: caller.project.projectId,
+          view,
+          issue: checkpointIssueReceipt(issue),
+        });
+      }
       return toolResult({ projectId: caller.project.projectId, issue });
     },
   );

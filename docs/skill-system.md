@@ -30,8 +30,16 @@ mà không phụ thuộc `~/.agents/skills`, `~/.claude/skills` hay `~/.codex/sk
 
 `council` khác `paseo-committee`: Committee là hai advisor hỗ trợ planning/root-cause; Council là
 protocol Lead-only cho quyết định material, giữ Round 1 sealed, chỉ verify claim có thể đổi verdict và
-không dùng vote hay Chat Room trong V0. WebUI chỉ project case từ `council.*` labels và lifecycle agent;
-report cùng binding verdict vẫn nằm trong timeline của seat và Lead.
+không dùng vote. Default difficult Council tạo một Peer `solution-architect` và một Peer `reviewer` với
+native provider-neutral execution specialization, distinct mandates và separate child issues. WebUI
+project case từ `council.*` labels và lifecycle agent; nó là Human control/view surface, không phải
+seat-to-seat transport. Report cùng binding verdict vẫn nằm trong timeline của seat và Lead. Council bind
+một parent Beads case issue; mỗi Peer seat nhận exact child issue trong
+`assignment.resourceGrants.beadsIssueIds`, phải chạy ordered `beads_status` +
+`beads_get {view:"checkpoint"}` trước read-only source inspection, và chỉ được Lead đánh dấu integrity valid
+sau khi mọi required seat đã terminal và activity audit xác nhận checkpoint, snapshot và
+no-write/no-orchestration boundary. Checkpoint chỉ trả label count/narrative digests; source evidence đến
+từ exact repository/snapshot đã authorize trong neutral brief.
 
 `paseo-handoff` là workflow skill cho context briefing và agent creation. Nó không tạo adjacent-Lead
 handoff packet/state machine, không revoke predecessor, không activate successor Lead và không chuyển
@@ -43,11 +51,11 @@ Immutable Foundation packages nằm dưới [`foundation/dist/skills`](../founda
 admission map là
 [`role-bundles.json`](../foundation/dist/skills/role-bundles.json):
 
-| Role       | Active                                                                    | Explicit-only  | Packaged-disabled |
-| ---------- | ------------------------------------------------------------------------- | -------------- | ----------------- |
-| Lead       | —                                                                         | `repo-refresh` | `ultra-review`    |
-| Peer       | `frontend-design`                                                         | —              | —                 |
-| Supervisor | `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` | —              | —                 |
+| Role       | Active                                                                                           | Explicit-only                   | Packaged-disabled |
+| ---------- | ------------------------------------------------------------------------------------------------ | ------------------------------- | ----------------- |
+| Lead       | `beads-issue-tracker`                                                                            | `repo-refresh`, `triple-review` | —                 |
+| Peer       | `beads-issue-tracker`, `frontend-design`                                                         | —                               | `triple-review`   |
+| Supervisor | `beads-issue-tracker`, `paseo-supervisor`, `architecture-premise-audit`, `test-proof-debt-audit` | —                               | `triple-review`   |
 
 Ý nghĩa admission:
 
@@ -56,8 +64,9 @@ admission map là
 - `packaged-disabled`: bytes được ship để provenance/review nhưng không eligible ở runtime;
 - package không thuộc bundle của role phải bị hide hoặc disable cho role đó.
 
-`ultra-review` chưa được admit chỉ vì file tồn tại. Nó cần một Foundation-authored adaptation loại bỏ
-native subagent/provider/path hard-code và có complete receive/verification path trước khi xin admission.
+`beads-issue-tracker` là package mandatory duy nhất được daemon embed nguyên bytes vào durable role
+instructions của cả ba role. Agent áp dụng package đã load này trực tiếp; không phụ thuộc global skill
+discovery hoặc một copy cũ trong provider home. Thiếu/invalid package block role materialization.
 
 ## Tại sao bundle theo role
 
@@ -102,6 +111,8 @@ còn lại.
 Role bundle là canonical admission source; provider adapter chỉ là transport:
 
 - Codex nhận exact `skills.config` với Foundation package ngoài bundle bị disable;
+- daemon đồng thời embed exact active `beads-issue-tracker` package vào immutable RoleBinding cho mọi
+  provider, nên mandatory checkpoint không phụ thuộc provider-native skill loader;
 - Council dùng product role-admission manifest riêng nhưng cùng nguyên tắc: Codex command inventory lấy
   từ daemon bundle và inject exact `SKILL.md` vào đúng invocation `/council`; `skills.config` đồng thời
   disable stale/caller-supplied Council path. Package mang provenance `PASEO_DERIVATIVE`: giữ lineage
@@ -109,8 +120,8 @@ Role bundle là canonical admission source; provider adapter chỉ là transport
   không phụ thuộc global discovery của Codex;
 - Claude nhận Council như session-local single-skill plugin chỉ ở Lead; Peer/Supervisor vừa strip local
   plugin path, deny `Skill(council)` và hide plain/namespaced command khỏi inventory;
-- Codex và Claude là hai provider adapter được qualify trong release này. Provider khác giữ
-  `UNKNOWN` cho tới khi có executable adapter và fresh role-visible canary tương ứng;
+- Codex, Claude, Cursor và Zetscan có fresh bounded checkpoint canary trong current development
+  candidate. Qualification vẫn là evidence của exact build/run, không phải universal reliability;
 - global package link hoặc user-global install không được biến thành eligibility cho non-owning role.
 
 Nếu Foundation `role-bundles.json` hoặc product `role-admission.json` missing, invalid hoặc trỏ tới package

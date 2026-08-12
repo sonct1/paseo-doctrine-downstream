@@ -38,6 +38,21 @@ describe("withRuntimePaseoMcpServer", () => {
     });
   });
 
+  test("adds a non-secret daemon-run marker so resumed providers reconnect MCP", () => {
+    const result = withRuntimePaseoMcpServer({
+      config: BASE_CONFIG,
+      agentId: "agent-1",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "cap-token",
+      mcpRuntimeId: "daemon-run-2",
+    });
+
+    expect(result.mcpServers?.paseo).toMatchObject({
+      type: "http",
+      url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-1&runtimeInstanceId=daemon-run-2",
+    });
+  });
+
   test("does not inject when no MCP base URL is configured", () => {
     const result = withRuntimePaseoMcpServer({
       config: BASE_CONFIG,

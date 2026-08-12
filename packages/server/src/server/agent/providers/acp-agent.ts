@@ -121,7 +121,7 @@ import {
 } from "./diagnostic-utils.js";
 import { withTimeout } from "../../../utils/promise-timeout.js";
 
-const ACP_AUTO_ACCEPT_FEATURE_ID = "auto_accept";
+export const ACP_AUTO_ACCEPT_FEATURE_ID = "auto_accept";
 
 function assertChildWithPipes(
   child: ChildProcess,
@@ -470,6 +470,7 @@ interface ACPAgentSessionOptions {
 export interface ACPSessionLaunchPreparation {
   command?: [string, ...string[]];
   env?: Record<string, string>;
+  featureValues?: Record<string, unknown>;
   cleanup?: () => Promise<void> | void;
 }
 
@@ -495,6 +496,7 @@ interface ACPProcessTransport {
 export interface ACPToolSnapshot {
   toolCallId: string;
   title: string;
+  transportShadow?: "cursor-opaque-mcp";
   kind?: ToolKind | null;
   status?: ToolCallStatus | null;
   content?: ToolCallContent[] | null;
@@ -873,8 +875,14 @@ export class ACPAgentClient implements AgentClient {
   ): Promise<AgentSession> {
     this.assertProvider(config);
     const sessionLaunch = await this.prepareSessionLaunch(config, launchContext);
+    const preparedConfig = sessionLaunch?.featureValues
+      ? {
+          ...config,
+          featureValues: { ...config.featureValues, ...sessionLaunch.featureValues },
+        }
+      : config;
     const session = new ACPAgentSession(
-      { ...config, provider: this.provider },
+      { ...preparedConfig, provider: this.provider },
       {
         provider: this.provider,
         logger: this.logger,
@@ -930,7 +938,13 @@ export class ACPAgentClient implements AgentClient {
       cwd,
     };
     const sessionLaunch = await this.prepareSessionLaunch(mergedConfig, launchContext);
-    const session = new ACPAgentSession(mergedConfig, {
+    const preparedConfig = sessionLaunch?.featureValues
+      ? {
+          ...mergedConfig,
+          featureValues: { ...mergedConfig.featureValues, ...sessionLaunch.featureValues },
+        }
+      : mergedConfig;
+    const session = new ACPAgentSession(preparedConfig, {
       provider: this.provider,
       logger: this.logger,
       runtimeSettings: this.runtimeSettings,
@@ -3304,6 +3318,7 @@ function mapToolSnapshotToTimeline(
     metadata: {
       kind: snapshot.kind ?? undefined,
       title: snapshot.title,
+      ...(snapshot.transportShadow ? { transportShadow: snapshot.transportShadow } : {}),
     },
   };
   if (status === "failed") {

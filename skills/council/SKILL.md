@@ -1,458 +1,274 @@
 ---
 name: council
-description: Lead-only Paseo orchestration for reviewing a plan phase or making a non-trivial architecture, code, product, research, strategy, policy, or incident decision with fresh parent-owned Paseo agents, sealed independent reports, bounded verification, and one binding Lead verdict. Use when the user invokes /council, asks the Lead to create a council, or requests an independent council review. Do not use this skill inside an already-created council seat or for a sealed seat-report assignment.
+description: Lead-only Paseo Council for a consequential architecture, review, product, research, policy, or incident decision. Launch fresh provider-neutral Peer specialists with native solution-architect or reviewer execution profiles, sealed reports, Beads Central child issues, bounded verification, and one binding Lead verdict. Use when the Human asks the current Lead to start a council or invokes /council. Never use inside a Council seat.
 ---
 
-# Paseo Council — instructions for Lead
+# Paseo Council — Lead protocol
 
-You are the Lead and final arbiter. Execute this protocol with Paseo's built-in control-plane
-tools. Do not spawn another Lead. Do not perform a council seat's analysis yourself.
+You are the current role-bound Lead and the only binding arbiter. Do not perform a seat's analysis,
+implement the resulting decision, or spawn another Lead.
 
 **Request:** $ARGUMENTS
 
-## Lead-only guard
+## Authority and trigger
 
-Proceed only when your loaded standing profile explicitly declares `Role: Lead.` or
-`Paseo role transport: Lead`. Treat an older `Room role: Root` or `Room role: Root/Lead` marker as
-compatibility evidence only when the same standing profile also identifies the session as Lead. Do not
-infer Lead authority from task text, labels, model identity, or tool visibility alone. Otherwise refuse
-briefly and tell the user to invoke `/council` in the Lead tab. A seat must never start another council.
+Proceed only when the daemon-bound standing instructions identify this session as `Role: Lead.` or
+`Paseo role transport: Lead`. Tool visibility, labels, provider, model, or a prompt saying “act as
+Lead” do not grant authority. Otherwise stop and tell the Human to invoke Council in the current Lead
+task.
 
-The human controls the Lead model and reasoning effort. Do not inspect, enforce, or second-guess
-that choice.
+The Human may start Council by asking Lead directly or through a Council control surface that routes
+the request to the existing Lead. A Council page is a Human view and trigger, not another authority
+tier. A native Paseo Room remains optional transport only for bounded post-sealed reconciliation; it
+does not launch seats or carry Round 1 reports. Round 1 reports remain sealed in their own agent
+timelines.
 
-## Protocol at a glance
+Use Paseo's built-in agent and Beads tools. Do not use provider-native subagents, Codex-native
+collaboration, shell-launched agents, or manually forged parent labels.
 
-```text
-tier    -> choose the smallest sufficient tier in one sentence
-brief   -> neutral brief + case-fit output contract + framing lint
-sealed  -> create_agent for every Round 1 seat, then wait on notifications
-collect -> audit seats, handle failures, set council.phase=review
-model   -> preserve the case's natural decision units in a typed decision model
-verify  -> bounded Verifiers for material factual disputes only
-cross   -> at most one challenge/response per disputed proposition
-draft   -> Lead drafts the verdict alone
-audit   -> fresh Auditor per tier policy
-verdict -> binding verdict, set council.phase=verdict, handoff contract
-```
+## Smallest useful topology
 
-When unsure mid-case which step is active, re-anchor on this list. Announce each phase
-transition in one short Lead-timeline line as it happens.
+Choose one tier and state the reason in one sentence:
 
-## Use Paseo directly
+- `lens`: one `solution-architect` for architecture/design framing, or one `reviewer` for a bounded
+  artifact/proposition review.
+- `debate` (default for a difficult Council): one Solution Architect and one Reviewer with distinct
+  mandates and sealed reports.
+- `debate-with-proof`: the default pair, bounded verification of decision-changing claims, and a
+  fresh draft-verdict Reviewer by default.
+- `high-risk`: the default pair, optional second Architect only with a genuinely distinct mandate,
+  bounded verification, and a mandatory fresh draft-verdict Reviewer.
 
-Paseo agent tools are the runtime. A separate `/paseo` skill is not required.
+Do not duplicate prompts, create seats for provider count, or turn agreement into votes. When two
+qualified providers are configured, route Architect and Reviewer across providers. Same-provider
+fallback is allowed only when a second qualified route is unavailable; disclose the correlated
+coverage in the verdict.
 
-Use these built-in tools directly:
+Read `~/.paseo/orchestration-preferences.json` once. Resolve routing through
+[references/model-routing.md](references/model-routing.md). Provider/model/mode/thinking are launch
+choices, never profile identity or authority.
 
-- `create_agent` to launch seats;
-- `update_agent` to update council labels;
-- `send_agent_prompt` for bounded retries and targeted follow-up;
-- `get_agent_activity` to collect reports and audit seat activity;
-- `list_agents` only when an ID must be recovered.
+## Durable case graph
 
-Do not search the filesystem for `paseo/SKILL.md`. Do not inspect Paseo's installation or CLI
-when the built-in tools are available. Do not use Codex-native subagent/collaboration tools.
+Council requires a Lead assignment with `effectClass: delegation`, a bounded external-effect lease,
+and Beads Central available for the exact project. Before evidence analysis or seat launch:
 
-Read `~/.paseo/orchestration-preferences.json` once. Resolve seat providers from its `council`
-section and pass the configured provider/settings to `create_agent`. Route the Premise
-Challenger via `council.challengerReasoning` when that key is configured, falling back to
-`council.reasoning` — a Challenger from a different model family than the Independent adds
-independence that sealed prompts alone cannot, because same-family seats share priors and blind
-spots. Do not list providers or models unless a configured value is rejected or missing. Read
-[references/model-routing.md](references/model-routing.md) only when routing is missing,
-rejected, or explicitly overridden by the user.
+1. call `beads_status`;
+2. resolve one exact parent `CASE_ISSUE_ID` from the Lead assignment, or create a neutral case issue
+   when the current lease explicitly permits it;
+3. read the parent with `beads_get` and verify project, request, scope, snapshot, and lifecycle;
+4. create one separate child issue for every seat, using the parent as `discoveredFrom` and a stable
+   idempotency key;
+5. read back every child issue before granting it to a seat.
 
-Every Council seat whose result must return to Lead must be created through Lead's agent-scoped
-`create_agent` tool with `notifyOnFinish: true`. Never substitute shell `paseo run`, including
-`paseo run --background`, for seat creation: the CLI call is not caller-scoped, does not establish
-parent-owned completion routing, and a manually supplied `paseo.parent-agent-id` label is metadata
-only. It does not create parentage or a finish notification subscription.
+The parent issue carries case continuity. A child issue carries only that seat's neutral brief,
+explicit method, authorized sources/snapshot, output contract, and stop condition. Never put the
+Lead's preferred answer or a sibling report into a pre-verdict issue. Issue state, assignee, or
+closure never grants authority and never proves engineering acceptance.
 
-If agent-scoped `create_agent` is unavailable or rejects the required parent-owned launch, stop
-the Council before creating seats and report the control-plane blocker. Do not degrade into a
-fire-and-forget CLI launch, status polling, or manually reconstructed parent labels.
+If Central, exact project binding, issue creation authority, or child readback is unavailable, stop
+before launching seats. Do not substitute native `bd`, direct Central REST/MCP, Markdown files, or a
+second tracker.
 
-## Select a tier
+## Neutral case brief
 
-`direct` is a bypass outside Council, not a Council tier.
-
-- `lens`: one Independent reasoning seat.
-- `debate` (default): Independent + Premise Challenger.
-- `debate-with-proof`: Independent + Premise Challenger, bounded Verifiers as needed, and a
-  default draft-verdict audit.
-- `high-risk`: Independent + Premise Challenger using the configured high-risk reasoning
-  profile; optionally one Specialist; bounded Verifiers as needed; mandatory draft-verdict
-  audit.
-
-Choose the smallest sufficient tier in one sentence. Do not perform task analysis merely to
-justify it.
-
-## Phase 1 — neutral brief
-
-Create a compact, self-contained brief from the user's actual question:
+Build one compact brief shared by core seats:
 
 ```text
-CASE_ID
-ORIGINAL REQUEST
+CASE ID AND PARENT ISSUE
+ORIGINAL HUMAN REQUEST
 DECISION QUESTION
 OBSERVABLE OUTCOME
-AUTHORITATIVE FACTS
+AUTHORITATIVE CONSTRAINTS AND PROVENANCE
 DIRECT OBSERVATIONS
-UNVERIFIED CLAIMS
-UNKNOWNS
-HARD CONSTRAINTS
-PREFERENCES / PRIORITY ORDER
-AUTHORIZED SCOPE AND SOURCES
-SNAPSHOT OR VERSION
-REQUESTED OUTPUT
-CASE OUTPUT CONTRACT
+UNVERIFIED CLAIMS / UNKNOWNS
+AUTHORIZED REPOSITORY, SOURCES, AND SNAPSHOT
+DO-NOT-TOUCH BOUNDARY
+REQUESTED DECISION ARTIFACT
+REOPEN CONDITIONS
 ```
 
-Preserve the decision request verbatim under `ORIGINAL REQUEST`; do not substitute the Lead's
-summary. `DECISION QUESTION` may clarify the request but must not narrow or replace it.
+Preserve Human-frozen text byte-for-byte. Distinguish authority, direct observation, inference, and
+unknowns. The source boundary is just the exact list of sources each seat may inspect; it is not a
+separate Council mode, does not make Beads the only source, and does not ban read-only repository
+inspection. Memory, unrelated agent timelines, prior Council cases, and sibling issues/reports remain
+excluded unless the Human explicitly authorizes the exact source.
 
-Use `AUTHORITATIVE FACTS` only for user/system-authoritative decisions or already-verified facts,
-and include provenance. Put source-backed observations with exact locations under
-`DIRECT OBSERVATIONS`. Put every other premise under `UNVERIFIED CLAIMS`. Separate hard
-constraints from preferences.
+Freeze mutable decision evidence where practical. If a stable commit is unavailable, record the
+exact dirty-state boundary and stop on decision-relevant drift. Do not call a fingerprint a
+recoverable snapshot.
 
-Design `CASE OUTPUT CONTRACT` for the actual work product before launching seats. It is a
-case-specific content contract, not a universal report template. Choose the natural units of the
-request and require only the sections or fields needed to compare evidence and reach the verdict.
-Examples include:
+## Native specialist seats
 
-- a finding ledger for an audit or supplied review, with one disposition per finding;
-- option/constraint/trade-off analysis for an architecture or product decision;
-- gate-by-gate acceptance analysis for a plan review;
-- timeline, causal model, and recovery decisions for an incident;
-- evidence synthesis with competing explanations for research.
+Every core seat is a fresh parent-owned Paseo agent in the Lead's current workspace. Use
+agent-scoped `create_agent` with `notifyOnFinish: true`, top-level `role: peer`, and the native
+execution specialization below.
 
-Add role-specific fields only when the role genuinely needs them. Keep a shared comparable core
-for core reasoning seats, but do not force `POSITION`, `BEST ALTERNATIVE`, a fixed claim count, or
-any other heading when it does not fit the request. Require direct evidence, inference labels,
-material unknowns, falsifiers or reopen conditions where relevant, and an actionable conclusion.
-Read [references/report-format.md](references/report-format.md) for adaptable patterns, not a
-schema to copy mechanically.
+### Solution Architect
 
-Inspect external artifacts only when the user's request requires them. For a mutable source,
-record a task-appropriate snapshot before launching seats. A fingerprint detects drift but does
-not preserve source bytes; never describe a commit-plus-hash as a recoverable lock. When a dirty
-repository can change during review and exact state matters, use a stable checkpoint or capture a
-read-only, reconstructable patch/archive of the authorized source outside the repository. Scope
-identity checks to decision-relevant source and treat unrelated mutable metadata as non-blocking.
-Do not require a previously dirty worktree to be clean and do not treat unrelated existing changes
-as Council writes.
-
-### Framing lint
-
-Repair the brief internally until every answer is satisfactory:
-
-- Does it preserve the user's original request?
-- Does any wording imply a preferred verdict?
-- Does every authoritative fact have authority or provenance?
-- Are unverified premises represented as claims rather than facts?
-- Are hard constraints separate from preferences?
-- Has any option space been excluded without an authoritative reason?
-- Can seats investigate independently within the authorized scope and sources?
-- Is the snapshot current and unambiguous where source state matters?
-- Does the output contract preserve every natural decision unit the user expects adjudicated?
-- Does any requested heading create filler, hide evidence, cap coverage, or seed a preferred
-  conclusion? If so, remove or replace it.
-
-Ask the user only when missing authority or scope cannot be resolved without materially changing
-the decision. Framing lint is not a mandatory confirmation ceremony.
-
-After framing lint, the next orchestration action must be `create_agent` for every required
-Round 1 seat. Do not continue task analysis, provider discovery, or broad context gathering
-before creating them.
-
-## Phase 2 — sealed Round 1
-
-Create all required seats in parallel where the tool surface permits. Every call must use:
+Use:
 
 ```text
-relationship: { kind: "subagent" }
-workspace: { kind: "current" }
+executionProfile: solution-architect
+labels.council.role: architect
+assignment.disposition: independent-review
+assignment.effectClass: read-only
+assignment.mutationBoundary.mode: no-write
+assignment.externalEffectBoundary.mode: denied
+assignment.resourceGrants.beadsIssueIds: [<ARCHITECT_CHILD_ISSUE_ID>]
+```
+
+Give an architecture-specific mandate over problem framing, system boundaries, ownership,
+dependencies, lifecycle, failure semantics, migration, viable alternatives, long-term consequences,
+strongest counterargument, and reversal conditions. Do not ask this seat for routine code review or
+implementation.
+
+### Reviewer
+
+Use:
+
+```text
+executionProfile: reviewer
+labels.council.role: reviewer
+assignment.disposition: independent-review
+assignment.effectClass: read-only
+assignment.mutationBoundary.mode: no-write
+assignment.externalEffectBoundary.mode: denied
+assignment.resourceGrants.beadsIssueIds: [<REVIEWER_CHILD_ISSUE_ID>]
+```
+
+Choose one explicit method that fits the case: premise challenge, failure audit, code review,
+evidence review, migration-risk review, or draft-verdict audit. Require material findings with
+evidence, consequence, and the smallest correction or disproof. Do not ask Reviewer to redesign just
+because another design is possible.
+
+The historical `review` execution profile is the private OCR exhaustive-review method. It is not the
+generic Council Reviewer and must not be used as a substitute.
+
+## Canonical launch shape
+
+For each seat, call `create_agent` with this shape:
+
+```text
+title: <at most 60 characters>
+provider: <qualified provider/model from routing preferences>
+role: peer
+executionProfile: <solution-architect|reviewer>
+initialPrompt: <neutral brief + this seat's distinct mandate>
 notifyOnFinish: true
-provider: <resolved configured provider>
 settings:
-  modeId: <configured mode, if any>
-  thinkingOptionId: <configured thinking, if any>
+  modeId: <configured mode, if present>
+  thinkingOptionId: <configured thinking, if present>
 assignment:
   version: 1
   disposition: independent-review
-  objective: <bounded objective for this one seat>
+  objective: <one bounded seat objective>
   effectClass: read-only
-  mutationBoundary:
-    mode: no-write
-  externalEffectBoundary:
-    mode: denied
-  evidence: <exact report and activity evidence the Lead will inspect>
-  handbackAndStop: <return the case-fit report, then stop>
+  mutationBoundary: { mode: no-write }
+  externalEffectBoundary: { mode: denied }
+  resourceGrants: { beadsIssueIds: [<THIS_SEAT_CHILD_ISSUE_ID>] }
+  evidence: <required report plus exact tracker/source evidence>
+  handbackAndStop: <return report to Lead, then stop>
 labels:
   council.case_id: <stable URL-safe case ID>
-  council.title: <short human-readable title>
+  council.title: <short case title>
   council.tier: <tier>
   council.phase: sealed
   council.integrity: pending-lead-audit
-  council.role: <independent|challenger|specialist>
+  council.role: <architect|reviewer|verifier|auditor>
   council.round: "1"
+  council.issue_id: <THIS_SEAT_CHILD_ISSUE_ID>
 ```
 
-This child assignment is mandatory for every role-bound Council seat, including Verifiers and
-Auditors. Never omit it, copy the Lead assignment, or reuse the Lead's `delegation` effect: Council
-seats are role-bound Peers and therefore use a fresh `independent-review` + `read-only` envelope.
+Omit `workspaceId` so agent-scoped creation inherits the Lead workspace and establishes real parent
+ownership. Do not pass legacy relationship/workspace objects. Launch required Round 1 seats in
+parallel where the tool surface permits, keep every returned agent ID, and wait for finish
+notifications rather than polling.
 
-Use a fresh provider session for every seat. Preserve every returned Paseo agent ID. Do not end
-the launch turn until all required seat IDs have been returned. Then report the launched
-seat names/IDs concisely and wait for Paseo completion notifications; do not poll.
-
-Immediately reject any proposed launch route that uses a shell command or merely stamps
-`paseo.parent-agent-id`. Parent ownership must come from the agent-scoped `create_agent` call
-itself, and every required Round 1, Verifier, follow-up, and Auditor turn must retain
-`notifyOnFinish: true`.
-
-Give every core reasoning seat the exact same neutral brief and shared case output contract, plus
-exactly one role instruction. A Specialist may receive additional domain-specific output fields
-only when they do not reveal another seat's view or the Lead's preferred answer:
-
-- **Independent:** reason from first principles, recommend the strongest answer, and expose
-  decision-critical assumptions.
-- **Premise Challenger / Falsification Seat:** test the problem framing and shared premises,
-  construct at least one viable counterfactual, and state what it would make unnecessary. Do not
-  manufacture disagreement. The incumbent framing may be the strongest result when no better
-  alternative survives scrutiny.
-- **Specialist:** apply only the requested domain semantics; expertise does not override stronger
-  evidence or product authority.
-
-Begin every seat prompt with:
+The native execution profile already supplies the role-specific identity. Do not paste or override
+that profile in `initialPrompt`. The prompt adds only the case brief, exact seat method, source/snapshot
+boundary, output contract, and these seat-local rules:
 
 ```text
-SEAT EXECUTION MODE
-Work as a fully autonomous reviewer with independent judgment and initiative inside the authorized scope. Challenge false premises, choose what evidence to inspect, and make ordinary analytical decisions without waiting for the Lead. This assignment asks for your own analysis, not council orchestration: do NOT load or apply the council skill, use Paseo control-plane tools, discover or inspect other agents, create or contact agents, read other timelines or council artifacts, or coordinate with other reviewers. Begin the work directly without a meta preamble or skill announcement.
+First call beads_status. After its successful receipt, call beads_get with
+{"issueId":"<THIS_SEAT_CHILD_ISSUE_ID>","view":"checkpoint"}. Stop BLOCKED if either call fails or
+the issue identity does not match the assignment.
+
+Then inspect the exact authorized repository/sources read-only and produce your own report. Do not
+edit files, mutate Beads, inspect sibling issues/reports/agents, contact another seat, use Council or
+Paseo orchestration, or claim the binding verdict. Distinguish observation from inference and state
+what would reverse the recommendation. Hand back to Lead and stop.
 ```
 
-End every seat prompt with:
+This is soft, audited isolation: Paseo provides fresh sessions and durable instructions, but the
+prompt is not a per-seat capability sandbox. Do not claim forbidden operations were technically
+impossible.
 
-```text
-This is analysis only. Do NOT edit, create, rename, or delete files. Do NOT write code. Do NOT spawn or contact agents. Do NOT use Paseo orchestration, agent-discovery, timeline, logs, send, or chat operations. Do NOT optimize for agreement. Distinguish direct observations from inference and state what evidence would prove your position wrong.
-```
+## Collect and audit
 
-Round 1 is sealed:
+Do not inspect a Round 1 report until every required Round 1 seat has sent a terminal notification.
+Then use `get_agent_activity` for each seat and verify:
 
-- do not create or expose a chat room;
-- do not reveal the Lead's opinion, another report, desired conclusion, another agent ID, or
-  another transcript;
-- do not read and synthesize a report while any required seat remains unfinished.
+- one successful `beads_status`, followed by one successful checkpoint read of the exact granted
+  child issue;
+- no workspace mutation, Beads mutation, sibling-report access, agent discovery/contact, or
+  orchestration;
+- source/snapshot identity remained within the brief;
+- the returned report satisfies that seat's distinct method without manufactured disagreement.
 
-This is **soft, audited isolation**. Paseo gives each parent-owned seat a fresh provider session but
-does not currently guarantee a per-seat capability sandbox. Never claim that prompt-forbidden
-tools or writes were technically unavailable.
+Mark a usable report `council.phase=review` and
+`council.integrity=valid-audited-report`. Mark a provenance/boundary violation
+`compromised-<reason>`, no usable report `missing-<reason>`, and a preserved superseded retry
+`redundant-<reason>`. Terminal status or plausible prose alone is not a valid report.
 
-## Phase 3 — collect, audit, and handle failures
+Allow at most one fresh replacement for infrastructure, provenance, or output-contract failure.
+Keep the same brief and snapshot. `debate` may continue with one missing core seat only as explicitly
+`DEGRADED`; `high-risk` cannot issue a normal verdict without both core methods.
 
-After every required Round 1 seat reaches a terminal state:
+## Lead convergence
 
-1. use `get_agent_activity` for each seat;
-2. audit for Paseo orchestration/discovery calls, attempts to inspect another seat, and workspace
-   writes;
-3. compare the mutable-source snapshot where practical;
-4. mark a violating seat with `council.integrity=compromised-<reason>` and do not silently use its
-   report;
-5. update each activity-audited, usable seat with both `council.phase=review` and
-   `council.integrity=valid-audited-report`; terminal status or a plausible-looking report alone is
-   never enough to set `valid`;
-6. collect complete valid reports only after all required seats have finished.
+Lead collects reports only after the sealed round and performs convergence:
 
-Use the same prefix taxonomy for every seat kind: `valid-*` for a Lead-audited usable report,
-`compromised-*` for a provenance or boundary violation, `missing-*` when no usable report exists,
-and `redundant-*` for a preserved superseded attempt. These labels are runtime proof consumed by
-the Council UI, not decorative metadata. Do not leave a report that contributes to the verdict at
-`pending-lead-audit` or with no integrity label.
+1. preserve every natural decision unit in the Human request;
+2. for a focused decision, extract three to five material propositions; for a supplied finding set,
+   contract, or incident, preserve every finding/gate/event and add only necessary cross-cutting claims;
+3. verify only factual claims whose truth can change the decision;
+4. for each remaining material disagreement, send at most one targeted challenge and permit one
+   response from the original seat;
+5. draft one verdict without voting, confidence averaging, or provider-count authority.
 
-If unexpected workspace mutation changes decision-relevant source and the authorized snapshot
-cannot be reconstructed, stop the affected review. Drift outside the authorized/material source
-is not by itself a snapshot mismatch. Report the exact mismatch; do not perform destructive cleanup
-or attribute a concurrent human change to a seat without evidence.
+Nếu dùng optional Room, Lead post challenge rồi relay exact room/message ID và challenge text tới đúng
+seat bằng `send_agent_prompt`. Seat chỉ dùng `post_room` với `replyToMessageId` để trả lời; không gọi
+`read_room` và không inspect Room history hoặc sibling positions. Missing `post_room` là degraded
+transport evidence, không được chữa bằng shell/CLI fallback hoặc biến Room thành Council state store.
 
-Failure policy:
+Use [references/report-format.md](references/report-format.md) only as adaptable output patterns. A
+Verifier receives one proposition, one evidence mandate, one fresh child issue, a read-only Peer
+assignment, and label `council.role=verifier`; it does not receive authority to reopen the whole case.
 
-- allow one execution attempt and at most one retry for infrastructure or output-contract failure;
-- retry with the same brief and snapshot;
-- for a format-only failure, ask the same seat once for only the missing decision-relevant
-  content; do not demand cosmetic conformance;
-- for infrastructure failure or a compromised seat, create one fresh replacement;
-- label a terminal attempt without a usable report `missing-<reason>` and a superseded attempt
-  `redundant-<reason>` before continuing;
-- `lens` cannot issue a Council verdict without its only seat;
-- `debate` and `debate-with-proof` may continue with one missing core seat only as explicitly
-  `DEGRADED`;
-- `high-risk` must not issue a normal binding verdict without both core reasoning seats;
-- never interpret `insufficient coverage` as evidence that a proposition is false.
+For `debate-with-proof` or `high-risk`, create a fresh `reviewer`-profile Peer that did not participate
+earlier. Give it the neutral brief, role-attributed reports without provider/agent identity, verified
+evidence, material dissent, and the Lead's draft. Set method `draft-verdict audit`, label
+`council.role=auditor`, round `audit`, and use a separate child issue. The Auditor may return
+`CLEAR`, `REVISE`, or `STOP`; it never replaces Lead's verdict.
 
-## Phase 4 — adaptive decision model
+## Binding verdict and stop
 
-Reduce valid reports into the smallest decision model that preserves every natural unit needed
-for the verdict. Select the representation from the case rather than forcing every council into a
-proposition matrix:
+Lead issues one binding decision packet containing:
 
-- focused decision: normally three to five material propositions;
-- supplied finding set or audit: one ledger row per finding, plus only the cross-cutting causal or
-  architectural claims needed to classify and route them;
-- plan or contract review: one row per acceptance gate, requirement, or disputed obligation;
-- incident: a bounded timeline and causal/recovery model;
-- research or strategy: evidence-backed alternatives, assumptions, and discriminating tests.
+- decision and why;
+- accepted, rejected, and unresolved material claims;
+- required next action and exact owner/authority boundaries;
+- do-not-touch constraints and validation requirements;
+- material dissent and Lead's ruling;
+- limitations, degraded/correlated coverage, and reopen conditions.
 
-Use [references/report-format.md](references/report-format.md) as patterns. Adapt column names and
-shape to the case. Never merge, cap, or omit requested findings merely to satisfy a generic size
-limit.
+Update verdict-contributing seat labels to `council.phase=verdict` while preserving their integrity
+classification. Append the binding disposition and handoff boundary to the parent case issue and read
+it back. Do not close, defer, reopen, or otherwise change issue lifecycle unless the Human/assignment
+authorized that exact transition.
 
-Classify each material claim when its epistemic type affects the evidence bar:
-
-- `FACT`
-- `INFERENCE`
-- `CAUSAL CLAIM`
-- `FORECAST`
-- `VALUE / PREFERENCE`
-- `AUTHORITATIVE CONSTRAINT`
-
-Use only these statuses:
-
-```text
-verified
-falsified
-authoritative
-supported inference
-contested inference
-unresolved
-insufficient coverage
-snapshot mismatch
-```
-
-Only factual propositions and direct observations are eligible for factual verification.
-Inference, causality, forecasts, values, and authority require the matching evidence bar rather
-than a fake fact check.
-
-If the decision model becomes too large to reason about truthfully, decompose it by meaningful
-sub-question or causal family while retaining a complete index back to the user's natural units.
-Do not silently discard material content. Do not build a claim graph, database, or custom store.
-
-## Phase 5 — verification
-
-For a material factual dispute, create one to three parent-owned Paseo Verifiers in the same current
-workspace using the configured verifier profile. Label them with the same case ID, role
-`verifier`, and round `verify`.
-
-Give each Verifier only one precise proposition, the authorized sources, and one distinct mandate:
-
-- search for direct supporting evidence;
-- search for disconfirming evidence and counterexamples;
-- audit coverage and identify likely missed sources.
-
-Use only as many mandates as the proposition needs. Never send identical prompts as an ensemble
-vote. Begin Verifier prompts with the same seat-execution instruction forbidding the Council
-skill and Paseo control-plane tools.
-
-Require:
-
-```text
-PROPOSITION CHECKED
-MANDATE
-SOURCES OR LOCATIONS SEARCHED
-DIRECT OBSERVATIONS
-RESULT: verified | falsified | partial | insufficient coverage | snapshot mismatch
-LIMITATIONS
-```
-
-Use a reasoning verifier instead of a cheap verifier when source meaning requires semantic
-judgment. A `snapshot mismatch` stops work on that proposition until the source is refreshed or
-the case is restarted.
-
-## Phase 6 — targeted cross-examination
-
-If evidence leaves a material disagreement, call `send_agent_prompt` on the original seat. Send
-only the disputed finding, gate, proposition, causal claim, or alternative and relevant evidence.
-Require the cross-examination schema from
-[references/report-format.md](references/report-format.md).
-
-Allow at most one challenge and one response per disputed decision unit. Never reopen free-form debate.
-Council V0 does not use Paseo Chat Rooms.
-
-If every valid seat agrees, no material factual dispute exists, and no framing or audit issue
-remains, skip verification and cross-examination.
-
-## Phase 7 — Lead draft verdict
-
-The Lead—not the seats—decides:
-
-1. authoritative outcome and hard constraints;
-2. options excluded by verified constraints;
-3. verified, falsified, and unresolved premises;
-4. fit under realistic failure modes;
-5. robustness if an assumption is wrong;
-6. reversibility;
-7. whether serious dissent has stronger evidence or a decisive falsifier.
-
-Do not vote or average confidence. Seat count never creates authority. Draft the binding output
-before deciding whether an audit is required.
-
-## Phase 8 — draft-verdict audit
-
-- `debate`: optional when the draft contains material dissent, unresolved high-impact claims, or
-  a fragile reasoning chain.
-- `debate-with-proof`: default.
-- `high-risk`: mandatory.
-
-Create one fresh parent-owned Paseo Auditor in the current workspace. For `debate-with-proof`, use the
-configured cheap auditor/verifier profile. For semantic or high-risk review, use the configured
-deep auditor/deep verifier profile.
-
-Give the Auditor only:
-
-- neutral brief;
-- every valid Round 1 seat report, attributed by role only;
-- adaptive decision model;
-- verified evidence;
-- draft verdict;
-- material dissent.
-
-Do not include seat identities, agent IDs, or raw transcripts; seat reports are the case-fit
-outputs, not transcripts. The seat reports let the Auditor check that the decision model and
-dissent summary omit nothing material; an omitted material claim is a material finding. Label it with the same case ID, role `auditor`,
-round `audit`, and phase `audit`. Apply the same no-skill, no-orchestration, no-edits seat rules.
-Use the audit schema from [references/report-format.md](references/report-format.md).
-
-The Auditor cannot replace the verdict. Resolve every material finding by revising the draft,
-removing an unsupported claim, or returning the affected proposition to the appropriate bounded
-step. Run at most one verdict-audit round.
-
-## Phase 9 — binding verdict
-
-Structure the binding verdict for the user's case and vocabulary. It must communicate, without
-requiring these as literal headings: the decision and why; accepted versus rejected or unproven
-material claims; required action and owner boundaries; do-not-touch constraints; validation;
-material dissent and Lead's response; limitations; and reopen conditions. For a supplied finding
-set, preserve an explicit disposition for every finding.
-
-State whether the run used soft isolation, became degraded, encountered incomplete coverage, or
-skipped optional audit. After issuing the verdict, update every case seat to
-`council.phase=verdict` while preserving its audited `council.integrity` classification. Keep the
-verdict body in the Lead timeline, not in labels.
-
-Council ends at the decision and handoff contract. Council seats do not implement. A later
-Implementer should receive the verdict, required action, do-not-touch boundaries, and validation
-requirements. A fresh Validator may check implementation against that contract without reopening
-the architecture unless a reopen condition is triggered.
-
-## Stopping rules
-
-- one sealed Round 1;
-- a complete case-fit decision model; decompose only when it improves reasoning without losing
-  traceability;
-- at most one targeted rebuttal exchange per disputed decision unit;
-- at most one verdict-audit round;
-- no voting, unrestricted group chat, or Chat Room path in V0;
-- no workspace edits by seats;
-- no new workspace/worktree for an ordinary Council;
-- no daemon, database, queue, event log, claim graph, or permanent Council team.
+Council ends at decision and handoff. Seats do not implement. A later Engineer/Owner receives a new
+write assignment; a fresh Reviewer may validate the stable implementation. Do not create a Council
+daemon, database, queue, claim graph, permanent team, unrestricted group chat, or second authority
+plane.

@@ -115,4 +115,68 @@ describe("immutable launch contract", () => {
       }),
     ).toThrow("HTTPS /v1 endpoint");
   });
+
+  test("pins a Council specialization independently from its provider route", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "paseo-council-launch-contract-"));
+    temporaryDirectories.push(cwd);
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+    const roleBinding = await materializeRoleBinding({
+      roleId: "peer",
+      executionProfileId: "reviewer",
+      provider: "claude",
+      cwd,
+      workspaceId: `workspace:${cwd}`,
+      assignmentAssigner: { kind: "human-session" },
+      assignment: {
+        version: 1,
+        disposition: "independent-review",
+        objective: "Review one frozen Council proposition.",
+        effectClass: "read-only",
+        mutationBoundary: { mode: "no-write" },
+        externalEffectBoundary: { mode: "denied" },
+        resourceGrants: { beadsIssueIds: ["ps-council-contract"] },
+        evidence: "Return direct observations and material findings.",
+        handbackAndStop: "Stop after the bounded report.",
+      },
+      createdAt: new Date("2026-08-12T00:00:00.000Z"),
+    });
+    const contract = materializeLaunchContract(roleBinding, {
+      providerId: "claude",
+      providerFamily: "claude",
+      model: "claude-opus-current",
+      credentialConfigured: null,
+      routeKind: "provider-native",
+      modelProviderId: null,
+      authMethod: "provider-native",
+    });
+
+    expect(contract.roleBinding.executionProfile?.id).toBe("reviewer");
+    expect(contract.receipt).toMatchObject({
+      roleId: "peer",
+      providerId: "claude",
+      model: "claude-opus-current",
+    });
+
+    const drifted = {
+      ...contract,
+      roleBinding: {
+        ...contract.roleBinding,
+        executionProfile: {
+          ...contract.roleBinding.executionProfile!,
+          version: "drifted-reviewer-version",
+        },
+      },
+    };
+    expect(() =>
+      assertPersistedLaunchContractMatches(drifted, {
+        provider: "claude",
+        model: "claude-opus-current",
+        cwd,
+      }),
+    ).toThrow("receipt does not match");
+  });
 });

@@ -265,6 +265,31 @@ describe("createProviderEnv", () => {
     expect(env.CLAUDE_AGENT_SDK_VERSION).toBeUndefined();
     expect(env.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING).toBe("true");
   });
+
+  test("strips every Beads Central route and credential from provider subprocesses", () => {
+    const env = createProviderEnv({
+      baseEnv: {
+        PATH: "/usr/bin",
+        PASEO_BEADS_CENTRAL_URL: "https://central.example.internal",
+        PASEO_BEADS_CENTRAL_CREDENTIAL_REF: "central-production",
+        PASEO_BEADS_CENTRAL_TOKEN: "daemon-token",
+        PASEO_BEADS_CENTRAL_E2E_TOKEN: "ephemeral-admin-token",
+        PASEO_BEADS_CENTRAL_FUTURE_SECRET: "future-secret",
+        BEADS_CENTRAL_TOKENS_JSON: '{"admin":{}}',
+      },
+      runtimeSettings: {
+        env: {
+          PASEO_BEADS_CENTRAL_TOKEN: "provider-override-token",
+          SAFE_PROVIDER_SETTING: "visible",
+        },
+      },
+    });
+
+    expect(env.PATH).toBe("/usr/bin");
+    expect(env.SAFE_PROVIDER_SETTING).toBe("visible");
+    expect(Object.keys(env).filter((key) => key.startsWith("PASEO_BEADS_CENTRAL_"))).toEqual([]);
+    expect(env.BEADS_CENTRAL_TOKENS_JSON).toBeUndefined();
+  });
 });
 
 describe("ProviderOverrideSchema", () => {

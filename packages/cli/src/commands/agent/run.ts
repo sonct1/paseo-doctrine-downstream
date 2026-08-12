@@ -17,7 +17,9 @@ import { resolveProviderAndModel } from "../../utils/provider-model.js";
 import { buildWorkspaceSource } from "../workspace/create.js";
 import { PaseoRoleIdSchema, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import {
+  assignmentExternalEffectBoundaryFor,
   AssignmentEffectClassSchema,
+  AssignmentResourceGrantsSchema,
   PASEO_ASSIGNMENT_CONTRACT_VERSION,
   type AssignmentEffectClass,
   type AssignmentEnvelope,
@@ -41,6 +43,12 @@ export function addRunOptions(cmd: Command): Command {
         "Role assignment effect: read-only, mutating, delegation, bootstrap, or recovery",
       )
       .option("--write-scope <scope>", "Narrow write scope for a mutating role assignment")
+      .option(
+        "--beads-issue <id>",
+        "Grant an exact Beads Central issue to a Peer (can be used multiple times)",
+        collectMultiple,
+        [],
+      )
       .addOption(new Option("--name <name>", "Hidden alias for --title").hideHelp())
       .option(
         "--provider <provider>",
@@ -126,6 +134,7 @@ export interface AgentRunOptions extends CommandOptions {
   role?: string;
   assignmentEffect?: string;
   writeScope?: string;
+  beadsIssue?: string[];
   name?: string;
   provider?: string;
   model?: string;
@@ -430,6 +439,21 @@ function validateRunOptions(prompt: string, options: AgentRunOptions, outputSche
     } satisfies CommandError;
   }
 
+  const beadsIssueIds = normalizeBeadsIssueIds(options.beadsIssue);
+  if (beadsIssueIds.length > 0 && roleId !== "peer") {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "--beads-issue is only valid with --role peer",
+    } satisfies CommandError;
+  }
+  if (roleId === "peer" && beadsIssueIds.length === 0) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "--beads-issue is required with --role peer",
+      details: "Pin at least one exact durable issue ID for the mandatory Peer tracker checkpoint",
+    } satisfies CommandError;
+  }
+
   if (outputSchema && runsInBackground(options)) {
     throw {
       code: "INVALID_OPTIONS",
@@ -467,16 +491,33 @@ function parseAssignmentEffectOption(
   return parsed.data;
 }
 
-function buildCliAssignment(input: {
+function normalizeBeadsIssueIds(values: readonly string[] | undefined): string[] {
+  const beadsIssueIds = Array.from(
+    new Set((values ?? []).map((issueId) => issueId.trim()).filter(Boolean)),
+  );
+  const parsed = AssignmentResourceGrantsSchema.safeParse({ beadsIssueIds });
+  if (!parsed.success) {
+    throw {
+      code: "INVALID_OPTIONS",
+      message: "Invalid --beads-issue value",
+      details: parsed.error.issues.map((issue) => issue.message).join("; "),
+    } satisfies CommandError;
+  }
+  return beadsIssueIds;
+}
+
+export function buildCliAssignment(input: {
   roleId: PaseoRoleId;
   effectClass: AssignmentEffectClass;
   objective: string;
   cwd: string;
   writeScope?: string;
+  beadsIssueIds?: readonly string[];
 }): AssignmentEnvelope {
   let disposition: AssignmentEnvelope["disposition"] = "supervision";
   if (input.roleId === "lead") disposition = "lead-direct";
   if (input.roleId === "peer") disposition = "peer-execution";
+  const beadsIssueIds = normalizeBeadsIssueIds(input.beadsIssueIds);
   return {
     version: PASEO_ASSIGNMENT_CONTRACT_VERSION,
     disposition,
@@ -488,7 +529,8 @@ function buildCliAssignment(input: {
         Boolean(input.writeScope?.trim()))
         ? { mode: "bounded-write", scope: input.writeScope?.trim() || input.cwd }
         : { mode: "no-write" },
-    externalEffectBoundary: { mode: "denied" },
+    externalEffectBoundary: assignmentExternalEffectBoundaryFor(input.roleId, input.effectClass),
+    ...(beadsIssueIds.length > 0 ? { resourceGrants: { beadsIssueIds } } : {}),
     evidence: "Return exact changed or inspected scope and proportional verification.",
     handbackAndStop:
       "Stop at completion or a material blocker; hand back evidence, unknowns, residual risk, and lease state.",
@@ -501,6 +543,7 @@ function buildOptionalCliAssignment(input: {
   objective: string;
   cwd: string;
   writeScope?: string;
+  beadsIssueIds?: readonly string[];
 }): AssignmentEnvelope | undefined {
   if (!input.roleId || !input.effectClass) return undefined;
   return buildCliAssignment({
@@ -509,6 +552,7 @@ function buildOptionalCliAssignment(input: {
     objective: input.objective,
     cwd: input.cwd,
     writeScope: input.writeScope,
+    beadsIssueIds: input.beadsIssueIds,
   });
 }
 
@@ -748,6 +792,7 @@ export async function runRunCommand(
       objective: prompt,
       cwd: runCwd,
       writeScope: options.writeScope,
+      beadsIssueIds: options.beadsIssue,
     });
 
     if (outputSchema) {

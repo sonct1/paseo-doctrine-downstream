@@ -37,6 +37,8 @@ export function withRuntimePaseoMcpServer(params: {
   config: AgentSessionConfig;
   agentId: string;
   mcpBaseUrl: string | null;
+  /** Non-secret daemon-run identity used to force provider MCP reconnection after resume. */
+  mcpRuntimeId?: string;
   /**
    * Capability token authenticating the injected connection to the daemon's
    * Agent MCP endpoint. The daemon password is gated off this route, so without
@@ -52,9 +54,14 @@ export function withRuntimePaseoMcpServer(params: {
     throw new Error(`MCP server name ${PASEO_MCP_SERVER_NAME} is reserved for Paseo runtime`);
   }
 
+  const runtimeUrl = new URL(params.mcpBaseUrl);
+  runtimeUrl.searchParams.set("callerAgentId", params.agentId);
+  if (params.mcpRuntimeId) {
+    runtimeUrl.searchParams.set("runtimeInstanceId", params.mcpRuntimeId);
+  }
   const runtimeServer: McpServerConfig = {
     type: "http",
-    url: `${params.mcpBaseUrl}?callerAgentId=${params.agentId}`,
+    url: runtimeUrl.toString(),
     ...(params.mcpAuthToken ? { headers: { Authorization: `Bearer ${params.mcpAuthToken}` } } : {}),
   };
   runtimePaseoMcpServers.add(runtimeServer);

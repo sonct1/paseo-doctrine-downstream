@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
@@ -32,15 +33,39 @@ interface RoleBundleManifest {
 export interface FoundationSkillPolicy {
   packageNames: ReadonlySet<string>;
   enabledNames: ReadonlySet<string>;
+  skillPaths: ReadonlyMap<string, string>;
   manifestPath: string;
   status: "bound" | "missing-or-invalid";
 }
 
 function defaultManifestPath(): string {
-  const releaseRoot =
-    process.env.PASEO_FOUNDATION_CURRENT ??
-    path.join(os.homedir(), ".local", "share", "paseo-foundation", "current");
-  return path.join(releaseRoot, "skills", "role-bundles.json");
+  const configuredReleaseRoot = process.env.PASEO_FOUNDATION_CURRENT;
+  if (configuredReleaseRoot) {
+    return path.join(configuredReleaseRoot, "skills", "role-bundles.json");
+  }
+
+  const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const bundled = path.join(moduleDirectory, "foundation-skills", "role-bundles.json");
+  if (existsSync(bundled)) return bundled;
+
+  // Source-tree fallback for tests and `tsx` development. Production builds use
+  // the adjacent immutable bundle above, not whichever Foundation release happens
+  // to be installed on the host.
+  const imported = path.resolve(
+    moduleDirectory,
+    "../../../../../foundation/dist/skills/role-bundles.json",
+  );
+  if (existsSync(imported)) return imported;
+
+  return path.join(
+    os.homedir(),
+    ".local",
+    "share",
+    "paseo-foundation",
+    "current",
+    "skills",
+    "role-bundles.json",
+  );
 }
 
 function stringArray(value: unknown): value is string[] {
@@ -55,13 +80,26 @@ function parseManifest(filePath: string): RoleBundleManifest | null {
     if (!value || typeof value !== "object") return null;
     const record = value as Partial<RoleBundleManifest>;
     if (record.schemaVersion !== 1 || !record.packages || !record.roles) return null;
+    const packageNames = Object.keys(record.packages);
+    const packageSet = new Set(packageNames);
+    const skillRoot = path.dirname(filePath);
+    if (
+      packageNames.length === 0 ||
+      packageNames.some((name) => !/^[a-z0-9-]+$/u.test(name)) ||
+      packageNames.some((name) => !existsSync(path.join(skillRoot, name, "SKILL.md")))
+    ) {
+      return null;
+    }
     for (const role of ["lead", "peer", "supervisor"] as const) {
       const bundle = record.roles[role];
       if (
         !bundle ||
         !stringArray(bundle.active) ||
         !stringArray(bundle.explicitOnly) ||
-        !stringArray(bundle.packagedDisabled)
+        !stringArray(bundle.packagedDisabled) ||
+        [...bundle.active, ...bundle.explicitOnly, ...bundle.packagedDisabled].some(
+          (name) => !packageSet.has(name),
+        )
       ) {
         return null;
       }
@@ -81,6 +119,12 @@ export function loadFoundationSkillPolicy(
     return {
       packageNames: new Set(KNOWN_FOUNDATION_SKILLS),
       enabledNames: new Set(),
+      skillPaths: new Map(
+        KNOWN_FOUNDATION_SKILLS.map((name) => [
+          name,
+          path.join(path.dirname(manifestPath), name, "SKILL.md"),
+        ]),
+      ),
       manifestPath,
       status: "missing-or-invalid",
     };
@@ -93,11 +137,23 @@ export function loadFoundationSkillPolicy(
     return {
       packageNames: new Set([...KNOWN_FOUNDATION_SKILLS, ...packageNames]),
       enabledNames: new Set(),
+      skillPaths: new Map(
+        [...KNOWN_FOUNDATION_SKILLS, ...packageNames].map((name) => [
+          name,
+          path.join(path.dirname(manifestPath), name, "SKILL.md"),
+        ]),
+      ),
       manifestPath,
       status: "missing-or-invalid",
     };
   }
-  return { packageNames, enabledNames, manifestPath, status: "bound" };
+  const skillPaths = new Map(
+    [...packageNames].map((name) => [
+      name,
+      path.join(path.dirname(manifestPath), name, "SKILL.md"),
+    ]),
+  );
+  return { packageNames, enabledNames, skillPaths, manifestPath, status: "bound" };
 }
 
 function codexSkillName(value: unknown): string | null {
@@ -135,4 +191,29 @@ export function filterFoundationSkills<T extends { name: string }>(
   return skills.filter(
     (skill) => !policy.packageNames.has(skill.name) || policy.enabledNames.has(skill.name),
   );
+}
+
+const CLAUDE_MANDATORY_FOUNDATION_SKILLS = ["beads-issue-tracker"] as const;
+
+export function mergeClaudeMandatoryFoundationPlugins(
+  existing: ReadonlyArray<{ type: "local"; path: string; skipMcpDiscovery?: boolean }> | undefined,
+  policy: FoundationSkillPolicy,
+): Array<{ type: "local"; path: string; skipMcpDiscovery?: boolean }> {
+  const mandatoryNames = new Set<string>(CLAUDE_MANDATORY_FOUNDATION_SKILLS);
+  const retained = (existing ?? []).filter(
+    (plugin) => !mandatoryNames.has(path.basename(plugin.path)),
+  );
+  const projected = CLAUDE_MANDATORY_FOUNDATION_SKILLS.flatMap((name) => {
+    const skillPath = policy.skillPaths.get(name);
+    return policy.status === "bound" && policy.enabledNames.has(name) && skillPath
+      ? [{ type: "local" as const, path: path.dirname(skillPath), skipMcpDiscovery: true as const }]
+      : [];
+  });
+  return [...retained, ...projected];
+}
+
+export function claudeMandatoryFoundationSkillDenyRules(policy: FoundationSkillPolicy): string[] {
+  return CLAUDE_MANDATORY_FOUNDATION_SKILLS.filter(
+    (name) => policy.status !== "bound" || !policy.enabledNames.has(name),
+  ).flatMap((name) => [`Skill(${name})`, `Skill(${name}:${name})`]);
 }

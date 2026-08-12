@@ -27,9 +27,70 @@ const roleOutputPath = resolve(
   packageRoot,
   "dist/server/server/agent/foundation-role-definitions.json",
 );
+const executionSpecializationSourcePath = resolve(
+  repositoryRoot,
+  "foundation/dist/profiles/native/execution-specializations.json",
+);
+const executionSpecializationOutputPath = resolve(
+  packageRoot,
+  "dist/server/server/agent/foundation-execution-specializations.json",
+);
+const foundationSkillsSourceRoot = resolve(repositoryRoot, "foundation/dist/skills");
+const foundationSkillAdmissionSourcePath = resolve(foundationSkillsSourceRoot, "role-bundles.json");
+const foundationSkillsOutputRoot = resolve(
+  packageRoot,
+  "dist/server/server/agent/foundation-skills",
+);
 const productSkillsSourceRoot = resolve(repositoryRoot, "skills");
 const productSkillAdmissionSourcePath = resolve(productSkillsSourceRoot, "role-admission.json");
 const productSkillsOutputRoot = resolve(packageRoot, "dist/server/server/agent/product-skills");
+
+function readFoundationSkillAdmission() {
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(foundationSkillAdmissionSourcePath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Cannot read imported Foundation role-skill admission at ${foundationSkillAdmissionSourcePath}`,
+      { cause: error },
+    );
+  }
+  if (
+    manifest?.schemaVersion !== 1 ||
+    !manifest.packages ||
+    typeof manifest.packages !== "object" ||
+    !manifest.roles ||
+    typeof manifest.roles !== "object"
+  ) {
+    throw new Error("Imported Foundation role-skill admission manifest is invalid");
+  }
+  const packageNames = Object.keys(manifest.packages);
+  const packageSet = new Set(packageNames);
+  if (packageNames.length === 0 || packageNames.some((name) => !/^[a-z0-9-]+$/u.test(name))) {
+    throw new Error("Imported Foundation role-skill admission package names are invalid");
+  }
+  for (const name of packageNames) {
+    if (!existsSync(resolve(foundationSkillsSourceRoot, name, "SKILL.md"))) {
+      throw new Error(`Imported Foundation role-skill package '${name}' has no SKILL.md`);
+    }
+  }
+  for (const role of ["lead", "peer", "supervisor"]) {
+    const admission = manifest.roles[role];
+    const states = admission
+      ? [admission.active, admission.explicitOnly, admission.packagedDisabled]
+      : [];
+    if (
+      states.length !== 3 ||
+      states.some(
+        (entries) => !Array.isArray(entries) || entries.some((name) => typeof name !== "string"),
+      ) ||
+      states.flat().some((name) => !packageSet.has(name))
+    ) {
+      throw new Error(`Imported Foundation role-skill admission for '${role}' is invalid`);
+    }
+  }
+  return packageNames.sort();
+}
 
 function readProductSkillAdmission() {
   let manifest;
@@ -161,6 +222,22 @@ mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
 mkdirSync(dirname(roleOutputPath), { recursive: true });
 copyFileSync(roleSourcePath, roleOutputPath);
+copyFileSync(executionSpecializationSourcePath, executionSpecializationOutputPath);
+
+const foundationRoleSkillPackages = readFoundationSkillAdmission();
+rmSync(foundationSkillsOutputRoot, { recursive: true, force: true });
+mkdirSync(foundationSkillsOutputRoot, { recursive: true });
+copyFileSync(
+  foundationSkillAdmissionSourcePath,
+  resolve(foundationSkillsOutputRoot, "role-bundles.json"),
+);
+for (const packageName of foundationRoleSkillPackages) {
+  cpSync(
+    resolve(foundationSkillsSourceRoot, packageName),
+    resolve(foundationSkillsOutputRoot, packageName),
+    { recursive: true },
+  );
+}
 
 const productRoleSkillPackages = readProductSkillAdmission();
 rmSync(productSkillsOutputRoot, { recursive: true, force: true });

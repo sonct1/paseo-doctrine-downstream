@@ -4,8 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
+  claudeMandatoryFoundationSkillDenyRules,
   filterFoundationSkills,
   loadFoundationSkillPolicy,
+  mergeClaudeMandatoryFoundationPlugins,
   mergeCodexFoundationSkillConfig,
 } from "./foundation-skill-policy.js";
 
@@ -44,6 +46,11 @@ function manifestPath(): string {
       },
     })}\n`,
   );
+  for (const name of ["frontend-design", "paseo-supervisor", "repo-refresh"]) {
+    const skillDirectory = path.join(root, "skills", name);
+    mkdirSync(skillDirectory, { recursive: true });
+    writeFileSync(path.join(skillDirectory, "SKILL.md"), `# ${name}\n`);
+  }
   return target;
 }
 
@@ -117,5 +124,42 @@ describe("Foundation skill policy", () => {
         policy,
       ),
     ).toEqual([{ name: "frontend-design" }, { name: "third-party-skill" }]);
+  });
+
+  test("projects the canonical mandatory tracker into Claude and replaces stale copies", () => {
+    const importedManifest = path.resolve(
+      import.meta.dirname,
+      "../../../../../foundation/dist/skills/role-bundles.json",
+    );
+    const policy = loadFoundationSkillPolicy("peer", importedManifest);
+    const merged = mergeClaudeMandatoryFoundationPlugins(
+      [
+        {
+          type: "local",
+          path: "/stale/skills/beads-issue-tracker",
+        },
+        { type: "local", path: "/custom/plugins/local-review" },
+      ],
+      policy,
+    );
+
+    expect(merged).toEqual([
+      { type: "local", path: "/custom/plugins/local-review" },
+      {
+        type: "local",
+        path: path.dirname(policy.skillPaths.get("beads-issue-tracker")!),
+        skipMcpDiscovery: true,
+      },
+    ]);
+    expect(claudeMandatoryFoundationSkillDenyRules(policy)).toEqual([]);
+  });
+
+  test("fails closed for the mandatory Claude tracker when Foundation is invalid", () => {
+    const policy = loadFoundationSkillPolicy("lead", "/missing/role-bundles.json");
+    expect(mergeClaudeMandatoryFoundationPlugins(undefined, policy)).toEqual([]);
+    expect(claudeMandatoryFoundationSkillDenyRules(policy)).toEqual([
+      "Skill(beads-issue-tracker)",
+      "Skill(beads-issue-tracker:beads-issue-tracker)",
+    ]);
   });
 });

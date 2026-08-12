@@ -3,12 +3,13 @@ import {
   chmodSync,
   lstatSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import type {
   WorkspaceProtocolIssue,
   WorkspaceProtocolRevision,
@@ -73,7 +74,29 @@ function hasMandatoryIssueTrackerClause(content: string): boolean {
   return marksMandatory && REQUIRED_TRACKER_TERMS.every((term) => trackerClause.includes(term));
 }
 
-export function validateWorkspaceProtocol(content: string): WorkspaceProtocolIssue[] {
+function canonicalIdentityPath(value: string): string {
+  let canonical: string;
+  try {
+    canonical = realpathSync.native(value);
+  } catch {
+    canonical = resolve(value);
+  }
+  return process.platform === "win32" ? canonical.toLowerCase() : canonical;
+}
+
+function hasMismatchedIdentityScope(content: string, repoRoot: string): boolean {
+  const explicitScope = content.match(/\bapplies_to\s*(?:[:=]\s*|\s+)`([^`\r\n]+)`/iu)?.[1]?.trim();
+  return Boolean(
+    explicitScope &&
+    isAbsolute(explicitScope) &&
+    canonicalIdentityPath(explicitScope) !== canonicalIdentityPath(repoRoot),
+  );
+}
+
+export function validateWorkspaceProtocol(
+  content: string,
+  repoRoot?: string,
+): WorkspaceProtocolIssue[] {
   const issues: WorkspaceProtocolIssue[] = [];
   const byteLength = Buffer.byteLength(content, "utf8");
   if (byteLength === 0 || content.trim().length === 0) issues.push("empty");
@@ -92,6 +115,9 @@ export function validateWorkspaceProtocol(content: string): WorkspaceProtocolIss
     patterns.some((pattern) => pattern.test(content)),
   ).length;
   if (identityCategoryCount < 2) issues.push("missing_identity");
+  if (repoRoot && hasMismatchedIdentityScope(content, repoRoot)) {
+    issues.push("mismatched_identity_scope");
+  }
   if (!hasMandatoryIssueTrackerClause(content)) issues.push("missing_issue_tracker");
   return issues;
 }
@@ -101,7 +127,7 @@ export function inspectWorkspaceProtocol(repoRoot: string): WorkspaceProtocolSna
   try {
     const content = readFileSync(protocolPath, "utf8");
     const revision = revisionFor(protocolPath, content);
-    const issues = validateWorkspaceProtocol(content);
+    const issues = validateWorkspaceProtocol(content, repoRoot);
     return {
       status: issues.length === 0 ? "valid" : "invalid",
       repoRoot,
@@ -136,7 +162,7 @@ export function writeWorkspaceProtocol(input: {
   content: string;
   expectedRevision: WorkspaceProtocolRevision | null;
 }): WriteWorkspaceProtocolResult {
-  const issues = validateWorkspaceProtocol(input.content);
+  const issues = validateWorkspaceProtocol(input.content, input.repoRoot);
   if (issues.length > 0) {
     return { ok: false, error: { code: "invalid_content", issues } };
   }

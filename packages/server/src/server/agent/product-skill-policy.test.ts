@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe("product role skill policy", () => {
-  test("pins every Council seat to a fresh read-only Peer assignment", () => {
+  test("pins Council to native specialist Peers with separate durable issues", () => {
     const councilSkill = readFileSync(
       path.resolve(import.meta.dirname, "../../../../../skills/council/SKILL.md"),
       "utf8",
@@ -57,18 +57,35 @@ describe("product role skill policy", () => {
     ) as { packages: { council: { provenance: string } } };
 
     expect(admission.packages.council.provenance).toBe("PASEO_DERIVATIVE");
+    expect(councilSkill).toContain("executionProfile: solution-architect");
+    expect(councilSkill).toContain("executionProfile: reviewer");
+    expect(councilSkill).toContain("one separate child issue for every seat");
+    expect(councilSkill).toContain("using the parent as `discoveredFrom`");
     expect(councilSkill).toContain("disposition: independent-review");
     expect(councilSkill).toContain("effectClass: read-only");
-    expect(councilSkill).toContain("mutationBoundary:\n    mode: no-write");
-    expect(councilSkill).toContain("externalEffectBoundary:\n    mode: denied");
+    expect(councilSkill).toContain("mutationBoundary: { mode: no-write }");
+    expect(councilSkill).toContain("externalEffectBoundary: { mode: denied }");
+    expect(councilSkill).toContain("beadsIssueIds: [<THIS_SEAT_CHILD_ISSUE_ID>]");
+    expect(councilSkill).toContain('{"issueId":"<THIS_SEAT_CHILD_ISSUE_ID>","view":"checkpoint"}');
+    expect(councilSkill).toContain(
+      "Then inspect the exact authorized repository/sources read-only",
+    );
+    expect(councilSkill).toContain("inspect sibling issues/reports/agents");
+    expect(councilSkill).toContain(
+      "Do not inspect a Round 1 report until every required Round 1 seat",
+    );
+    expect(councilSkill).toContain("Omit `workspaceId`");
+    expect(councilSkill).toContain("role: peer");
+    expect(councilSkill).toContain("at most 60 characters");
+    expect(councilSkill).not.toContain('relationship: { kind: "subagent" }');
+    expect(councilSkill).not.toContain('workspace: { kind: "current" }');
     expect(councilSkill).toContain("council.integrity: pending-lead-audit");
     expect(councilSkill).toContain("council.integrity=valid-audited-report");
-    expect(councilSkill).toContain(
-      "terminal status or a plausible-looking report alone is\n   never enough to set `valid`",
-    );
-    expect(councilSkill).toContain(
-      "Never omit it, copy the Lead assignment, or reuse the Lead's `delegation` effect",
-    );
+    expect(councilSkill).toContain("at most one targeted challenge and permit one");
+    expect(councilSkill).toContain("Lead issues one binding decision packet");
+    expect(councilSkill).toContain("Do not create a Council\ndaemon, database, queue");
+    expect(councilSkill).not.toContain("no file operation is permitted");
+    expect(councilSkill).not.toContain("the only tool operations permitted");
   });
 
   test("admits Council only to Lead from one canonical manifest", () => {

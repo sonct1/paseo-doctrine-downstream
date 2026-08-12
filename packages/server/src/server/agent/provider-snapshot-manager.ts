@@ -486,12 +486,14 @@ export class ProviderSnapshotManager {
     return {
       provider: parent.provider,
       modeId: parent.currentModeId,
-      isUnattended: definition.isCreateConfigUnattended({
-        modeId: parent.currentModeId,
-        config: parent.config,
-        features: parent.features,
-        availableModes: parent.availableModes ?? definition.modes ?? [],
-      }),
+      isUnattended:
+        parent.roleBinding !== undefined ||
+        definition.isCreateConfigUnattended({
+          modeId: parent.currentModeId,
+          config: parent.config,
+          features: parent.features,
+          availableModes: parent.availableModes ?? definition.modes ?? [],
+        }),
     };
   }
 
@@ -585,12 +587,18 @@ export class ProviderSnapshotManager {
   private getRoleBindingSupport(provider: AgentProvider) {
     const providerOverride = this.providerOverrides?.[provider];
     const legacyRoleId = detectLegacyProviderRole(providerOverride?.command);
+    const definition = this.providerRegistry[provider];
+    const client = definition ? this.ensureClient(provider, definition) : null;
+    const hasPaseoToolTransport = Boolean(
+      client?.capabilities.supportsMcpServers || client?.capabilities.supportsNativePaseoTools,
+    );
     return resolveProviderRoleBindingSupport(
       provider,
       this.providerRegistry[provider]?.derivedFromProviderId ?? null,
       legacyRoleId,
       providerOverride?.roleBinding,
       providerOverride?.command,
+      hasPaseoToolTransport,
     );
   }
 

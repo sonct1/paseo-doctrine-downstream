@@ -301,6 +301,11 @@ describe("AgentStorage", () => {
   test("applySnapshot preserves durable coordination and handoff metadata", async () => {
     const agentId = "lead-predecessor";
     await storage.applySnapshot(createManagedAgent({ id: agentId, lifecycle: "idle" }));
+    await storage.setBeadsStatusCheckpoint(agentId, {
+      assignmentDigest: "a".repeat(64),
+      version: "1.2.0",
+      checkedAt: "2026-08-08T00:00:30.000Z",
+    });
     const record = await storage.get(agentId);
     expect(record).not.toBeNull();
     await storage.upsert({
@@ -362,6 +367,16 @@ describe("AgentStorage", () => {
     expect(afterSnapshot?.coordinationSignals?.[0]?.id).toBe("signal-1");
     expect(afterSnapshot?.leadHandoffs?.[0]?.id).toBe("handoff-1");
     expect(afterSnapshot?.coordinationPolicyState?.consecutiveTurnFailures).toBe(2);
+    expect(afterSnapshot?.beadsStatusCheckpoint).toEqual({
+      assignmentDigest: "a".repeat(64),
+      version: "1.2.0",
+      checkedAt: "2026-08-08T00:00:30.000Z",
+    });
+
+    const reloaded = new AgentStorage(storagePath, logger);
+    expect((await reloaded.get(agentId))?.beadsStatusCheckpoint).toEqual(
+      afterSnapshot?.beadsStatusCheckpoint,
+    );
   });
 
   test("stores titles independently of snapshots", async () => {
@@ -386,6 +401,16 @@ describe("AgentStorage", () => {
     await expect(storage.setTitle("missing-agent", "Impossible")).rejects.toThrow(
       "Agent missing-agent not found",
     );
+  });
+
+  test("setBeadsStatusCheckpoint throws when the agent record does not exist", async () => {
+    await expect(
+      storage.setBeadsStatusCheckpoint("missing-agent", {
+        assignmentDigest: "a".repeat(64),
+        version: "1.2.0",
+        checkedAt: "2026-08-08T00:00:30.000Z",
+      }),
+    ).rejects.toThrow("Agent missing-agent not found");
   });
 
   test("applySnapshot accepts explicit title overrides", async () => {

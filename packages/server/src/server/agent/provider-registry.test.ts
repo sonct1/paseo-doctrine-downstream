@@ -1964,4 +1964,26 @@ describe("fetchCatalog", () => {
     expect(catalog.models.map((model) => model.id)).toEqual(["catalog-model"]);
     expect(catalog.modes.map((mode) => mode.id)).toEqual(["ask"]);
   });
+
+  test("restores unattended metadata on runtime modes that match the provider manifest", async () => {
+    const injectedClient = {
+      provider: "claude",
+      capabilities: {},
+      fetchCatalog: vi.fn(async () => ({
+        models: [],
+        modes: [{ id: "bypassPermissions", label: "Bypass" }],
+      })),
+      isAvailable: vi.fn(async () => true),
+    } satisfies Partial<AgentClient> as AgentClient;
+
+    const registry = buildProviderRegistry(logger);
+    const catalog = await registry.claude.fetchCatalog(
+      { cwd: "/tmp/catalog", force: false },
+      injectedClient,
+    );
+
+    expect(catalog.modes).toEqual([
+      expect.objectContaining({ id: "bypassPermissions", isUnattended: true }),
+    ]);
+  });
 });

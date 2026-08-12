@@ -6,12 +6,17 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { experimental_createMCPClient } from "ai";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  Client as ModernMcpClient,
+  StreamableHTTPClientTransport as ModernStreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
 import pino from "pino";
 
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { hashDaemonPassword } from "../auth.js";
 import { createPaseoDaemon, type PaseoDaemonConfig } from "../bootstrap.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
+import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import type {
   AgentClient,
   AgentPersistenceHandle,
@@ -92,6 +97,23 @@ async function createMcpClient(url: string, authToken?: string): Promise<McpClie
   return { callTool: boundCallTool, close: () => rawClient.close() };
 }
 
+async function createModernMcpClient(url: string, authToken?: string): Promise<McpClient> {
+  const transport = new ModernStreamableHTTPClientTransport(
+    new URL(url),
+    authToken ? { requestInit: { headers: { Authorization: `Bearer ${authToken}` } } } : undefined,
+  );
+  const rawClient = new ModernMcpClient(
+    { name: "paseo-modern-e2e", version: "1.0.0" },
+    { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+  );
+  await rawClient.connect(transport);
+  return {
+    callTool: async ({ name, args }) =>
+      (await rawClient.callTool({ name, arguments: args })) as McpToolResult,
+    close: () => rawClient.close(),
+  };
+}
+
 async function expectMcpToolRejection(
   action: () => Promise<McpToolResult>,
   expectedMessage: string,
@@ -132,6 +154,7 @@ function roleAssignment(role: "lead" | "peer" | "supervisor"): AssignmentEnvelop
     effectClass: "read-only",
     mutationBoundary: { mode: "no-write" },
     externalEffectBoundary: { mode: "denied" },
+    ...(role === "peer" ? { resourceGrants: { beadsIssueIds: ["test-peer-issue"] } } : {}),
     evidence: "Return the daemon-issued role and topology receipts.",
     handbackAndStop: "Stop after the topology assertion or a material blocker.",
   };
@@ -218,10 +241,55 @@ async function assertAgentNotRunning(options: {
 }
 
 describe("agent MCP end-to-end (offline)", () => {
+  test("serves the 2026-07-28 discovery flow and an authenticated tool call", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-modern-mcp-home-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-modern-mcp-static-"));
+    const daemon = await createPaseoDaemon(
+      {
+        listen: "127.0.0.1:0",
+        paseoHome,
+        corsAllowedOrigins: [],
+        hostnames: true,
+        mcpEnabled: true,
+        staticDir,
+        mcpDebug: false,
+        agentClients: createTestAgentClients(),
+        agentStoragePath: path.join(paseoHome, "agents"),
+        auth: { password: hashDaemonPassword("daemon-secret") },
+      },
+      pino({ level: "silent" }),
+    );
+    let client: McpClient | null = null;
+
+    try {
+      await daemon.start();
+      const listenTarget = daemon.getListenTarget();
+      if (!listenTarget || listenTarget.type !== "tcp") {
+        throw new Error("Isolated daemon did not bind a TCP port");
+      }
+      client = await createModernMcpClient(
+        `http://127.0.0.1:${listenTarget.port}/mcp/agents`,
+        daemon.agentManager.getMcpAuthToken(),
+      );
+      const result = await client.callTool({ name: "list_agents", args: {} });
+      expect(getStructuredContent(result)?.agents).toEqual([]);
+    } finally {
+      await client?.close();
+      await daemon.stop();
+      await rm(paseoHome, { recursive: true, force: true });
+      await rm(staticDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test("role-bound agent actions enforce topology before side effects", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-home-"));
     const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-static-"));
     const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-role-actions-cwd-"));
+    await writeFile(
+      path.join(agentCwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(agentCwd),
+      "utf8",
+    );
     const recorder: LaunchRecorder = { recordedLaunches: [] };
     const daemonConfig: PaseoDaemonConfig = {
       listen: "127.0.0.1:0",
@@ -326,6 +394,22 @@ describe("agent MCP end-to-end (offline)", () => {
 
       const peerClient = await createMcpClient(`${mcpUrl}?callerAgentId=${peerOneId}`);
       clients.push(peerClient);
+      await expectMcpToolRejection(
+        () =>
+          peerClient.callTool({
+            name: "post_room",
+            args: { room: "missing-council-room", body: "Bounded Peer response" },
+          }),
+        "Chat room not found: missing-council-room",
+      );
+      await expectMcpToolRejection(
+        () =>
+          peerClient.callTool({
+            name: "read_room",
+            args: { room: "missing-council-room" },
+          }),
+        "Tool read_room not found",
+      );
       const peerRecordCountBefore = (await daemon.agentStorage.list()).length;
       const peerLaunchCountBefore = recorder.recordedLaunches.length;
       await expectMcpToolRejection(
@@ -599,12 +683,14 @@ describe("agent MCP end-to-end (offline)", () => {
       agentId = typeof payload?.agentId === "string" ? payload.agentId : null;
       expect(agentId).toBeTruthy();
 
-      expect(recorder.recordedLaunches.at(-1)?.mcpServers).toMatchObject({
-        paseo: {
-          type: "http",
-          url: `http://127.0.0.1:${port}/mcp/agents?callerAgentId=${agentId!}`,
-        },
-      });
+      const injectedMcp = recorder.recordedLaunches.at(-1)?.mcpServers?.paseo;
+      expect(injectedMcp?.type).toBe("http");
+      const injectedUrl = new URL(injectedMcp?.type === "http" ? injectedMcp.url : "");
+      expect(`${injectedUrl.origin}${injectedUrl.pathname}`).toBe(
+        `http://127.0.0.1:${port}/mcp/agents`,
+      );
+      expect(injectedUrl.searchParams.get("callerAgentId")).toBe(agentId);
+      expect(injectedUrl.searchParams.get("runtimeInstanceId")).toMatch(/^[a-f0-9-]{36}$/u);
       const injectedAgent = daemon.agentManager.getAgent(agentId!);
       expect(injectedAgent?.config.mcpServers?.paseo).toBeUndefined();
 
@@ -632,7 +718,10 @@ describe("agent MCP end-to-end (offline)", () => {
         await client.callTool({ name: "kill_agent", args: { agentId } });
       }
       if (disabledAgentId) {
-        await disabledClient.callTool({ name: "kill_agent", args: { agentId: disabledAgentId } });
+        await disabledClient.callTool({
+          name: "kill_agent",
+          args: { agentId: disabledAgentId },
+        });
       }
       await disabledClient.close();
       await disabledDaemon.stop();
@@ -688,12 +777,14 @@ describe("agent MCP end-to-end (offline)", () => {
       agentId = typeof payload?.agentId === "string" ? payload.agentId : null;
       expect(agentId).toBeTruthy();
 
-      expect(recorder.recordedLaunches.at(-1)?.mcpServers).toMatchObject({
-        paseo: {
-          type: "http",
-          url: `http://127.0.0.1:${port}/mcp/agents?callerAgentId=${agentId!}`,
-        },
-      });
+      const injectedMcp = recorder.recordedLaunches.at(-1)?.mcpServers?.paseo;
+      expect(injectedMcp?.type).toBe("http");
+      const injectedUrl = new URL(injectedMcp?.type === "http" ? injectedMcp.url : "");
+      expect(`${injectedUrl.origin}${injectedUrl.pathname}`).toBe(
+        `http://127.0.0.1:${port}/mcp/agents`,
+      );
+      expect(injectedUrl.searchParams.get("callerAgentId")).toBe(agentId);
+      expect(injectedUrl.searchParams.get("runtimeInstanceId")).toMatch(/^[a-f0-9-]{36}$/u);
       const injectedAgent = daemon.agentManager.getAgent(agentId!);
       expect(injectedAgent?.config.mcpServers?.paseo).toBeUndefined();
     } finally {
@@ -762,7 +853,12 @@ describe("agent MCP end-to-end (offline)", () => {
       }
       await client.close();
       await daemon.stop();
-      await rm(paseoHome, { recursive: true, force: true });
+      await rm(paseoHome, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 20,
+      });
       await rm(staticDir, { recursive: true, force: true });
       await rm(agentCwd, { recursive: true, force: true });
     }
@@ -816,7 +912,13 @@ describe("agent MCP end-to-end (offline)", () => {
       async getAvailableModes(): Promise<
         Array<{ id: string; label: string; description: string }>
       > {
-        return [{ id: "full-access", label: "Full access", description: "No prompts" }];
+        return [
+          {
+            id: "full-access",
+            label: "Full access",
+            description: "No prompts",
+          },
+        ];
       }
 
       async getCurrentMode(): Promise<string | null> {
@@ -859,7 +961,12 @@ describe("agent MCP end-to-end (offline)", () => {
       }
 
       async fetchCatalog(): Promise<{
-        models: Array<{ provider: "codex"; id: string; label: string; isDefault: boolean }>;
+        models: Array<{
+          provider: "codex";
+          id: string;
+          label: string;
+          isDefault: boolean;
+        }>;
         modes: Array<{ id: string; label: string; description: string }>;
       }> {
         return {
@@ -871,7 +978,13 @@ describe("agent MCP end-to-end (offline)", () => {
               isDefault: true,
             },
           ],
-          modes: [{ id: "full-access", label: "Full access", description: "No prompts" }],
+          modes: [
+            {
+              id: "full-access",
+              label: "Full access",
+              description: "No prompts",
+            },
+          ],
         };
       }
 
@@ -980,11 +1093,17 @@ describe("agent MCP end-to-end (offline)", () => {
     try {
       const { execSync } = await import("node:child_process");
       execSync("git init -b main", { cwd: repoRoot, stdio: "pipe" });
-      execSync("git config user.email 'test@test.com'", { cwd: repoRoot, stdio: "pipe" });
+      execSync("git config user.email 'test@test.com'", {
+        cwd: repoRoot,
+        stdio: "pipe",
+      });
       execSync("git config user.name 'Test'", { cwd: repoRoot, stdio: "pipe" });
       await writeFile(path.join(repoRoot, "file.txt"), "hello\n", "utf8");
       execSync("git add .", { cwd: repoRoot, stdio: "pipe" });
-      execSync("git -c commit.gpgsign=false commit -m 'initial'", { cwd: repoRoot, stdio: "pipe" });
+      execSync("git -c commit.gpgsign=false commit -m 'initial'", {
+        cwd: repoRoot,
+        stdio: "pipe",
+      });
 
       const setupCommand =
         'while [ ! -f "$PASEO_WORKTREE_PATH/allow-setup" ]; do sleep 0.05; done; echo "done" > "$PASEO_WORKTREE_PATH/setup-done.txt"';

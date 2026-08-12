@@ -4042,13 +4042,35 @@ export class CodexAppServerAgentSession implements AgentSession {
     return rawArgs.length > 0 ? { commandName, args: rawArgs } : { commandName };
   }
 
+  private parseEmbeddedProductSkillInput(
+    text: string,
+  ): { commandName: string; args?: string } | null {
+    if (!this.productSkillPolicy || this.productSkillPolicy.status !== "bound") return null;
+
+    for (const commandName of this.productSkillPolicy.enabledNames) {
+      const token = `/${commandName}`;
+      let index = text.indexOf(token);
+      while (index >= 0) {
+        const before = index === 0 ? "" : text[index - 1];
+        const after = text[index + token.length] ?? "";
+        if ((!before || /\s/u.test(before)) && (!after || /\s/u.test(after))) {
+          const args = `${text.slice(0, index)} ${text.slice(index + token.length)}`.trim();
+          return args ? { commandName, args } : { commandName };
+        }
+        index = text.indexOf(token, index + token.length);
+      }
+    }
+    return null;
+  }
+
   private async resolveSlashCommandInvocation(
     prompt: AgentPromptInput,
   ): Promise<{ commandName: string; args?: string } | null> {
     if (typeof prompt !== "string") {
       return null;
     }
-    const parsed = this.parseSlashCommandInput(prompt);
+    const parsed =
+      this.parseSlashCommandInput(prompt) ?? this.parseEmbeddedProductSkillInput(prompt);
     if (!parsed) {
       return null;
     }
@@ -6790,6 +6812,8 @@ export class CodexAppServerAgentSession implements AgentSession {
 }
 
 export class CodexAppServerAgentClient implements AgentClient {
+  readonly requiresSessionCloseBeforeResume = true;
+
   readonly provider = CODEX_PROVIDER;
   readonly capabilities = CODEX_APP_SERVER_CAPABILITIES;
   private goalsEnabledPromise: Promise<boolean> | null = null;
@@ -7014,6 +7038,15 @@ export class CodexAppServerAgentClient implements AgentClient {
     launchContext?: AgentLaunchContext,
     options?: AgentResumeSessionOptions,
   ): Promise<AgentSession> {
+    if (
+      options?.purpose !== "history" &&
+      launchContext?.roleBinding &&
+      launchContext.providerLaunchBinding?.routeKind === "openai-compatible"
+    ) {
+      throw new Error(
+        `Role-bound native resume is not qualified for openai-compatible Codex route '${launchContext.providerLaunchBinding.providerId}': the resumed model catalog may omit mandatory Paseo tools; launch a fresh role-bound replacement instead`,
+      );
+    }
     const storedConfig = (handle.metadata ?? {}) as Partial<AgentSessionConfig>;
     const merged: AgentSessionConfig = {
       ...storedConfig,

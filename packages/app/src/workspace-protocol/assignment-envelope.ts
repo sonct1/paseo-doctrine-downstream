@@ -1,4 +1,5 @@
 import {
+  assignmentExternalEffectBoundaryFor,
   PASEO_ASSIGNMENT_CONTRACT_VERSION,
   type AssignmentEffectClass,
   type AssignmentEnvelope,
@@ -31,10 +32,17 @@ export function buildAssignmentEnvelope(input: {
   effectClass: AssignmentEffectClass;
   objective: string;
   cwd: string;
+  beadsIssueIds?: readonly string[];
 }): AssignmentEnvelope {
   const objective = input.objective.trim();
   if (!objective) {
     throw new Error("assignment_contract_required: objective");
+  }
+  const beadsIssueIds = Array.from(
+    new Set((input.beadsIssueIds ?? []).map((issueId) => issueId.trim()).filter(Boolean)),
+  );
+  if (input.roleId === "peer" && beadsIssueIds.length === 0) {
+    throw new Error("assignment_contract_required: Peer Beads issue grant");
   }
   return {
     version: PASEO_ASSIGNMENT_CONTRACT_VERSION,
@@ -42,7 +50,8 @@ export function buildAssignmentEnvelope(input: {
     objective,
     effectClass: input.effectClass,
     mutationBoundary: mutationBoundaryForEffect(input.effectClass, input.cwd),
-    externalEffectBoundary: { mode: "denied" },
+    externalEffectBoundary: assignmentExternalEffectBoundaryFor(input.roleId, input.effectClass),
+    ...(beadsIssueIds.length > 0 ? { resourceGrants: { beadsIssueIds } } : {}),
     evidence: "Return exact changed or inspected scope and proportional verification.",
     handbackAndStop:
       "Stop at completion or a material blocker; hand back evidence, unknowns, residual risk, and lease state.",

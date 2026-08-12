@@ -184,6 +184,83 @@ test("session create applies the resolved mode from the provider create config",
   );
 });
 
+test("session create requests unattended provider config for a role-bound launch", async () => {
+  const snapshot = {
+    id: "agent-role-1",
+    provider: "claude",
+    cwd: "/tmp/paseo-create-role-test",
+    runtimeInfo: null,
+  } as ManagedAgent;
+  const createAgent = vi.fn(async () => snapshot);
+  const stub = createProviderSnapshotManagerStub();
+  stub.resolveCreateConfig.mockResolvedValue({ modeId: "bypassPermissions" });
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      createAgent,
+      getAgent: vi.fn(() => snapshot),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger: createTestLogger(),
+    providerSnapshotManager: stub.manager,
+  };
+
+  await createAgentCommand(dependencies, {
+    kind: "session",
+    config: { provider: "claude", cwd: "/tmp/paseo-create-role-test" },
+    workspaceId: "ws-create-role-test",
+    roleId: "lead",
+    labels: {},
+    provisionalTitle: null,
+    firstAgentContext: { attachments: [] },
+    buildSessionConfig: async (config) => ({ sessionConfig: config }),
+  });
+
+  expect(stub.resolveCreateConfig).toHaveBeenCalledWith(
+    expect.objectContaining({
+      provider: "claude",
+      unattended: true,
+    }),
+  );
+  expect(createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ modeId: "bypassPermissions" }),
+    undefined,
+    expect.objectContaining({ roleId: "lead" }),
+  );
+});
+
+test("session create leaves an ordinary interactive launch attended", async () => {
+  const snapshot = {
+    id: "agent-interactive-1",
+    provider: "claude",
+    cwd: "/tmp/paseo-create-interactive-test",
+    runtimeInfo: null,
+  } as ManagedAgent;
+  const stub = createProviderSnapshotManagerStub();
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      createAgent: vi.fn(async () => snapshot),
+      getAgent: vi.fn(() => snapshot),
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger: createTestLogger(),
+    providerSnapshotManager: stub.manager,
+  };
+
+  await createAgentCommand(dependencies, {
+    kind: "session",
+    config: { provider: "claude", cwd: "/tmp/paseo-create-interactive-test" },
+    workspaceId: "ws-create-interactive-test",
+    labels: {},
+    provisionalTitle: null,
+    firstAgentContext: { attachments: [] },
+    buildSessionConfig: async (config) => ({ sessionConfig: config }),
+  });
+
+  expect(stub.resolveCreateConfig).toHaveBeenCalledWith(
+    expect.objectContaining({ unattended: false }),
+  );
+});
+
 test("mcp create accepts provider-only internal input and leaves model undefined", async () => {
   const assignment: AssignmentEnvelope = {
     version: 1,
@@ -212,6 +289,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
     providerSnapshotManager: {
       resolveCreateConfig: vi.fn(async (input) => {
         expect(input.provider).toBe("claude");
+        expect(input.unattended).toBe(true);
         return {};
       }),
     } as Parameters<typeof createAgentCommand>[0]["providerSnapshotManager"],

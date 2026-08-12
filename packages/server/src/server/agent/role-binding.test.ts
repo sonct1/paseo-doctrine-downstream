@@ -47,6 +47,7 @@ function assignmentFor(
         ? { mode: "bounded-write", scope: "src/**" }
         : { mode: "no-write" },
     externalEffectBoundary: { mode: "denied" },
+    ...(roleId === "peer" ? { resourceGrants: { beadsIssueIds: ["ps-role-binding-test"] } } : {}),
     evidence: "Report exact inspected paths and observed checks.",
     handbackAndStop: "Stop after evidence handback or a material blocker.",
   };
@@ -100,6 +101,10 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("Broad agent lists may omit internal loop workers");
     expect(binding.instructions).toContain(binding.workspaceProtocol.digest);
     expect(binding.instructions).toContain("Mutation boundary: no-write");
+    expect(binding.instructions).toContain("Mandatory role-projected skill package");
+    expect(binding.instructions).toContain('<paseo-role-skill name="beads-issue-tracker">');
+    expect(binding.instructions).toContain("daemon từ chối mọi Beads operation khác cho tới khi");
+    expect(binding.instructions).toContain("label values");
     expect(binding.assignment).toMatchObject({ effectClass: "read-only" });
     const receipt = toRoleBindingReceipt(binding);
     expect(receipt).not.toHaveProperty("instructions");
@@ -130,7 +135,108 @@ describe("native Foundation role materialization", () => {
       path: join(cwd, "WORKSPACE_PROTOCOL.md"),
     });
     expect(binding.instructions).toContain("Do not load");
+    expect(binding.instructions).toContain("beads-issue-tracker");
     expect(binding.instructions).not.toContain("Room role: Root");
+  });
+
+  test.each([
+    [
+      "solution-architect",
+      "You are the Tech Team Solution Architect.",
+      "architecture, not implementation or routine code review",
+    ],
+    ["reviewer", "You are the Tech Team Reviewer.", "You are not the Solution Architect"],
+  ] as const)(
+    "materializes %s privately on Peer and redacts it from public receipts",
+    async (executionProfileId, identityMarker, boundaryMarker) => {
+      const cwd = await createWorkspace();
+      await writeFile(
+        join(cwd, "WORKSPACE_PROTOCOL.md"),
+        buildWorkspaceProtocolTemplate(cwd),
+        "utf8",
+      );
+      const binding = await materializeRoleBinding({
+        roleId: "peer",
+        executionProfileId,
+        provider: "codex",
+        cwd,
+        ...assignmentBinding("peer", cwd),
+      });
+
+      expect(binding.executionProfile).toMatchObject({
+        id: executionProfileId,
+        version: "1.0.0-foundation",
+      });
+      expect(binding.instructions).toContain(identityMarker);
+      expect(binding.instructions).toContain(boundaryMarker);
+      expect(binding.instructions).not.toContain("Claude Opus");
+      expect(toRoleBindingReceipt(binding)).not.toHaveProperty("executionProfile");
+    },
+  );
+
+  test("rejects a Peer execution specialization under a non-Peer authority role", async () => {
+    const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+
+    await expect(
+      materializeRoleBinding({
+        roleId: "lead",
+        executionProfileId: "solution-architect",
+        provider: "codex",
+        cwd,
+        ...assignmentBinding("lead", cwd),
+      }),
+    ).rejects.toThrow("requires role 'peer'");
+  });
+
+  test("composes Council specializations through every SLP-supported Peer channel", async () => {
+    const providers = [
+      ["codex", "codex-developer-instructions", undefined],
+      ["claude", "claude-system-prompt", undefined],
+      ["pi", "pi-before-agent-start", undefined],
+      ["omp", "omp-append-system-prompt", undefined],
+      [
+        "cursor-acp",
+        "cursor-project-rule-capsule",
+        { status: "supported", injectionMethod: "cursor-project-rule-capsule" },
+      ],
+      [
+        "antigravity-acp",
+        "antigravity-custom-agent",
+        {
+          status: "supported",
+          injectionMethod: "antigravity-custom-agent",
+          roleIds: ["peer"],
+        },
+      ],
+    ] as const;
+
+    for (const executionProfileId of ["solution-architect", "reviewer"] as const) {
+      for (const [provider, injectionMethod, providerSupport] of providers) {
+        const cwd = await createWorkspace();
+        await writeFile(
+          join(cwd, "WORKSPACE_PROTOCOL.md"),
+          buildWorkspaceProtocolTemplate(cwd),
+          "utf8",
+        );
+        const binding = await materializeRoleBinding({
+          roleId: "peer",
+          executionProfileId,
+          provider,
+          providerSupport,
+          cwd,
+          ...assignmentBinding("peer", cwd),
+        });
+
+        expect(binding.injectionMethod).toBe(injectionMethod);
+        expect(binding.instructions).toContain("Role: Peer");
+        expect(binding.executionProfile?.id).toBe(executionProfileId);
+      }
+    }
   });
 
   test("rejects a missing or invalid mandatory protocol", async () => {
@@ -238,8 +344,26 @@ describe("native Foundation role materialization", () => {
     ).toMatchObject(
       process.platform === "win32"
         ? { status: "unsupported" }
-        : { status: "supported", injectionMethod: "antigravity-custom-agent" },
+        : {
+            status: "supported",
+            injectionMethod: "antigravity-custom-agent",
+            roleIds: ["peer"],
+          },
     );
+    expect(
+      resolveProviderRoleBindingSupport(
+        "antigravity",
+        null,
+        null,
+        undefined,
+        ["agy-acp", "--agy-binary", "/opt/agy"],
+        false,
+      ),
+    ).toMatchObject({
+      status: "unsupported",
+      reason: expect.stringContaining("mandatory Beads checkpoint"),
+      roleIds: ["peer"],
+    });
     expect(
       resolveProviderRoleBindingSupport(
         "antigravity",
@@ -255,6 +379,92 @@ describe("native Foundation role materialization", () => {
         "acp",
       ]),
     ).toMatchObject({ status: "unsupported", reason: expect.stringContaining("retired") });
+    expect(
+      resolveProviderRoleBindingSupport("cursor", null, null, undefined, [
+        "cursor-agent",
+        "--auto-review",
+        "acp",
+      ]),
+    ).toMatchObject({
+      status: "unsupported",
+      reason: expect.stringContaining("permission-policy flags"),
+    });
+  });
+
+  test("limits Antigravity eligibility to Peer role materialization", async () => {
+    if (process.platform === "win32") return;
+    const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+    const support = resolveProviderRoleBindingSupport("antigravity", null, null, undefined, [
+      "agy-acp",
+      "--agy-binary",
+      "/opt/agy",
+    ]);
+
+    await expect(
+      materializeRoleBinding({
+        roleId: "lead",
+        provider: "antigravity",
+        providerSupport: support,
+        cwd,
+        ...assignmentBinding("lead", cwd),
+      }),
+    ).rejects.toThrow("provider eligibility is limited to role(s): peer");
+    await expect(
+      materializeRoleBinding({
+        roleId: "peer",
+        provider: "antigravity",
+        providerSupport: support,
+        cwd,
+        ...assignmentBinding("peer", cwd),
+      }),
+    ).resolves.toMatchObject({
+      roleId: "peer",
+      injectionMethod: "antigravity-custom-agent",
+    });
+  });
+
+  test("separates Antigravity role denial from the Peer transport blocker", async () => {
+    if (process.platform === "win32") return;
+    const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+    const unavailable = resolveProviderRoleBindingSupport(
+      "antigravity",
+      null,
+      null,
+      undefined,
+      ["agy-acp", "--agy-binary", "/opt/agy"],
+      false,
+    );
+
+    for (const roleId of ["lead", "supervisor"] as const) {
+      await expect(
+        materializeRoleBinding({
+          roleId,
+          provider: "antigravity",
+          providerSupport: unavailable,
+          cwd,
+          ...assignmentBinding(roleId, cwd),
+        }),
+      ).rejects.toThrow("provider eligibility is limited to role(s): peer");
+    }
+    await expect(
+      materializeRoleBinding({
+        roleId: "peer",
+        provider: "antigravity",
+        providerSupport: unavailable,
+        cwd,
+        ...assignmentBinding("peer", cwd),
+      }),
+    ).rejects.toThrow("current Antigravity bridge has no MCP or native Paseo-tool transport");
   });
 
   test("role-bound tool policy owns enablement while provider filters can narrow it", () => {
@@ -269,18 +479,23 @@ describe("native Foundation role materialization", () => {
     expect(applyRolePaseoToolPolicy("peer", { enabled: false })).toEqual({
       enabled: true,
       allowedTools: expect.arrayContaining([
+        "post_room",
         "beads_get",
         "beads_claim",
         "beads_update",
         "beads_add_dependency",
       ]),
     });
+    expect(applyRolePaseoToolPolicy("peer", { enabled: false })).toEqual({
+      enabled: true,
+      allowedTools: expect.not.arrayContaining(["read_room", "create_agent"]),
+    });
     expect(
       applyRolePaseoToolPolicy("peer", {
         enabled: true,
-        allowedTools: ["beads_get", "beads_close", "create_agent"],
+        allowedTools: ["post_room", "read_room", "beads_get", "beads_close", "create_agent"],
       }),
-    ).toEqual({ enabled: true, allowedTools: ["beads_get"] });
+    ).toEqual({ enabled: true, allowedTools: ["post_room", "beads_get"] });
     expect(applyRolePaseoToolPolicy("supervisor", { enabled: false })).toEqual({
       enabled: true,
       allowedTools: expect.arrayContaining(["get_agent_status", "list_agents", "beads_get"]),

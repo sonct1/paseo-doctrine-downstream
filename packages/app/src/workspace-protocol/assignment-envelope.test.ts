@@ -17,12 +17,57 @@ describe("assignment envelope", () => {
         effectClass: "mutating",
         objective: "Implement the bounded fix",
         cwd: "/repo/worktree",
+        beadsIssueIds: ["ps123-abc"],
       }),
     ).toMatchObject({
       disposition: "peer-execution",
       mutationBoundary: { mode: "bounded-write", scope: "/repo/worktree" },
-      externalEffectBoundary: { mode: "denied" },
+      externalEffectBoundary: {
+        mode: "bounded",
+        scope: "Beads Central issue/work graph for this assignment only; no other external effects",
+      },
+      resourceGrants: { beadsIssueIds: ["ps123-abc"] },
     });
+  });
+
+  test("requires and normalizes the exact Peer issue grant", () => {
+    expect(() =>
+      buildAssignmentEnvelope({
+        roleId: "peer",
+        effectClass: "read-only",
+        objective: "Review the granted issue",
+        cwd: "/repo",
+      }),
+    ).toThrow("assignment_contract_required: Peer Beads issue grant");
+
+    expect(
+      buildAssignmentEnvelope({
+        roleId: "peer",
+        effectClass: "read-only",
+        objective: "Review the granted issue",
+        cwd: "/repo",
+        beadsIssueIds: [" ps123-abc ", "ps123-abc"],
+      }).resourceGrants,
+    ).toEqual({ beadsIssueIds: ["ps123-abc"] });
+  });
+
+  test("keeps read-only and Supervisor launches externally denied", () => {
+    expect(
+      buildAssignmentEnvelope({
+        roleId: "lead",
+        effectClass: "read-only",
+        objective: "Inspect current state",
+        cwd: "/repo",
+      }).externalEffectBoundary,
+    ).toEqual({ mode: "denied" });
+    expect(
+      buildAssignmentEnvelope({
+        roleId: "supervisor",
+        effectClass: "recovery",
+        objective: "Observe an exact recovery",
+        cwd: "/repo",
+      }).externalEffectBoundary,
+    ).toEqual({ mode: "denied" });
   });
 
   test("rejects a role launch without an objective", () => {

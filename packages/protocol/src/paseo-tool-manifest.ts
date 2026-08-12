@@ -239,7 +239,8 @@ export const PASEO_TOOL_MANIFEST = [
   {
     id: "beads_get",
     label: "Inspect issue",
-    description: "Read one durable issue and its dependency metadata.",
+    description:
+      "Read one durable issue, with a bounded checkpoint view and omitted-narrative digests.",
     group: "Issues",
   },
   {

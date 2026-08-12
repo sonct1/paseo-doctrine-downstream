@@ -22,7 +22,11 @@ import {
 } from "@/provider-selection/provider-selection";
 import { useDraftStore } from "@/stores/draft-store";
 import { toDraftInputIfReady } from "@/stores/draft-store/state";
-import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import {
+  isProviderRoleBindingSupportedForRole,
+  PASEO_ROLE_SUMMARIES,
+  type PaseoRoleId,
+} from "@getpaseo/protocol/role-binding";
 import {
   isAssignmentEffectAllowedForRole,
   PASEO_ASSIGNMENT_EFFECT_SUMMARIES,
@@ -31,6 +35,12 @@ import {
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
 
 const ASSIGNMENT_EFFECT_FEATURE_ID = "foundation_assignment_effect";
+const BEADS_ISSUE_GRANT_FEATURE_ID = "foundation_beads_issue_grant";
+
+export interface BeadsIssueGrantOption {
+  id: string;
+  label: string;
+}
 
 type AttachmentUpdater =
   | UserComposerAttachment[]
@@ -43,6 +53,7 @@ interface AgentInputDraftComposerOptions {
   isVisible?: boolean;
   onlineServerIds?: string[];
   lockedWorkingDir?: string;
+  beadsIssueOptions?: readonly BeadsIssueGrantOption[];
 }
 
 interface UseAgentInputDraftInput {
@@ -60,6 +71,7 @@ type DraftComposerState = UseAgentFormStateResult & {
   selectedRole: PaseoRoleId | null;
   setRoleFromUser: (roleId: PaseoRoleId) => void;
   selectedAssignmentEffect: AssignmentEffectClass;
+  selectedBeadsIssueIds: string[];
 };
 
 export interface AgentInputDraft {
@@ -71,6 +83,51 @@ export interface AgentInputDraft {
   isHydrated: boolean;
   attachmentFocusRequestId: number;
   composerState: DraftComposerState | null;
+}
+
+function useBeadsIssueGrantControl(
+  selectedRole: PaseoRoleId | null,
+  issueOptions: readonly BeadsIssueGrantOption[] | undefined,
+) {
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const feature = useMemo<AgentFeature | null>(
+    () =>
+      selectedRole === "peer"
+        ? {
+            type: "select",
+            id: BEADS_ISSUE_GRANT_FEATURE_ID,
+            label: "Peer issue grant",
+            description: "Exact durable Beads issue leased to this Peer assignment.",
+            value: selectedIssueId,
+            options: [...(issueOptions ?? [])],
+          }
+        : null,
+    [issueOptions, selectedIssueId, selectedRole],
+  );
+
+  useEffect(() => {
+    if (selectedRole !== "peer") {
+      setSelectedIssueId(null);
+      return;
+    }
+    if (selectedIssueId && !issueOptions?.some((option) => option.id === selectedIssueId)) {
+      setSelectedIssueId(null);
+    }
+  }, [issueOptions, selectedIssueId, selectedRole]);
+
+  const setFromFeatureValue = useCallback(
+    (value: unknown) => {
+      const issueId = typeof value === "string" ? value.trim() : "";
+      setSelectedIssueId(issueOptions?.some((option) => option.id === issueId) ? issueId : null);
+    },
+    [issueOptions],
+  );
+
+  return {
+    feature,
+    selectedIssueIds: selectedIssueId ? [selectedIssueId] : [],
+    setFromFeatureValue,
+  };
 }
 
 export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDraft {
@@ -99,6 +156,10 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const [selectedRole, setSelectedRole] = useState<PaseoRoleId | null>(null);
   const [selectedAssignmentEffect, setSelectedAssignmentEffect] =
     useState<AssignmentEffectClass>("read-only");
+  const beadsIssueGrant = useBeadsIssueGrantControl(
+    selectedRole,
+    composerOptions?.beadsIssueOptions,
+  );
   const text = draft?.text ?? "";
   const attachments = draft?.attachments ?? [];
   const isHydrated = hydratedDraftKey === draftKey;
@@ -213,14 +274,14 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       return;
     }
     const selectedEntry = entries.find((entry) => entry.provider === selectedProvider);
-    if (selectedEntry?.roleBinding?.status === "supported") {
+    if (isProviderRoleBindingSupportedForRole(selectedEntry?.roleBinding, selectedRole)) {
       return;
     }
     const compatible = entries.find(
       (entry) =>
         entry.enabled !== false &&
         entry.status === "ready" &&
-        entry.roleBinding?.status === "supported",
+        isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole),
     );
     if (compatible) {
       setProviderFromUser(compatible.provider);
@@ -279,9 +340,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         }
         return;
       }
+      if (featureId === BEADS_ISSUE_GRANT_FEATURE_ID) {
+        beadsIssueGrant.setFromFeatureValue(value);
+        return;
+      }
       setDraftFeatureValue(featureId, value);
     },
-    [selectedRole, setDraftFeatureValue],
+    [beadsIssueGrant, selectedRole, setDraftFeatureValue],
   );
 
   const commandDraftConfig = useMemo(
@@ -315,7 +380,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     );
     const compatibleProviderIds = new Set(
       (formState.allProviderEntries ?? [])
-        .filter((entry) => entry.roleBinding?.status === "supported")
+        .filter((entry) => isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole))
         .map((entry) => entry.provider),
     );
     const roleAwareFormState =
@@ -343,8 +408,12 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         selectedRole: roleBindingAvailable ? selectedRole : null,
         onSelectRole: setRoleAndNormalizeEffect,
         features:
-          roleBindingAvailable && assignmentEffectFeature
-            ? [...(draftFeatures ?? []), assignmentEffectFeature]
+          roleBindingAvailable && (assignmentEffectFeature || beadsIssueGrant.feature)
+            ? [
+                ...(draftFeatures ?? []),
+                ...(assignmentEffectFeature ? [assignmentEffectFeature] : []),
+                ...(beadsIssueGrant.feature ? [beadsIssueGrant.feature] : []),
+              ]
             : draftFeatures,
         onSetFeature: setAgentControlFeature,
       }),
@@ -352,6 +421,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       selectedRole: roleBindingAvailable ? selectedRole : null,
       setRoleFromUser: setRoleAndNormalizeEffect,
       selectedAssignmentEffect,
+      selectedBeadsIssueIds: beadsIssueGrant.selectedIssueIds,
     };
   }, [
     commandDraftConfig,
@@ -360,6 +430,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     effectiveThinkingOptionId,
     draftFeatures,
     assignmentEffectFeature,
+    beadsIssueGrant,
     draftFeatureValues,
     formState,
     selectedRole,

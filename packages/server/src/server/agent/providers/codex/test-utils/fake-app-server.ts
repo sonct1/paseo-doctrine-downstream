@@ -133,6 +133,26 @@ export function createFakeCodexAppServer(
     "thread/start": () => ({ thread: { id: "thread-1" } }),
     "thread/loaded/list": () => ({ data: [] }),
     "thread/resume": () => ({}),
+    "config/mcpServer/reload": () => ({}),
+    "mcpServerStatus/list": () => ({
+      data: [
+        {
+          name: "paseo",
+          authStatus: "notRequired",
+          resourceTemplates: [],
+          resources: [],
+          tools: {
+            beads_status: {},
+            beads_get: {},
+          },
+        },
+      ],
+      nextCursor: null,
+    }),
+    "mcpServer/tool/call": () => ({
+      content: [],
+      structuredContent: { available: true, version: "1.2.0" },
+    }),
     "turn/start": () => ({}),
     "thread/fork": (params) => ({
       thread: {

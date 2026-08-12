@@ -8,6 +8,7 @@ import {
   type ACPCatalogModelResolver,
   type ACPClientCapabilityMeta,
   type ACPConfigFeatureOption,
+  type ACPToolSnapshot,
   DEFAULT_ACP_CAPABILITIES,
   type ACPExtensionCommandsParser,
   type SessionStateResponse,
@@ -53,6 +54,7 @@ interface GenericACPAgentClientOptions {
   extensionCommandsParser?: ACPExtensionCommandsParser;
   catalogModelResolver?: ACPCatalogModelResolver;
   sessionResponseTransformer?: (response: SessionStateResponse) => SessionStateResponse;
+  toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
 }
 
 export class GenericACPAgentClient extends ACPAgentClient {
@@ -79,6 +81,7 @@ export class GenericACPAgentClient extends ACPAgentClient {
       extensionCommandsParser: options.extensionCommandsParser,
       catalogModelResolver: options.catalogModelResolver,
       sessionResponseTransformer: options.sessionResponseTransformer,
+      toolSnapshotTransformer: options.toolSnapshotTransformer,
     });
 
     this.command = options.command;

@@ -7,11 +7,55 @@ import type { SpawnedACPProcess, SessionStateResponse } from "./acp-agent.js";
 import {
   CURSOR_FAST_FEATURE_OPTION,
   CursorACPAgentClient,
+  isCursorOpaqueMcpToolSnapshot,
+  markCursorOpaqueMcpToolSnapshot,
   materializeCursorRoleCapsule,
 } from "./cursor-acp-agent.js";
 import { createTestLogger } from "../../../test-utils/test-logger.js";
 
 describe("CursorACPAgentClient model discovery", () => {
+  test("recognizes only Cursor's opaque MCP transport shadow", () => {
+    expect(
+      isCursorOpaqueMcpToolSnapshot({
+        toolCallId: "opaque-1",
+        title: "MCP: tool",
+        kind: "other",
+        rawInput: {},
+        rawOutput: { success: true },
+      }),
+    ).toBe(true);
+    expect(
+      isCursorOpaqueMcpToolSnapshot({
+        toolCallId: "opaque-2",
+        title: "opaque-2",
+        kind: "other",
+        rawOutput: { success: true },
+      }),
+    ).toBe(true);
+    expect(
+      isCursorOpaqueMcpToolSnapshot({
+        toolCallId: "named-1",
+        title: "MCP: beads_status",
+        kind: null,
+      }),
+    ).toBe(false);
+    expect(
+      isCursorOpaqueMcpToolSnapshot({
+        toolCallId: "unknown-1",
+        title: "unknown-1",
+        kind: null,
+      }),
+    ).toBe(false);
+    expect(
+      markCursorOpaqueMcpToolSnapshot({
+        toolCallId: "opaque-3",
+        title: "opaque-3",
+        kind: null,
+        rawOutput: { success: true },
+      }).transportShadow,
+    ).toBe("cursor-opaque-mcp");
+  });
+
   function fastConfigOption(currentValue: "false" | "true") {
     return {
       id: "fast",
@@ -198,15 +242,22 @@ describe("Cursor native role binding", () => {
           },
         },
       });
-      const capsuleDirectory = prepared.command?.[2];
+      const workspaceFlagIndex = prepared.command?.indexOf("--workspace") ?? -1;
+      const capsuleDirectory = prepared.command?.[workspaceFlagIndex + 1];
       expect(prepared.command).toEqual([
         "cursor-agent",
+        "--force",
+        "--approve-mcps",
+        "--trust",
+        "--sandbox",
+        "disabled",
         "--workspace",
         capsuleDirectory,
         "--add-dir",
         "/workspace/repo",
         "acp",
       ]);
+      expect(prepared.featureValues).toEqual({ auto_accept: true });
       expect(capsuleDirectory).toMatch(/paseo-peer-[a-f0-9]{12}-[a-f0-9]{12}$/u);
       await expect(
         readFile(join(capsuleDirectory!, ".cursor", "rules", "paseo-role.mdc"), "utf8"),
@@ -243,6 +294,19 @@ describe("Cursor native role binding", () => {
           roleBinding: { roleId: "lead", instructions: "Lead instructions" },
         },
       }),
-    ).rejects.toThrow("caller-supplied --workspace");
+    ).rejects.toThrow("caller-supplied workspace or permission-policy flags");
+  });
+
+  test("rejects caller permission flags so the role route stays daemon-pinned", async () => {
+    await expect(
+      materializeCursorRoleCapsule({
+        command: ["cursor-agent", "--auto-review", "acp"],
+        cwd: "/workspace/repo",
+        launchContext: {
+          agentId: "agent-1",
+          roleBinding: { roleId: "peer", instructions: "Peer instructions" },
+        },
+      }),
+    ).rejects.toThrow("caller-supplied workspace or permission-policy flags");
   });
 });

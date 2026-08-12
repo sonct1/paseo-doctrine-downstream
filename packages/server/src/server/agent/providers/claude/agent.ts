@@ -143,6 +143,13 @@ import {
   mergeClaudeProductPlugins,
   type ProductSkillPolicy,
 } from "../../product-skill-policy.js";
+import {
+  claudeMandatoryFoundationSkillDenyRules,
+  filterFoundationSkills,
+  loadFoundationSkillPolicy,
+  mergeClaudeMandatoryFoundationPlugins,
+  type FoundationSkillPolicy,
+} from "../../foundation-skill-policy.js";
 
 const fsPromises = promises;
 const CLAUDE_SETTING_SOURCES: NonNullable<ClaudeOptions["settingSources"]> = [
@@ -2024,6 +2031,7 @@ class ClaudeAgentSession implements AgentSession {
   private readonly launchEnv?: Record<string, string>;
   private readonly agentId?: string;
   private readonly roleInstructions?: string;
+  private readonly foundationSkillPolicy: FoundationSkillPolicy | null;
   private readonly productSkillPolicy: ProductSkillPolicy | null;
   private readonly defaults?: { agents?: Record<string, AgentDefinition> };
   private readonly runtimeSettings?: ProviderRuntimeSettings;
@@ -2092,6 +2100,7 @@ class ClaudeAgentSession implements AgentSession {
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
     this.roleInstructions = options.roleInstructions;
+    this.foundationSkillPolicy = options.roleId ? loadFoundationSkillPolicy(options.roleId) : null;
     this.productSkillPolicy = options.roleId
       ? loadProductSkillPolicy(options.roleId, options.productSkillBundleRoot)
       : null;
@@ -2548,9 +2557,9 @@ class ClaudeAgentSession implements AgentSession {
     this.turnState = "idle";
     this.sidechainTracker.clear();
     this.taskProtocolSource.reset();
+    await this.awaitWithTimeout(this.query?.interrupt?.(), "close query interrupt");
     this.input?.end();
     this.query?.close?.();
-    await this.awaitWithTimeout(this.query?.interrupt?.(), "close query interrupt");
     await this.awaitWithTimeout(this.query?.return?.(), "close query return");
     this.query = null;
     this.input = null;
@@ -2625,9 +2634,10 @@ class ClaudeAgentSession implements AgentSession {
     if (!commandMap.has(REWIND_COMMAND_NAME)) {
       commandMap.set(REWIND_COMMAND_NAME, REWIND_COMMAND);
     }
-    return filterProductSkills(Array.from(commandMap.values()), this.productSkillPolicy).sort(
-      (a, b) => a.name.localeCompare(b.name),
-    );
+    return filterProductSkills(
+      filterFoundationSkills(Array.from(commandMap.values()), this.foundationSkillPolicy),
+      this.productSkillPolicy,
+    ).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async revertConversation(input: { messageId: string }): Promise<void> {
@@ -3222,12 +3232,21 @@ class ClaudeAgentSession implements AgentSession {
       append: appendedSystemPrompt,
     };
     base.agents = {};
+    if (this.foundationSkillPolicy) {
+      base.plugins = mergeClaudeMandatoryFoundationPlugins(
+        base.plugins,
+        this.foundationSkillPolicy,
+      );
+    }
     if (this.productSkillPolicy) {
       base.plugins = mergeClaudeProductPlugins(base.plugins, this.productSkillPolicy);
     }
     base.disallowedTools = Array.from(
       new Set([
         ...(base.disallowedTools ?? []),
+        ...(this.foundationSkillPolicy
+          ? claudeMandatoryFoundationSkillDenyRules(this.foundationSkillPolicy)
+          : []),
         ...(this.productSkillPolicy ? claudeProductSkillDenyRules(this.productSkillPolicy) : []),
         "Agent",
         "Task",

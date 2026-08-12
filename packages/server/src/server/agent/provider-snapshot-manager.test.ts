@@ -984,6 +984,77 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
+  test("treats a role-bound parent as unattended even when its displayed mode is not", async () => {
+    const resolverInputs: ResolveAgentCreateConfigInput[] = [];
+    const childModes: AgentMode[] = [
+      { id: "child-unattended", label: "Child", isUnattended: true },
+    ];
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: {
+        copilot: { enabled: false },
+        opencode: { enabled: false },
+        pi: { enabled: false },
+      },
+      extraClients: {
+        codex: createExtraClient("codex", {
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog() {
+            return { models: [] as AgentModelDefinition[], modes: childModes };
+          },
+          async resolveCreateConfig(input) {
+            resolverInputs.push(input);
+            return {
+              modeId: input.parent?.isUnattended ? "child-unattended" : undefined,
+              featureValues: undefined,
+            };
+          },
+        }),
+        claude: createExtraClient("claude", {
+          async isAvailable() {
+            return true;
+          },
+          async fetchCatalog() {
+            return { models: [] as AgentModelDefinition[], modes: [] as AgentMode[] };
+          },
+          isCreateConfigUnattended() {
+            return false;
+          },
+        }),
+      },
+    });
+    try {
+      const parent = {
+        id: "role-parent",
+        provider: "claude",
+        currentModeId: "default",
+        availableModes: [],
+        config: { provider: "claude", cwd: "/tmp/project" },
+        roleBinding: { roleId: "lead" },
+      } as ManagedAgent;
+
+      await manager.resolveCreateConfig({
+        cwd: "/tmp/project",
+        provider: "codex",
+        requestedMode: undefined,
+        featureValues: undefined,
+        parent,
+        unattended: false,
+      });
+
+      expect(resolverInputs[0]?.parent).toEqual({
+        provider: "claude",
+        modeId: "default",
+        isUnattended: true,
+      });
+      expect(resolverInputs[0]?.unattended).toBe(true);
+    } finally {
+      manager.destroy();
+    }
+  });
+
   test("resolveCreateConfig passes explicit unattended intent to provider policy", async () => {
     const resolverInputs: ResolveAgentCreateConfigInput[] = [];
     const modes: AgentMode[] = [{ id: "worker", label: "Worker", isUnattended: true }];

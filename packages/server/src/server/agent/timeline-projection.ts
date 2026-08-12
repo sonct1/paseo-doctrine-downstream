@@ -36,35 +36,21 @@ export interface ProjectedTimelinePageSelection {
   hasNewer: boolean;
 }
 
-function appendSeqToRanges(ranges: TimelineSeqRange[], seq: number): TimelineSeqRange[] {
-  if (ranges.length === 0) {
-    return [{ startSeq: seq, endSeq: seq }];
-  }
-
-  const next = [...ranges];
-  const last = next[next.length - 1];
-  if (!last) {
-    return [{ startSeq: seq, endSeq: seq }];
-  }
-
-  if (seq <= last.endSeq + 1) {
-    last.endSeq = Math.max(last.endSeq, seq);
-    return next;
-  }
-
-  next.push({ startSeq: seq, endSeq: seq });
-  return next;
-}
-
 function mergeSeqRanges(
   existing: TimelineSeqRange[],
   incoming: TimelineSeqRange[],
 ): TimelineSeqRange[] {
-  let merged = [...existing];
-  for (const range of incoming) {
-    for (let seq = range.startSeq; seq <= range.endSeq; seq += 1) {
-      merged = appendSeqToRanges(merged, seq);
+  const ordered = [...existing, ...incoming]
+    .map((range) => ({ startSeq: range.startSeq, endSeq: range.endSeq }))
+    .sort((left, right) => left.startSeq - right.startSeq || left.endSeq - right.endSeq);
+  const merged: TimelineSeqRange[] = [];
+  for (const range of ordered) {
+    const previous = merged[merged.length - 1];
+    if (!previous || range.startSeq > previous.endSeq + 1) {
+      merged.push(range);
+      continue;
     }
+    previous.endSeq = Math.max(previous.endSeq, range.endSeq);
   }
   return merged;
 }
@@ -160,6 +146,109 @@ function collapseToolLifecycle(entries: readonly WorkingEntry[]): WorkingEntry[]
   return output;
 }
 
+const MAX_CURSOR_SHADOW_INTERVENING_ROWS = 2;
+
+function isAuthoritativePaseoMcpReceipt(entry: WorkingEntry): boolean {
+  return (
+    entry.item.type === "tool_call" &&
+    (entry.item.status === "completed" ||
+      entry.item.status === "failed" ||
+      entry.item.status === "canceled") &&
+    entry.item.metadata?.source === "paseo-mcp-server"
+  );
+}
+
+function isCompletedCursorOpaqueMcpShadow(entry: WorkingEntry): boolean {
+  return (
+    entry.item.type === "tool_call" &&
+    entry.item.status === "completed" &&
+    entry.item.metadata?.transportShadow === "cursor-opaque-mcp"
+  );
+}
+
+/**
+ * Cursor ACP emits a second redacted lifecycle for MCP calls. Its transport
+ * shadow can complete with `{ success: true }` even when the authoritative
+ * Paseo tool receipt is failed, because transport delivery succeeded while the
+ * tool operation did not. Keep both lifecycles in canonical history, but
+ * collapse the shadow from the human-facing projection only when a bounded
+ * sequence cluster has the same number of terminal authoritative receipts and
+ * opaque shadows. Pairing stays monotonic within that cluster; count mismatches
+ * remain visible instead of guessing.
+ */
+function collapseProviderTransportShadows(entries: readonly WorkingEntry[]): WorkingEntry[] {
+  const output = [...entries];
+  const collapsedShadowIndexes = new Set<number>();
+  const relevant = output
+    .map((entry, index) => ({ entry, index }))
+    .filter(
+      (candidate) =>
+        isAuthoritativePaseoMcpReceipt(candidate.entry) ||
+        isCompletedCursorOpaqueMcpShadow(candidate.entry),
+    )
+    .sort(
+      (left, right) =>
+        left.entry.seqStart - right.entry.seqStart ||
+        left.entry.seqEnd - right.entry.seqEnd ||
+        left.index - right.index,
+    );
+  const clusters: Array<typeof relevant> = [];
+  for (const candidate of relevant) {
+    const cluster = clusters[clusters.length - 1];
+    const clusterEnd = cluster?.reduce(
+      (maximum, member) => Math.max(maximum, member.entry.seqEnd),
+      Number.NEGATIVE_INFINITY,
+    );
+    if (
+      !cluster ||
+      clusterEnd === undefined ||
+      candidate.entry.seqStart > clusterEnd + MAX_CURSOR_SHADOW_INTERVENING_ROWS + 1
+    ) {
+      clusters.push([candidate]);
+      continue;
+    }
+    cluster.push(candidate);
+  }
+
+  for (const cluster of clusters) {
+    const receipts = cluster.filter((candidate) => isAuthoritativePaseoMcpReceipt(candidate.entry));
+    const shadows = cluster.filter((candidate) =>
+      isCompletedCursorOpaqueMcpShadow(candidate.entry),
+    );
+    if (receipts.length === 0 || receipts.length !== shadows.length) {
+      continue;
+    }
+
+    for (let index = 0; index < receipts.length; index += 1) {
+      const receipt = receipts[index];
+      const shadow = shadows[index];
+      if (!receipt || !shadow) {
+        continue;
+      }
+      output[receipt.index] = {
+        ...receipt.entry,
+        timestamp: shadow.entry.timestamp,
+        seqStart: Math.min(receipt.entry.seqStart, shadow.entry.seqStart),
+        seqEnd: Math.max(receipt.entry.seqEnd, shadow.entry.seqEnd),
+        sourceSeqRanges: mergeSeqRanges(
+          receipt.entry.sourceSeqRanges,
+          shadow.entry.sourceSeqRanges,
+        ),
+        collapsed: Array.from(
+          new Set<TimelineProjectionKind>([
+            ...receipt.entry.collapsed,
+            ...shadow.entry.collapsed,
+            "tool_lifecycle",
+          ]),
+        ),
+      };
+      collapsedShadowIndexes.add(shadow.index);
+    }
+  }
+
+  return output.filter((_, index) => !collapsedShadowIndexes.has(index));
+}
+
 function mergeReasoningChunks(entries: readonly WorkingEntry[]): WorkingEntry[] {
   const output: WorkingEntry[] = [];
 
@@ -251,6 +340,13 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
   return output;
 }
 
+function projectCanonicalEntries(entries: readonly WorkingEntry[]): WorkingEntry[] {
+  const toolCollapsed = collapseToolLifecycle(entries);
+  const transportCollapsed = collapseProviderTransportShadows(toolCollapsed);
+  const assistantMerged = mergeAssistantChunks(transportCollapsed);
+  return mergeReasoningChunks(assistantMerged);
+}
+
 export function projectTimelineRows(input: {
   rows: readonly AgentTimelineRow[];
   mode: TimelineProjectionMode;
@@ -260,9 +356,7 @@ export function projectTimelineRows(input: {
     return canonical;
   }
 
-  const toolCollapsed = collapseToolLifecycle(canonical);
-  const assistantMerged = mergeAssistantChunks(toolCollapsed);
-  return mergeReasoningChunks(assistantMerged);
+  return projectCanonicalEntries(canonical);
 }
 
 /**
@@ -278,7 +372,7 @@ export function selectTimelineWindowByProjectedLimit(input: {
   const { rows, direction } = input;
   const limit = Math.max(0, Math.floor(input.limit));
   const canonical = makeCanonicalEntries(rows);
-  const projectedAll = mergeReasoningChunks(mergeAssistantChunks(collapseToolLifecycle(canonical)));
+  const projectedAll = projectCanonicalEntries(canonical);
 
   if (projectedAll.length === 0) {
     return {

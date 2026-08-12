@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it, vi } from "vitest";
 import { realpathSync, rmSync } from "node:fs";
 import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
@@ -1078,14 +1077,12 @@ describe("browser MCP tools", () => {
       expect(toolNames).not.toContain("list_agents");
       expect(toolNames).not.toContain("browser_list_tabs");
       expect(toolNames).toEqual(expect.arrayContaining(["create_agent", "browser_snapshot"]));
-      await expect(client.callTool({ name: "list_agents", arguments: {} })).resolves.toEqual({
-        content: [{ type: "text", text: "MCP error -32602: Tool list_agents not found" }],
-        isError: true,
-      });
-      await expect(client.callTool({ name: "browser_list_tabs", arguments: {} })).resolves.toEqual({
-        content: [{ type: "text", text: "MCP error -32602: Tool browser_list_tabs not found" }],
-        isError: true,
-      });
+      await expect(client.callTool({ name: "list_agents", arguments: {} })).rejects.toThrow(
+        "Tool list_agents not found",
+      );
+      await expect(client.callTool({ name: "browser_list_tabs", arguments: {} })).rejects.toThrow(
+        "Tool browser_list_tabs not found",
+      );
       expect(broker.calls).toEqual([]);
     } finally {
       await client.close();
@@ -1120,10 +1117,9 @@ describe("browser MCP tools", () => {
       expect(toolNames).toContain("list_agents");
       expect(toolNames).not.toContain("create_agent");
       expect(toolNames).not.toContain("browser_snapshot");
-      await expect(client.callTool({ name: "create_agent", arguments: {} })).resolves.toEqual({
-        content: [{ type: "text", text: "MCP error -32602: Tool create_agent not found" }],
-        isError: true,
-      });
+      await expect(client.callTool({ name: "create_agent", arguments: {} })).rejects.toThrow(
+        "Tool create_agent not found",
+      );
     } finally {
       await client.close();
       await server.close();
@@ -1346,6 +1342,118 @@ describe("create_agent MCP tool", () => {
       }),
     );
   });
+
+  it("lets only a role-bound Lead select a Council execution specialization", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const lead = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_parent",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    const child = createManagedAgent({
+      id: "architect-agent",
+      provider: "codex",
+      cwd: existingCwd,
+      workspaceId: "wks_parent",
+      lifecycle: "idle",
+      currentModeId: "full-access",
+      availableModes: [],
+      config: { title: "Council architect" },
+    });
+    spies.agentManager.getAgent.mockImplementation((id: string) => {
+      if (id === lead.id) return lead;
+      if (id === child.id) return child;
+      return null;
+    });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: lead.id,
+        cwd: lead.cwd,
+        workspaceId: lead.workspaceId,
+        roleBinding: lead.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(child);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: lead.id,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+    expect((tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile).toBeDefined();
+
+    await tool.handler({
+      title: "Council architect",
+      provider: "codex/gpt-5.4",
+      role: "peer",
+      executionProfile: "solution-architect",
+      settings: { modeId: "auto", thinkingOptionId: "medium" },
+      initialPrompt: "Inspect the bounded architecture question",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5.4",
+        modeId: "auto",
+        thinkingOptionId: "medium",
+      }),
+      undefined,
+      expect.objectContaining({
+        roleId: "peer",
+        executionProfileId: "solution-architect",
+        workspaceId: "wks_parent",
+      }),
+    );
+  });
+
+  it.each(["peer", "supervisor"] as const)(
+    "does not project the execution-specialization field to an ordinary %s",
+    async (callerRole) => {
+      const { agentManager, agentStorage, spies } = createTestDeps();
+      const caller = createManagedAgent({
+        id: `${callerRole}-agent`,
+        cwd: existingCwd,
+        workspaceId: "wks_parent",
+        roleBinding: createTestRoleBinding(callerRole),
+      });
+      spies.agentManager.getAgent.mockReturnValue(caller);
+      mockStoredAgentRecords(spies.agentStorage.get, [
+        createActiveStoredRecord({
+          id: caller.id,
+          cwd: caller.cwd,
+          workspaceId: caller.workspaceId,
+          roleBinding: caller.roleBinding,
+        }),
+      ]);
+
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        callerAgentId: caller.id,
+        logger,
+      });
+      const tool = registeredTool(server, "create_agent");
+
+      expect(
+        (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape.executionProfile,
+      ).toBeUndefined();
+      await expect(
+        tool.handler({
+          title: "Council reviewer",
+          provider: "codex/gpt-5.4",
+          role: "peer",
+          executionProfile: "reviewer",
+          initialPrompt: "Review the bounded proposition",
+        }),
+      ).rejects.toThrow(/Unrecognized key/);
+      expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { callerRole: "lead" as const, requestedRole: "lead" as const },
@@ -5746,6 +5854,66 @@ describe("speak MCP tool", () => {
 
 describe("agent snapshot MCP serialization", () => {
   const logger = createTestLogger();
+
+  it("records exact authoritative Paseo MCP receipts for Cursor callers", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue(
+      createManagedAgent({ id: "cursor-caller", provider: "cursor" }),
+    );
+    spies.agentManager.listAgents.mockReturnValue([]);
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "cursor-caller",
+      logger,
+    });
+    const response = await registeredTool(server, "list_agents").handler({ cwd: REPO_CWD });
+
+    expect(response.structuredContent).toEqual({ agents: [] });
+    expect(spies.agentManager.appendTimelineItem).toHaveBeenCalledTimes(2);
+    const [runningAgentId, running] = spies.agentManager.appendTimelineItem.mock.calls[0]!;
+    const [completedAgentId, completed] = spies.agentManager.appendTimelineItem.mock.calls[1]!;
+    expect(runningAgentId).toBe("cursor-caller");
+    expect(completedAgentId).toBe("cursor-caller");
+    expect(running).toMatchObject({
+      type: "tool_call",
+      name: "mcp__paseo__list_agents",
+      status: "running",
+      detail: { type: "unknown", input: { cwd: REPO_CWD }, output: null },
+      metadata: {
+        source: "paseo-mcp-server",
+        authoritativeToolName: "list_agents",
+      },
+    });
+    expect(completed).toMatchObject({
+      type: "tool_call",
+      callId: running.callId,
+      name: "mcp__paseo__list_agents",
+      status: "completed",
+      detail: { type: "unknown", input: { cwd: REPO_CWD }, output: { agents: [] } },
+    });
+  });
+
+  it("does not duplicate native provider MCP receipts", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue(
+      createManagedAgent({ id: "claude-caller", provider: "claude" }),
+    );
+    spies.agentManager.listAgents.mockReturnValue([]);
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: "claude-caller",
+      logger,
+    });
+    await registeredTool(server, "list_agents").handler({});
+
+    expect(spies.agentManager.appendTimelineItem).not.toHaveBeenCalled();
+  });
 
   it("returns compact list items from list_agents", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();

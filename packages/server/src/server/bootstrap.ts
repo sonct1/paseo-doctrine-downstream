@@ -1,11 +1,12 @@
 import express from "express";
-import { createServer as createHTTPServer, type IncomingMessage, type ServerResponse } from "http";
+import { createServer as createHTTPServer } from "http";
 import { constants, existsSync, unlinkSync } from "fs";
 import { open } from "fs/promises";
 import { randomUUID } from "node:crypto";
 import { hostname as getHostname } from "node:os";
 import path from "node:path";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpHandler } from "@modelcontextprotocol/server";
+import { toNodeHandler } from "@modelcontextprotocol/node";
 import type { Logger } from "pino";
 import { z } from "zod";
 import { createBranchChangeRouteHandler } from "./script-route-branch-handler.js";
@@ -869,7 +870,9 @@ export async function createPaseoDaemon(
     workspaceGitService,
     logger,
   });
-  const providerSnapshotLogger = logger.child({ module: "provider-snapshot-manager" });
+  const providerSnapshotLogger = logger.child({
+    module: "provider-snapshot-manager",
+  });
   const providerSnapshotManager = new ProviderSnapshotManager({
     logger: providerSnapshotLogger,
     runtimeSettings: config.agentProviderSettings,
@@ -892,6 +895,7 @@ export async function createPaseoDaemon(
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
     },
     mcpAuthToken: agentMcpAuthToken,
+    mcpRuntimeId: randomUUID(),
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     logger,
@@ -1032,7 +1036,9 @@ export async function createPaseoDaemon(
     workspaceRegistry,
     workspaceGitService,
     providerSnapshotManager,
-    readDaemonConfig: () => ({ metadataGeneration: daemonConfigStore.get().metadataGeneration }),
+    readDaemonConfig: () => ({
+      metadataGeneration: daemonConfigStore.get().metadataGeneration,
+    }),
     gitMutation: createGitMutationService({
       workspaceGitService,
       logger,
@@ -1291,7 +1297,9 @@ export async function createPaseoDaemon(
   const persistedRecords = await agentStorage.list();
   logger.info(
     { elapsed: elapsed() },
-    `Agent registry loaded (${persistedRecords.length} record${persistedRecords.length === 1 ? "" : "s"}); agents will initialize on demand`,
+    `Agent registry loaded (${persistedRecords.length} record${
+      persistedRecords.length === 1 ? "" : "s"
+    }); agents will initialize on demand`,
   );
   logger.info(
     "Voice mode configured for agent-scoped resume flow (no dedicated voice assistant provider)",
@@ -1412,39 +1420,37 @@ export async function createPaseoDaemon(
 
   const mcpEnabled = config.mcpEnabled ?? true;
   let agentMcpBaseUrl: string | null = null;
+  let closeAgentMcpHandler: (() => Promise<void>) | null = null;
   if (mcpEnabled) {
     const agentMcpRoute = "/mcp/agents";
 
-    const createAgentMcpSession = async (callerAgentId?: string) => {
-      const agentMcpServer = await createAgentMcpServer(
-        createAgentToolHostDependencies({
-          callerAgentId,
-          paseoToolPolicy: callerAgentId
-            ? agentManager.getPaseoToolPolicy(callerAgentId)
-            : undefined,
-        }),
-      );
-
-      // Stateless mode: each HTTP request builds a fresh server + transport that is
-      // torn down when the response closes, so no per-session state is retained between
-      // requests. The agent control plane only lists and calls tools, neither of which
-      // needs cross-request state, so sessions would only pin memory for the life of the
-      // daemon (agents that exit without a clean DELETE never get reaped).
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        // NOTE: We enforce a Vite-like host allowlist at the app/websocket layer.
-        // StreamableHTTPServerTransport's built-in check requires exact Host header matches.
-        enableDnsRebindingProtection: false,
-      });
-      Object.assign(transport, {
-        onerror: (err: Error) => {
-          logger.error({ err }, "Agent MCP transport error");
-        },
-      });
-
-      await agentMcpServer.connect(transport);
-      return { server: agentMcpServer, transport };
-    };
+    // One protocol-aware handler serves both the 2025 initialize flow and the
+    // 2026-07-28 server/discover flow. Its factory still creates a fresh MCP
+    // server for every request, preserving the previous stateless lifecycle.
+    const agentMcpHandler = createMcpHandler(
+      async ({ requestInfo }) => {
+        const callerAgentId = requestInfo
+          ? (new URL(requestInfo.url).searchParams.get("callerAgentId") ?? undefined)
+          : undefined;
+        return createAgentMcpServer(
+          createAgentToolHostDependencies({
+            callerAgentId,
+            paseoToolPolicy: callerAgentId
+              ? agentManager.getPaseoToolPolicy(callerAgentId)
+              : undefined,
+          }),
+        );
+      },
+      {
+        legacy: "stateless",
+        responseMode: "json",
+        onerror: (err) => logger.error({ err }, "Agent MCP protocol error"),
+      },
+    );
+    closeAgentMcpHandler = () => agentMcpHandler.close();
+    const handleAgentMcpNodeRequest = toNodeHandler(agentMcpHandler, {
+      onerror: (err) => logger.error({ err }, "Agent MCP adapter error"),
+    });
 
     const runAgentMcpRequest = async (
       req: express.Request,
@@ -1491,24 +1497,7 @@ export async function createPaseoDaemon(
           });
           return;
         }
-        const callerAgentIdRaw = req.query.callerAgentId;
-        let callerAgentId: string | undefined;
-        if (typeof callerAgentIdRaw === "string") {
-          callerAgentId = callerAgentIdRaw;
-        } else if (Array.isArray(callerAgentIdRaw) && typeof callerAgentIdRaw[0] === "string") {
-          callerAgentId = callerAgentIdRaw[0];
-        }
-        const { server, transport } = await createAgentMcpSession(callerAgentId);
-        res.on("close", () => {
-          void transport.close();
-          void server.close();
-        });
-
-        await transport.handleRequest(
-          req as unknown as IncomingMessage,
-          res as unknown as ServerResponse,
-          req.body,
-        );
+        await handleAgentMcpNodeRequest(req, res, req.body);
       } catch (err) {
         logger.error({ err }, "Failed to handle Agent MCP request");
         if (!res.headersSent) {
@@ -1762,6 +1751,7 @@ export async function createPaseoDaemon(
     await attempt("relay", () => relayRuntime?.stop());
     await attempt("websocket-close", () => wsServer?.close());
     await attempt("service-proxy", () => serviceProxy.stopStandalone());
+    await attempt("agent-mcp", () => closeAgentMcpHandler?.());
     // Force-drop remaining sockets so httpServer.close() resolves promptly.
     // We've already closed wsServer (which sent ws-layer close frames) and
     // stopped every other service, so anything still attached is a TCP

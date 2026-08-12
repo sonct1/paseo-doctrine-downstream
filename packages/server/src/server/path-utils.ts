@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, posix, resolve, win32 } from "node:path";
+import { isRealpathInsideRoot } from "../utils/path.js";
 
 export function assertAbsolutePath(cwd: string): void {
   if (!posix.isAbsolute(cwd) && !win32.isAbsolute(cwd)) {
@@ -28,15 +29,5 @@ export function resolvePathFromBase(baseCwd: string, requestedPath: string): str
 }
 
 export function isSameOrDescendantPath(basePath: string, candidatePath: string): boolean {
-  let normalizedBase = basePath.replace(/\\/g, "/").replace(/\/$/, "");
-  let normalizedCandidate = candidatePath.replace(/\\/g, "/").replace(/\/$/, "");
-
-  if (/^[a-zA-Z]:\//.test(normalizedBase) || /^[a-zA-Z]:\//.test(normalizedCandidate)) {
-    normalizedBase = normalizedBase.toLowerCase();
-    normalizedCandidate = normalizedCandidate.toLowerCase();
-  }
-
-  return (
-    normalizedCandidate === normalizedBase || normalizedCandidate.startsWith(normalizedBase + "/")
-  );
+  return isRealpathInsideRoot(basePath, candidatePath);
 }

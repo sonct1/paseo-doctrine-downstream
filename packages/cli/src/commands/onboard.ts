@@ -171,13 +171,31 @@ function renderProgressLine(progress: DownloadProgress): string {
 
 type ProbeResult = { kind: "ready"; listen: string; host: string | null } | { kind: "pending" };
 
+export function resolveOnboardProbeListen(state: {
+  running: boolean;
+  pidInfo: { listen?: string | null } | null;
+}): string | null {
+  if (!state.running) {
+    return null;
+  }
+  const lockedListen = state.pidInfo?.listen;
+  return typeof lockedListen === "string" && lockedListen.trim() ? lockedListen.trim() : null;
+}
+
 async function probeDaemonReady(home: string, timeoutMs: number): Promise<ProbeResult> {
   const state = resolveLocalDaemonState({ home });
-  const host = resolveTcpHostFromListen(state.listen);
+  // The supervisor initially owns a PID lock with listen=null and fills the bound
+  // address only after its worker is ready. Never fall back to persisted/default
+  // config during that window: it may point at a different Paseo home's daemon.
+  const listen = resolveOnboardProbeListen(state);
+  if (!listen) {
+    return { kind: "pending" };
+  }
+  const host = resolveTcpHostFromListen(listen);
   const deadline = Date.now() + timeoutMs;
   const remainingTimeoutMs = () => Math.max(1, deadline - Date.now());
 
-  if (state.running && host) {
+  if (host) {
     const client = await tryConnectToDaemon({
       host,
       timeout: Math.min(remainingTimeoutMs(), READY_PROBE_TIMEOUT_MS),
@@ -187,15 +205,15 @@ async function probeDaemonReady(home: string, timeoutMs: number): Promise<ProbeR
         await client.fetchAgents({
           timeout: Math.min(remainingTimeoutMs(), READY_PROBE_TIMEOUT_MS),
         });
-        return { kind: "ready", listen: state.listen, host };
+        return { kind: "ready", listen, host };
       } catch {
         // Daemon process is alive but not API-ready yet.
       } finally {
         await client.close().catch(() => {});
       }
     }
-  } else if (state.running && !host) {
-    return { kind: "ready", listen: state.listen, host: null };
+  } else {
+    return { kind: "ready", listen, host: null };
   }
 
   return { kind: "pending" };

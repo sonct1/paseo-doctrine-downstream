@@ -17,12 +17,35 @@ export const PASEO_ASSIGNMENT_EFFECTS_BY_ROLE = {
   supervisor: ["read-only", "bootstrap", "recovery"],
 } as const satisfies Record<"lead" | "peer" | "supervisor", readonly AssignmentEffectClass[]>;
 
+export const PASEO_BEADS_EXTERNAL_EFFECT_SCOPE =
+  "Beads Central issue/work graph for this assignment only; no other external effects";
+
 export function isAssignmentEffectAllowedForRole(
   roleId: keyof typeof PASEO_ASSIGNMENT_EFFECTS_BY_ROLE,
   effectClass: AssignmentEffectClass,
 ): boolean {
   const allowed: readonly AssignmentEffectClass[] = PASEO_ASSIGNMENT_EFFECTS_BY_ROLE[roleId];
   return allowed.includes(effectClass);
+}
+
+/**
+ * Default external-effect lease for Human-launched Foundation roles.
+ *
+ * Lead work that can change durable work state and mutating Peer work need a
+ * narrow Beads Central lease. Read-only work and every Supervisor assignment
+ * remain externally denied; server-side role guards still enforce the exact
+ * mutation authority for each Beads operation.
+ */
+export function assignmentExternalEffectBoundaryFor(
+  roleId: keyof typeof PASEO_ASSIGNMENT_EFFECTS_BY_ROLE,
+  effectClass: AssignmentEffectClass,
+): AssignmentExternalEffectBoundary {
+  const canMutateBeads =
+    (roleId === "lead" && effectClass !== "read-only") ||
+    (roleId === "peer" && effectClass === "mutating");
+  return canMutateBeads
+    ? { mode: "bounded", scope: PASEO_BEADS_EXTERNAL_EFFECT_SCOPE }
+    : { mode: "denied" };
 }
 
 export const PASEO_ASSIGNMENT_EFFECT_SUMMARIES = [
@@ -58,6 +81,9 @@ export const AssignmentExternalEffectBoundarySchema = z.discriminatedUnion("mode
   z.object({ mode: z.literal("denied") }),
   z.object({ mode: z.literal("bounded"), scope: z.string().trim().min(1) }),
 ]);
+export type AssignmentExternalEffectBoundary = z.infer<
+  typeof AssignmentExternalEffectBoundarySchema
+>;
 
 export const WorkspaceProtocolAdmissionExceptionSchema = z.object({
   reason: z.string().trim().min(1),

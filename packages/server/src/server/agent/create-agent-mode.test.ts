@@ -157,6 +157,18 @@ describe("resolveAndValidateCreateAgentMode", () => {
     expect(resolved).toBe("full-access");
   });
 
+  it("uses the target unattended mode for an unattended same-provider caller", () => {
+    const resolved = resolveAndValidateCreateAgentMode({
+      requestedMode: undefined,
+      targetProvider: "codex",
+      parent: agentParent("codex", "auto", true),
+      unattended: false,
+      availableModes: CODEX_MODES,
+      targetUnattendedMode: "full-access",
+    });
+    expect(resolved).toBe("full-access");
+  });
+
   it("inherits target's unattended mode for unattended creation without a parent", () => {
     const resolved = resolveAndValidateCreateAgentMode({
       requestedMode: undefined,

@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
+  isProviderRoleBindingSupportedForRole,
   PaseoRoleIdSchema,
   RoleBindingReceiptSchema,
   type PaseoRoleId,
@@ -16,7 +18,14 @@ import type {
 } from "@getpaseo/protocol/assignment-contract";
 import { z } from "zod";
 
+import {
+  ExecutionProfileBindingReceiptSchema,
+  foundationExecutionProfileDefinitionDigest,
+  getFoundationExecutionProfileDefinition,
+  type FoundationExecutionProfileId,
+} from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
+import { loadFoundationSkillPolicy } from "./foundation-skill-policy.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
 import {
   buildAssignmentInstruction,
@@ -26,17 +35,9 @@ import {
 
 export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 
-// COMPAT(privateExecutionProfile): keep parsing launch contracts written by
-// paseo-v0.3.1-paseo.1. New launches cannot request or materialize this field.
-const LegacyExecutionProfileBindingReceiptSchema = z.object({
-  id: z.literal("review"),
-  version: z.string().min(1),
-  definitionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-});
-
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
-  executionProfile: LegacyExecutionProfileBindingReceiptSchema.optional(),
+  executionProfile: ExecutionProfileBindingReceiptSchema.optional(),
   assignmentContract: PersistedAssignmentContractSchema.optional(),
 });
 
@@ -44,6 +45,7 @@ export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
 
 export interface MaterializeRoleBindingInput {
   roleId: PaseoRoleId;
+  executionProfileId?: FoundationExecutionProfileId;
   provider: string;
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
@@ -79,6 +81,7 @@ const SUPERVISOR_PASEO_TOOLS = [
 ] as const;
 
 const PEER_PASEO_TOOLS = [
+  "post_room",
   "beads_status",
   "beads_ready",
   "beads_list",
@@ -136,15 +139,28 @@ function resolveCursorACPRoleBindingSupport(
     command?.some(
       (argument) => argument === "--workspace" || argument.startsWith("--workspace="),
     ) ?? false;
+  const hasCallerPermissionPolicy =
+    command?.some(
+      (argument) =>
+        argument === "-f" ||
+        argument === "--force" ||
+        argument === "--yolo" ||
+        argument === "--auto-review" ||
+        argument === "--approve-mcps" ||
+        argument === "--trust" ||
+        argument === "--sandbox" ||
+        argument.startsWith("--sandbox="),
+    ) ?? false;
   if (
     !commandMatchesExecutable(command, ["cursor-agent", "cursor-agent.exe"]) ||
     acpCommandCount !== 1 ||
-    hasCallerWorkspace
+    hasCallerWorkspace ||
+    hasCallerPermissionPolicy
   ) {
     return {
       status: "unsupported",
       reason:
-        "Cursor native role binding requires exact 'cursor-agent ... acp' launch without a caller-supplied --workspace",
+        "Cursor native role binding requires exact 'cursor-agent ... acp' launch without caller-supplied workspace or permission-policy flags",
     };
   }
   return {
@@ -155,11 +171,13 @@ function resolveCursorACPRoleBindingSupport(
 
 function resolveAntigravityACPRoleBindingSupport(
   command: readonly string[] | undefined,
+  hasPaseoToolTransport?: boolean,
 ): ProviderRoleBindingSupport {
   if (process.platform === "win32") {
     return {
       status: "unsupported",
       reason: "Antigravity native role binding is not implemented on Windows",
+      roleIds: ["peer"],
     };
   }
   const binaryFlagIndexes = (command ?? []).flatMap((argument, index) =>
@@ -175,19 +193,30 @@ function resolveAntigravityACPRoleBindingSupport(
       status: "unsupported",
       reason:
         "Antigravity native role binding requires one --agy-binary value and rejects caller-supplied --agent arguments",
+      roleIds: ["peer"],
+    };
+  }
+  if (hasPaseoToolTransport === false) {
+    return {
+      status: "unsupported",
+      reason:
+        "The current Antigravity bridge has no MCP or native Paseo-tool transport for the mandatory Beads checkpoint",
+      roleIds: ["peer"],
     };
   }
   return {
     status: "supported",
     injectionMethod: "antigravity-custom-agent",
+    roleIds: ["peer"],
     notice:
-      "agy-acp is a third-party bridge. Review Google's current Antigravity authentication terms before using an account through it.",
+      "Antigravity has a Peer-only eligibility ceiling; actual launch still requires qualified native Paseo and Beads transport. agy-acp is a third-party bridge; review Google's current authentication terms before using an account through it.",
   };
 }
 
 function resolveConfiguredACPRoleBindingSupport(
   nativeRoleBinding: ProviderNativeRoleBindingConfig | undefined,
   command: readonly string[] | undefined,
+  hasPaseoToolTransport?: boolean,
 ): ProviderRoleBindingSupport | null {
   if (nativeRoleBinding?.driver === "cursor-plugin") {
     return {
@@ -200,13 +229,13 @@ function resolveConfiguredACPRoleBindingSupport(
     return resolveCursorACPRoleBindingSupport(command);
   }
   if (nativeRoleBinding?.driver === "antigravity-custom-agent") {
-    return resolveAntigravityACPRoleBindingSupport(command);
+    return resolveAntigravityACPRoleBindingSupport(command, hasPaseoToolTransport);
   }
   if (commandMatchesExecutable(command, ["cursor-agent", "cursor-agent.exe"])) {
     return resolveCursorACPRoleBindingSupport(command);
   }
   if (commandMatchesExecutable(command, ["agy-acp", "agy-acp.exe"])) {
-    return resolveAntigravityACPRoleBindingSupport(command);
+    return resolveAntigravityACPRoleBindingSupport(command, hasPaseoToolTransport);
   }
   return null;
 }
@@ -248,6 +277,7 @@ export function resolveProviderRoleBindingSupport(
   legacyRoleId?: PaseoRoleId | null,
   nativeRoleBinding?: ProviderNativeRoleBindingConfig,
   command?: readonly string[],
+  hasPaseoToolTransport?: boolean,
 ): ProviderRoleBindingSupport {
   if (legacyRoleId) {
     return {
@@ -260,7 +290,11 @@ export function resolveProviderRoleBindingSupport(
   const family = resolveProviderFamily(provider, providerBaseId);
   const builtInSupport = resolveBuiltInRoleBindingSupport(family);
   if (builtInSupport) return builtInSupport;
-  const configuredSupport = resolveConfiguredACPRoleBindingSupport(nativeRoleBinding, command);
+  const configuredSupport = resolveConfiguredACPRoleBindingSupport(
+    nativeRoleBinding,
+    command,
+    hasPaseoToolTransport,
+  );
   if (configuredSupport) return configuredSupport;
   return {
     status: "unsupported",
@@ -326,15 +360,55 @@ function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): str
   return `Workspace Protocol binding: full-read required at ${receipt.path}; sha256=${receipt.digest}. Read the exact current file before orchestration. If current bytes no longer match this digest, stop and request a fresh binding instead of relying on stale protocol state.`;
 }
 
+function buildMandatoryBeadsSkillInstruction(roleId: PaseoRoleId): string {
+  const policy = loadFoundationSkillPolicy(roleId);
+  const skillPath = policy.skillPaths.get("beads-issue-tracker");
+  if (policy.status !== "bound" || !policy.enabledNames.has("beads-issue-tracker") || !skillPath) {
+    throw new Error(
+      "foundation_skill_admission_required: beads-issue-tracker is not bound for this role",
+    );
+  }
+  let skill: string;
+  try {
+    skill = readFileSync(skillPath, "utf8");
+  } catch (error) {
+    throw new Error(
+      `foundation_skill_admission_required: cannot read beads-issue-tracker at ${skillPath}`,
+      { cause: error },
+    );
+  }
+  if (!skill.startsWith("---\nname: beads-issue-tracker\n")) {
+    throw new Error(
+      `foundation_skill_admission_required: invalid beads-issue-tracker package at ${skillPath}`,
+    );
+  }
+  return [
+    "Mandatory role-projected skill package: the daemon has loaded these exact bytes for this assignment. Apply them directly; do not search for, load, or read another beads-issue-tracker copy.",
+    '<paseo-role-skill name="beads-issue-tracker">',
+    skill,
+    "</paseo-role-skill>",
+  ].join("\n\n");
+}
+
 export async function materializeRoleBinding(
   input: MaterializeRoleBindingInput,
 ): Promise<PersistedRoleBinding> {
   const support =
     input.providerSupport ??
     resolveProviderRoleBindingSupport(input.provider, input.providerBaseId);
-  if (support.status !== "supported") {
+  if (support.roleIds && !support.roleIds.includes(input.roleId)) {
+    throw new Error(
+      `Provider '${input.provider}' cannot bind Paseo role '${input.roleId}': provider eligibility is limited to role(s): ${support.roleIds.join(", ")}`,
+    );
+  }
+  if (support.status === "unsupported") {
     throw new Error(
       `Provider '${input.provider}' cannot bind Paseo role '${input.roleId}': ${support.reason}`,
+    );
+  }
+  if (!isProviderRoleBindingSupportedForRole(support, input.roleId)) {
+    throw new Error(
+      `Provider '${input.provider}' cannot bind Paseo role '${input.roleId}': provider eligibility is limited to role(s): ${support.roleIds?.join(", ") ?? "none"}`,
     );
   }
 
@@ -348,6 +422,14 @@ export async function materializeRoleBinding(
     envelope: input.assignment,
     createdAt,
   });
+  const executionProfile = input.executionProfileId
+    ? getFoundationExecutionProfileDefinition(input.executionProfileId)
+    : null;
+  if (executionProfile && executionProfile.authorityRoleId !== input.roleId) {
+    throw new Error(
+      `Execution profile '${executionProfile.id}' requires role '${executionProfile.authorityRoleId}'`,
+    );
+  }
   const workspaceProtocol = requireWorkspaceProtocol(
     input.cwd,
     input.roleId,
@@ -355,8 +437,10 @@ export async function materializeRoleBinding(
   );
   const instructions = [
     definition.instructions,
+    executionProfile?.instructions,
     buildProtocolInstruction(workspaceProtocol),
     buildAssignmentInstruction(assignmentContract),
+    buildMandatoryBeadsSkillInstruction(input.roleId),
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");
@@ -374,6 +458,15 @@ export async function materializeRoleBinding(
     assignmentContract,
     createdAt: createdAt.toISOString(),
     instructions,
+    ...(executionProfile
+      ? {
+          executionProfile: {
+            id: executionProfile.id,
+            version: executionProfile.version,
+            definitionDigest: foundationExecutionProfileDefinitionDigest(executionProfile),
+          },
+        }
+      : {}),
   };
 }
 

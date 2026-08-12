@@ -210,6 +210,12 @@ const PARENT_SESSION_ENV_VARS = [
   "CLAUDE_AGENT_SDK_VERSION",
 ];
 
+// Beads Central credentials belong to the daemon-mediated issue plane. Provider
+// subprocesses receive role-scoped tools, never Central endpoints or bearer
+// material they could use to bypass the pinned actor/project binding.
+const DAEMON_ONLY_PROVIDER_ENV_KEYS = ["BEADS_CENTRAL_TOKENS_JSON"] as const;
+const DAEMON_ONLY_PROVIDER_ENV_PREFIXES = ["PASEO_BEADS_CENTRAL_"] as const;
+
 export interface ProviderEnvOptions {
   baseEnv?: ProcessEnvRecord;
   runtimeSettings?: ProviderRuntimeSettings;
@@ -235,6 +241,20 @@ export function createProviderEnvSpec(options: ProviderEnvOptions = {}): Provide
   const envOverlay: ProcessEnvRecord = Object.assign({}, ...overlays);
   for (const key of PARENT_SESSION_ENV_VARS) {
     envOverlay[key] = undefined;
+  }
+  const visibleKeys = new Set([
+    ...Object.keys(options.baseEnv ?? process.env),
+    ...overlays.flatMap((overlay) => Object.keys(overlay)),
+  ]);
+  for (const key of visibleKeys) {
+    if (
+      DAEMON_ONLY_PROVIDER_ENV_KEYS.includes(
+        key as (typeof DAEMON_ONLY_PROVIDER_ENV_KEYS)[number],
+      ) ||
+      DAEMON_ONLY_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))
+    ) {
+      envOverlay[key] = undefined;
+    }
   }
   return {
     ...(options.baseEnv ? { baseEnv: options.baseEnv } : {}),

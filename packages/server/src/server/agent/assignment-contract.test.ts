@@ -63,17 +63,33 @@ describe("immutable assignment contract", () => {
   test("injects role-specific mandatory tracker behavior", () => {
     const peer = materialize({
       roleId: "peer",
-      envelope: envelope({ disposition: "peer-execution" }),
+      envelope: envelope({
+        disposition: "peer-execution",
+        resourceGrants: { beadsIssueIds: ["ps123-abc"] },
+      }),
     });
     const supervisor = materialize({
       roleId: "supervisor",
       envelope: envelope({ disposition: "supervision" }),
     });
 
-    expect(buildAssignmentInstruction(peer)).toContain("claim before owned mutation");
+    expect(buildAssignmentInstruction(peer)).toContain("Claim before owned mutation");
     expect(buildAssignmentInstruction(peer)).toContain("never close");
-    expect(buildAssignmentInstruction(supervisor)).toContain("remain read-only");
+    expect(buildAssignmentInstruction(peer)).toContain("never guess or hard-code an MCP namespace");
+    expect(buildAssignmentInstruction(peer)).toContain(
+      "Only an authoritative Paseo tool receipt counts",
+    );
+    expect(buildAssignmentInstruction(supervisor)).toContain("Remain read-only");
     expect(buildAssignmentInstruction(supervisor)).toContain("material handoff");
+  });
+
+  test("rejects a Peer assignment without an exact Beads issue grant", () => {
+    expect(() =>
+      materialize({
+        roleId: "peer",
+        envelope: envelope({ disposition: "peer-execution" }),
+      }),
+    ).toThrow("Peer requires an exact Beads issue grant");
   });
 
   test("fails closed when a role-bound create omits the assignment", () => {
@@ -99,12 +115,33 @@ describe("immutable assignment contract", () => {
     ).toThrow(`${ASSIGNMENT_CONTRACT_INVALID_ERROR}: delegation requires no-write`);
   });
 
+  test("rejects an external-effect lease that contradicts the role and effect", () => {
+    expect(() =>
+      materialize({
+        roleId: "peer",
+        envelope: envelope({
+          disposition: "independent-review",
+          resourceGrants: { beadsIssueIds: ["ps123-abc"] },
+          externalEffectBoundary: {
+            mode: "bounded",
+            scope: "Beads Central update to the granted issue only",
+          },
+        }),
+      }),
+    ).toThrow(
+      `${ASSIGNMENT_CONTRACT_INVALID_ERROR}: peer read-only requires external effects denied`,
+    );
+  });
+
   test("permits an exact bounded bootstrap write", () => {
     expect(
       materialize({
         envelope: envelope({
           effectClass: "bootstrap",
-          mutationBoundary: { mode: "bounded-write", scope: "/repo/WORKSPACE_PROTOCOL.md" },
+          mutationBoundary: {
+            mode: "bounded-write",
+            scope: "/repo/WORKSPACE_PROTOCOL.md",
+          },
         }),
       }).receipt.mutationBoundary,
     ).toEqual({ mode: "bounded-write", scope: "/repo/WORKSPACE_PROTOCOL.md" });
@@ -114,7 +151,10 @@ describe("immutable assignment contract", () => {
     expect(() =>
       materialize({
         roleId: "peer",
-        envelope: envelope({ disposition: "peer-execution", effectClass: "delegation" }),
+        envelope: envelope({
+          disposition: "peer-execution",
+          effectClass: "delegation",
+        }),
       }),
     ).toThrow("effect 'delegation' is not allowed for role 'peer'");
     expect(() =>
@@ -138,7 +178,10 @@ describe("immutable assignment contract", () => {
       },
     });
     expect(() =>
-      materialize({ envelope: withException, assigner: { kind: "agent", agentId: "agent-1" } }),
+      materialize({
+        envelope: withException,
+        assigner: { kind: "agent", agentId: "agent-1" },
+      }),
     ).toThrow("protocol exception requires Human session issuer");
     expect(() =>
       materialize({

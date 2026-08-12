@@ -46,6 +46,16 @@ const PERSISTENCE_HANDLE_SCHEMA = z
   .nullable()
   .optional();
 
+const BEADS_STATUS_CHECKPOINT_SCHEMA = z
+  .object({
+    assignmentDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    version: z.string().min(1),
+    checkedAt: z.string().datetime(),
+  })
+  .strict();
+
+export type BeadsStatusCheckpoint = z.infer<typeof BEADS_STATUS_CHECKPOINT_SCHEMA>;
+
 const STORED_AGENT_SCHEMA = z.object({
   id: z.string(),
   provider: z.string(),
@@ -81,6 +91,7 @@ const STORED_AGENT_SCHEMA = z.object({
   owner: AgentOwnerSchema.optional(),
   roleBinding: PersistedRoleBindingSchema.optional(),
   launchContract: PersistedLaunchContractSchema.optional(),
+  beadsStatusCheckpoint: BEADS_STATUS_CHECKPOINT_SCHEMA.optional(),
   coordinationSignals: z.array(CoordinationSignalSchema).optional(),
   leadHandoffs: z.array(LeadHandoffPacketSchema).optional(),
   coordinationPolicyState: z
@@ -124,6 +135,9 @@ function preserveCoordinationMetadata(
   }
   if (existing?.coordinationPolicyState !== undefined) {
     record.coordinationPolicyState = existing.coordinationPolicyState;
+  }
+  if (existing?.beadsStatusCheckpoint !== undefined) {
+    record.beadsStatusCheckpoint = existing.beadsStatusCheckpoint;
   }
 }
 
@@ -173,6 +187,25 @@ export class AgentStorage {
   async upsert(record: StoredAgentRecord): Promise<void> {
     await this.load();
     await this.queueRecordWrite(record);
+  }
+
+  async setBeadsStatusCheckpoint(
+    agentId: string,
+    checkpoint: BeadsStatusCheckpoint | null,
+  ): Promise<void> {
+    await this.load();
+    await this.queueRecordMutation(agentId, (existing) => {
+      if (!existing) {
+        throw new Error(`Agent ${agentId} not found`);
+      }
+      const next = { ...existing };
+      if (checkpoint) {
+        next.beadsStatusCheckpoint = BEADS_STATUS_CHECKPOINT_SCHEMA.parse(checkpoint);
+      } else {
+        delete next.beadsStatusCheckpoint;
+      }
+      return next;
+    });
   }
 
   private queueRecordWrite(record: StoredAgentRecord): Promise<void> {

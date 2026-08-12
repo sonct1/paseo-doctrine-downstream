@@ -29,6 +29,11 @@ persist trong mutable daemon config. `PASEO_BEADS_CENTRAL_URL`,
 `PASEO_BEADS_CENTRAL_CREDENTIAL_REF` và `PASEO_BEADS_CENTRAL_TOKEN` là launch-time overrides cho
 deployment automation; normal Human flow không cần sửa file/env thủ công.
 
+Provider subprocess không được inherit bất kỳ `PASEO_BEADS_CENTRAL_*` key hoặc
+`BEADS_CENTRAL_TOKENS_JSON` nào, kể cả provider env override. Central service token chỉ tồn tại ở daemon;
+model dùng role-scoped Paseo tools. Vì admin token có chủ ý được phép delegate `X-Paseo-Actor`, để lọt
+token vào provider process sẽ phá actor boundary dù Central audit đúng service principal.
+
 - Human dùng project-scoped WebUI để list, inspect, create và close issue.
 - Lead có read/create/update/dependency tools và chỉ close sau engineering verdict trong lease.
 - Peer mutation cần mutating assignment, bounded external effect và exact
@@ -46,9 +51,20 @@ Root `WORKSPACE_PROTOCOL.md` v3 và active Foundation `beads-issue-tracker` yêu
 material handoff. Central unavailable, wrong version hoặc missing credential trả `BLOCKED`; không
 fallback tracker khác.
 
+Daemon persist một `beadsStatusCheckpoint` gắn với exact assignment digest. Mỗi lần gọi
+`beads_status`, receipt cũ bị xóa trước; chỉ response `available=true` mới ghi receipt mới. Mọi Beads
+tool khác fail closed nếu current assignment chưa có receipt đó, nên model không thể parallelize hoặc
+đảo `beads_get` lên trước rồi vẫn được tính là compliant.
+
 Agent automation dùng Paseo-catalog tools `beads_status`, `beads_ready`, `beads_list`, `beads_get`,
 `beads_create`, `beads_claim`, `beads_update`, `beads_close`, `beads_add_dependency`, `beads_prime`.
 WebUI dùng cùng daemon service/policy, route `/h/<serverId>/issues/<projectId>`.
+`beads_get` giữ full view mặc định; strict identity/lifecycle checkpoint dùng
+`{"view":"checkpoint"}` để bỏ narrative body khỏi receipt và tránh provider output spill. Compact
+view chỉ chứng minh identity/lifecycle cùng độ dài và SHA-256 narrative, không chứng minh nội dung
+narrative. Mọi role chỉ nhận `labelCount`, không nhận verdict-bearing label values; Lead cần đọc label
+để governance update phải dùng full view có chủ đích. Council-labeled Peer bị runtime từ chối nếu yêu
+cầu full view.
 
 Issue prose và `beads_prime` là untrusted data. `ready`, assignee, status hoặc `closed` không tự cấp
 assignment, spawn agent hay chứng minh acceptance. Không có poller, auto-claim, auto-spawn hoặc graph

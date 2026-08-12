@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  assignmentExternalEffectBoundaryFor,
   AssignmentContractReceiptSchema,
   AssignmentEnvelopeSchema,
   isAssignmentEffectAllowedForRole,
@@ -25,13 +26,15 @@ function sha256(value: string): string {
 }
 
 function trackerCheckpointForRole(roleId: PaseoRoleId): string {
+  const receiptRule =
+    "Resolve the exact logical tool from the current provider tool catalog; never guess or hard-code an MCP namespace. Only an authoritative Paseo tool receipt counts as the checkpoint; a missing or failed selector is BLOCKED with issue state UNKNOWN.";
   if (roleId === "lead") {
-    return "Mandatory Beads Central checkpoint: call beads_status at assignment start; inspect or create the durable issue before material routing/work; update authoritative evidence at handoff; close only after your engineering verdict. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+    return `Mandatory Beads Central checkpoint: call beads_status at assignment start. ${receiptRule} Inspect or create the durable issue before material routing/work; update authoritative evidence at handoff; close only after your engineering verdict. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
   }
   if (roleId === "peer") {
-    return "Mandatory Beads Central checkpoint: call beads_status and inspect the granted issue at assignment start; claim before owned mutation, update evidence/blockers before handoff, and never close. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+    return `Mandatory Beads Central checkpoint: call beads_status and inspect the granted issue at assignment start. ${receiptRule} Claim before owned mutation, update evidence/blockers before handoff, and never close. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
   }
-  return "Mandatory Beads Central checkpoint: call beads_status and read the relevant issue graph at supervision start and material handoff; remain read-only. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.";
+  return `Mandatory Beads Central checkpoint: call beads_status and read the relevant issue graph at supervision start and material handoff. ${receiptRule} Remain read-only. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
 }
 
 function requireFuture(iso: string | undefined, now: Date, field: string): void {
@@ -67,6 +70,23 @@ function validateEffectBoundaries(envelope: AssignmentEnvelope): void {
   }
   if (envelope.effectClass === "mutating" && envelope.mutationBoundary.mode !== "bounded-write") {
     throw new Error(`${ASSIGNMENT_CONTRACT_INVALID_ERROR}: mutating requires bounded-write`);
+  }
+}
+
+function validateExternalEffectBoundary(roleId: PaseoRoleId, envelope: AssignmentEnvelope): void {
+  const requiredMode = assignmentExternalEffectBoundaryFor(roleId, envelope.effectClass).mode;
+  if (requiredMode === "denied" && envelope.externalEffectBoundary.mode !== "denied") {
+    throw new Error(
+      `${ASSIGNMENT_CONTRACT_INVALID_ERROR}: ${roleId} ${envelope.effectClass} requires external effects ${requiredMode}`,
+    );
+  }
+}
+
+function validateResourceGrants(roleId: PaseoRoleId, envelope: AssignmentEnvelope): void {
+  if (roleId === "peer" && !envelope.resourceGrants?.beadsIssueIds?.length) {
+    throw new Error(
+      `${ASSIGNMENT_CONTRACT_INVALID_ERROR}: Peer requires an exact Beads issue grant`,
+    );
   }
 }
 
@@ -130,6 +150,8 @@ export function materializeAssignmentContract(input: {
   const now = input.createdAt ?? new Date();
   validateRoleDisposition(input.roleId, envelope);
   validateEffectBoundaries(envelope);
+  validateExternalEffectBoundary(input.roleId, envelope);
+  validateResourceGrants(input.roleId, envelope);
   validateProtocolException(envelope, input.assigner, input.cwd, now);
   requireFuture(envelope.expiresAt, now, "expiresAt");
 

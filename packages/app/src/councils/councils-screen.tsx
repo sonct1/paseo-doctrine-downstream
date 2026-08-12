@@ -175,7 +175,7 @@ function CouncilLoading() {
 
 function CouncilEmpty({
   text,
-  description = "Council cases appear here when Lead launches seats with the council workflow.",
+  description = "Ask the current Lead to start Council. Cases appear here when its specialist Peer seats launch.",
 }: {
   text: string;
   description?: string;
@@ -332,7 +332,7 @@ function CouncilDetail({
             <View style={styles.sectionHeadingCopy}>
               <Text style={styles.sectionTitle}>Seats</Text>
               <Text style={styles.sectionDescription}>
-                Parent-owned agents in this case · sealed Round 1 stays private
+                Parent-owned specialist Peers · sealed Round 1 stays private
               </Text>
             </View>
             <SeatCount count={council.seats.length} />
@@ -391,7 +391,9 @@ function CouncilHero({ council, compact }: { council: CouncilCase; compact: bool
             </Text>
           </View>
           <Text style={styles.heroTitle}>{council.title}</Text>
-          <Text style={styles.heroSubtitle}>One accountable Lead. Independent seats. No vote.</Text>
+          <Text style={styles.heroSubtitle}>
+            One accountable Lead. Architect + Reviewer. No vote.
+          </Text>
         </View>
         <View style={[styles.reportMetric, compact && styles.reportMetricCompact]}>
           <Text style={styles.reportMetricValue}>

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  isProviderRoleBindingSupportedForRole,
   PASEO_ROLE_CONTRACT_VERSION,
   PASEO_ROLE_IDS,
   ProviderRoleBindingSupportSchema,
@@ -40,6 +41,23 @@ describe("Paseo role binding protocol", () => {
         reason: "runtime canary required",
       }),
     ).toThrow();
+
+    const peerOnly = ProviderRoleBindingSupportSchema.parse({
+      status: "supported",
+      injectionMethod: "antigravity-custom-agent",
+      roleIds: ["peer"],
+    });
+    expect(isProviderRoleBindingSupportedForRole(peerOnly, "peer")).toBe(true);
+    expect(isProviderRoleBindingSupportedForRole(peerOnly, "lead")).toBe(false);
+    expect(isProviderRoleBindingSupportedForRole(peerOnly, "supervisor")).toBe(false);
+
+    const unavailablePeerOnly = ProviderRoleBindingSupportSchema.parse({
+      status: "unsupported",
+      reason: "transport unavailable",
+      roleIds: ["peer"],
+    });
+    expect(unavailablePeerOnly.roleIds).toEqual(["peer"]);
+    expect(isProviderRoleBindingSupportedForRole(unavailablePeerOnly, "peer")).toBe(false);
   });
 
   test("role receipts contain no materialized instruction bytes", () => {

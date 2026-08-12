@@ -597,6 +597,48 @@ describe("ClaudeAgentClient binary resolution", () => {
 describe("ClaudeAgentSession features", () => {
   const logger = createTestLogger();
 
+  function createCloseOrderQuery() {
+    const operations: string[] = [];
+    let closed = false;
+    const interrupt = vi.fn(async function interruptQuery() {
+      if (closed) throw new Error("ProcessTransport is not ready for writing");
+      operations.push("interrupt");
+    });
+    const close = vi.fn(function closeQuery() {
+      closed = true;
+      operations.push("close");
+    });
+    const returnQuery = vi.fn(async function returnQuery() {
+      operations.push("return");
+    });
+    const queryFactory = vi.fn(function createQuery() {
+      return { interrupt, close, return: returnQuery };
+    });
+    return { operations, queryFactory };
+  }
+
+  test("interrupts the Claude query before closing its transport", async () => {
+    const { operations, queryFactory } = createCloseOrderQuery();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession({
+      provider: "claude",
+      cwd: process.cwd(),
+    });
+
+    await (
+      session as unknown as {
+        ensureQuery(): Promise<unknown>;
+      }
+    ).ensureQuery();
+    await session.close();
+
+    expect(operations).toEqual(["interrupt", "close", "return"]);
+  });
+
   function createQueryMock() {
     let endQuery: (() => void) | null = null;
     const queryEnded = new Promise<void>((resolve) => {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 
-import type { AgentStorage } from "../agent/agent-storage.js";
+import type { AgentStorage, BeadsStatusCheckpoint } from "../agent/agent-storage.js";
 import type { PersistedAssignmentContract } from "../agent/assignment-contract.js";
 import type {
   PaseoToolConfig,
@@ -74,6 +74,7 @@ function issueResult(result: PaseoToolResult): IssueResult {
 centralDescribe("Beads Central Product role path", () => {
   test("routes Lead, Peer, and Supervisor tools through Central to real bd", async () => {
     const runKey = `${process.pid}-${Date.now()}`;
+    const idempotencyKey = (operation: string): string => `central-e2e-${runKey}-${operation}`;
     const projects = new Map<string, PersistedProjectRecord>([
       ["project-main", project("project-main", `central-e2e:${runKey}:main`)],
       ["project-other", project("project-other", `central-e2e:${runKey}:other`)],
@@ -100,6 +101,8 @@ centralDescribe("Beads Central Product role path", () => {
 
     function roleTools(roleId: PaseoRoleId, agentId: string, beadsIssueIds: string[] = []) {
       const tools = new Map<string, CapturedTool>();
+      let beadsStatusCheckpoint: BeadsStatusCheckpoint | null = null;
+      const roleAssignment = assignment(roleId, beadsIssueIds);
       registerBeadsTools({
         registerTool: (name, config, handler) => tools.set(name, { config, handler }),
         service,
@@ -110,9 +113,13 @@ centralDescribe("Beads Central Product role path", () => {
             workspaceId: "workspace-main",
             roleBinding: {
               roleId,
-              assignmentContract: assignment(roleId, beadsIssueIds),
+              assignmentContract: roleAssignment,
             },
+            beadsStatusCheckpoint,
           }),
+          setBeadsStatusCheckpoint: async (_id, checkpoint) => {
+            beadsStatusCheckpoint = checkpoint;
+          },
         } as unknown as AgentStorage,
         workspaceRegistry: {
           get: async () => ({
@@ -150,7 +157,7 @@ centralDescribe("Beads Central Product role path", () => {
         issueType: "task",
         priority: 1,
         labels: ["qualification"],
-        idempotencyKey: "central-e2e-create-0001",
+        idempotencyKey: idempotencyKey("create"),
       }),
     );
     const retry = issueResult(
@@ -161,7 +168,7 @@ centralDescribe("Beads Central Product role path", () => {
         issueType: "task",
         priority: 1,
         labels: ["qualification"],
-        idempotencyKey: "central-e2e-create-0001",
+        idempotencyKey: idempotencyKey("create"),
       }),
     );
     expect(retry.issue.id).toBe(created.issue.id);
@@ -177,7 +184,7 @@ centralDescribe("Beads Central Product role path", () => {
     const claimed = issueResult(
       await invoke(peer, "beads_claim", {
         issueId: created.issue.id,
-        idempotencyKey: "central-e2e-claim-0001",
+        idempotencyKey: idempotencyKey("claim"),
       }),
     );
     expect(claimed.issue.assignee).toBe("paseo-agent-peer-central-e2e");
@@ -187,7 +194,7 @@ centralDescribe("Beads Central Product role path", () => {
         issueId: created.issue.id,
         appendNotes: "Peer qualified the current Central and real-bd path.",
         addLabels: ["peer-qualified"],
-        idempotencyKey: "central-e2e-update-0001",
+        idempotencyKey: idempotencyKey("update"),
       }),
     );
     expect(updated.issue.notes).toContain("Peer qualified");
@@ -207,7 +214,7 @@ centralDescribe("Beads Central Product role path", () => {
       await invoke(lead, "beads_close", {
         issueId: created.issue.id,
         reason: "Role-path qualification passed",
-        idempotencyKey: "central-e2e-lead-close",
+        idempotencyKey: idempotencyKey("close"),
       }),
     );
     expect(closed.issue.status).toBe("closed");
@@ -215,7 +222,7 @@ centralDescribe("Beads Central Product role path", () => {
       invoke(peer, "beads_update", {
         issueId: created.issue.id,
         appendNotes: "Must remain closed and unchanged",
-        idempotencyKey: "central-e2e-closed-update",
+        idempotencyKey: idempotencyKey("closed-update"),
       }),
     ).rejects.toThrow("cannot mutate closed issue");
 

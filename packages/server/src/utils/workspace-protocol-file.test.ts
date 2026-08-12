@@ -30,6 +30,20 @@ function makeRoot(): string {
 }
 
 describe("workspace protocol file", () => {
+  test("rejects an explicit applies_to path bound to another repository", () => {
+    const repoRoot = makeRoot();
+    const otherRoot = makeRoot();
+    writeFileSync(
+      join(repoRoot, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(otherRoot),
+      "utf8",
+    );
+
+    expect(inspectWorkspaceProtocol(repoRoot)).toMatchObject({
+      status: "invalid",
+      issues: expect.arrayContaining(["mismatched_identity_scope"]),
+    });
+  });
   test("missing state provides a complete valid repository-specific bootstrap preview", () => {
     const repoRoot = makeRoot();
     const snapshot = inspectWorkspaceProtocol(repoRoot);

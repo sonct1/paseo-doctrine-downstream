@@ -17,6 +17,9 @@ interface CapturedTool {
   handler: (input: unknown, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>;
 }
 
+const ASSIGNMENT_DIGEST = "a".repeat(64);
+const STALE_ASSIGNMENT_DIGEST = "b".repeat(64);
+
 function assignment(
   effectClass: "read-only" | "mutating" | "delegation" = "mutating",
   external: "denied" | "bounded" = "bounded",
@@ -24,6 +27,7 @@ function assignment(
 ): PersistedAssignmentContract {
   return {
     receipt: {
+      assignmentDigest: ASSIGNMENT_DIGEST,
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     },
     envelope: {
@@ -41,14 +45,29 @@ function createHarness(options: {
   roleId: PaseoRoleId;
   assignment?: PersistedAssignmentContract;
   assignee?: string | null;
+  checkpoint?: "current" | "missing" | "stale";
+  statusAvailable?: boolean;
 }) {
+  const currentAssignment = options.assignment ?? assignment();
   const agent = {
     id: "peer-1",
     workspaceId: "workspace-1",
     roleBinding: {
       roleId: options.roleId,
-      assignmentContract: options.assignment ?? assignment(),
+      assignmentContract: currentAssignment,
     },
+    ...(options.checkpoint === "missing"
+      ? {}
+      : {
+          beadsStatusCheckpoint: {
+            assignmentDigest:
+              options.checkpoint === "stale"
+                ? STALE_ASSIGNMENT_DIGEST
+                : currentAssignment.receipt.assignmentDigest,
+            version: "1.2.0",
+            checkedAt: new Date().toISOString(),
+          },
+        }),
   };
   const issue = {
     id: "ps123-abc",
@@ -57,9 +76,20 @@ function createHarness(options: {
     priority: 2,
     issue_type: "task" as const,
     assignee: options.assignee,
+    description: "Detailed description",
+    acceptance_criteria: "Acceptance narrative",
+    notes: "n".repeat(20_000),
+    labels: ["tracked", "e2e"],
+    dependent_count: 2,
+    dependency_count: 1,
+    comment_count: 3,
   };
   const service = {
-    status: vi.fn().mockResolvedValue({ available: true, version: "1.1.2" }),
+    status: vi.fn().mockResolvedValue({
+      available: options.statusAvailable ?? true,
+      version: "1.2.0",
+      ...(options.statusAvailable === false ? { reason: "Central unavailable" } : {}),
+    }),
     ready: vi.fn().mockResolvedValue([issue]),
     list: vi.fn().mockResolvedValue([issue]),
     get: vi.fn().mockResolvedValue(issue),
@@ -83,12 +113,22 @@ function createHarness(options: {
     addDependency: vi.fn().mockResolvedValue(issue),
     prime: vi.fn().mockResolvedValue("workflow"),
   };
+  const setBeadsStatusCheckpoint = vi.fn(
+    async (_agentId: string, checkpoint: typeof agent.beadsStatusCheckpoint | null) => {
+      if (checkpoint) {
+        agent.beadsStatusCheckpoint = checkpoint;
+      } else {
+        delete agent.beadsStatusCheckpoint;
+      }
+    },
+  );
   const tools = new Map<string, CapturedTool>();
   registerBeadsTools({
     registerTool: (name, config, handler) => tools.set(name, { config, handler }),
     service: service as unknown as BeadsService,
     agentStorage: {
       get: vi.fn().mockResolvedValue(agent),
+      setBeadsStatusCheckpoint,
     } as unknown as AgentStorage,
     workspaceRegistry: {
       get: vi.fn().mockResolvedValue({
@@ -103,7 +143,7 @@ function createHarness(options: {
     callerAgentId: "peer-1",
     roleId: options.roleId,
   });
-  return { tools, service, issue };
+  return { tools, service, issue, agent, setBeadsStatusCheckpoint };
 }
 
 function tool(harness: ReturnType<typeof createHarness>, name: string): CapturedTool {
@@ -113,6 +153,104 @@ function tool(harness: ReturnType<typeof createHarness>, name: string): Captured
 }
 
 describe("Beads Central Paseo tools", () => {
+  it("rejects every non-status Beads call until status succeeds for the current assignment", async () => {
+    const missing = createHarness({
+      roleId: "supervisor",
+      assignee: null,
+      checkpoint: "missing",
+    });
+    await expect(
+      tool(missing, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).rejects.toThrow(
+      "beads_status must succeed for the current assignment before calling another Beads tool",
+    );
+    expect(missing.service.get).not.toHaveBeenCalled();
+
+    const stale = createHarness({
+      roleId: "supervisor",
+      assignee: null,
+      checkpoint: "stale",
+    });
+    await expect(
+      tool(stale, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).rejects.toThrow("beads_status must succeed for the current assignment");
+    expect(stale.service.get).not.toHaveBeenCalled();
+  });
+
+  it("records only a successful status receipt and admits later Beads calls", async () => {
+    const harness = createHarness({
+      roleId: "supervisor",
+      assignee: null,
+      checkpoint: "missing",
+    });
+
+    await expect(tool(harness, "beads_status").handler({}, {})).resolves.toMatchObject({
+      structuredContent: { available: true, version: "1.2.0" },
+    });
+    expect(harness.setBeadsStatusCheckpoint).toHaveBeenNthCalledWith(1, "peer-1", null);
+    expect(harness.setBeadsStatusCheckpoint).toHaveBeenNthCalledWith(
+      2,
+      "peer-1",
+      expect.objectContaining({
+        assignmentDigest: ASSIGNMENT_DIGEST,
+        version: "1.2.0",
+      }),
+    );
+    await expect(
+      tool(harness, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).resolves.toMatchObject({ structuredContent: { projectId: "project-1" } });
+  });
+
+  it("clears admission when status reports Central unavailable", async () => {
+    const harness = createHarness({
+      roleId: "supervisor",
+      assignee: null,
+      statusAvailable: false,
+    });
+
+    await expect(tool(harness, "beads_status").handler({}, {})).resolves.toMatchObject({
+      structuredContent: { available: false, reason: "Central unavailable" },
+    });
+    expect(harness.setBeadsStatusCheckpoint).toHaveBeenCalledTimes(1);
+    await expect(
+      tool(harness, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).rejects.toThrow("beads_status must succeed for the current assignment");
+  });
+
+  it("serializes concurrent status attempts so the latest result owns admission", async () => {
+    const harness = createHarness({
+      roleId: "supervisor",
+      assignee: null,
+      checkpoint: "missing",
+    });
+    let releaseFirst: ((value: { available: true; version: string }) => void) | undefined;
+    harness.service.status
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        available: false,
+        version: "1.2.0",
+        reason: "Central unavailable",
+      });
+
+    const first = tool(harness, "beads_status").handler({}, {});
+    const second = tool(harness, "beads_status").handler({}, {});
+    await vi.waitFor(() => expect(harness.service.status).toHaveBeenCalledTimes(1));
+    releaseFirst?.({ available: true, version: "1.2.0" });
+
+    await expect(first).resolves.toMatchObject({ structuredContent: { available: true } });
+    await expect(second).resolves.toMatchObject({ structuredContent: { available: false } });
+    expect(harness.service.status).toHaveBeenCalledTimes(2);
+    expect(harness.agent).not.toHaveProperty("beadsStatusCheckpoint");
+    await expect(
+      tool(harness, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).rejects.toThrow("beads_status must succeed for the current assignment");
+  });
+
   it("derives project and actor from the caller instead of accepting client-selected identity", async () => {
     const harness = createHarness({
       roleId: "peer",
@@ -250,6 +388,65 @@ describe("Beads Central Paseo tools", () => {
     expect(supervisor.tools.has("beads_close")).toBe(false);
     expect(supervisor.tools.has("beads_add_dependency")).toBe(false);
     expect(supervisor.service.claim).not.toHaveBeenCalled();
+  });
+
+  it("offers a bounded checkpoint view without changing the full issue read", async () => {
+    const peer = createHarness({ roleId: "peer", assignee: "paseo-agent-peer-1" });
+
+    const checkpoint = await tool(peer, "beads_get").handler(
+      { issueId: "ps123-abc", view: "checkpoint" },
+      {},
+    );
+    expect(checkpoint.structuredContent).toMatchObject({
+      projectId: "project-1",
+      view: "checkpoint",
+      issue: {
+        id: "ps123-abc",
+        status: "in_progress",
+        labelCount: 2,
+        dependent_count: 2,
+        dependency_count: 1,
+        comment_count: 3,
+        narrativeOmitted: {
+          titleCharacters: 12,
+          titleSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          descriptionCharacters: 20,
+          descriptionSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          acceptanceCriteriaCharacters: 20,
+          acceptanceCriteriaSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          notesCharacters: 20_000,
+          notesSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          closeReasonCharacters: 0,
+          closeReasonSha256: null,
+        },
+      },
+    });
+    expect(JSON.stringify(checkpoint.structuredContent)).not.toContain("n".repeat(1_000));
+    expect(JSON.stringify(checkpoint.structuredContent)).not.toContain("Tracked work");
+    expect(checkpoint.structuredContent).not.toHaveProperty("issue.title");
+    expect(checkpoint.structuredContent).not.toHaveProperty("issue.labels");
+
+    const full = await tool(peer, "beads_get").handler({ issueId: "ps123-abc" }, {});
+    expect(full.structuredContent).toMatchObject({
+      projectId: "project-1",
+      issue: { notes: "n".repeat(20_000) },
+    });
+  });
+
+  it("removes label values from every role checkpoint", async () => {
+    for (const roleId of ["lead", "peer", "supervisor"] as const) {
+      const harness = createHarness({
+        roleId,
+        assignee: roleId === "peer" ? "paseo-agent-peer-1" : null,
+      });
+      const checkpoint = await tool(harness, "beads_get").handler(
+        { issueId: "ps123-abc", view: "checkpoint" },
+        {},
+      );
+      expect(checkpoint.structuredContent).toMatchObject({ issue: { labelCount: 2 } });
+      expect(checkpoint.structuredContent).not.toHaveProperty("issue.labels");
+      expect(checkpoint.structuredContent).not.toHaveProperty("issue.labelsTruncated");
+    }
   });
 
   it("fails closed when the assignment denies external effects", async () => {

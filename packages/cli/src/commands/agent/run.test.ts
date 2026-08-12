@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildCliAssignment,
   resolveExistingRunWorkspace,
   resolveRunCallerAgentId,
   runRunCommand,
@@ -13,6 +14,26 @@ describe("managed agent caller context", () => {
 
   it("omits blank caller ids", () => {
     expect(resolveRunCallerAgentId({ PASEO_AGENT_ID: "   " })).toBeUndefined();
+  });
+});
+
+describe("CLI assignment issue grants", () => {
+  it("normalizes exact Peer issue grants into the immutable envelope", () => {
+    expect(
+      buildCliAssignment({
+        roleId: "peer",
+        effectClass: "mutating",
+        objective: "Implement the granted issue",
+        cwd: "/repo",
+        beadsIssueIds: [" ps123-abc ", "ps123-abc"],
+      }),
+    ).toMatchObject({
+      resourceGrants: { beadsIssueIds: ["ps123-abc"] },
+      externalEffectBoundary: {
+        mode: "bounded",
+        scope: "Beads Central issue/work graph for this assignment only; no other external effects",
+      },
+    });
   });
 });
 
@@ -118,6 +139,20 @@ describe("runRunCommand option validation", () => {
     await expectInvalidOptions(
       { role: "lead", assignmentEffect: "read-only", writeScope: "src/**" },
       /--write-scope is not allowed for read-only/,
+    );
+  });
+
+  it("requires an exact issue grant for every Peer assignment", async () => {
+    await expectInvalidOptions(
+      { role: "peer", assignmentEffect: "read-only" },
+      /--beads-issue is required with --role peer/,
+    );
+  });
+
+  it("rejects Peer issue grants on another role", async () => {
+    await expectInvalidOptions(
+      { role: "lead", assignmentEffect: "read-only", beadsIssue: ["ps123-abc"] },
+      /--beads-issue is only valid with --role peer/,
     );
   });
 });

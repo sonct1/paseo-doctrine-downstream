@@ -176,6 +176,227 @@ describe("projectTimelineRows", () => {
     expect(tool?.collapsed).toContain("tool_lifecycle");
   });
 
+  test("collapses a completed Cursor MCP transport shadow into its authoritative receipt", () => {
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-02-13T00:00:00.000Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "other",
+          status: "running",
+          error: null,
+          detail: { type: "unknown", input: {}, output: null },
+          metadata: { kind: "other", transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+      {
+        seq: 2,
+        timestamp: "2026-02-13T00:00:00.010Z",
+        item: {
+          type: "tool_call",
+          callId: "receipt-1",
+          name: "mcp__paseo__beads_status",
+          status: "running",
+          error: null,
+          detail: { type: "unknown", input: {}, output: null },
+          metadata: { source: "paseo-mcp-server" },
+        },
+      },
+      {
+        seq: 3,
+        timestamp: "2026-02-13T00:00:00.020Z",
+        item: {
+          type: "tool_call",
+          callId: "receipt-1",
+          name: "mcp__paseo__beads_status",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: {}, output: { available: true } },
+          metadata: { source: "paseo-mcp-server" },
+        },
+      },
+      {
+        seq: 4,
+        timestamp: "2026-02-13T00:00:00.030Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "other",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: {}, output: { success: true } },
+          metadata: { kind: "other", transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+    ];
+
+    const projected = projectTimelineRows({ rows, mode: "projected" });
+
+    expect(projected).toHaveLength(1);
+    const receipt = projected[0];
+    expect(receipt?.item.type).toBe("tool_call");
+    if (receipt?.item.type === "tool_call") {
+      expect(receipt.item.name).toBe("mcp__paseo__beads_status");
+      expect(receipt.item.callId).toBe("receipt-1");
+    }
+    expect(receipt?.seqStart).toBe(1);
+    expect(receipt?.seqEnd).toBe(4);
+    expect(receipt?.sourceSeqRanges).toEqual([{ startSeq: 1, endSeq: 4 }]);
+    expect(receipt?.collapsed).toContain("tool_lifecycle");
+  });
+
+  test("collapses a successful Cursor transport shadow into a failed authoritative receipt", () => {
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-02-13T00:00:00.000Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "other",
+          status: "running",
+          error: null,
+          detail: { type: "unknown", input: {}, output: null },
+          metadata: { kind: "other", transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+      {
+        seq: 2,
+        timestamp: "2026-02-13T00:00:00.010Z",
+        item: {
+          type: "tool_call",
+          callId: "receipt-1",
+          name: "mcp__paseo__get_agent_status",
+          status: "running",
+          error: null,
+          detail: { type: "unknown", input: { agentId: "" }, output: null },
+          metadata: { source: "paseo-mcp-server" },
+        },
+      },
+      {
+        seq: 3,
+        timestamp: "2026-02-13T00:00:00.020Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "other",
+          status: "running",
+          error: null,
+          detail: { type: "unknown", input: {}, output: null },
+          metadata: { kind: "other", transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+      {
+        seq: 4,
+        timestamp: "2026-02-13T00:00:00.030Z",
+        item: {
+          type: "tool_call",
+          callId: "receipt-1",
+          name: "mcp__paseo__get_agent_status",
+          status: "failed",
+          error: { message: "Agent not found" },
+          detail: { type: "unknown", input: { agentId: "" }, output: null },
+          metadata: { source: "paseo-mcp-server" },
+        },
+      },
+      {
+        seq: 5,
+        timestamp: "2026-02-13T00:00:00.040Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "other",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: {}, output: { success: true } },
+          metadata: { kind: "other", transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+    ];
+
+    const projected = projectTimelineRows({ rows, mode: "projected" });
+
+    expect(projected).toHaveLength(1);
+    const receipt = projected[0];
+    expect(receipt?.item.type).toBe("tool_call");
+    if (receipt?.item.type === "tool_call") {
+      expect(receipt.item.name).toBe("mcp__paseo__get_agent_status");
+      expect(receipt.item.status).toBe("failed");
+      expect(receipt.item.error).toEqual({ message: "Agent not found" });
+    }
+    expect(receipt?.seqStart).toBe(1);
+    expect(receipt?.seqEnd).toBe(5);
+    expect(receipt?.sourceSeqRanges).toEqual([{ startSeq: 1, endSeq: 5 }]);
+    expect(receipt?.collapsed).toContain("tool_lifecycle");
+  });
+
+  test("keeps an unpaired Cursor MCP transport shadow visible", () => {
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-02-13T00:00:00.000Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "opaque-1",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: null, output: { success: true } },
+          metadata: { transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+    ];
+
+    const projected = projectTimelineRows({ rows, mode: "projected" });
+
+    expect(projected).toHaveLength(1);
+    expect(projected[0]?.item).toEqual(rows[0]?.item);
+    expect(projected[0]?.collapsed).toEqual([]);
+  });
+
+  test("keeps a distant Cursor MCP transport shadow visible", () => {
+    const rows: AgentTimelineRow[] = [
+      {
+        seq: 1,
+        timestamp: "2026-02-13T00:00:00.000Z",
+        item: {
+          type: "tool_call",
+          callId: "receipt-1",
+          name: "mcp__paseo__beads_status",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: {}, output: { available: true } },
+          metadata: { source: "paseo-mcp-server" },
+        },
+      },
+      ...Array.from({ length: 4 }, (_, index) => ({
+        seq: index + 2,
+        timestamp: `2026-02-13T00:00:00.00${index + 1}Z`,
+        item: { type: "user_message" as const, text: `gap-${index}` },
+      })),
+      {
+        seq: 6,
+        timestamp: "2026-02-13T00:00:00.060Z",
+        item: {
+          type: "tool_call",
+          callId: "opaque-1",
+          name: "opaque-1",
+          status: "completed",
+          error: null,
+          detail: { type: "unknown", input: null, output: { success: true } },
+          metadata: { transportShadow: "cursor-opaque-mcp" },
+        },
+      },
+    ];
+
+    const projected = projectTimelineRows({ rows, mode: "projected" });
+
+    expect(projected.filter((entry) => entry.item.type === "tool_call")).toHaveLength(2);
+    expect(projected.at(-1)?.item).toEqual(rows.at(-1)?.item);
+  });
+
   test("returns canonical rows unchanged in canonical mode", () => {
     const rows: AgentTimelineRow[] = [
       {

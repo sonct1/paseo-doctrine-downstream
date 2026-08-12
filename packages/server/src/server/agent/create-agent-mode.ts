@@ -61,15 +61,15 @@ export function resolveAndValidateCreateAgentMode(
     return undefined;
   }
 
-  if (parent.provider === targetProvider) {
-    return parent.modeId ?? undefined;
-  }
-
   if (
     (input.unattended || isUnattendedCreateConfigParent(parent)) &&
     input.targetUnattendedMode !== undefined
   ) {
     return input.targetUnattendedMode;
+  }
+
+  if (parent.provider === targetProvider) {
+    return parent.modeId ?? undefined;
   }
 
   if (availableModes?.length === 0) {

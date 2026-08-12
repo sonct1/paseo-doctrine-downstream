@@ -108,6 +108,11 @@ import {
   type PaseoRoleId,
 } from "@getpaseo/protocol/role-binding";
 import {
+  ExecutionProfileBindingReceiptSchema,
+  FoundationExecutionProfileIdSchema,
+  getFoundationExecutionProfileDefinition,
+} from "../foundation-execution-profiles.js";
+import {
   ManualCoordinationSignalKindSchema,
   CoordinationSignalResolutionSchema,
   CoordinationSignalSchema,
@@ -185,8 +190,8 @@ function registerConfiguredBeadsTools(
   registerTool: Parameters<typeof registerBeadsTools>[0]["registerTool"],
 ): void {
   if (!options.callerAgentId || !options.beadsService || !options.workspaceRegistry) return;
-  const caller = options.agentManager.getAgent(options.callerAgentId);
-  if (!caller?.roleBinding) return;
+  const roleBinding = resolveCatalogRoleBinding(options.agentManager, options.callerAgentId);
+  if (!roleBinding) return;
   registerBeadsTools({
     registerTool,
     service: options.beadsService,
@@ -194,19 +199,77 @@ function registerConfiguredBeadsTools(
     workspaceRegistry: options.workspaceRegistry,
     projectRegistry: options.projectRegistry,
     callerAgentId: options.callerAgentId,
-    roleId: caller.roleBinding.roleId,
+    roleId: roleBinding.roleId,
   });
+}
+
+function resolveCatalogRoleBinding(agentManager: AgentManager, agentId: string) {
+  const resolver = (
+    agentManager as AgentManager & {
+      getRoleBindingForToolCatalog?: AgentManager["getRoleBindingForToolCatalog"];
+    }
+  ).getRoleBindingForToolCatalog;
+  return typeof resolver === "function"
+    ? resolver.call(agentManager, agentId)
+    : agentManager.getAgent(agentId)?.roleBinding;
 }
 
 function projectFoundationLaunchReceipts(
   agent: Pick<ManagedAgent, "roleBinding" | "launchContract">,
+  options?: { includeExecutionProfile?: boolean },
 ) {
   return {
     ...(agent.roleBinding ? { roleBinding: toRoleBindingReceipt(agent.roleBinding) } : {}),
     ...(agent.launchContract
       ? { launchContract: toLaunchContractReceipt(agent.launchContract) }
       : {}),
+    ...(options?.includeExecutionProfile && agent.roleBinding?.executionProfile
+      ? { executionProfile: agent.roleBinding.executionProfile }
+      : {}),
   };
+}
+
+function resolveCallerRoleId(
+  agentManager: AgentManager,
+  callerAgentId: string | undefined,
+): string | undefined {
+  if (!callerAgentId) {
+    return undefined;
+  }
+  return resolveCatalogRoleBinding(agentManager, callerAgentId)?.roleId;
+}
+
+function executionProfileInputShape(enabled: boolean): z.ZodRawShape {
+  if (!enabled) {
+    return {};
+  }
+  return {
+    executionProfile: FoundationExecutionProfileIdSchema.optional().describe(
+      "Lead-only Peer execution specialization. solution-architect frames architecture; reviewer performs a focused review method; review is the private OCR exhaustive-review route.",
+    ),
+  };
+}
+
+function executionProfileOutputShape(enabled: boolean): z.ZodRawShape {
+  if (!enabled) {
+    return {};
+  }
+  return { executionProfile: ExecutionProfileBindingReceiptSchema.optional() };
+}
+
+function resolveExecutionProfileRequest(parsedArgs: object, callerRoleId: string | undefined) {
+  if (!("executionProfile" in parsedArgs) || parsedArgs.executionProfile === undefined) {
+    return undefined;
+  }
+  const executionProfileId = FoundationExecutionProfileIdSchema.parse(parsedArgs.executionProfile);
+  if (callerRoleId !== "lead") {
+    throw new Error("Only a role-bound Lead can create an execution-specialized Peer");
+  }
+  const profile = getFoundationExecutionProfileDefinition(executionProfileId);
+  if (!("role" in parsedArgs) || parsedArgs.role !== profile.authorityRoleId) {
+    throw new Error(`Execution profile '${profile.id}' requires role '${profile.authorityRoleId}'`);
+  }
+  return executionProfileId;
 }
 
 type AgentScopedRoleTopologyAction =
@@ -657,8 +720,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     resolveCallerContext,
     logger,
   } = options;
-  const childLogger = logger.child({ module: "agent", component: "paseo-tool-catalog" });
+  const childLogger = logger.child({
+    module: "agent",
+    component: "paseo-tool-catalog",
+  });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
+  const callerRoleId = resolveCallerRoleId(agentManager, callerAgentId);
+  const canCreateExecutionProfile = callerRoleId === "lead";
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
     const inputSchema = tool.inputSchema;
@@ -947,7 +1015,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           return false;
         }
       },
-      { message: "provider must be provider or provider/model, for example codex/gpt-5.4" },
+      {
+        message: "provider must be provider or provider/model, for example codex/gpt-5.4",
+      },
     );
   const CreateAgentSettingsInputSchema = z
     .object({
@@ -1092,6 +1162,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     role: PaseoRoleIdSchema.optional().describe(
       "Paseo Foundation role to bind through the provider-native durable instruction channel.",
     ),
+    ...executionProfileInputShape(canCreateExecutionProfile),
     assignment: AssignmentEnvelopeSchema.optional().describe(
       "Required immutable one-task authority envelope when role is set.",
     ),
@@ -1339,7 +1410,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         },
       },
       async ({ room, limit = 50, since }) => {
-        const messages = await options.chatService!.readMessages({ room, limit, since });
+        const messages = await options.chatService!.readMessages({
+          room,
+          limit,
+          since,
+        });
         return {
           content: [],
           structuredContent: ensureValidJson({ messages }),
@@ -1591,6 +1666,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         availableModes: z.array(ProviderModeSchema),
         roleBinding: RoleBindingReceiptSchema.optional(),
         launchContract: LaunchContractReceiptSchema.optional(),
+        ...executionProfileOutputShape(canCreateExecutionProfile),
         lastMessage: z.string().nullable().optional(),
         permission: AgentPermissionRequestPayloadSchema.nullable().optional(),
         guidance: z.string().optional(),
@@ -1599,6 +1675,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     async (args: unknown) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs, worktree } = resolvedArgs;
+      const executionProfileId = resolveExecutionProfileRequest(parsedArgs, callerRoleId);
       let requestedBackground: boolean;
       let notifyOnFinish: boolean;
       if (resolvedArgs.kind === "agent-scoped") {
@@ -1632,6 +1709,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           kind: "mcp",
           provider: parsedArgs.provider,
           roleId: parsedArgs.role,
+          executionProfileId,
           assignment: parsedArgs.assignment,
           title: parsedArgs.title,
           initialPrompt: parsedArgs.initialPrompt,
@@ -1666,7 +1744,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ...(liveSnapshot.workspaceId ? { workspaceId: liveSnapshot.workspaceId } : {}),
             currentModeId: liveSnapshot.currentModeId,
             availableModes: liveSnapshot.availableModes,
-            ...projectFoundationLaunchReceipts(liveSnapshot),
+            ...projectFoundationLaunchReceipts(liveSnapshot, {
+              includeExecutionProfile: canCreateExecutionProfile,
+            }),
             lastMessage: result.lastMessage,
             permission: sanitizePermissionRequest(result.permission),
           };
@@ -1699,7 +1779,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...(currentSnapshot.workspaceId ? { workspaceId: currentSnapshot.workspaceId } : {}),
           currentModeId: currentSnapshot.currentModeId,
           availableModes: currentSnapshot.availableModes,
-          ...projectFoundationLaunchReceipts(currentSnapshot),
+          ...projectFoundationLaunchReceipts(currentSnapshot, {
+            includeExecutionProfile: canCreateExecutionProfile,
+          }),
           lastMessage: null,
           permission: null,
           ...(guidance ? { guidance } : {}),
@@ -2058,7 +2140,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       title: "Prepare Lead handoff",
       description:
         "Persist an immutable adjacent-Lead handoff packet. The predecessor remains write Owner; this does not authorize or release either Lead.",
-      inputSchema: PrepareLeadHandoffInputSchema.omit({ predecessorAgentId: true }).shape,
+      inputSchema: PrepareLeadHandoffInputSchema.omit({
+        predecessorAgentId: true,
+      }).shape,
       outputSchema: { handoff: LeadHandoffPacketSchema },
     },
     async (input) => {
@@ -2621,7 +2705,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       }
       return {
         content: [],
-        structuredContent: ensureValidJson({ scripts: await workspaceScripts.list(workspaceId) }),
+        structuredContent: ensureValidJson({
+          scripts: await workspaceScripts.list(workspaceId),
+        }),
       };
     },
   );
@@ -3428,7 +3514,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const result = await setAgentModeCommand({ agentManager }, { agentId, modeId });
       return {
         content: [],
-        structuredContent: ensureValidJson({ success: true, newMode: result.modeId }),
+        structuredContent: ensureValidJson({
+          success: true,
+          newMode: result.modeId,
+        }),
       };
     },
   );

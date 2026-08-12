@@ -58,6 +58,16 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
         },
       },
       {
+        provider: "gemini-antigravity",
+        status: "ready",
+        enabled: true,
+        roleBinding: {
+          status: "supported",
+          injectionMethod: "antigravity-custom-agent",
+          roleIds: ["peer"],
+        },
+      },
+      {
         provider: "mock",
         status: "ready",
         enabled: true,
@@ -68,6 +78,11 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     ],
     providerDefinitions: [
       { id: "codex", label: "Codex", modes: [{ id: "auto", label: "Auto" }] },
+      {
+        id: "gemini-antigravity",
+        label: "Gemini Antigravity",
+        modes: [{ id: "plan", label: "Plan" }],
+      },
       { id: "mock", label: "Mock", modes: [{ id: "auto", label: "Auto" }] },
     ],
     providerDefinitionMap: new Map(),
@@ -217,6 +232,7 @@ describe("useAgentInputDraft live contract", () => {
           isVisible: true,
           onlineServerIds: ["host-1"],
           lockedWorkingDir: "/repo",
+          beadsIssueOptions: [{ id: "ps123-abc", label: "ps123-abc — Fix tracker" }],
         },
       });
       return null;
@@ -242,7 +258,7 @@ describe("useAgentInputDraft live contract", () => {
     expect(getLatest().composerState?.selectedAssignmentEffect).toBe("read-only");
     expect(
       getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
-    ).toEqual(["codex", "mock"]);
+    ).toEqual(["codex", "gemini-antigravity", "mock"]);
     expect(getLatest().composerState?.agentControls.features).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "foundation_assignment_effect" })]),
     );
@@ -258,12 +274,24 @@ describe("useAgentInputDraft live contract", () => {
     });
     expect(
       getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
-    ).toEqual(["codex"]);
+    ).toEqual(["codex", "gemini-antigravity"]);
     expect(getLatest().composerState?.agentControls.features).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "foundation_assignment_effect", value: "read-only" }),
+        expect.objectContaining({
+          id: "foundation_beads_issue_grant",
+          value: null,
+          options: [expect.objectContaining({ id: "ps123-abc" })],
+        }),
       ]),
     );
+    await act(async () => {
+      getLatest().composerState?.agentControls.onSetFeature?.(
+        "foundation_beads_issue_grant",
+        "ps123-abc",
+      );
+    });
+    expect(getLatest().composerState?.selectedBeadsIssueIds).toEqual(["ps123-abc"]);
     await act(async () => {
       getLatest().composerState?.agentControls.onSetFeature?.(
         "foundation_assignment_effect",
@@ -275,6 +303,9 @@ describe("useAgentInputDraft live contract", () => {
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("lead");
     });
+    expect(
+      getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
+    ).toEqual(["codex"]);
     await act(async () => {
       getLatest().composerState?.agentControls.onSetFeature?.(
         "foundation_assignment_effect",

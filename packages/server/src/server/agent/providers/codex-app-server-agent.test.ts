@@ -345,7 +345,10 @@ process.stdin.on("data", (chunk) => {
 
 describe("Codex app-server provider", () => {
   test("injects a Paseo role through native developer instructions and disables native agents", async () => {
-    vi.stubEnv("PASEO_FOUNDATION_CURRENT", "/missing/foundation-release");
+    vi.stubEnv(
+      "PASEO_FOUNDATION_CURRENT",
+      path.resolve(import.meta.dirname, "../../../../../../foundation/dist"),
+    );
     let threadStartParams: Record<string, unknown> | undefined;
     let turnStartParams: Record<string, unknown> | undefined;
     const appServer = createFakeCodexAppServer({
@@ -388,7 +391,7 @@ describe("Codex app-server provider", () => {
     );
 
     try {
-      await session.startTurn("/council review this decision");
+      await session.startTurn("Please run /council to review this decision");
 
       expect(threadStartParams?.developerInstructions).toBe("GLOBAL APPEND\n\nPASEO ROLE LEAD");
       expect(threadStartParams?.config).toMatchObject({
@@ -417,7 +420,9 @@ describe("Codex app-server provider", () => {
           .filter(
             (entry) =>
               !/[\\/]council[\\/]SKILL\.md$/u.test(entry.path) &&
-              !/[\\/]beads-issue-tracker[\\/]SKILL\.md$/u.test(entry.path),
+              !/[\\/]beads-issue-tracker[\\/]SKILL\.md$/u.test(entry.path) &&
+              !/[\\/]repo-refresh[\\/]SKILL\.md$/u.test(entry.path) &&
+              !/[\\/]triple-review[\\/]SKILL\.md$/u.test(entry.path),
           )
           .every((entry) => entry.enabled === false),
       ).toBe(true);
@@ -426,7 +431,7 @@ describe("Codex app-server provider", () => {
           expect.objectContaining({
             type: "text",
             text: expect.stringMatching(
-              /Paseo role-admitted skill invocation: \/council review this decision[\s\S]+# Paseo Council — instructions for Lead/u,
+              /Paseo role-admitted skill invocation: \/council Please run\s+to review this decision[\s\S]+# Paseo Council — Lead protocol/u,
             ),
           }),
         ]),
@@ -1425,6 +1430,50 @@ describe("Codex app-server provider", () => {
       },
     });
     await session.close();
+    appServer.assertNoErrors();
+  });
+
+  test("fails closed for interactive role-bound openai-compatible resume while allowing history readback", async () => {
+    const threadRequests: string[] = [];
+    const appServer = createFakeCodexAppServer({
+      "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
+      "thread/read": () => {
+        threadRequests.push("thread/read");
+        return { thread: { turns: [] } };
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    const launchContext: AgentLaunchContext = {
+      agentId: "agent-zetscan",
+      roleBinding: { roleId: "peer", instructions: "Bound Peer instructions" },
+      providerLaunchBinding: {
+        providerId: "codex-zetscan",
+        providerFamily: "codex",
+        model: "gpt-5.6-luna",
+        credentialConfigured: true,
+        routeKind: "openai-compatible",
+        modelProviderId: "codex-zetscan",
+        authMethod: "credential-command",
+        baseUrl: "https://provider.example.invalid/v1",
+        credentialRef: "test-zetscan",
+        credentialFile: "/tmp/test-zetscan-credential",
+      },
+    };
+
+    await expect(
+      provider.resumeSession(archivedThreadHandle(), undefined, launchContext),
+    ).rejects.toThrow(
+      "Role-bound native resume is not qualified for openai-compatible Codex route 'codex-zetscan'",
+    );
+
+    const historySession = await provider.resumeSession(
+      archivedThreadHandle(),
+      undefined,
+      launchContext,
+      { purpose: "history" },
+    );
+    expect(threadRequests).toEqual(["thread/read"]);
+    await historySession.close();
     appServer.assertNoErrors();
   });
 
