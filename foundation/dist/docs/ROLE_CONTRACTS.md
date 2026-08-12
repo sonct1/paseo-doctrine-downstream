@@ -65,6 +65,10 @@ Peer phải:
 
 `Engineer/Owner` cần exact write lease. Mọi disposition không có write lease giữ non-mutating dù runtime `full-access`. Reviewer falsify một stable candidate theo mandate, không tự patch finding hoặc redesign ngoài scope. Independent judgment không có nghĩa manufacture dissent.
 
+Khi Lead cần reusable Council method, daemon có thể compose provider-neutral `solution-architect` hoặc
+`reviewer` execution specialization vào immutable Peer RoleBinding. Specialization chỉ pin method cho exact
+assignment, không tạo standing role mới, không cấp write/acceptance authority và không thay Lead verdict.
+
 ## Supervisor
 
 Supervisor phục vụ Human bằng cách quan sát Lead ↔ Peer, phát hiện process bias/anti-pattern, giữ objective + accepted-decision continuity và replace/handoff Lead chỉ khi exact Human lease cho phép. Supervisor không phải super-Lead.

@@ -100,12 +100,14 @@ Peer/Supervisor không được admit skill này.
 
 [`profiles/native/execution-specializations.json`](../profiles/native/execution-specializations.json) là
 provider-neutral SLP overlay trên Peer, không phải bản copy full provider config của nguồn tham khảo và
-không phải role thứ tư. Standing specialization chỉ giữ adapted review behavior và `foundationSkills=none`;
-provider/model/effort/mode được Lead pin trong private bounded assignment, rồi existing provider adapter
-inject cùng immutable role bytes qua native durable channel. Specialization kế thừa nguyên provider
-support của role-bound Peer trong SLP; nó không có provider allowlist, model preference hoặc qualification
-layer riêng. Internal selector dependency chỉ tồn tại trong private specialization instructions và được
-exact seat tự kiểm tra sau routing; ordinary Lead/Peer handback không expose executable hoặc command.
+không phải role thứ tư. Registry hiện giữ ba method riêng: `solution-architect` và `reviewer` là hai
+specialization read-only cho Council/Lead routing; private `review` là OCR-delegated exhaustive review cho
+triple-review. Cả ba giữ `foundationSkills=none`; provider/model/effort/mode được Lead pin trong private
+bounded assignment, rồi existing provider adapter inject specialization cùng immutable role bytes qua
+native durable channel. Specialization kế thừa nguyên provider support của role-bound Peer trong SLP; nó
+không có provider allowlist, model preference hoặc qualification layer riêng. Internal selector dependency
+của `review` chỉ tồn tại trong private specialization instructions và được exact seat tự kiểm tra sau
+routing; ordinary Lead/Peer handback không expose executable hoặc command.
 
 Quy tắc này áp dụng cho mọi execution specialization tương lai, không riêng `review`: thêm một canonical
 registry entry dưới authority role hiện có, compose qua common `RoleBinding`, rồi kế thừa toàn bộ provider
