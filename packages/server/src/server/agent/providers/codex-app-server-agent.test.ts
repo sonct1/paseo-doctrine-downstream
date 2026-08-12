@@ -344,6 +344,66 @@ process.stdin.on("data", (chunk) => {
 }
 
 describe("Codex app-server provider", () => {
+  test("waits for mandatory Paseo MCP tools before admitting a fresh role-bound session", async () => {
+    let statusCalls = 0;
+    let turnStarts = 0;
+    const appServer = createFakeCodexAppServer({
+      "mcpServerStatus/list": () => {
+        statusCalls += 1;
+        return {
+          data: [
+            {
+              name: "paseo",
+              authStatus: "notRequired",
+              resourceTemplates: [],
+              resources: [],
+              tools: statusCalls === 1 ? { beads_status: {} } : { beads_status: {}, beads_get: {} },
+            },
+          ],
+          nextCursor: null,
+        };
+      },
+      "turn/start": () => {
+        turnStarts += 1;
+        return {};
+      },
+    });
+    const client = createProviderWithFakeAppServer(appServer);
+    const config = withRuntimePaseoMcpServer({
+      config: createConfig(),
+      agentId: "role-agent",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "test-token",
+    });
+
+    const session = await client.createSession(config, {
+      agentId: "role-agent",
+      roleBinding: { roleId: "peer", instructions: "Bound Peer instructions" },
+    });
+
+    expect(statusCalls).toBe(2);
+    expect(turnStarts).toBe(0);
+    await session.startTurn("checkpoint the granted issue");
+    expect(turnStarts).toBe(1);
+    await session.close();
+    appServer.assertNoErrors();
+  });
+
+  test("fails closed when a role-bound Codex session has no Paseo MCP transport", async () => {
+    const appServer = createFakeCodexAppServer();
+    const client = createProviderWithFakeAppServer(appServer);
+
+    await expect(
+      client.createSession(createConfig(), {
+        agentId: "role-agent",
+        roleBinding: { roleId: "peer", instructions: "Bound Peer instructions" },
+      }),
+    ).rejects.toThrow(
+      "Role-bound Codex session 'role-agent' cannot start without the mandatory Paseo MCP server",
+    );
+    appServer.assertNoErrors();
+  });
+
   test("injects a Paseo role through native developer instructions and disables native agents", async () => {
     vi.stubEnv(
       "PASEO_FOUNDATION_CURRENT",
@@ -1390,6 +1450,7 @@ describe("Codex app-server provider", () => {
 
   test("reapplies runtime MCP and role config when a resumed thread is already loaded", async () => {
     let resumeParams: unknown;
+    let statusCalls = 0;
     const appServer = createFakeCodexAppServer({
       "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
       "thread/resume": (params) => {
@@ -1397,6 +1458,21 @@ describe("Codex app-server provider", () => {
         return { thread: { id: "archived-thread-id" } };
       },
       "thread/read": () => ({ thread: { turns: [] } }),
+      "mcpServerStatus/list": () => {
+        statusCalls += 1;
+        return {
+          data: [
+            {
+              name: "paseo",
+              authStatus: "notRequired",
+              resourceTemplates: [],
+              resources: [],
+              tools: { beads_status: {}, beads_get: {} },
+            },
+          ],
+          nextCursor: null,
+        };
+      },
     });
     const provider = createProviderWithFakeAppServer(appServer);
 
@@ -1429,6 +1505,7 @@ describe("Codex app-server provider", () => {
         },
       },
     });
+    expect(statusCalls).toBe(1);
     await session.close();
     appServer.assertNoErrors();
   });

@@ -45,6 +45,7 @@ import { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
 import { composeSystemPromptParts } from "../system-prompt.js";
@@ -147,6 +148,10 @@ function isCodexAlreadyUnarchivedError(error: unknown, threadId: string): boolea
 
 const TURN_START_TIMEOUT_MS = 90 * 1000;
 const INTERRUPT_TIMEOUT_MS = 2_000;
+const ROLE_PASEO_MCP_READY_TIMEOUT_MS = 15_000;
+const ROLE_PASEO_MCP_READY_POLL_MS = 100;
+const ROLE_PASEO_MCP_SERVER_NAME = "paseo";
+const ROLE_PASEO_MCP_REQUIRED_TOOLS = ["beads_status", "beads_get"] as const;
 const CODEX_PROVIDER = "codex" as const;
 // Codex treats most app-server client names as the model-request originator.
 // This reserved Codex name is non-originating, so requests keep Codex's default
@@ -254,7 +259,7 @@ const CODEX_MODES: AgentMode[] = [
 const DEFAULT_CODEX_MODE_ID = "auto";
 
 interface CodexAppServerClientLike {
-  request(method: string, params?: unknown): Promise<unknown>;
+  request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown>;
   forkThread?(params: CodexThreadForkParams): Promise<CodexThreadForkResponse>;
   rollbackThread?(params: CodexThreadRollbackParams): Promise<CodexThreadRollbackResponse>;
   notify(method: string, params?: unknown): void;
@@ -887,6 +892,31 @@ function toCodexMcpConfig(config: McpServerConfig): CodexMcpServerConfig {
 
 function toObjectRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
+}
+
+function inspectRolePaseoMcpStatus(value: unknown): {
+  observedServerNames: string[];
+  missingTools: string[];
+} {
+  const response = toObjectRecord(value);
+  const rows = Array.isArray(response?.data) ? response.data : [];
+  const servers = rows.map(toObjectRecord).filter((row) => row !== undefined);
+  const observedServerNames = servers.flatMap((server) =>
+    typeof server.name === "string" ? [server.name] : [],
+  );
+  const paseo = servers.find((server) => server.name === ROLE_PASEO_MCP_SERVER_NAME);
+  const tools = toObjectRecord(paseo?.tools);
+  const missingTools = ROLE_PASEO_MCP_REQUIRED_TOOLS.filter(
+    (tool) => !tools || !Object.hasOwn(tools, tool),
+  );
+  return { observedServerNames, missingTools };
+}
+
+function requiresRolePaseoMcpAdmission(
+  launchContext: AgentLaunchContext | undefined,
+  purpose: "interactive" | "history" = "interactive",
+): boolean {
+  return Boolean(launchContext?.roleBinding) && purpose !== "history";
 }
 
 // Codex app-server API response types
@@ -3415,6 +3445,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   private unpairedCompactionItemCompletions = 0;
   private connected = false;
   private connectionPromise: Promise<void> | null = null;
+  private rolePaseoMcpReady = false;
   private closed = false;
   private collaborationModes: Array<{
     name: string;
@@ -3518,6 +3549,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private async establishConnection(): Promise<void> {
+    this.rolePaseoMcpReady = false;
     const child = await this.spawnAppServer();
     const client = new CodexAppServerClient(child, this.logger, () => this.traceContext());
     if (this.closed) {
@@ -3567,6 +3599,67 @@ export class CodexAppServerAgentSession implements AgentSession {
       }
       throw error;
     }
+  }
+
+  async requireRolePaseoMcpReady(): Promise<void> {
+    if (!this.roleInstructions || !this.agentId || this.rolePaseoMcpReady) {
+      return;
+    }
+    if (!this.config.mcpServers?.[ROLE_PASEO_MCP_SERVER_NAME]) {
+      throw new Error(
+        `Role-bound Codex session '${this.agentId}' cannot start without the mandatory Paseo MCP server`,
+      );
+    }
+
+    await this.connect();
+    if (!this.client) {
+      throw new Error("Codex client not initialized");
+    }
+    if (this.currentThreadId) {
+      await this.ensureThreadLoaded();
+    } else {
+      await this.ensureThread();
+    }
+    if (!this.currentThreadId) {
+      throw new Error("Codex app-server did not materialize a role-bound thread");
+    }
+
+    const deadline = Date.now() + ROLE_PASEO_MCP_READY_TIMEOUT_MS;
+    let observedServerNames: string[] = [];
+    let missingTools: string[] = [...ROLE_PASEO_MCP_REQUIRED_TOOLS];
+    let lastError: string | null = null;
+    do {
+      try {
+        const status = await this.client.request(
+          "mcpServerStatus/list",
+          {
+            threadId: this.currentThreadId,
+            detail: "toolsAndAuthOnly",
+            limit: 100,
+          },
+          // Codex waits for the thread's MCP inventory before answering this
+          // request, so a shorter per-request timeout defeats the admission gate.
+          Math.max(1, deadline - Date.now()),
+        );
+        ({ observedServerNames, missingTools } = inspectRolePaseoMcpStatus(status));
+        lastError = null;
+        if (missingTools.length === 0) {
+          this.rolePaseoMcpReady = true;
+          return;
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+      if (Date.now() < deadline) {
+        await delay(ROLE_PASEO_MCP_READY_POLL_MS);
+      }
+    } while (Date.now() < deadline);
+
+    const observed = observedServerNames.length > 0 ? observedServerNames.join(", ") : "none";
+    const detail = lastError ? `; last error: ${lastError}` : "";
+    throw new Error(
+      `Role-bound Codex session '${this.agentId}' cannot start: mandatory Paseo MCP tools are not model-visible (missing: ${missingTools.join(", ")}; observed servers: ${observed}${detail})`,
+    );
   }
 
   private async loadResolvedWorkspaceWrite(): Promise<void> {
@@ -6993,6 +7086,25 @@ export class CodexAppServerAgentClient implements AgentClient {
     return child;
   }
 
+  private async connectPreparedSession(
+    session: CodexAppServerAgentSession,
+    requireRoleToolAdmission: boolean,
+    closeFailureMessage: string,
+  ): Promise<AgentSession> {
+    try {
+      await session.connect();
+      if (requireRoleToolAdmission) {
+        await session.requireRolePaseoMcpReady();
+      }
+      return session;
+    } catch (error) {
+      await session.close().catch((closeError) => {
+        this.logger.warn({ err: closeError, connectError: error }, closeFailureMessage);
+      });
+      throw error;
+    }
+  }
+
   async createSession(
     config: AgentSessionConfig,
     launchContext?: AgentLaunchContext,
@@ -7028,8 +7140,11 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
     );
-    await session.connect();
-    return session;
+    return this.connectPreparedSession(
+      session,
+      requiresRolePaseoMcpAdmission(launchContext),
+      "Failed to close Codex session after role-tool admission failure",
+    );
   }
 
   async resumeSession(
@@ -7076,8 +7191,11 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
     );
-    await session.connect();
-    return session;
+    return this.connectPreparedSession(
+      session,
+      requiresRolePaseoMcpAdmission(launchContext, options?.purpose),
+      "Failed to close resumed Codex session after role-tool admission failure",
+    );
   }
 
   async listImportableSessions(
