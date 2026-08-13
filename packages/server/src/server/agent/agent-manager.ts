@@ -1311,18 +1311,18 @@ export class AgentManager {
     });
     await this.deleteAgentState(resolvedAgentId);
     this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
-    const launchContext = await this.buildLaunchContext(
-      resolvedAgentId,
-      client,
-      storedConfig.cwd,
-      paseoToolPolicy,
-      options?.env,
-      launchContract,
-    );
-    const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
-    const createOptions = this.buildCreateSessionOptions(options);
     if (roleBinding) this.roleBindingsAwaitingRegistration.set(resolvedAgentId, roleBinding);
     try {
+      const launchContext = await this.buildLaunchContext(
+        resolvedAgentId,
+        client,
+        storedConfig.cwd,
+        paseoToolPolicy,
+        options?.env,
+        launchContract,
+      );
+      const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
+      const createOptions = this.buildCreateSessionOptions(options);
       const session = await client.createSession(
         providerLaunchConfig,
         launchContext,
@@ -1414,17 +1414,17 @@ export class AgentManager {
       );
     }
     this.paseoToolPolicies.set(resolvedAgentId, paseoToolPolicy);
-    const launchContext = await this.buildLaunchContext(
-      resolvedAgentId,
-      client,
-      storedConfig.cwd,
-      paseoToolPolicy,
-      undefined,
-      launchContract,
-    );
-    const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
     if (roleBinding) this.roleBindingsAwaitingRegistration.set(resolvedAgentId, roleBinding);
     try {
+      const launchContext = await this.buildLaunchContext(
+        resolvedAgentId,
+        client,
+        storedConfig.cwd,
+        paseoToolPolicy,
+        undefined,
+        launchContract,
+      );
+      const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
       const session = await client.resumeSession(
         handle,
         providerLaunchConfig,
@@ -4967,6 +4967,7 @@ export class AgentManager {
     assertRoleSessionInput(config, role);
     const requestedModel = config.model;
     const storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
+    const client = this.requireClient(storedConfig.provider);
     const providerBaseId = this.providerBaseIds.get(storedConfig.provider) ?? null;
     let launchContract = role?.launchContract;
     let roleBinding = launchContract?.roleBinding ?? role?.roleBinding;
@@ -5003,10 +5004,11 @@ export class AgentManager {
     if (roleBinding) {
       this.assertCurrentRoleAdmission(roleBinding, storedConfig.provider);
     }
-    const providerPaseoToolPolicy = this.resolvePaseoToolPolicy(storedConfig.provider);
-    const paseoToolPolicy = this.paseoToolsEnabled
-      ? applyRolePaseoToolPolicy(roleBinding?.roleId, providerPaseoToolPolicy)
-      : { enabled: false };
+    const paseoToolPolicy = this.resolveEffectivePaseoToolPolicy(
+      storedConfig.provider,
+      roleBinding?.roleId,
+      client,
+    );
     const launchConfig = this.applyDaemonAppendSystemPrompt(
       withRuntimePaseoMcpServer({
         config: storedConfig,
@@ -5026,6 +5028,17 @@ export class AgentManager {
       roleBinding,
       launchContract,
     };
+  }
+
+  private resolveEffectivePaseoToolPolicy(
+    provider: AgentProvider,
+    roleId: PersistedRoleBinding["roleId"] | undefined,
+    client: AgentClient,
+  ): ProviderPaseoToolsPolicy | undefined {
+    if (!this.paseoToolsEnabled && !client.capabilities.supportsNativePaseoTools) {
+      return { enabled: false };
+    }
+    return applyRolePaseoToolPolicy(roleId, this.resolvePaseoToolPolicy(provider));
   }
 
   private assertCurrentRoleAdmission(
@@ -5055,7 +5068,7 @@ export class AgentManager {
       return;
     }
     throw new Error(
-      `Provider '${provider}' cannot launch Paseo Peer: the current Antigravity bridge has no MCP or native Paseo-tool transport for the mandatory Beads checkpoint`,
+      `Provider '${provider}' cannot launch Paseo Peer: the current Antigravity runtime has no qualified native Paseo-tool transport for the mandatory Beads checkpoint`,
     );
   }
 
@@ -5137,7 +5150,6 @@ export class AgentManager {
       ...(launchContract ? { providerLaunchBinding: launchContract.providerBinding } : {}),
     };
     if (
-      this.paseoToolsEnabled &&
       isPaseoToolPolicyEnabled(paseoToolPolicy) &&
       client.capabilities.supportsNativePaseoTools &&
       this.paseoToolCatalogFactory
@@ -5201,7 +5213,14 @@ export class AgentManager {
   private requireClient(provider: AgentProvider): AgentClient {
     const client = this.clients.get(provider);
     if (!client) {
-      throw new Error(`No client registered for provider '${provider}'`);
+      // Same wording as requireAvailableClient: a caller who names a provider that is not
+      // configured needs the list of ones that are, and which of the two lookups happened to
+      // run first is an implementation detail they cannot see.
+      throw new Error(
+        `Unknown provider '${provider}'. Configured providers: ${formatProviderList(
+          this.getConfiguredProviderIds(),
+        )}.`,
+      );
     }
     return client;
   }

@@ -169,7 +169,7 @@ function resolveCursorACPRoleBindingSupport(
   };
 }
 
-function resolveAntigravityACPRoleBindingSupport(
+function resolveAntigravityNativeRoleBindingSupport(
   command: readonly string[] | undefined,
   hasPaseoToolTransport?: boolean,
 ): ProviderRoleBindingSupport {
@@ -180,19 +180,12 @@ function resolveAntigravityACPRoleBindingSupport(
       roleIds: ["peer"],
     };
   }
-  const binaryFlagIndexes = (command ?? []).flatMap((argument, index) =>
-    argument === "--agy-binary" ? [index] : [],
-  );
-  if (
-    !commandMatchesExecutable(command, ["agy-acp", "agy-acp.exe"]) ||
-    binaryFlagIndexes.length !== 1 ||
-    !command?.[binaryFlagIndexes[0] + 1] ||
-    command.some((argument) => argument === "--agent" || argument.startsWith("--agent="))
-  ) {
+  const isNativeCommand =
+    commandMatchesExecutable(command, ["agy", "agy.exe"]) && command?.length === 1;
+  if (!isNativeCommand) {
     return {
       status: "unsupported",
-      reason:
-        "Antigravity native role binding requires one --agy-binary value and rejects caller-supplied --agent arguments",
+      reason: "Antigravity native role binding requires the exact command ['agy']",
       roleIds: ["peer"],
     };
   }
@@ -200,7 +193,7 @@ function resolveAntigravityACPRoleBindingSupport(
     return {
       status: "unsupported",
       reason:
-        "The current Antigravity bridge has no MCP or native Paseo-tool transport for the mandatory Beads checkpoint",
+        "The current Antigravity runtime has no qualified native Paseo-tool transport for the mandatory Beads checkpoint",
       roleIds: ["peer"],
     };
   }
@@ -209,14 +202,13 @@ function resolveAntigravityACPRoleBindingSupport(
     injectionMethod: "antigravity-custom-agent",
     roleIds: ["peer"],
     notice:
-      "Antigravity has a Peer-only eligibility ceiling; actual launch still requires qualified native Paseo and Beads transport. agy-acp is a third-party bridge; review Google's current authentication terms before using an account through it.",
+      "Antigravity uses the official native AGY CLI with a caller-scoped Paseo command gateway and has a Peer-only eligibility ceiling.",
   };
 }
 
 function resolveConfiguredACPRoleBindingSupport(
   nativeRoleBinding: ProviderNativeRoleBindingConfig | undefined,
   command: readonly string[] | undefined,
-  hasPaseoToolTransport?: boolean,
 ): ProviderRoleBindingSupport | null {
   if (nativeRoleBinding?.driver === "cursor-plugin") {
     return {
@@ -228,14 +220,8 @@ function resolveConfiguredACPRoleBindingSupport(
   if (nativeRoleBinding?.driver === "cursor-workspace-rule") {
     return resolveCursorACPRoleBindingSupport(command);
   }
-  if (nativeRoleBinding?.driver === "antigravity-custom-agent") {
-    return resolveAntigravityACPRoleBindingSupport(command, hasPaseoToolTransport);
-  }
   if (commandMatchesExecutable(command, ["cursor-agent", "cursor-agent.exe"])) {
     return resolveCursorACPRoleBindingSupport(command);
-  }
-  if (commandMatchesExecutable(command, ["agy-acp", "agy-acp.exe"])) {
-    return resolveAntigravityACPRoleBindingSupport(command, hasPaseoToolTransport);
   }
   return null;
 }
@@ -288,13 +274,12 @@ export function resolveProviderRoleBindingSupport(
     };
   }
   const family = resolveProviderFamily(provider, providerBaseId);
+  if (family === "gemini-antigravity") {
+    return resolveAntigravityNativeRoleBindingSupport(command ?? ["agy"], hasPaseoToolTransport);
+  }
   const builtInSupport = resolveBuiltInRoleBindingSupport(family);
   if (builtInSupport) return builtInSupport;
-  const configuredSupport = resolveConfiguredACPRoleBindingSupport(
-    nativeRoleBinding,
-    command,
-    hasPaseoToolTransport,
-  );
+  const configuredSupport = resolveConfiguredACPRoleBindingSupport(nativeRoleBinding, command);
   if (configuredSupport) return configuredSupport;
   return {
     status: "unsupported",

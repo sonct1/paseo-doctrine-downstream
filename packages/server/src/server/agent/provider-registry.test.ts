@@ -434,23 +434,26 @@ vi.mock("./providers/cursor-acp-agent.js", () => ({
   },
 }));
 
-vi.mock("./providers/antigravity-acp-agent.js", () => ({
-  AntigravityACPAgentClient: class AntigravityACPAgentClient {
+vi.mock("./providers/antigravity-native-agent.js", () => ({
+  AntigravityNativeAgentClient: class AntigravityNativeAgentClient {
     readonly capabilities = {
       supportsStreaming: true,
       supportsSessionPersistence: true,
-      supportsDynamicModes: true,
-      supportsMcpServers: true,
-      supportsReasoningStream: true,
+      supportsDynamicModes: false,
+      supportsMcpServers: false,
+      supportsNativePaseoTools: true,
+      supportsReasoningStream: false,
       supportsToolInvocations: true,
     };
-    readonly provider = "acp";
+    readonly provider: string;
 
     constructor(options: {
       command: string[];
       env?: Record<string, string>;
       providerParams?: unknown;
+      providerId?: string;
     }) {
+      this.provider = options.providerId ?? "gemini-antigravity";
       mockState.constructorArgs.antigravity.push({
         command: options.command,
         env: options.env,
@@ -913,27 +916,18 @@ test("cursor provider extending acp uses CursorACPAgentClient", () => {
   expect(mockState.constructorArgs.genericAcp).toEqual([]);
 });
 
-test("explicit Antigravity role driver uses AntigravityACPAgentClient", () => {
-  const registry = buildProviderRegistry(logger, {
-    providerOverrides: {
-      "gemini-antigravity": {
-        extends: "acp",
-        label: "Antigravity",
-        command: ["agy-acp", "--agy-binary", "agy"],
-        roleBinding: { driver: "antigravity-custom-agent" },
-      },
-    },
-  });
+test("builtin Antigravity uses the native AGY client", () => {
+  const registry = buildProviderRegistry(logger);
 
   expect(registry["gemini-antigravity"].createClient(logger).provider).toBe("gemini-antigravity");
   expect(mockState.constructorArgs.antigravity).toEqual([
     {
-      command: ["agy-acp", "--agy-binary", "agy"],
+      command: ["agy"],
       env: undefined,
       providerParams: undefined,
     },
     {
-      command: ["agy-acp", "--agy-binary", "agy"],
+      command: ["agy"],
       env: undefined,
       providerParams: undefined,
     },

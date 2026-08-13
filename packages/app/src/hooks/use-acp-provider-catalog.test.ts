@@ -38,10 +38,13 @@ describe("ACP provider catalog", () => {
     expect(ACP_PROVIDER_CATALOG.some((entry) => entry.id === "pi-acp")).toBe(false);
   });
 
+  it("does not offer builtin native Antigravity as an ACP provider", () => {
+    expect(ACP_PROVIDER_CATALOG.some((entry) => entry.id === "gemini-antigravity")).toBe(false);
+  });
+
   it("uses PATH commands for entries that were binary distributions upstream", () => {
     expect(findProvider("amp-acp").command).toEqual(["amp-acp"]);
     expect(findProvider("cursor").command).toEqual(["cursor-agent", "acp"]);
-    expect(findProvider("gemini-antigravity").command).toEqual(["agy-acp", "--agy-binary", "agy"]);
     expect(findProvider("codewhale").command).toEqual(["codewhale", "serve", "--acp"]);
     expect(findProvider("devin").command).toEqual(["devin", "acp"]);
     expect(findProvider("goose").command).toEqual(["goose", "acp"]);
@@ -88,11 +91,6 @@ describe("ACP provider catalog", () => {
     });
     expect(
       buildAcpProviderConfigPatch(findProvider("cursor")).providers?.cursor,
-    ).not.toHaveProperty("roleBinding");
-    expect(
-      buildAcpProviderConfigPatch(findProvider("gemini-antigravity")).providers?.[
-        "gemini-antigravity"
-      ],
     ).not.toHaveProperty("roleBinding");
   });
 });

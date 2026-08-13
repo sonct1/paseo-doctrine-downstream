@@ -142,6 +142,31 @@ const OPENCODE_MODES: AgentProviderModeDefinition[] = [
   },
 ];
 
+const ANTIGRAVITY_MODES: AgentProviderModeDefinition[] = [
+  {
+    id: "full-access",
+    label: "Full Access",
+    description: "Run native AGY tools without interactive approval prompts.",
+    icon: "ShieldOff",
+    colorTier: "dangerous",
+    isUnattended: true,
+  },
+  {
+    id: "accept-edits",
+    label: "Accept Edits",
+    description: "Let AGY accept file edits while retaining its other permission checks.",
+    icon: "ShieldPlus",
+    colorTier: "moderate",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    description: "Use AGY plan mode for read-only analysis.",
+    icon: "ShieldEllipsis",
+    colorTier: "planning",
+  },
+];
+
 export const OMP_MODES: AgentProviderModeDefinition[] = [
   {
     id: "full",
@@ -254,6 +279,13 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     enabledByDefault: false,
     defaultModeId: "full",
     modes: OMP_MODES,
+  },
+  {
+    id: "gemini-antigravity",
+    label: "Antigravity",
+    description: "Google Antigravity CLI with native sessions and Peer role binding",
+    defaultModeId: "full-access",
+    modes: ANTIGRAVITY_MODES,
   },
 ];
 

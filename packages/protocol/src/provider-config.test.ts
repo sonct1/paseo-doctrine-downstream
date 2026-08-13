@@ -8,6 +8,14 @@ import {
 } from "./provider-config.js";
 
 describe("provider Paseo-tool policy", () => {
+  test("accepts native Antigravity as a builtin provider without ACP inheritance", () => {
+    expect(
+      ProviderOverridesSchema.parse({
+        "gemini-antigravity": { command: ["agy"] },
+      })["gemini-antigravity"],
+    ).toEqual({ command: ["agy"] });
+  });
+
   test("accepts arbitrary tool IDs and leaves an empty policy enabled by default", () => {
     expect(
       ProviderPaseoToolsPolicySchema.parse({

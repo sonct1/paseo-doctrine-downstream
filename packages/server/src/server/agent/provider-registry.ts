@@ -33,7 +33,7 @@ import type {
   ProviderRuntimeSettings,
 } from "./provider-launch-config.js";
 import { ClaudeAgentClient } from "./providers/claude/agent.js";
-import { AntigravityACPAgentClient } from "./providers/antigravity-acp-agent.js";
+import { AntigravityNativeAgentClient } from "./providers/antigravity-native-agent.js";
 import { CodexAppServerAgentClient } from "./providers/codex-app-server-agent.js";
 import { CopilotACPAgentClient } from "./providers/copilot-acp-agent.js";
 import { CursorACPAgentClient } from "./providers/cursor-acp-agent.js";
@@ -67,14 +67,6 @@ function commandBasename(command: string): string {
   return command.split(/[\\/]/u).at(-1) ?? command;
 }
 
-function isAntigravityAcpProvider(override: ProviderOverride, executable: string): boolean {
-  return (
-    override.roleBinding?.driver === "antigravity-custom-agent" ||
-    executable === "agy-acp" ||
-    executable === "agy-acp.exe"
-  );
-}
-
 function createDerivedAcpClient(
   logger: Logger,
   command: [string, ...string[]],
@@ -97,9 +89,6 @@ function createDerivedAcpClient(
     executable === "cursor-agent.exe"
   ) {
     return new CursorACPAgentClient(acpOptions);
-  }
-  if (isAntigravityAcpProvider(override, executable)) {
-    return new AntigravityACPAgentClient(acpOptions);
   }
   if (providerId === "kimi") {
     return new KimiACPAgentClient(acpOptions);
@@ -280,6 +269,12 @@ const PROVIDER_CLIENT_FACTORIES: Record<string, ProviderClientFactory> = {
       providerParams: options?.providerParams,
       runtime: options?.ompRuntime,
     }),
+  "gemini-antigravity": (logger, runtimeSettings) =>
+    new AntigravityNativeAgentClient({
+      logger,
+      command: getAntigravityNativeCommand(runtimeSettings),
+      env: runtimeSettings?.env,
+    }),
   mock: (logger) => new MockLoadTestAgentClient(logger),
   "mock-slow": () => new MockSlowProviderClient(),
 };
@@ -295,6 +290,18 @@ function getCursorACPCommand(
   }
 
   return ["cursor-agent", "acp"];
+}
+
+function getAntigravityNativeCommand(
+  runtimeSettings: ProviderRuntimeSettings | undefined,
+): [string, ...string[]] {
+  if (
+    runtimeSettings?.command?.mode === "replace" &&
+    isNonEmptyStringArray(runtimeSettings.command.argv)
+  ) {
+    return runtimeSettings.command.argv;
+  }
+  return ["agy"];
 }
 
 function getProviderClientFactory(provider: string): ProviderClientFactory {

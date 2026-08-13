@@ -1510,13 +1510,35 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
-  test("fails closed for interactive role-bound openai-compatible resume while allowing history readback", async () => {
-    const threadRequests: string[] = [];
+  test("reapplies the exact bound openai-compatible route on interactive role resume", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "codex-bound-resume-route-"));
+    const credentialFile = path.join(tempDir, "codex-zetscan.json");
+    writeFileSync(credentialFile, JSON.stringify({ OPENAI_API_KEY: "sk-private" }), {
+      mode: 0o600,
+    });
+    let resumeParams: unknown;
+    let statusCalls = 0;
     const appServer = createFakeCodexAppServer({
       "thread/loaded/list": () => ({ data: ["archived-thread-id"] }),
-      "thread/read": () => {
-        threadRequests.push("thread/read");
-        return { thread: { turns: [] } };
+      "thread/resume": (params) => {
+        resumeParams = params;
+        return { thread: { id: "archived-thread-id" } };
+      },
+      "thread/read": () => ({ thread: { turns: [] } }),
+      "mcpServerStatus/list": () => {
+        statusCalls += 1;
+        return {
+          data: [
+            {
+              name: "paseo",
+              authStatus: "notRequired",
+              resourceTemplates: [],
+              resources: [],
+              tools: { beads_status: {}, beads_get: {} },
+            },
+          ],
+          nextCursor: null,
+        };
       },
     });
     const provider = createProviderWithFakeAppServer(appServer);
@@ -1533,25 +1555,51 @@ describe("Codex app-server provider", () => {
         authMethod: "credential-command",
         baseUrl: "https://provider.example.invalid/v1",
         credentialRef: "test-zetscan",
-        credentialFile: "/tmp/test-zetscan-credential",
+        credentialFile,
       },
     };
 
-    await expect(
-      provider.resumeSession(archivedThreadHandle(), undefined, launchContext),
-    ).rejects.toThrow(
-      "Role-bound native resume is not qualified for openai-compatible Codex route 'codex-zetscan'",
+    const runtimeConfig = withRuntimePaseoMcpServer({
+      config: createConfig(),
+      agentId: "agent-zetscan",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "test-token",
+    });
+    const session = await provider.resumeSession(
+      archivedThreadHandle(),
+      runtimeConfig,
+      launchContext,
     );
 
-    const historySession = await provider.resumeSession(
-      archivedThreadHandle(),
-      undefined,
-      launchContext,
-      { purpose: "history" },
-    );
-    expect(threadRequests).toEqual(["thread/read"]);
-    await historySession.close();
-    appServer.assertNoErrors();
+    try {
+      expect(resumeParams).toMatchObject({
+        threadId: "archived-thread-id",
+        modelProvider: "codex-zetscan",
+        model: "gpt-5.6-luna",
+        developerInstructions: expect.stringContaining("Bound Peer instructions"),
+        config: {
+          model_provider: "codex-zetscan",
+          model_providers: {
+            "codex-zetscan": {
+              base_url: "https://provider.example.invalid/v1",
+              wire_api: "responses",
+            },
+          },
+          mcp_servers: {
+            paseo: {
+              url: "http://127.0.0.1:6767/mcp/agents?callerAgentId=agent-zetscan",
+              http_headers: { Authorization: "Bearer test-token" },
+              required: true,
+            },
+          },
+        },
+      });
+      expect(statusCalls).toBe(1);
+      appServer.assertNoErrors();
+    } finally {
+      await session.close();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("defers runtime config during history load and applies it on the first interactive use", async () => {

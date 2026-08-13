@@ -205,7 +205,7 @@ describe("native Foundation role materialization", () => {
         { status: "supported", injectionMethod: "cursor-project-rule-capsule" },
       ],
       [
-        "antigravity-acp",
+        "antigravity-native",
         "antigravity-custom-agent",
         {
           status: "supported",
@@ -328,7 +328,7 @@ describe("native Foundation role materialization", () => {
     });
   });
 
-  test("auto-detects qualified provider-native ACP drivers and retires plugin projection", () => {
+  test("auto-detects qualified provider-native drivers and retires plugin projection", () => {
     expect(
       resolveProviderRoleBindingSupport("cursor", null, null, undefined, ["cursor-agent", "acp"]),
     ).toMatchObject({
@@ -336,11 +336,7 @@ describe("native Foundation role materialization", () => {
       injectionMethod: "cursor-project-rule-capsule",
     });
     expect(
-      resolveProviderRoleBindingSupport("antigravity", null, null, undefined, [
-        "agy-acp",
-        "--agy-binary",
-        "/opt/agy",
-      ]),
+      resolveProviderRoleBindingSupport("gemini-antigravity", null, null, undefined, ["agy"]),
     ).toMatchObject(
       process.platform === "win32"
         ? { status: "unsupported" }
@@ -352,11 +348,11 @@ describe("native Foundation role materialization", () => {
     );
     expect(
       resolveProviderRoleBindingSupport(
-        "antigravity",
+        "gemini-antigravity",
         null,
         null,
         undefined,
-        ["agy-acp", "--agy-binary", "/opt/agy"],
+        ["agy"],
         false,
       ),
     ).toMatchObject({
@@ -365,13 +361,11 @@ describe("native Foundation role materialization", () => {
       roleIds: ["peer"],
     });
     expect(
-      resolveProviderRoleBindingSupport(
-        "antigravity",
-        null,
-        null,
-        { driver: "antigravity-custom-agent" },
-        ["agy-acp", "--agy-binary", "/opt/agy", "--agent", "default"],
-      ),
+      resolveProviderRoleBindingSupport("gemini-antigravity", null, null, undefined, [
+        "agy",
+        "--agent",
+        "default",
+      ]),
     ).toMatchObject({ status: "unsupported" });
     expect(
       resolveProviderRoleBindingSupport("cursor", null, null, { driver: "cursor-plugin" }, [
@@ -399,16 +393,14 @@ describe("native Foundation role materialization", () => {
       buildWorkspaceProtocolTemplate(cwd),
       "utf8",
     );
-    const support = resolveProviderRoleBindingSupport("antigravity", null, null, undefined, [
-      "agy-acp",
-      "--agy-binary",
-      "/opt/agy",
+    const support = resolveProviderRoleBindingSupport("gemini-antigravity", null, null, undefined, [
+      "agy",
     ]);
 
     await expect(
       materializeRoleBinding({
         roleId: "lead",
-        provider: "antigravity",
+        provider: "gemini-antigravity",
         providerSupport: support,
         cwd,
         ...assignmentBinding("lead", cwd),
@@ -417,7 +409,7 @@ describe("native Foundation role materialization", () => {
     await expect(
       materializeRoleBinding({
         roleId: "peer",
-        provider: "antigravity",
+        provider: "gemini-antigravity",
         providerSupport: support,
         cwd,
         ...assignmentBinding("peer", cwd),
@@ -437,11 +429,11 @@ describe("native Foundation role materialization", () => {
       "utf8",
     );
     const unavailable = resolveProviderRoleBindingSupport(
-      "antigravity",
+      "gemini-antigravity",
       null,
       null,
       undefined,
-      ["agy-acp", "--agy-binary", "/opt/agy"],
+      ["agy"],
       false,
     );
 
@@ -449,7 +441,7 @@ describe("native Foundation role materialization", () => {
       await expect(
         materializeRoleBinding({
           roleId,
-          provider: "antigravity",
+          provider: "gemini-antigravity",
           providerSupport: unavailable,
           cwd,
           ...assignmentBinding(roleId, cwd),
@@ -459,12 +451,12 @@ describe("native Foundation role materialization", () => {
     await expect(
       materializeRoleBinding({
         roleId: "peer",
-        provider: "antigravity",
+        provider: "gemini-antigravity",
         providerSupport: unavailable,
         cwd,
         ...assignmentBinding("peer", cwd),
       }),
-    ).rejects.toThrow("current Antigravity bridge has no MCP or native Paseo-tool transport");
+    ).rejects.toThrow("current Antigravity runtime has no qualified native Paseo-tool transport");
   });
 
   test("role-bound tool policy owns enablement while provider filters can narrow it", () => {

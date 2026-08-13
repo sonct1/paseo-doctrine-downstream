@@ -69,12 +69,12 @@ Role và provider chỉ ghép được khi adapter có native durable instructio
 - Pi append exact binding bằng generated `before_agent_start` extension trên create/resume.
 - OMP append exact binding bằng native `--append-system-prompt` trên create/resume.
 - Cursor ACP materialize một stable private role capsule dưới Paseo state, ghi exact binding vào `.cursor/rules/paseo-role.mdc` với `alwaysApply: true`, rồi launch role-bound route bằng `--force --approve-mcps --trust --sandbox disabled`, private `--workspace <capsule>` và `--add-dir <repo>` trước `acp`. ACP `auto_accept` cũng được pin làm fallback. Caller-supplied workspace hoặc permission-policy flag bị reject để route không có hai nguồn policy. Không dùng `--plugin-dir`: installed runtime đã chứng minh local plugin có thể bị silent-ignore. Exact direct marker, repo-access, ACP create và ACP resume canary đều pass trên `cursor-agent 2026.08.04-aaa8809`.
-- Antigravity chỉ được admit cho role `Peer`. ACP driver materialize một unique per-agent custom-agent profile và exact wrapper pin `agy --agent`; profile được create/verify/cleanup theo exact bytes. Driver chạy trên macOS/Linux. Current Level-1 `agy-acp 0.1.0` reject non-empty `mcpServers`, nên provider config `supportsMcpServers: false` bị fail closed trước role launch vì Peer không thể thực hiện mandatory Beads checkpoint. Không dùng Antigravity cho Lead/Supervisor và không gọi một Peer thiếu tracker là qualified. Muốn mở lại cần bridge có role-scoped Paseo-tool transport và fresh runtime qualification.
-- Generic ACP không có standardized system-instruction field nên mặc định `unsupported`. Paseo chỉ auto-detect hai exact transport shape trên; custom ACP khác phải có provider-native driver riêng và qualification evidence trước khi được chọn cho role-bound spawn.
+- Antigravity chỉ admit role `Peer`. Native adapter gọi official `agy` print-mode `stream-json`, materialize unique exact custom-agent profile với `run_command`, `inheritMcp: false`, `subagent: false`, persist native `conversation_id` và resume bằng `--conversation`. Paseo tools đi qua private loopback command gateway dùng caller-scoped catalog; gateway token chỉ tồn tại trong environment của exact AGY process và Beads Central credential không được project vào model. Route này không phụ thuộc ACP hoặc native AGY MCP converter. Isolated canary ngày 2026-08-13 trên `agy 1.1.12` và Beads Central `1.2.0` đã chứng minh model tự gọi `beads_status` + granted `beads_get`, rồi daemon restart và resume cùng agent để gọi lại thành công. Lead/Supervisor vẫn fail closed.
+- Generic ACP không có standardized system-instruction field nên mặc định `unsupported`. Paseo chỉ auto-detect exact Cursor transport shape; Antigravity đi qua built-in native provider riêng. Custom ACP khác phải có provider-native driver riêng và qualification evidence trước khi được chọn cho role-bound spawn.
 
-Capability có hai trạng thái: `supported` nghĩa adapter có implementation method mà role-first picker có thể dùng; `unsupported` nghĩa không có native durable channel hoặc launch shape hợp lệ. Supported receipt có thể mang allowlist `roleIds`; absence giữ compatibility với daemon cũ và nghĩa là mọi role. `supported` không tự chứng minh current-host runtime qualification hoặc mandatory tool transport; evidence đó phải đến từ fresh canary/readback riêng. Không fallback sang initial prompt hoặc generic ACP. Cursor là implementation-supported cho ba role; Antigravity chỉ có durable-instruction support cho Peer và current Level-1 bridge vẫn bị tracker gate chặn; legacy `cursor-plugin` fail closed với migration notice.
+Capability có hai trạng thái: `supported` nghĩa adapter có implementation method mà role-first picker có thể dùng; `unsupported` nghĩa không có native durable channel hoặc launch shape hợp lệ. Supported receipt có thể mang allowlist `roleIds`; absence giữ compatibility với daemon cũ và nghĩa là mọi role. `supported` không tự chứng minh current-host runtime qualification hoặc mandatory tool transport; evidence đó phải đến từ fresh canary/readback riêng. Không fallback sang initial prompt hoặc generic ACP. Cursor là implementation-supported cho ba role; Antigravity native là implementation-supported riêng cho Peer; legacy `cursor-plugin` fail closed với migration notice.
 
-`agy-acp` là third-party transport. Technical role support không thay user-account policy: provider detail phải hiện notice yêu cầu review current [Google Antigravity authentication terms](https://antigravity.google/terms). Qualification trong branch dùng official `agy` cho model calls và fake binary cho bridge pinning, không dùng OAuth account qua third-party bridge.
+Technical role support không thay user-account policy; qualification dùng official `agy` cùng account đã được Human cấu hình và Paseo không đọc hoặc trả AGY token.
 
 Không có silent fallback. Provider có model phù hợp nhưng thiếu native role channel vẫn không tương thích với Foundation role.
 
@@ -94,13 +94,15 @@ subscription giữ Codex auth store; custom dùng private Paseo credential store
 `CODEX_HOME` chỉ để tách API key; chỉ cần `CODEX_HOME` riêng nếu Human thật sự muốn hai Codex login store độc
 lập.
 
-Current native-resume qualification còn một hard boundary: trên reproduced custom
-`openai-compatible` Codex route, app-server transport vẫn list/call được Paseo MCP nhưng model catalog của
-thread đã resume không còn expose mandatory Paseo selectors. Adapter không được tự gọi `beads_status` để
-biến transport preflight thành model checkpoint. Vì vậy interactive resume của một role-bound custom
-Codex agent hiện fail closed và yêu cầu fresh role-bound replacement; history readback vẫn được phép.
-Built-in Codex subscription, Claude và Cursor resume có fresh runtime canary riêng. Mở lại custom resume
-chỉ sau model-visible selector canary qua daemon restart, không dựa vào app-server `tools/list` một mình.
+Reproduced failure cũ trên custom `openai-compatible` Codex resume đến từ route selector không được pin
+lại trên `thread/resume`, không phải vì custom API provider vốn không thể thấy Paseo tools. Adapter hiện
+gửi lại exact persisted `modelProvider`, `model`, bound inner config, durable role instructions và required
+Paseo MCP config trên interactive resume; admission vẫn đợi mandatory tool inventory. Ngoài source/fake
+contract tests, isolated qualification ngày 2026-08-13 đã create một
+`codex-zetscan/gpt-5.6-luna` Supervisor, để model tự gọi đúng `beads_status` và `beads_get` trên Beads
+Central `1.2.0`, restart daemon, rồi resume chính persisted agent để lặp lại hai model tool calls thành
+công. Đây là model-visible create/restart/resume receipt, không chỉ app-server `mcpServerStatus/list` hay
+adapter-side preflight.
 
 ## Tool policy và authority
 
@@ -168,7 +170,7 @@ trên WebUI. Nếu protocol không tồn tại, ordinary role launch dừng trư
 Project Settings; chỉ exact bounded bootstrap/governance exception mới được tạo để repair. CLI role create bắt buộc
 `--assignment-effect`; write scope chỉ hợp lệ cho `mutating|bootstrap|recovery`.
 
-Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor và exact `agy-acp --agy-binary <agy>` được nhận diện từ transport command nên catalog/config không cần ghi `roleBinding` thủ công. Unsupported Antigravity receipt vẫn giữ `roleIds: ["peer"]`, để non-Peer bị từ chối bởi policy trước và Peer nhận exact transport blocker. Các provider alias như `codex-lead` là migration input, không phải product model mới.
+Provider Settings chỉ cấu hình connection/credentials/model. Foundation Roles hiển thị role contract version, compatible providers, injection method và qualification state. Provider detail hiển thị native method, policy notice hoặc candidate blocker; role-first picker chỉ liệt kê `supported`. Cursor được nhận diện từ exact transport command; Antigravity là built-in `gemini-antigravity`, mặc định gọi exact `agy`, nên catalog/config không cần ghi `roleBinding` thủ công. Antigravity receipt giữ `roleIds: ["peer"]` để non-Peer bị từ chối trước provider launch. Các provider alias như `codex-lead` là migration input, không phải product model mới.
 
 Trong migration window, daemon nhận diện **exact legacy wrapper command** như `codex-profile <role>`, `codex-cliproxy-profile <role>` hoặc `claude --agent paseo-<role>`. Các route này bị loại khỏi native role-first picker và bị reject trước state mutation/session launch; Paseo không suy role từ provider ID tùy ý. Transport-only alias kế thừa Codex/Claude vẫn tương thích.
 
@@ -209,7 +211,7 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Incompatible provider bị reject trước session launch.
 - Protocol hiện diện nhưng invalid bị reject trước state mutation hoặc provider launch.
 - Cursor capsule phải giữ exact role marker qua ACP create/resume mà không ghi `.cursor/rules` vào target repository.
-- Antigravity wrapper phải pin exact materialized agent trên discovery/prompt/resume, reject caller `--agent`, cleanup only exact owned profile, và hiện third-party auth notice.
+- Antigravity native adapter phải pin exact materialized profile trên create/resume, chỉ cấp `run_command`, cleanup only exact owned profile, giữ gateway loopback/token private, persist exact conversation handle, và fail closed ngoài role Peer hoặc khi caller-scoped catalog không materialize được.
 - Legacy no-role sessions tiếp tục chạy như trước.
 - Workspace Protocol bootstrap không overwrite file vừa xuất hiện hoặc vừa đổi ngoài WebUI, và invalid
   preview không tạo partial file.

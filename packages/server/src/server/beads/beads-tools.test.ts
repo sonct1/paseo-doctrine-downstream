@@ -318,13 +318,16 @@ describe("Beads Central Paseo tools", () => {
     expect(harness.service.update).toHaveBeenCalledOnce();
   });
 
-  it("rejects Peer claim and mutation outside exact assignment issue grants", async () => {
+  it("rejects Peer reads and mutations outside exact assignment issue grants", async () => {
     const peer = createHarness({
       roleId: "peer",
       assignment: assignment("mutating", "bounded", ["ps123-other"]),
       assignee: "paseo-agent-peer-1",
     });
 
+    await expect(
+      tool(peer, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).rejects.toThrow("does not grant Beads issue ps123-abc");
     await expect(
       tool(peer, "beads_claim").handler(
         { issueId: "ps123-abc", idempotencyKey: "claim-ungranted" },

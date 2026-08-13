@@ -331,6 +331,7 @@ export function registerBeadsTools(options: RegisterBeadsToolsOptions): void {
     },
     async ({ issueId, view }, execution) => {
       const caller = await resolveCaller(options);
+      requirePeerIssueGrant(caller, issueId);
       const issue = await options.service.get(caller.project, issueId, execution.signal);
       if (view === "checkpoint") {
         return toolResult({

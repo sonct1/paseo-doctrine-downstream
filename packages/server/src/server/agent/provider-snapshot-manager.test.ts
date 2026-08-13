@@ -163,7 +163,7 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
-  test("auto-detects qualified native ACP role drivers without role-specific provider JSON", () => {
+  test("auto-detects qualified native role drivers without role-specific provider JSON", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
@@ -175,7 +175,7 @@ describe("ProviderSnapshotManager public surface", () => {
         "gemini-antigravity": {
           extends: "acp",
           label: "Antigravity",
-          command: ["agy-acp", "--agy-binary", "agy"],
+          command: ["agy"],
         },
         "plain-acp": {
           extends: "acp",
@@ -243,6 +243,7 @@ describe("ProviderSnapshotManager public surface", () => {
         claude: { enabled: false },
         codex: { enabled: false },
         copilot: { enabled: false },
+        "gemini-antigravity": { enabled: false },
         opencode: { enabled: false },
         pi: { enabled: false },
       },
@@ -495,6 +496,7 @@ describe("ProviderSnapshotManager public surface", () => {
         claude: { enabled: false },
         codex: { enabled: false },
         copilot: { enabled: false },
+        "gemini-antigravity": { enabled: false },
         opencode: { enabled: false },
         pi: { enabled: false },
       },
@@ -502,7 +504,15 @@ describe("ProviderSnapshotManager public surface", () => {
     try {
       const entries = await manager.listProviders({ cwd: "/tmp/project", wait: true });
       const providers = entries.map((entry) => entry.provider).sort();
-      expect(providers).toEqual(["claude", "codex", "copilot", "omp", "opencode", "pi"]);
+      expect(providers).toEqual([
+        "claude",
+        "codex",
+        "copilot",
+        "gemini-antigravity",
+        "omp",
+        "opencode",
+        "pi",
+      ]);
       for (const entry of entries) {
         expect(entry.enabled).toBe(false);
         expect(entry.status).toBe("unavailable");

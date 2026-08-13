@@ -13,15 +13,15 @@ describe("resolveProviderIconName", () => {
     expect(resolveProviderIconName("claude")).toEqual({ kind: "builtin", id: "claude" });
     expect(resolveProviderIconName("omp")).toEqual({ kind: "builtin", id: "omp" });
     expect(resolveProviderIconName("minimax")).toEqual({ kind: "builtin", id: "minimax" });
+    expect(resolveProviderIconName("gemini-antigravity")).toEqual({
+      kind: "builtin",
+      id: "gemini-antigravity",
+    });
   });
 
   it("returns the catalog identifier for ACP catalog provider ids that ship an icon", () => {
     expect(resolveProviderIconName("amp-acp")).toEqual({ kind: "catalog", id: "amp-acp" });
     expect(resolveProviderIconName("gemini")).toEqual({ kind: "catalog", id: "gemini" });
-    expect(resolveProviderIconName("gemini-antigravity")).toEqual({
-      kind: "catalog",
-      id: "gemini-antigravity",
-    });
     expect(resolveProviderIconName("traecli")).toEqual({ kind: "catalog", id: "traecli" });
   });
 

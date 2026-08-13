@@ -8,6 +8,7 @@ import { MiniMaxIcon } from "@/components/icons/minimax-icon";
 import { OpenCodeIcon } from "@/components/icons/opencode-icon";
 import { OmpIcon } from "@/components/icons/omp-icon";
 import { PiIcon } from "@/components/icons/pi-icon";
+import { ACP_PROVIDER_ICON_SVGS } from "@/assets/acp-provider-icons";
 import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { resolveProviderIconName } from "@/components/provider-icon-name";
 
@@ -18,10 +19,19 @@ export interface ProviderIconProps {
 
 export type ProviderIconComponent = ComponentType<ProviderIconProps>;
 
+const AntigravityIcon: ProviderIconComponent = ({ size, color }) =>
+  createElement(SvgXml, {
+    xml: ACP_PROVIDER_ICON_SVGS.agy,
+    width: size,
+    height: size,
+    color,
+  });
+
 const BUILTIN_PROVIDER_ICONS: Record<string, ProviderIconComponent> = {
   claude: ClaudeIcon as unknown as ProviderIconComponent,
   codex: CodexIcon as unknown as ProviderIconComponent,
   copilot: CopilotIcon as unknown as ProviderIconComponent,
+  "gemini-antigravity": AntigravityIcon,
   kiro: PackagePlus,
   minimax: MiniMaxIcon as unknown as ProviderIconComponent,
   omp: OmpIcon as unknown as ProviderIconComponent,

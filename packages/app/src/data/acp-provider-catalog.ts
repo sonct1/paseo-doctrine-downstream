@@ -179,16 +179,6 @@ const CATALOG_DATA = [
     command: ["npx", "-y", "@google/gemini-cli@0.54.4", "--acp"],
   },
   {
-    id: "gemini-antigravity",
-    title: "Antigravity (AGY ACP bridge)",
-    description:
-      "Third-party ACP bridge for the native Antigravity CLI. Review Google's current authentication terms before connecting an account; Paseo never reads the AGY token.",
-    version: "manual",
-    iconId: "agy",
-    installLink: "https://github.com/nghichcode/paseo_agy",
-    command: ["agy-acp", "--agy-binary", "agy"],
-  },
-  {
     id: "glm-acp-agent",
     title: "GLM Agent",
     description:

@@ -2296,6 +2296,7 @@ test("createAgent passes native Paseo tools through launch context without inter
     registry: storage,
     logger,
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    paseoToolsEnabled: false,
     paseoToolCatalogFactory: () => paseoTools,
     idFactory: () => "00000000-0000-4000-8000-000000000106",
   });
@@ -2316,6 +2317,7 @@ test("createAgent passes native Paseo tools through launch context without inter
   );
 
   expect(client.lastLaunchContext?.paseoTools).toBe(paseoTools);
+  // Native host-tool projection is independent of HTTP MCP injection.
   expect(client.lastConfig?.mcpServers).toEqual({
     custom: {
       type: "stdio",
@@ -10210,6 +10212,11 @@ test("role-bound create persists immutable binding and passes only launch instru
   let manager!: AgentManager;
 
   class RoleCaptureClient extends TestAgentClient {
+    override readonly capabilities = {
+      ...TEST_CAPABILITIES,
+      supportsMcpServers: true,
+      supportsNativePaseoTools: true,
+    };
     launchContexts: Array<AgentLaunchContext | undefined> = [];
     launchConfigs: AgentSessionConfig[] = [];
     preRegistrationRoleIds: Array<string | undefined> = [];
@@ -10257,13 +10264,25 @@ test("role-bound create persists immutable binding and passes only launch instru
   }
 
   const client = new RoleCaptureClient("codex");
+  const preCatalogRoleIds: Array<string | undefined> = [];
   manager = new AgentManager({
     clients: { codex: client },
     registry: storage,
     logger,
     idFactory: () => "00000000-0000-4000-8000-000000000116",
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
-    resolvePaseoToolPolicy: () => ({ enabled: false }),
+    paseoToolCatalogFactory: ({ callerAgentId }) => {
+      preCatalogRoleIds.push(
+        callerAgentId ? manager.getRoleBindingForToolCatalog(callerAgentId)?.roleId : undefined,
+      );
+      return {
+        tools: new Map(),
+        getTool: () => undefined,
+        executeTool: async () => {
+          throw new Error("No tools registered in test catalog");
+        },
+      };
+    },
   });
 
   try {
@@ -10278,11 +10297,9 @@ test("role-bound create persists immutable binding and passes only launch instru
       instructions: expect.stringContaining("Role: Lead"),
     });
     expect(client.preRegistrationRoleIds[0]).toBe("lead");
-    expect(client.launchConfigs[0]?.mcpServers?.paseo).toEqual({
-      type: "http",
-      url: `http://127.0.0.1:6767/mcp/agents?callerAgentId=${created.id}`,
-    });
-    expect(manager.getPaseoToolPolicy(created.id)).toEqual({ enabled: true });
+    expect(preCatalogRoleIds[0]).toBe("lead");
+    expect(client.launchConfigs[0]?.mcpServers?.paseo).toBeUndefined();
+    expect(manager.getPaseoToolPolicy(created.id)).toBeUndefined();
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
     expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({
@@ -10329,6 +10346,7 @@ test("role-bound create persists immutable binding and passes only launch instru
     const exactInstructions = created.roleBinding?.instructions;
     await manager.reloadAgentSession(created.id);
     expect(client.preRegistrationRoleIds[1]).toBe("lead");
+    expect(preCatalogRoleIds[1]).toBe("lead");
     expect(client.launchContexts[1]?.roleBinding).toEqual({
       roleId: "lead",
       instructions: exactInstructions,
@@ -10624,7 +10642,7 @@ test("Antigravity Peer fails before launch when its bridge cannot carry mandator
           },
         },
       ),
-    ).rejects.toThrow("no MCP or native Paseo-tool transport for the mandatory Beads checkpoint");
+    ).rejects.toThrow("no qualified native Paseo-tool transport");
     expect(client.createdConfigs).toHaveLength(0);
     expect(manager.getAgent("00000000-0000-4000-8000-000000000122")).toBeNull();
   } finally {

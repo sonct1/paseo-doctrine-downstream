@@ -13,7 +13,7 @@ This downstream patch is based on upstream Paseo 0.3.1.
 
 - Keep Council as a workspace-portable projection over existing agents while isolating cases by daemon, workspace, and accountable parent Lead.
 - Show Council report readiness, seat integrity, disposition, and Lead-linked verdict provenance without introducing a second lifecycle engine or vote.
-- Preserve native provider identity and immutable role-binding receipts across Codex, Claude, Cursor ACP, Gemini Antigravity ACP, and custom Codex routes.
+- Preserve native provider identity and immutable role-binding receipts across Codex, Claude, Cursor ACP, native Antigravity CLI, and custom Codex routes.
 - Report provider modes and model labels from discovered runtime metadata instead of inventing fallback values.
 
 ### Fixed

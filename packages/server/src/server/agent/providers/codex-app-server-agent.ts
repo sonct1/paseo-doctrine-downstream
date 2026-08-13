@@ -4076,18 +4076,10 @@ export class CodexAppServerAgentSession implements AgentSession {
       const loaded = toObjectRecord(await client.request("thread/loaded/list", {}));
       const ids = Array.isArray(loaded?.data) ? loaded.data : [];
       const applyRuntimeOverrides = options.applyRuntimeOverrides !== false;
-      const params: Record<string, unknown> = { threadId };
-      const developerInstructions = applyRuntimeOverrides
-        ? composeSystemPromptParts(
-            this.config.systemPrompt,
-            this.config.daemonAppendSystemPrompt,
-            this.roleInstructions,
-          )
-        : undefined;
-      if (developerInstructions) params.developerInstructions = developerInstructions;
-      const codexConfig = applyRuntimeOverrides ? this.buildCodexInnerConfig() : null;
-      if (codexConfig) params.config = codexConfig;
-      const hasRuntimeOverrides = Boolean(developerInstructions) || codexConfig !== null;
+      const { params, hasRuntimeOverrides } = this.buildThreadResumeRequest(
+        threadId,
+        applyRuntimeOverrides,
+      );
       if (
         ids.includes(threadId) &&
         (!applyRuntimeOverrides ||
@@ -4116,6 +4108,38 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.logger.warn({ error, threadId }, "Failed to resume persisted Codex thread");
       throw new Error(`Failed to resume Codex thread ${threadId}: ${message}`, { cause: error });
     }
+  }
+
+  private buildThreadResumeRequest(
+    threadId: string,
+    applyRuntimeOverrides: boolean,
+  ): { params: Record<string, unknown>; hasRuntimeOverrides: boolean } {
+    const params: Record<string, unknown> = { threadId };
+    if (!applyRuntimeOverrides) {
+      return { params, hasRuntimeOverrides: false };
+    }
+
+    const developerInstructions = composeSystemPromptParts(
+      this.config.systemPrompt,
+      this.config.daemonAppendSystemPrompt,
+      this.roleInstructions,
+    );
+    if (developerInstructions) params.developerInstructions = developerInstructions;
+    const boundModelProvider = this.providerLaunchBinding?.modelProviderId;
+    if (boundModelProvider) params.modelProvider = boundModelProvider;
+    const boundModel = this.providerLaunchBinding?.model;
+    if (boundModel) params.model = boundModel;
+    const codexConfig = this.buildCodexInnerConfig();
+    if (codexConfig) params.config = codexConfig;
+
+    return {
+      params,
+      hasRuntimeOverrides:
+        Boolean(developerInstructions) ||
+        Boolean(boundModelProvider) ||
+        Boolean(boundModel) ||
+        codexConfig !== null,
+    };
   }
 
   private parseSlashCommandInput(text: string): { commandName: string; args?: string } | null {
@@ -7153,15 +7177,6 @@ export class CodexAppServerAgentClient implements AgentClient {
     launchContext?: AgentLaunchContext,
     options?: AgentResumeSessionOptions,
   ): Promise<AgentSession> {
-    if (
-      options?.purpose !== "history" &&
-      launchContext?.roleBinding &&
-      launchContext.providerLaunchBinding?.routeKind === "openai-compatible"
-    ) {
-      throw new Error(
-        `Role-bound native resume is not qualified for openai-compatible Codex route '${launchContext.providerLaunchBinding.providerId}': the resumed model catalog may omit mandatory Paseo tools; launch a fresh role-bound replacement instead`,
-      );
-    }
     const storedConfig = (handle.metadata ?? {}) as Partial<AgentSessionConfig>;
     const merged: AgentSessionConfig = {
       ...storedConfig,

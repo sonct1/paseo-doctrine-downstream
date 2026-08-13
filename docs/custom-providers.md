@@ -447,7 +447,9 @@ The [Agent Client Protocol (ACP)](https://agentclientprotocol.com) is an open st
 
 ACP agents communicate over JSON-RPC 2.0 on stdio. Paseo spawns the agent process and talks to it through stdin/stdout.
 
-Paseo also ships an in-app ACP provider catalog for common agents, including Antigravity (through the third-party `agy-acp` bridge), CodeWhale, Cursor, DeepAgents, DimCode, Gemini CLI, Hermes, Qwen Code, and Kimi Code. Catalog entries create the same `extends: "acp"` provider config shown below.
+Paseo cũng có in-app provider catalog cho các agent ACP phổ biến như CodeWhale, Cursor, DeepAgents,
+DimCode, Gemini CLI, Hermes, Qwen Code và Kimi Code. Antigravity là built-in native provider dùng official
+`agy`, nên không xuất hiện trong ACP catalog.
 
 ### Adding a generic ACP provider
 
@@ -543,11 +545,7 @@ recognizes their exact transport command while composing the immutable launch co
         "label": "Cursor",
         "command": ["cursor-agent", "acp"]
       },
-      "gemini-antigravity": {
-        "extends": "acp",
-        "label": "Antigravity",
-        "command": ["agy-acp", "--agy-binary", "agy"]
-      }
+      "gemini-antigravity": { "command": ["agy"] }
     }
   }
 }
@@ -559,17 +557,19 @@ acp`. The target repository is not modified. A caller-supplied `--workspace` is 
 `roleBinding.driver: "cursor-plugin"` setting is retired and fails closed because Cursor can silently
 ignore local plugins; remove it from existing config.
 
-For Antigravity, Paseo resolves the `agy` executable, creates a unique exact custom-agent profile,
-and replaces only the bridge's `--agy-binary` value with a wrapper that pins `agy --agent
-<materialized-name>`. Caller-supplied `--agent` is rejected. The current driver supports macOS/Linux
-only. `agy-acp` is a third-party bridge, so the provider detail includes a notice to review Google's
-current [Antigravity authentication terms](https://antigravity.google/terms) before connecting an
-account. Paseo never reads or returns the AGY token.
+Với Antigravity, command canonical là official `agy` executable. Paseo gọi trực tiếp print-mode
+`stream-json`, persist native `conversation_id`, và resume bằng `--conversation`.
+Mỗi role-bound Peer nhận một exact custom-agent profile chỉ có `run_command`, không inherit MCP và không
+được spawn subagent. Paseo đồng thời tạo một private loopback command gateway với bearer ngẫu nhiên và
+caller-scoped tool catalog; model gọi `paseo-agent-tool`, còn gateway enforce đúng policy/RoleBinding rồi
+mới forward vào Paseo. Token Beads Central không được đưa vào process model.
 
-Both exact command shapes are implementation-supported and appear in the role-first picker. Missing
-or malformed launch arguments fail closed; there is no generic ACP or initial-prompt fallback. The
-optional `roleBinding` field remains an advanced compatibility surface for exact provider-native
-drivers, not a place to store role bytes or self-qualify arbitrary ACP commands.
+Chỉ exact command `['agy']` được nhận. Native route chỉ admit role `Peer`; Lead/Supervisor fail closed.
+Qualification cách ly ngày 2026-08-13 với `agy 1.1.12`, `gemini-3.6-flash-low` và Beads Central `1.2.0`
+đã chứng minh model tự gọi `beads_status`, `beads_get`, rồi tiếp tục cùng native conversation sau daemon
+restart. Missing/malformed launch arguments fail closed; không có generic ACP hoặc initial-prompt fallback.
+Optional `roleBinding` vẫn chỉ là advanced compatibility surface cho exact provider-native driver, không
+phải nơi chứa role bytes hoặc tự qualify arbitrary ACP command.
 
 ### Generic ACP diagnostics
 
