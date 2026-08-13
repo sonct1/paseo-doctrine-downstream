@@ -326,8 +326,16 @@ function requireWorkspaceProtocol(
   };
 }
 
-function buildProtocolInstruction(receipt: WorkspaceProtocolBindingReceipt): string {
+function buildProtocolInstruction(
+  receipt: WorkspaceProtocolBindingReceipt,
+  hasProtocolException: boolean,
+): string {
   if (receipt.status === "missing") {
+    if (!hasProtocolException) {
+      // Admitted because this assignment is read-only with no external effects. State the gap
+      // plainly so the agent reports it instead of inferring that the repository has no rules.
+      return `Workspace Protocol binding: not yet bootstrapped at ${receipt.path}. This assignment was admitted because it declares no write scope and no external effects. Treat the repository's coordination tactics as unknown rather than absent, stay non-mutating, and report that the protocol still needs bootstrapping at handback. Any write scope or external effect requires a bound protocol or an exact Human exception first.`;
+    }
     if (receipt.readership === "assignment-only") {
       return `Workspace Protocol binding: temporarily missing under an exact Human bootstrap exception at ${receipt.path}. Do not load that path; remain inside the read-only/bootstrap assignment and stop at its expiry.`;
     }
@@ -415,15 +423,25 @@ export async function materializeRoleBinding(
       `Execution profile '${executionProfile.id}' requires role '${executionProfile.authorityRoleId}'`,
     );
   }
+  // Graduated admission: a missing protocol blocks material work, not every role launch.
+  // Read-only work with no external effects proceeds and reports that bootstrap is owed;
+  // any write scope or external effect requires a bound protocol or an exact Human exception.
+  // An invalid protocol always fails closed, because absence is a gap while corruption is a
+  // contradiction we must not silently reinterpret.
+  const envelope = assignmentContract.envelope;
+  const hasProtocolException = envelope.protocolException !== undefined;
+  const performsMaterialWork =
+    envelope.mutationBoundary.mode !== "no-write" ||
+    envelope.externalEffectBoundary.mode !== "denied";
   const workspaceProtocol = requireWorkspaceProtocol(
     input.cwd,
     input.roleId,
-    assignmentContract.envelope.protocolException !== undefined,
+    hasProtocolException || !performsMaterialWork,
   );
   const instructions = [
     definition.instructions,
     executionProfile?.instructions,
-    buildProtocolInstruction(workspaceProtocol),
+    buildProtocolInstruction(workspaceProtocol, hasProtocolException),
     buildAssignmentInstruction(assignmentContract),
     buildMandatoryBeadsSkillInstruction(input.roleId),
   ]

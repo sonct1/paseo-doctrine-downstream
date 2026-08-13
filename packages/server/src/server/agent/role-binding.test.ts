@@ -263,6 +263,40 @@ describe("native Foundation role materialization", () => {
     ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: invalid`);
   });
 
+  test("admits read-only work when the protocol has not been bootstrapped yet", async () => {
+    const cwd = await createWorkspace();
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+      ...assignmentBinding("lead", cwd),
+      assignment: assignmentFor("lead", "read-only"),
+    });
+
+    expect(binding.workspaceProtocol.status).toBe("missing");
+    expect(binding.instructions).toContain("not yet bootstrapped");
+    expect(binding.instructions).toContain("stay non-mutating");
+    // Absence is a gap to report, never a licence to assume the repository has no tactics.
+    expect(binding.instructions).toContain("unknown rather than absent");
+    expect(binding.instructions).not.toContain("bootstrap exception");
+  });
+
+  test("still blocks external effects when the protocol has not been bootstrapped", async () => {
+    const cwd = await createWorkspace();
+    await expect(
+      materializeRoleBinding({
+        roleId: "lead",
+        provider: "codex",
+        cwd,
+        ...assignmentBinding("lead", cwd),
+        assignment: {
+          ...assignmentFor("lead", "delegation"),
+          externalEffectBoundary: { mode: "bounded", scope: "publish release notes" },
+        },
+      }),
+    ).rejects.toThrow(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing`);
+  });
+
   test("allows a Human-bound read-only exception for a missing protocol", async () => {
     const cwd = await createWorkspace();
     const binding = await materializeRoleBinding({

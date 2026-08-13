@@ -22,11 +22,10 @@ If the target is unstable, a required route is unavailable, or Lead cannot state
 
 Create all three as read-only Paseo children of Lead and let them inspect independently:
 
-- Semantic lane A: a role-bound Peer using GPT-5.6 Sol with `high` reasoning.
-- Semantic lane B: a role-bound Peer using Claude Opus 5 with `xhigh` reasoning.
+- Semantic lane A and semantic lane B: two role-bound Peers pinned to strong reasoning routes at high effort, drawn from **different provider families**. Independence comes from separate provider and session lineage, not from a model name. Discover what is currently available, then pin the exact provider, model, and effort in each bounded assignment with reason and expiry.
 - Coverage lane: a role-bound Peer using the private provider-neutral `review` execution specialization. Choose from the same provider routes SLP currently supports for ordinary role-bound Peers, then pin the exact provider, model, effort, and mode in the bounded assignment. The specialization adds no provider or model gate of its own.
 
-The two semantic assignments receive only the neutral brief and ordinary Peer constraints. Do not reveal the coverage seat, its implementation mechanism, selected files, or findings to either semantic seat. Create the coverage seat through Lead's private `executionProfile=review` route; do not describe it as a general reviewer or expose its profile in a general Peer catalog. Lead supplies the stable target and coverage contract but does not direct, reproduce, or need to know the specialization's internal selection mechanism.
+The two semantic assignments receive only the neutral brief and ordinary Peer constraints. Do not reveal the coverage seat, its implementation mechanism, selected files, or findings to either semantic seat. Create the coverage seat through Lead's private `executionProfile=review` route; do not describe it as a general reviewer or expose its profile in a general Peer catalog. Lead supplies the stable target and coverage contract and does not direct the seat's internal workflow, but may always ask how the reviewable set was selected: a coverage floor Lead cannot reproduce is not evidence.
 
 The coverage assignment must supply the exact candidate, business background, and requested review contract. The private specialization owns its internal deterministic selection and rule-resolution workflow; the assigned review model performs all review reasoning. Its selected reviewable surface is a mandatory coverage floor, not a context ceiling. The exact seat checks its internal dependency after routing and returns a generic coverage-dependency blocker if unavailable; Lead does not install, substitute, or invoke that implementation directly.
 
@@ -36,7 +35,7 @@ Never seed a lane with another lane's findings or conclusions during the sealed 
 
 Each semantic handback must identify the candidate and contract, record checks run, provide evidence-backed findings and uncertainty, and state whether the candidate remained stable.
 
-The coverage handback must additionally account for every selected `(path, status)` entry as reviewed or skipped with a concrete reason; preserve excluded files and reasons, applied rule groups, coverage rate, and findings ordered by severity. Selector output is coverage evidence, never a review conclusion. Do not expose the private implementation command or executable in the ordinary Lead handback.
+The coverage handback must additionally account for every selected `(path, status)` entry as reviewed or skipped with a concrete reason; preserve excluded files and reasons, applied rule groups, coverage rate, and findings ordered by severity. Selector output is coverage evidence, never a review conclusion. Keep raw delegate transcripts out of the handback, but name the selector and the exact commands run whenever Lead asks or a coverage claim rests on them: Lead must be able to reproduce how the reviewable set was chosen, and a coverage floor nobody can audit is not evidence.
 
 Reject a handback as stale if its observed candidate differs from the frozen identity. Do not combine evidence across snapshots or infer acceptance from test status, silence, or coverage alone.
 

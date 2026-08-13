@@ -21,7 +21,15 @@ export const WORKSPACE_PROTOCOL_FILE_NAME = "WORKSPACE_PROTOCOL.md";
 export const WORKSPACE_PROTOCOL_VERSION = 3;
 const MAX_WORKSPACE_PROTOCOL_BYTES = 64 * 1024;
 
-const SUPPORTED_MARKERS = new Set(["<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->"]);
+/**
+ * Schema evolves additively: a new version may only add optional clauses, so any version this
+ * build has not seen is still readable — unknown clauses are ignored rather than fatal. The
+ * version is a capability hint, never an admission gate, so an older daemon meeting a newer
+ * file degrades instead of refusing the repository. Rollout order across machines is not
+ * something we control, and a build that refuses the future locks its own users out.
+ * Only a malformed marker is rejected, because that is corruption rather than a version.
+ */
+const WELL_FORMED_MARKER = /^<!--\s*PASEO_WORKSPACE_PROTOCOL_VERSION:\s*([1-9]\d{0,3})\s*-->$/u;
 const IDENTITY_CATEGORIES: readonly (readonly RegExp[])[] = [
   [/\bowner\b/iu, /chủ sở hữu/iu, /\bauthority\b/iu, /thẩm quyền/iu],
   [/\bapplies_to\b/iu, /áp dụng/iu, /phạm vi/iu, /\brepository\b/iu, /\bproject\b/iu],
@@ -58,7 +66,8 @@ export function buildWorkspaceProtocolTemplate(repoRoot: string, now = new Date(
 - default topology: Lead-direct cho exact tiny task; chỉ thêm smallest useful Peer/Supervisor khi uncertainty, risk hoặc independent judgment thật sự cần.
 - ownership/hotspots: mỗi moving/coupled scope có một write Owner; assignment phải nêu shared hoặc coupled surfaces trước delegation.
 - routing defaults: discover rồi pin provider/model/effort trong bounded assignment; không silent fallback; route phải có reason, scope và expiry.
-- issue tracker: Beads Central là durable issue/work graph bắt buộc cho Lead, Peer và Supervisor. Mỗi role phải gọi \`beads_status\` khi bắt đầu assignment, dùng đúng project do Paseo bind, đọc issue liên quan trước action và ghi authoritative readback ở material handoff; nếu Central unavailable thì \`BLOCKED\`, không fallback sang native \`bd\` hoặc tracker thứ hai. Lead create/update graph và chỉ close sau verdict; Peer claim/update đúng granted issue và tạo discovered work bằng \`discoveredFrom\`; Supervisor read-only.
+- issue tracker: Beads Central là durable issue/work graph bắt buộc cho Lead, Peer và Supervisor. Mỗi role phải gọi \`beads_status\` khi bắt đầu assignment, dùng đúng project do Paseo bind, đọc issue liên quan trước action và ghi authoritative readback ở material handoff; nếu Central unavailable thì mutation \`BLOCKED\` và issue state giữ \`UNKNOWN\`, việc inspect không mutation vẫn tiếp tục, không fallback sang native \`bd\` hoặc tracker thứ hai. Lead create/update graph và chỉ close sau verdict; Peer claim/update đúng granted issue và tạo discovered work bằng \`discoveredFrom\`; Supervisor read-only.
+- existing harness: chưa khảo sát. Ghi ra những gì đã cai trị repository này (\`AGENTS.md\`, \`CONTRIBUTING\`, CI gates, review conventions) và protocol này nhường cái nào; chỉ ghi \`none\` sau khi đã thực sự nhìn.
 - project policy: \`none\`; chỉ activate exact package + version + scope + authority + conflict rule bằng Human decision hoặc protocol revision mới.
 - review/evidence: focused checks và current diff là mặc định; independent review theo material risk; Lead/Human giữ acceptance authority.
 - escalation/Human decisions: dùng \`REOPEN\`, \`DEPENDENCY\` hoặc \`BLOCKED\` với evidence và exact decision cần Human chốt.
@@ -105,7 +114,7 @@ export function validateWorkspaceProtocol(
   const markerMentions = content.match(/<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu) ?? [];
   if (markerMentions.length === 0) issues.push("missing_version_marker");
   if (markerMentions.length > 1) issues.push("duplicate_version_marker");
-  if (markerMentions.some((marker) => !SUPPORTED_MARKERS.has(marker.trim()))) {
+  if (markerMentions.some((marker) => !WELL_FORMED_MARKER.test(marker.trim()))) {
     issues.push("unsupported_version");
   }
   if (/\{\{REQUIRED:[^{}]+\}\}/u.test(content)) issues.push("unresolved_placeholder");

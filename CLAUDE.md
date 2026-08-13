@@ -98,6 +98,8 @@ npm run dev:app                      # Start Expo against the dev daemon
 npm run dev:desktop                  # Start Electron desktop dev
 npm run cli -- ls -a -g              # List all agents
 npm run cli -- daemon status         # Check daemon status
+./scripts/local-stack.sh             # Is the running daemon this tree? (exit 1 = stale)
+./scripts/local-stack.sh --apply     # Import Foundation, build, install, restart
 npm run typecheck                    # Always run after changes
 npm run lint                         # Always run after changes
 npm run format                       # Auto-format with Biome
@@ -110,7 +112,10 @@ See [docs/development.md](docs/development.md) for full setup, build sync requir
 
 ## Critical rules
 
-- **After daemon/runtime-facing changes, build and reload or restart the main Paseo daemon on port 6767 without asking again only when fresh authoritative readback shows no agent in a running/starting state and no workspace script running.** If work is active or the state cannot be determined, do not restart; report the blocker. A restart must use the current checkout build and preserve the existing home/listen/relay/WebUI settings unless the Human requests a change.
+- **After daemon/runtime-facing changes, run `./scripts/local-stack.sh --apply` without asking again.** It imports Foundation if the lock is behind, builds, refuses to restart unless fresh readback shows no agent running or starting, installs, and restarts. Preserve the existing home/listen/relay/WebUI settings unless the Human requests a change. If work is active or live state cannot be determined, it stops — report the blocker instead of forcing it.
+  - **Verify with `./scripts/local-stack.sh` (no flag). Exit 0 means the daemon is running your tree.** It compares build provenance, not version strings. An installed daemon can carry the same version as the source with different bytes; that happened on 2026-08-13 and blocked every repository whose Workspace Protocol was newer than the stale build. A dev tree is normally dirty, so the commit alone cannot answer "is the daemon running my code" — only `sourceFingerprint` can.
+  - **Two things go stale, not one.** `foundation/dist` is imported from a tagged `paseo-foundation` commit and pinned in `foundation/sources.lock.json`; the daemon is built from this checkout. Rebuilding without re-importing ships old doctrine with new code. Tag Foundation first — the importer refuses a dirty or untagged source, and counts untracked files as dirty.
+  - **Never rebuild at the same version string.** Bump `version` and run `npm run version:sync-internal` first, so the installed release is identifiable and the previous one under `~/.local/share/paseo-web-cli/releases/` stays a one-symlink rollback.
 - **NEVER assume a timeout means the service needs restarting** — timeouts can be transient.
 - **NEVER add auth checks to tests** — agent providers handle their own auth.
 - **Before changing app routes, startup routing, remembered workspace restore, or active workspace selection, read [docs/expo-router.md](docs/expo-router.md).**

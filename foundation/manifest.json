@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.12",
+  "distributionVersion": "0.1.0-dev.13",
   "foundationSource": {
-    "commit": "76724c176c4a1339162c9aa261fc9e473b3679c9",
-    "ref": "foundation-v0.1.0-dev.12"
+    "commit": "5b9deed40b1108402acf74f159ad0353f6d97290",
+    "ref": "foundation-v0.1.0-dev.13"
   },
   "files": [
     {
       "path": "AGENTS.md",
       "mode": "0644",
-      "sha256": "ff5a165adaebc9ec1c297cead830675d33bc7d8301363b6e6d5722b839e9db46"
+      "sha256": "5d37993b6e78e1faaaa1dfd478b853f3e8e0a8bf92d8aefd613801ad15708eb1"
     },
     {
       "path": "docs/ASSIGNMENT_AND_HANDBACK.md",
@@ -19,7 +19,7 @@
     {
       "path": "docs/PORTABLE_BOOTSTRAP_AND_ROUTING.md",
       "mode": "0644",
-      "sha256": "5a2e56ec830365c812086bdb0a873dfb5966c904d269f5ea6c3b2fc30c5bdafb"
+      "sha256": "e87fb4d83f872ed05f658a4ba948d4f3c89f70d19052d90c605a46ce897e6844"
     },
     {
       "path": "docs/ROLE_CONTRACTS.md",
@@ -54,7 +54,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "0a8d5484a968baa74cf2abe7270420a91ab28259944c3be5146552bdb668843c"
+      "sha256": "607a0a486a0a6d818e8d918d265c9de544e7ae9ba16f77a9333a3d34993db727"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
@@ -89,7 +89,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/skills/triple-review/SKILL.md",
       "mode": "0644",
-      "sha256": "33ca10b86538d77d2b1f17c6083b7665d377cab42f02896b03a3db5bce16815e"
+      "sha256": "c645a2bc73d52524f6c79960dfea13049bd44db510462a3e2024cc374b13e6c0"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/skills/triple-review/agents/openai.yaml",
@@ -99,7 +99,7 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "58ea022cacbf20b7c3aa3556f9132b92ce134f632c0f862656ff8829a84f2a55"
+      "sha256": "65a01608c0f055dfa09fcc74c14e8106c9aa3af4a41ba080556337bbff38ef64"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
@@ -124,7 +124,7 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "d7edde1c3998eea24b881c09e62a35bb523fcb317643118fe760c59764977b38"
+      "sha256": "8c87a53cf404f0023814689cf1dd377255b17dd62c031df0f7ce99596045b4c0"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
@@ -234,7 +234,7 @@
     {
       "path": "profiles/cursor/paseo-lead/skills/triple-review/SKILL.md",
       "mode": "0644",
-      "sha256": "33ca10b86538d77d2b1f17c6083b7665d377cab42f02896b03a3db5bce16815e"
+      "sha256": "c645a2bc73d52524f6c79960dfea13049bd44db510462a3e2024cc374b13e6c0"
     },
     {
       "path": "profiles/cursor/paseo-lead/skills/triple-review/agents/openai.yaml",
@@ -314,7 +314,7 @@
     {
       "path": "profiles/native/execution-specializations.json",
       "mode": "0644",
-      "sha256": "996833016511306ac0c2cad203b7a173bf21d8e8f6a8824fe33c3690ae9bfbb4"
+      "sha256": "22a49ef57d7ca26ce1540a5ab28e911015d7aa3f568c05b94a5d627e7b372ec6"
     },
     {
       "path": "profiles/native/role-definitions.json",
@@ -369,7 +369,7 @@
     {
       "path": "profiles/opencode-role-roots/lead/skills/triple-review/SKILL.md",
       "mode": "0644",
-      "sha256": "33ca10b86538d77d2b1f17c6083b7665d377cab42f02896b03a3db5bce16815e"
+      "sha256": "c645a2bc73d52524f6c79960dfea13049bd44db510462a3e2024cc374b13e6c0"
     },
     {
       "path": "profiles/opencode-role-roots/lead/skills/triple-review/agents/openai.yaml",
@@ -544,7 +544,7 @@
     {
       "path": "skills/triple-review/SKILL.md",
       "mode": "0644",
-      "sha256": "33ca10b86538d77d2b1f17c6083b7665d377cab42f02896b03a3db5bce16815e"
+      "sha256": "c645a2bc73d52524f6c79960dfea13049bd44db510462a3e2024cc374b13e6c0"
     },
     {
       "path": "skills/triple-review/agents/openai.yaml",
@@ -554,7 +554,7 @@
     {
       "path": "templates/WORKSPACE_PROTOCOL.md",
       "mode": "0644",
-      "sha256": "52b7207d0f7d590c24fc2ba65466a6c15666e8124914b5d769cda3ace110abe5"
+      "sha256": "18fd8f80fc4dc42c001f6ef5ad7bafd73d2f2c3a15c297269a74d1d6c56bd89e"
     },
     {
       "path": "templates/paseo-provider-overrides.example.json",

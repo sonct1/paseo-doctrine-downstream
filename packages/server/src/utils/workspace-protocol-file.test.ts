@@ -54,8 +54,8 @@ describe("workspace protocol file", () => {
     expect(validateWorkspaceProtocol(snapshot.suggestedContent)).toEqual([]);
   });
 
-  test("classifies placeholders, conflict markers, unsupported versions, and missing identity", () => {
-    const content = `# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 99 -->\n\n{{REQUIRED: owner}}\n<<<<<<< ours\n`;
+  test("classifies placeholders, conflict markers, malformed versions, and missing identity", () => {
+    const content = `# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: v99beta -->\n\n{{REQUIRED: owner}}\n<<<<<<< ours\n`;
     expect(validateWorkspaceProtocol(content)).toEqual(
       expect.arrayContaining([
         "unsupported_version",
@@ -65,6 +65,10 @@ describe("workspace protocol file", () => {
         "missing_issue_tracker",
       ]),
     );
+    // A numerically higher version is the future, not corruption: it must not be rejected.
+    expect(validateWorkspaceProtocol(content.replace("v99beta", "99"))).not.toContain(
+      "unsupported_version",
+    );
   });
 
   test("rejects legacy, markerless, and trackerless protocols during mandatory admission", () => {
@@ -73,11 +77,23 @@ describe("workspace protocol file", () => {
     expect(validateWorkspaceProtocol(loose)).toEqual(
       expect.arrayContaining(["missing_title", "missing_version_marker", "missing_issue_tracker"]),
     );
-    expect(
-      validateWorkspaceProtocol(`${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->\n`),
-    ).toEqual(
-      expect.arrayContaining(["missing_title", "unsupported_version", "missing_issue_tracker"]),
-    );
+    // Schema evolution is additive, so the version number never gates admission: an older
+    // marker still reads, and a version from a newer build degrades instead of failing closed.
+    for (const version of [1, 2, 3, 9]) {
+      expect(
+        validateWorkspaceProtocol(
+          `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: ${version} -->\n`,
+        ),
+      ).not.toContain("unsupported_version");
+    }
+    // A marker that is not a version at all is corruption, not the future.
+    for (const malformed of ["abc", "0", "-1", ""]) {
+      expect(
+        validateWorkspaceProtocol(
+          `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: ${malformed} -->\n`,
+        ),
+      ).toContain("unsupported_version");
+    }
     expect(
       validateWorkspaceProtocol(
         `${loose}<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n`,

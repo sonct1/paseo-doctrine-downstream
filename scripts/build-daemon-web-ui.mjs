@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,44 @@ const APP_DIR = path.join(REPO_ROOT, "packages", "app");
 const SOURCE_DIST = path.join(APP_DIR, "dist");
 const TARGET_DIST = path.join(REPO_ROOT, "packages", "server", "dist", "server", "web-ui");
 const COMPRESS_EXTENSIONS = new Set([".html", ".js", ".css", ".json", ".svg", ".map"]);
+const LOCK_DIR = path.join(REPO_ROOT, "packages", "server", "dist", ".web-ui-build-lock");
+
+// Two builds at once destroy each other: cleanTarget() removes the directory that the other
+// build's precompressAssets() is writing .br/.gz files into, and the loser dies with ENOENT on
+// a path it just created. mkdir is atomic, so it doubles as the lock.
+async function acquireBuildLock() {
+  await mkdir(path.dirname(LOCK_DIR), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await mkdir(LOCK_DIR);
+      await writeFile(path.join(LOCK_DIR, "pid"), String(process.pid), "utf8");
+      return;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      const owner = Number.parseInt(
+        await readFile(path.join(LOCK_DIR, "pid"), "utf8").catch(() => ""),
+        10,
+      );
+      if (Number.isInteger(owner) && isProcessAlive(owner)) {
+        throw new Error(
+          `Another daemon web UI build is running (pid ${owner}). Wait for it, or remove ${LOCK_DIR} if that process is gone.`,
+        );
+      }
+      // The owner died mid-build and left the lock behind; its output is untrustworthy anyway.
+      await rm(LOCK_DIR, { recursive: true, force: true });
+    }
+  }
+  throw new Error(`Could not acquire ${LOCK_DIR}`);
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
 
 function fmtMiB(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
@@ -117,22 +155,27 @@ async function measureBundle(dir) {
 }
 
 async function main() {
-  await exportBrowserWebApp();
+  await acquireBuildLock();
+  try {
+    await exportBrowserWebApp();
 
-  const sourceStat = await stat(SOURCE_DIST).catch(() => null);
-  if (!sourceStat?.isDirectory()) {
-    throw new Error(`Browser web export not found at ${SOURCE_DIST}`);
+    const sourceStat = await stat(SOURCE_DIST).catch(() => null);
+    if (!sourceStat?.isDirectory()) {
+      throw new Error(`Browser web export not found at ${SOURCE_DIST}`);
+    }
+
+    await cleanTarget();
+    await copyAssets();
+    await precompressAssets(TARGET_DIST);
+
+    const sizes = await measureBundle(TARGET_DIST);
+    console.log("Daemon web UI bundle:");
+    console.log(`  raw:    ${fmtMiB(sizes.raw)}`);
+    console.log(`  gzip:   ${fmtMiB(sizes.gzip)}`);
+    console.log(`  brotli: ${fmtMiB(sizes.brotli)}`);
+  } finally {
+    await rm(LOCK_DIR, { recursive: true, force: true });
   }
-
-  await cleanTarget();
-  await copyAssets();
-  await precompressAssets(TARGET_DIST);
-
-  const sizes = await measureBundle(TARGET_DIST);
-  console.log("Daemon web UI bundle:");
-  console.log(`  raw:    ${fmtMiB(sizes.raw)}`);
-  console.log(`  gzip:   ${fmtMiB(sizes.gzip)}`);
-  console.log(`  brotli: ${fmtMiB(sizes.brotli)}`);
 }
 
 main().catch((error) => {

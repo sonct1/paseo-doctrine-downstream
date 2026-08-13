@@ -24,10 +24,12 @@ Khi conflict material, đọc exact source. Memory, status, provider ID, runtime
 - **Assignment:** bounded objective với exact lease, scope, handback và stop condition.
 
 Workspace Protocol giữ khoảng mười semantic clauses, không lặp universal role invariants, `AGENTS.md`
-hay one-task details. Mọi repository role-bound phải có root file v3 với issue-tracker clause bắt buộc;
-repo không có tactics riêng vẫn dùng generated thin default. Thiếu/invalid file block ordinary role
-launch; chỉ exact Human-issued bounded bootstrap exception mới được tạo/sửa file. Provider/model/effort
-được discover rồi pin trong bounded assignment, không mutate standing role profile.
+hay one-task details. Mọi repository role-bound phải có root file với issue-tracker clause bắt buộc; repo
+không có tactics riêng dùng `baseline` form. Contract bind ở project onboarding: absent thì sinh baseline,
+invalid thì fail closed tới correction path. Absence không block ordinary role launch — gate chỉ áp trước
+new material delegation hoặc protected/mutating work. Schema version không bao giờ là gate; reader nhận
+mọi version đã phát hành. Provider/model/effort được discover rồi pin trong bounded assignment, không
+mutate standing role profile.
 
 Lead là execution reader duy nhất và đọc file bắt buộc trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà nhận relevant constraints, gồm mandatory issue-tracker checkpoint, trong assignment.
 
@@ -40,11 +42,9 @@ quan sát orchestration và không bypass Lead trong ordinary work; exact Human 
 phép bounded stop/freeze hoặc decision relay theo [`docs/ROLE_CONTRACTS.md`](docs/ROLE_CONTRACTS.md).
 Mỗi moving/coupled scope chỉ có một write Owner.
 
-Sau thay đổi chạm daemon/runtime, được tự build và reload hoặc restart main Paseo daemon mà không cần xin
-approval lại khi fresh authoritative readback chứng minh không có agent ở trạng thái running/starting và
-không có workspace script đang chạy. Nếu có active work hoặc không xác định chắc live state thì không
-restart và handback blocker. Restart phải dùng current checkout build, giữ nguyên home/listen/relay/WebUI
-settings trừ khi Human yêu cầu đổi.
+Daemon/runtime restart theo universal idle-readback rule tại
+[`docs/ROLE_CONTRACTS.md`](docs/ROLE_CONTRACTS.md). Rule đó là role invariant nên chỉ sống ở role profile
+và role contract; file này tham chiếu chứ không giữ bản sao.
 
 ## Simplicity và evidence
 

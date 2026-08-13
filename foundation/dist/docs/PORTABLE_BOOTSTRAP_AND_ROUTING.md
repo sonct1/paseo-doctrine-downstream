@@ -23,9 +23,15 @@ file, v3 marker và mandatory tracker clause; không ép target theo wording c�
 
 ## Bounded bootstrap
 
-Không có hoặc invalid root `WORKSPACE_PROTOCOL.md` block ordinary role launch. Chỉ exact
-Human-issued bootstrap exception với scope/expiry mới cho phép bounded creation/repair. Command sau kiểm
-nonempty, placeholder, conflict marker, v3 marker, minimal identity và mandatory Beads Central clause:
+Admission là graduated theo [`D-033`](CURRENT_DECISIONS.md#d-033--graduated-admission-và-additive-protocol-schema).
+Protocol được bind ở project onboarding: thiếu file thì sinh `baseline` form và ghi sau khi Human xác
+nhận. Absence **không** block ordinary role launch — gate chỉ áp trước new material delegation hoặc
+protected/mutating work. Invalid hoặc unreadable vẫn fail closed tới correction path và không bao giờ bị
+ghi đè im lặng.
+
+Schema version không tham gia vào quyết định chặn: checker chấp nhận mọi version đã phát hành và bỏ qua
+clause lạ. Command sau kiểm nonempty, placeholder, conflict marker, supported marker, minimal identity và
+mandatory Beads Central clause:
 
 ```bash
 scripts/validate-foundation --check-protocol /path/to/repository
