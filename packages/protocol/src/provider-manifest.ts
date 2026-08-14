@@ -76,6 +76,13 @@ const CLAUDE_MODES: AgentProviderModeDefinition[] = [
 
 const CODEX_MODES: AgentProviderModeDefinition[] = [
   {
+    id: "read-only",
+    label: "Read Only",
+    description: "Inspect files and run only commands allowed by Codex's read-only sandbox.",
+    icon: "ShieldCheck",
+    colorTier: "safe",
+  },
+  {
     id: "auto",
     label: "Default Permissions",
     description: "Edit files and run commands with Codex's default approval flow.",

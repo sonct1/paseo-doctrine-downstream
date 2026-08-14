@@ -49,15 +49,34 @@ export function assignmentExternalEffectBoundaryFor(
 }
 
 export const PASEO_ASSIGNMENT_EFFECT_SUMMARIES = [
-  { id: "read-only", label: "Read only", description: "Inspect and report without mutation." },
-  { id: "mutating", label: "Workspace write", description: "Write only inside this workspace." },
+  {
+    id: "read-only",
+    label: "Read-only lease",
+    description:
+      "No workspace mutation. Launch fails unless the provider can enforce a no-write mode.",
+  },
+  {
+    id: "mutating",
+    label: "Workspace-write lease",
+    description:
+      "Authorizes writes only inside this workspace; technical containment is provider-specific.",
+  },
   {
     id: "delegation",
-    label: "Delegation",
-    description: "Route bounded work without direct mutation.",
+    label: "Delegation lease",
+    description:
+      "Route bounded work without direct mutation; the launched agent remains technically no-write.",
   },
-  { id: "bootstrap", label: "Bootstrap", description: "Prepare missing governance artifacts." },
-  { id: "recovery", label: "Recovery", description: "Perform exact Human-authorized recovery." },
+  {
+    id: "bootstrap",
+    label: "Bootstrap lease",
+    description: "Prepare only the missing governance artifacts named by the assignment.",
+  },
+  {
+    id: "recovery",
+    label: "Recovery lease",
+    description: "Perform only the exact Human-authorized recovery actions.",
+  },
 ] as const satisfies ReadonlyArray<{
   id: AssignmentEffectClass;
   label: string;

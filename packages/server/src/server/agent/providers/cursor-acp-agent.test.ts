@@ -227,6 +227,44 @@ describe("CursorACPAgentClient model discovery", () => {
 });
 
 describe("Cursor native role binding", () => {
+  test("uses provider-enforced plan mode for a no-write role launch", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "paseo-cursor-readonly-role-test-"));
+    try {
+      const prepared = await materializeCursorRoleCapsule({
+        command: ["cursor-agent", "acp"],
+        cwd: "/workspace/repo",
+        modeId: "plan",
+        capsuleRoot: temporaryRoot,
+        launchContext: {
+          agentId: "agent-readonly",
+          roleBinding: {
+            roleId: "supervisor",
+            instructions: "Immutable no-write Supervisor instructions",
+          },
+        },
+      });
+
+      expect(prepared.command).toEqual([
+        "cursor-agent",
+        "--mode",
+        "plan",
+        "--trust",
+        "--sandbox",
+        "enabled",
+        "--workspace",
+        expect.stringMatching(/paseo-supervisor-[a-f0-9]{12}-[a-f0-9]{12}$/u),
+        "--add-dir",
+        "/workspace/repo",
+        "acp",
+      ]);
+      expect(prepared.command).not.toContain("--force");
+      expect(prepared.command).not.toContain("--approve-mcps");
+      expect(prepared.featureValues).toEqual({ auto_accept: false });
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   test("projects exact role bytes into a stable isolated workspace-rule capsule", async () => {
     const temporaryRoot = await mkdtemp(join(tmpdir(), "paseo-cursor-role-test-"));
     try {

@@ -10306,6 +10306,7 @@ test("role-bound create persists immutable binding and passes only launch instru
     });
     expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(29);
     expect(created.config.systemPrompt).toBeUndefined();
+    expect(created.config.modeId).toBe("read-only");
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
     expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({
       providerId: "codex",
@@ -10364,6 +10365,12 @@ test("role-bound create persists immutable binding and passes only launch instru
     await expect(manager.setAgentModel(created.id, "gpt-5.4-mini")).rejects.toThrow(
       "Cannot change model on role-bound agent",
     );
+    await expect(manager.setAgentMode(created.id, "full-access")).rejects.toThrow(
+      "assignment_capability_boundary_required",
+    );
+    await expect(
+      manager.respondToPermission(created.id, "permission-escalation", { behavior: "allow" }),
+    ).rejects.toThrow("assignment_capability_boundary_required");
     expect(manager.getAgent(created.id)?.config.model).toBe("gpt-5.4");
 
     await expect(

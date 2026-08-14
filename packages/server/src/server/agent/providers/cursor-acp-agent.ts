@@ -34,6 +34,7 @@ const CURSOR_ROLE_UNATTENDED_ARGS = [
   "--sandbox",
   "disabled",
 ] as const;
+const CURSOR_ROLE_READ_ONLY_ARGS = ["--mode", "plan", "--trust", "--sandbox", "enabled"] as const;
 
 export const CURSOR_FAST_FEATURE_OPTION: ACPConfigFeatureOption = {
   id: "fast",
@@ -82,6 +83,7 @@ function roleCapsuleCommand(
   command: readonly [string, ...string[]],
   capsuleDirectory: string,
   cwd: string,
+  readOnly: boolean,
 ): [string, ...string[]] {
   const acpIndexes = command.flatMap((argument, index) => (argument === "acp" ? [index] : []));
   const hasCallerWorkspace = command.some(
@@ -95,6 +97,8 @@ function roleCapsuleCommand(
       argument === "--auto-review" ||
       argument === "--approve-mcps" ||
       argument === "--trust" ||
+      argument === "--mode" ||
+      argument.startsWith("--mode=") ||
       argument === "--sandbox" ||
       argument.startsWith("--sandbox="),
   );
@@ -107,7 +111,7 @@ function roleCapsuleCommand(
   return [
     command[0],
     ...command.slice(1, acpIndex),
-    ...CURSOR_ROLE_UNATTENDED_ARGS,
+    ...(readOnly ? CURSOR_ROLE_READ_ONLY_ARGS : CURSOR_ROLE_UNATTENDED_ARGS),
     "--workspace",
     capsuleDirectory,
     "--add-dir",
@@ -134,6 +138,7 @@ export async function materializeCursorRoleCapsule(input: {
   command: readonly [string, ...string[]];
   cwd: string;
   launchContext: AgentLaunchContext;
+  modeId?: string;
   capsuleRoot?: string;
 }): Promise<ACPSessionLaunchPreparation> {
   const roleBinding = input.launchContext.roleBinding;
@@ -155,8 +160,8 @@ export async function materializeCursorRoleCapsule(input: {
   await mkdir(rulesDirectory, { recursive: true, mode: 0o700 });
   await writeExclusiveOrVerify(rulePath, content);
   return {
-    command: roleCapsuleCommand(input.command, directory, input.cwd),
-    featureValues: { [ACP_AUTO_ACCEPT_FEATURE_ID]: true },
+    command: roleCapsuleCommand(input.command, directory, input.cwd, input.modeId === "plan"),
+    featureValues: { [ACP_AUTO_ACCEPT_FEATURE_ID]: input.modeId !== "plan" },
   };
 }
 
@@ -198,6 +203,7 @@ export class CursorACPAgentClient extends GenericACPAgentClient {
       command: this.roleCommand,
       cwd: config.cwd,
       launchContext,
+      modeId: config.modeId,
       capsuleRoot: this.roleCapsuleRoot,
     });
   }

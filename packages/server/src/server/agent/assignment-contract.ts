@@ -210,10 +210,15 @@ export function buildAssignmentInstruction(contract: PersistedAssignmentContract
       : "denied";
   const beadsIssueGrants = envelope.resourceGrants?.beadsIssueIds?.join(", ") || "none";
   const trackerCheckpoint = trackerCheckpointForRole(receipt.roleId, envelope.effectClass);
+  const technicalCapabilityBoundary =
+    envelope.mutationBoundary.mode === "no-write"
+      ? "Technical capability boundary: Paseo pins this session to a provider-enforced no-write mode. Do not request or attempt a mode change or permission escalation; launch must fail closed when the provider cannot enforce no-write."
+      : "Technical capability boundary: runtime capability does not expand the exact bounded-write scope or external-effect lease above.";
   return [
     `Assignment Contract: sha256=${receipt.assignmentDigest}; disposition=${envelope.disposition}; effect=${envelope.effectClass}.`,
     `Objective: ${envelope.objective}`,
     `Mutation boundary: ${writeScope}. External effects: ${externalScope}.`,
+    technicalCapabilityBoundary,
     `Beads issue grants: ${beadsIssueGrants}.`,
     trackerCheckpoint,
     `Evidence: ${envelope.evidence}`,

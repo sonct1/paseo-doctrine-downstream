@@ -43,6 +43,9 @@ Provider, model, runtime mode, agent status, Memory hoặc historical plan khôn
 Paseo là delegation và lifecycle plane duy nhất. Foundation roles không được mở thêm Codex-native,
 Claude-native hoặc provider-native agent tree. Một session có thể có `full-access`, nhưng capability đó
 không cấp write lease, ownership, external effect, recovery, replacement hoặc acceptance authority.
+Ngược lại, assignment có mutation boundary `no-write` phải được daemon pin vào provider-enforced
+no-write mode; không có mode đã qualify thì launch fail closed. Agent không được đổi mode hoặc approve
+permission escalation để thoát boundary này.
 
 ### Ba instruction layer
 

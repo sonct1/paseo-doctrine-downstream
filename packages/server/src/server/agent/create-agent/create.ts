@@ -269,10 +269,11 @@ async function resolveSessionCreateAgent(
     requestedMode: builtSessionConfig.modeId,
     featureValues: builtSessionConfig.featureValues,
     parent: null,
-    // Standing Paseo roles run without provider approval prompts. The
-    // assignment/role contract remains the authority boundary; unattended is
-    // only the provider execution capability. Ordinary interactive sessions
-    // keep the provider default unless their caller requests a mode explicitly.
+    // Resolve an unattended candidate for standing roles so write-authorized
+    // assignments do not stop on provider ceremony. AgentManager then aligns
+    // the effective capability with the immutable assignment: no-write is
+    // provider-enforced or fails closed. Ordinary interactive sessions keep
+    // the provider default unless their caller requests a mode explicitly.
     unattended: input.roleId !== undefined,
   });
   const sessionConfig: AgentSessionConfig = {

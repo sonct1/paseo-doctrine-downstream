@@ -114,6 +114,8 @@ function resolveCursorACPRoleBindingSupport(
         argument === "--auto-review" ||
         argument === "--approve-mcps" ||
         argument === "--trust" ||
+        argument === "--mode" ||
+        argument.startsWith("--mode=") ||
         argument === "--sandbox" ||
         argument.startsWith("--sandbox="),
     ) ?? false;

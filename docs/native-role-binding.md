@@ -68,7 +68,7 @@ Role và provider chỉ ghép được khi adapter có native durable instructio
 - Claude: Agent SDK `systemPrompt` append; đồng thời deny native delegation tools sau khi merge provider extras.
 - Pi append exact binding bằng generated `before_agent_start` extension trên create/resume.
 - OMP append exact binding bằng native `--append-system-prompt` trên create/resume.
-- Cursor ACP materialize một stable private role capsule dưới Paseo state, ghi exact binding vào `.cursor/rules/paseo-role.mdc` với `alwaysApply: true`, rồi launch role-bound route bằng `--force --approve-mcps --trust --sandbox disabled`, private `--workspace <capsule>` và `--add-dir <repo>` trước `acp`. ACP `auto_accept` cũng được pin làm fallback. Caller-supplied workspace hoặc permission-policy flag bị reject để route không có hai nguồn policy. Không dùng `--plugin-dir`: installed runtime đã chứng minh local plugin có thể bị silent-ignore. Exact direct marker, repo-access, ACP create và ACP resume canary đều pass trên `cursor-agent 2026.08.04-aaa8809`.
+- Cursor ACP materialize một stable private role capsule dưới Paseo state và ghi exact binding vào `.cursor/rules/paseo-role.mdc` với `alwaysApply: true`. Assignment có write lease dùng unattended route hiện hành; assignment `no-write` bị pin sang `--mode plan --sandbox enabled`, bỏ `--force`, bỏ `--approve-mcps` và đặt ACP `auto_accept=false`. Cả hai route dùng private `--workspace <capsule>` và `--add-dir <repo>` trước `acp`. Caller-supplied workspace, mode hoặc permission-policy flag bị reject để route không có hai nguồn policy. Không dùng `--plugin-dir`: installed runtime đã chứng minh local plugin có thể bị silent-ignore.
 - Antigravity chỉ admit role `Peer`. Native adapter gọi official `agy` print-mode `stream-json`, materialize unique exact custom-agent profile với `run_command`, `inheritMcp: false`, `subagent: false`, persist native `conversation_id` và resume bằng `--conversation`. Paseo tools đi qua private loopback command gateway dùng caller-scoped catalog; gateway token chỉ tồn tại trong environment của exact AGY process và Beads Central credential không được project vào model. Route này không phụ thuộc ACP hoặc native AGY MCP converter. Isolated canary ngày 2026-08-13 trên `agy 1.1.12` và Beads Central `1.2.0` đã chứng minh model tự gọi `beads_status` + granted `beads_get`, rồi daemon restart và resume cùng agent để gọi lại thành công. Lead/Supervisor vẫn fail closed.
 - Generic ACP không có standardized system-instruction field nên mặc định `unsupported`. Paseo chỉ auto-detect exact Cursor transport shape; Antigravity đi qua built-in native provider riêng. Custom ACP khác phải có provider-native driver riêng và qualification evidence trước khi được chọn cho role-bound spawn.
 
@@ -77,6 +77,12 @@ Capability có hai trạng thái: `supported` nghĩa adapter có implementation 
 Technical role support không thay user-account policy; qualification dùng official `agy` cùng account đã được Human cấu hình và Paseo không đọc hoặc trả AGY token.
 
 Không có silent fallback. Provider có model phù hợp nhưng thiếu native role channel vẫn không tương thích với Foundation role.
+
+Assignment `no-write` có thêm capability gate độc lập với durable instruction channel. Daemon pin Codex
+vào `read-only`, Claude/Cursor/Antigravity vào `plan`, khóa mode switch và từ chối permission response
+`allow`. Pi và OMP vẫn có durable role channel nhưng chưa có no-write mode đã qualify, nên no-write
+launch của hai route này fail closed. Write-authorized assignment không bị gate này mở rộng scope:
+provider mode chỉ là capability, assignment vẫn là authority.
 
 ### Hai Codex route độc lập với role
 
@@ -121,7 +127,7 @@ toàn bộ projection.
   Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
 - Supervisor chỉ có observation/governance và Beads read-only subset; recovery/replacement vẫn cần exact Human lease.
 
-`full-access` là runtime capability, không phải write lease, ownership, external-effect hoặc acceptance authority.
+`full-access` là runtime capability, không phải write lease, ownership, external-effect hoặc acceptance authority; đồng thời nó không được dùng làm fallback cho mutation boundary `no-write`.
 
 ## Workspace Protocol
 
@@ -201,6 +207,10 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Execution specialization chỉ được role-bound Lead chọn cho fresh Peer, giữ exact profile receipt/bytes
   qua LaunchContract và resume, và bị redacted khỏi generic role receipt.
 - Resume/reload giữ exact provider route và model; model mutation trên role-bound agent bị reject.
+- Assignment `no-write` phải persist và launch bằng exact qualified no-write mode; provider thiếu mode
+  đó bị reject trước session launch.
+- Role-bound no-write session từ chối mode switch ra khỏi pinned mode và mọi permission response
+  `allow`; `deny` vẫn hợp lệ.
 - Codex/Claude provider extras không thể ghi đè role instruction hoặc native-delegation guards.
 - Built-in Codex chỉ launch khi native account readback là ChatGPT subscription.
 - Custom Codex thiếu model/URL/key hoặc launch lỗi không fallback sang built-in subscription.

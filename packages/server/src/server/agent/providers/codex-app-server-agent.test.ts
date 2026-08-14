@@ -716,6 +716,28 @@ describe("Codex app-server provider", () => {
     );
   });
 
+  test("read-only mode runs without approval escalation inside the Codex read-only sandbox", async () => {
+    const session = createSession({ modeId: "read-only" });
+    const request = vi.fn(async (method: string) => {
+      if (method === "thread/loaded/list") return { data: ["test-thread"] };
+      if (method === "turn/start") return {};
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    session.activeForegroundTurnId = null;
+    session.client = createStub<CodexClientLike>({ request });
+
+    await expect(session.getAvailableModes()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "read-only" })]),
+    );
+    await session.startTurn("inspect only");
+
+    const turnStart = request.mock.calls.find(([method]) => method === "turn/start")?.[1];
+    expect(turnStart).toMatchObject({
+      approvalPolicy: "never",
+      sandboxPolicy: { type: "readOnly" },
+    });
+  });
+
   test("getAvailableModes excludes auto-review when the Codex version is too old", async () => {
     const session = createSession({}, { autoReviewEnabled: false });
 

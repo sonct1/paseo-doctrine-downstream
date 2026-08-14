@@ -49,6 +49,11 @@ import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agen
 import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
 import { withAgentAuthorityLock } from "./agent-authority-lock.js";
 import { assertAgentPromptLease } from "./lead-handoffs.js";
+import {
+  assertRoleAssignmentModeAllowed,
+  assertRoleAssignmentPermissionResponseAllowed,
+  enforceRoleAssignmentCapability,
+} from "./assignment-capability-boundary.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -2024,6 +2029,7 @@ export class AgentManager {
 
   async setAgentMode(agentId: string, modeId: string): Promise<AgentProviderNotice | null> {
     const agent = this.requireSessionAgent(agentId);
+    assertRoleAssignmentModeAllowed(agent.roleBinding, modeId);
     const notice = (await agent.session.setMode(modeId)) ?? null;
     await this.drainSessionEvents(agentId);
     const currentMode = (await agent.session.getCurrentMode()) ?? modeId;
@@ -2835,6 +2841,7 @@ export class AgentManager {
     response: AgentPermissionResponse,
   ): Promise<AgentPermissionResult | void> {
     const agent = this.requireAgent(agentId);
+    assertRoleAssignmentPermissionResponseAllowed(agent.roleBinding, response);
     agent.inFlightPermissionResponses.add(requestId);
 
     try {
@@ -5001,7 +5008,7 @@ export class AgentManager {
   ): Promise<PreparedSessionConfig> {
     assertRoleSessionInput(config, role);
     const requestedModel = config.model;
-    const storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
+    let storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
     const client = this.requireClient(storedConfig.provider);
     const providerBaseId = this.providerBaseIds.get(storedConfig.provider) ?? null;
     let launchContract = role?.launchContract;
@@ -5033,6 +5040,7 @@ export class AgentManager {
       });
       launchContract = materializeLaunchContract(roleBinding, providerBinding);
     }
+    storedConfig = enforceRoleAssignmentCapability(storedConfig, roleBinding);
     if (roleBinding && launchContract) {
       assertPersistedRoleBindingMatches(roleBinding, storedConfig.provider);
       assertPersistedLaunchContractMatches(launchContract, storedConfig);

@@ -54,6 +54,9 @@ describe("immutable assignment contract", () => {
     });
     expect(contract.receipt.assignmentDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(buildAssignmentInstruction(contract)).toContain("Mutation boundary: no-write");
+    expect(buildAssignmentInstruction(contract)).toContain(
+      "Paseo pins this session to a provider-enforced no-write mode",
+    );
     expect(buildAssignmentInstruction(contract)).toContain("Beads issue grants: ps123-abc");
     expect(buildAssignmentInstruction(contract)).toContain(
       "Mandatory Beads Central checkpoint: call beads_status",

@@ -1430,7 +1430,11 @@ function DesktopFeatureItem({
   const comboboxOptions = useMemo<ComboboxOption[]>(
     () =>
       feature.type === "select"
-        ? feature.options.map((option) => ({ id: option.id, label: option.label }))
+        ? feature.options.map((option) => ({
+            id: option.id,
+            label: option.label,
+            description: option.description,
+          }))
         : [],
     [feature],
   );
@@ -1547,7 +1551,11 @@ function SheetFeatureItem({
   const comboboxOptions = useMemo<ComboboxOption[]>(
     () =>
       feature.type === "select"
-        ? feature.options.map((option) => ({ id: option.id, label: option.label }))
+        ? feature.options.map((option) => ({
+            id: option.id,
+            label: option.label,
+            description: option.description,
+          }))
         : [],
     [feature],
   );

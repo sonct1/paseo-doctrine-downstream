@@ -240,6 +240,11 @@ const CODEX_APP_SERVER_CAPABILITIES: AgentCapabilityFlags = {
 
 const CODEX_MODES: AgentMode[] = [
   {
+    id: "read-only",
+    label: "Read Only",
+    description: "Inspect files and run only commands allowed by Codex's read-only sandbox.",
+  },
+  {
     id: "auto",
     label: "Default Permissions",
     description: "Edit files and run commands with Codex's default approval flow.",
@@ -292,7 +297,7 @@ interface CodexModePreset {
 
 const MODE_PRESETS: Record<string, CodexModePreset> = {
   "read-only": {
-    approvalPolicy: "on-request",
+    approvalPolicy: "never",
     sandbox: "read-only",
   },
   auto: {
