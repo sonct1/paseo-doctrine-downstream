@@ -14,6 +14,7 @@ export interface TopologyNode {
   provider: string;
   model: string | null;
   requiresAttention: boolean;
+  issueIds: string[];
 }
 
 export interface TopologyEdge {
@@ -53,6 +54,11 @@ function titleOf(agent: Agent): string {
   );
 }
 
+function issueIdsOf(agent: Agent): string[] {
+  const issueIds = agent.roleBinding?.assignment?.resourceGrants?.beadsIssueIds;
+  return [...new Set(issueIds ?? [])].sort();
+}
+
 export function buildWorkspaceTopology(
   agents: ReadonlyMap<string, Agent> | undefined,
   workspaceId: string,
@@ -78,6 +84,7 @@ export function buildWorkspaceTopology(
     provider: agent.provider,
     model: agent.model,
     requiresAttention: agent.requiresAttention ?? false,
+    issueIds: issueIdsOf(agent),
   }));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const sourceById = new Map(workspaceAgents.map((agent) => [agent.id, agent]));
@@ -117,7 +124,12 @@ export function buildWorkspaceTopology(
     });
   }
 
-  const counts: Record<TopologyRole, number> = { lead: 0, peer: 0, supervisor: 0, unbound: 0 };
+  const counts: Record<TopologyRole, number> = {
+    lead: 0,
+    peer: 0,
+    supervisor: 0,
+    unbound: 0,
+  };
   for (const node of nodes) counts[node.role] += 1;
   return { nodes, edges, warnings, counts };
 }

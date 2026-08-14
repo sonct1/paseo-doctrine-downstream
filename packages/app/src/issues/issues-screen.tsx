@@ -22,6 +22,7 @@ import { useDaemonConfig } from "@/hooks/use-daemon-config";
 import type { Theme } from "@/styles/theme";
 import { buildHostProjectIssueRoute, buildHostProjectIssuesRoute } from "@/utils/host-routes";
 import { BeadsCentralConnectionSheet } from "./beads-central-connection-sheet";
+import { buildIssueBoard } from "./issue-board-model";
 import { useIssueMutations, useIssueQuery, useIssuesQuery, type IssueStatusFilter } from "./data";
 
 interface IssuesScreenProps {
@@ -30,7 +31,7 @@ interface IssuesScreenProps {
   selectedIssueId: string | null;
 }
 
-const STATUS_FILTERS: Array<{ value: IssueStatusFilter; label: string }> = [
+const STATUS_FILTERS: { value: IssueStatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In progress" },
@@ -39,7 +40,7 @@ const STATUS_FILTERS: Array<{ value: IssueStatusFilter; label: string }> = [
   { value: "closed", label: "Closed" },
 ];
 
-const ISSUE_TYPES: Array<{ value: BeadsIssueType; label: string }> = [
+const ISSUE_TYPES: { value: BeadsIssueType; label: string }[] = [
   { value: "task", label: "Task" },
   { value: "bug", label: "Bug" },
   { value: "feature", label: "Feature" },
@@ -54,7 +55,9 @@ const EMPTY_ISSUES: BeadsIssue[] = [];
 const ThemedListChecks = withUnistyles(ListChecks);
 const ThemedShieldCheck = withUnistyles(ShieldCheck);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
-const foregroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const foregroundMutedMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+});
 const foregroundExtraMutedMapping = (theme: Theme) => ({
   color: theme.colors.foregroundExtraMuted,
 });
@@ -324,6 +327,7 @@ function IssuesList({
   onConfigure: () => void;
   onCreate: () => void;
 }) {
+  const board = useMemo(() => buildIssueBoard(issues, filter), [filter, issues]);
   if (isLoading) return <CenteredLoading />;
   if (error) {
     return (
@@ -385,18 +389,42 @@ function IssuesList({
           ) : null}
         </IssuesEmpty>
       ) : (
-        <ScrollView style={styles.issuesScroll} testID="issues-list">
-          <View style={styles.issueList}>
-            {issues.map((issue) => (
-              <IssueRow
-                key={issue.id}
-                issue={issue}
-                selected={issue.id === selectedIssueId}
-                serverId={serverId}
-                projectId={projectId}
-              />
-            ))}
-          </View>
+        <ScrollView
+          horizontal
+          style={styles.issuesBoardScroll}
+          contentContainerStyle={styles.issuesBoard}
+          showsHorizontalScrollIndicator
+          testID="issues-list"
+        >
+          {board.map((column) => (
+            <View
+              key={column.status}
+              style={styles.issueColumn}
+              testID={`issue-kanban-column-${column.status}`}
+            >
+              <View style={styles.issueColumnHeader}>
+                <StatusBadge status={column.status} />
+                <Text style={styles.issueColumnCount}>{column.issues.length}</Text>
+              </View>
+              <ScrollView style={styles.issueColumnScroll} contentContainerStyle={styles.issueList}>
+                {column.issues.length === 0 ? (
+                  <View style={styles.issueColumnEmpty}>
+                    <Text style={styles.issueColumnEmptyText}>No issues in this state</Text>
+                  </View>
+                ) : (
+                  column.issues.map((issue) => (
+                    <IssueRow
+                      key={issue.id}
+                      issue={issue}
+                      selected={issue.id === selectedIssueId}
+                      serverId={serverId}
+                      projectId={projectId}
+                    />
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          ))}
         </ScrollView>
       )}
       {runtimeVersion ? (
@@ -467,7 +495,9 @@ function IssueRow({
       onPress={handlePress}
       style={style}
       accessibilityRole="button"
-      accessibilityLabel={`${issue.title}, ${statusLabel(issue.status)}, priority ${issue.priority}`}
+      accessibilityLabel={`${issue.title}, ${statusLabel(
+        issue.status,
+      )}, priority ${issue.priority}`}
       testID={`issue-row-${issue.id}`}
     >
       <View style={styles.issueRowTopline}>
@@ -1047,7 +1077,8 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
   },
   desktopListPane: {
-    width: 360,
+    flex: 1.7,
+    minWidth: 420,
     minHeight: 0,
     backgroundColor: theme.colors.surfaceSidebar,
     borderRightWidth: 1,
@@ -1055,7 +1086,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   desktopDetailPane: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 360,
     minHeight: 0,
   },
   centered: {
@@ -1138,21 +1169,71 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foreground,
     fontWeight: theme.fontWeight.medium,
   },
-  issuesScroll: {
+  issuesBoardScroll: {
     flex: 1,
     minHeight: 0,
   },
+  issuesBoard: {
+    alignItems: "stretch",
+    gap: theme.spacing[3],
+    padding: theme.spacing[3],
+  },
+  issueColumn: {
+    width: 286,
+    minHeight: 0,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.lg,
+    backgroundColor: theme.colors.surface1,
+    overflow: "hidden",
+  },
+  issueColumnHeader: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  issueColumnCount: {
+    minWidth: 24,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+    textAlign: "right",
+  },
+  issueColumnScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  issueColumnEmpty: {
+    minHeight: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing[3],
+  },
+  issueColumnEmptyText: {
+    color: theme.colors.foregroundExtraMuted,
+    fontSize: theme.fontSize.xs,
+    textAlign: "center",
+  },
   issueList: {
     padding: theme.spacing[2],
-    gap: theme.spacing[1],
+    gap: theme.spacing[2],
   },
   issueRow: {
     minHeight: 104,
     padding: theme.spacing[3],
     gap: theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
   },
   issueRowSelected: {
+    borderColor: theme.colors.accent,
     backgroundColor: theme.colors.surface2,
   },
   issueRowHovered: {

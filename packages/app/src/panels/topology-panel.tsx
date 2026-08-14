@@ -2,6 +2,7 @@ import { Network } from "lucide-react-native";
 import { useCallback } from "react";
 import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import type { BeadsIssue } from "@getpaseo/protocol/beads/rpc-schemas";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import type { PanelRegistration } from "@/panels/panel-registry";
 import type { TopologyNode, TopologyRole } from "@/panels/topology-model";
@@ -17,7 +18,9 @@ const ROLE_LABELS: Record<TopologyRole, string> = {
 };
 const ThemedNetwork = withUnistyles(Network);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
-const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
+const mutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+});
 
 function nodeStyle({ hovered, pressed }: PressableStateCallbackType) {
   return [styles.node, (hovered || pressed) && styles.nodeHovered];
@@ -26,9 +29,11 @@ function nodeStyle({ hovered, pressed }: PressableStateCallbackType) {
 function TopologyNodeRow({
   node,
   openAgent,
+  issueById,
 }: {
   node: TopologyNode;
   openAgent: (agentId: string) => void;
+  issueById: ReadonlyMap<string, BeadsIssue>;
 }) {
   const handleOpen = useCallback(() => openAgent(node.id), [node.id, openAgent]);
   return (
@@ -49,12 +54,29 @@ function TopologyNodeRow({
         {node.status} · {node.provider}
         {node.model ? ` · ${node.model}` : ""}
       </Text>
+      {node.issueIds.length > 0 ? (
+        <View style={styles.nodeIssues}>
+          <Text style={styles.nodeIssuesLabel}>Assigned issues</Text>
+          {node.issueIds.slice(0, 2).map((issueId) => {
+            const issue = issueById.get(issueId);
+            return (
+              <Text key={issueId} style={styles.nodeIssue} numberOfLines={1}>
+                {issue?.title ?? issueId}
+              </Text>
+            );
+          })}
+          {node.issueIds.length > 2 ? (
+            <Text style={styles.nodeIssueMore}>+{node.issueIds.length - 2} more</Text>
+          ) : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
 function TopologyPanel() {
-  const { topology, hydrated, openAgent } = useTopologyPanelState();
+  const { topology, hydrated, openAgent, issueById, grantedIssueCount, issuesError } =
+    useTopologyPanelState();
   if (!hydrated) {
     return (
       <View style={styles.centered} testID="workspace-topology-loading">
@@ -82,12 +104,23 @@ function TopologyPanel() {
         <Text style={styles.summaryMeta}>
           {topology.nodes.length} agents · {topology.edges.length} relationships
         </Text>
+        <Text style={styles.summaryMeta}>
+          {grantedIssueCount} assigned issue{grantedIssueCount === 1 ? "" : "s"}
+        </Text>
       </View>
       {topology.warnings.length > 0 ? (
         <View style={styles.warning}>
           <Text style={styles.warningText}>
-            {topology.warnings.length} relationship{topology.warnings.length === 1 ? "" : "s"} need
-            review. Ambiguous or missing bindings are not drawn as authority.
+            {topology.warnings.length} relationship
+            {topology.warnings.length === 1 ? "" : "s"} need review. Ambiguous or missing bindings
+            are not drawn as authority.
+          </Text>
+        </View>
+      ) : null}
+      {issuesError && grantedIssueCount > 0 ? (
+        <View style={styles.warning}>
+          <Text style={styles.warningText}>
+            Issue details unavailable; exact assignment grants remain shown.
           </Text>
         </View>
       ) : null}
@@ -99,7 +132,12 @@ function TopologyPanel() {
             <Text style={styles.sectionLabel}>{ROLE_LABELS[role]}</Text>
             <View style={styles.nodeList}>
               {nodes.map((node) => (
-                <TopologyNodeRow key={node.id} node={node} openAgent={openAgent} />
+                <TopologyNodeRow
+                  key={node.id}
+                  node={node}
+                  openAgent={openAgent}
+                  issueById={issueById}
+                />
               ))}
             </View>
           </View>
@@ -138,7 +176,10 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,
   },
-  summaryMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  summaryMeta: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   warning: {
     borderWidth: 1,
     borderColor: `${theme.colors.statusWarning}33`,
@@ -146,7 +187,10 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[3],
     backgroundColor: `${theme.colors.statusWarning}1a`,
   },
-  warningText: { color: theme.colors.statusWarning, fontSize: theme.fontSize.xs },
+  warningText: {
+    color: theme.colors.statusWarning,
+    fontSize: theme.fontSize.xs,
+  },
   section: { gap: theme.spacing[2] },
   sectionLabel: {
     color: theme.colors.foreground,
@@ -163,7 +207,11 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[1],
   },
   nodeHovered: { backgroundColor: theme.colors.surface2 },
-  nodeHeading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  nodeHeading: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   roleLabel: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
@@ -171,7 +219,27 @@ const styles = StyleSheet.create((theme) => ({
     letterSpacing: 0.8,
   },
   nodeTitle: { color: theme.colors.foreground, fontSize: theme.fontSize.base },
-  nodeMeta: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
+  nodeMeta: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  nodeIssues: {
+    marginTop: theme.spacing[2],
+    paddingTop: theme.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    gap: theme.spacing[1],
+  },
+  nodeIssuesLabel: {
+    color: theme.colors.foregroundExtraMuted,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.medium,
+  },
+  nodeIssue: { color: theme.colors.foreground, fontSize: theme.fontSize.xs },
+  nodeIssueMore: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
   statusDot: { width: 8, height: 8, borderRadius: theme.borderRadius.full },
   status_initializing: { backgroundColor: theme.colors.statusDotWarning },
   status_idle: { backgroundColor: theme.colors.statusDotSuccess },

@@ -26,13 +26,17 @@ test.describe("Beads Central issue surface", () => {
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(buildHostProjectIssuesRoute(getServerId(), first.projectId));
 
-      await expect(page.getByTestId("issues-screen")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("issues-screen")).toBeVisible({
+        timeout: 30_000,
+      });
       await expect(page.getByText("No issues yet", { exact: true })).toBeVisible();
       await page.getByTestId("beads-central-configure-button").click();
       const connectionSheet = page.getByTestId("beads-central-connection-sheet");
       await expect(connectionSheet).toBeVisible();
       await expect(
-        connectionSheet.getByText("There is no native backend or fallback.", { exact: false }),
+        connectionSheet.getByText("There is no native backend or fallback.", {
+          exact: false,
+        }),
       ).toBeVisible();
       await expect(
         connectionSheet.getByTestId("beads-central-endpoint").getByRole("textbox"),
@@ -82,7 +86,10 @@ test.describe("Beads Central issue surface", () => {
         },
       );
 
-      const issuesList = page.getByTestId("issues-list");
+      const issuesList = page.locator('[data-testid="issues-list"]:visible');
+      await expect(issuesList.getByTestId("issue-kanban-column-open")).toBeVisible();
+      await expect(issuesList.getByTestId("issue-kanban-column-in_progress")).toBeVisible();
+      await expect(issuesList.getByTestId("issue-kanban-column-blocked")).toBeVisible();
       await issuesList.getByRole("button", { name: /^Qualify Beads Central in Paseo,/u }).click();
       await detail.getByTestId("issue-close-button").click();
       await detail
@@ -101,28 +108,37 @@ test.describe("Beads Central issue surface", () => {
         .getByTestId("issue-close-reason")
         .fill("E2E evidence recorded; Human closes work state.");
       await detail.getByTestId("issue-close-confirm").click();
-      await expect(detail.getByTestId("issue-status-closed")).toBeVisible({ timeout: 30_000 });
+      await expect(detail.getByTestId("issue-status-closed")).toBeVisible({
+        timeout: 30_000,
+      });
       await expect(
-        detail.getByText("E2E evidence recorded; Human closes work state.", { exact: true }),
+        detail.getByText("E2E evidence recorded; Human closes work state.", {
+          exact: true,
+        }),
       ).toBeVisible();
-      const visibleIssuesList = page.locator('[data-testid="issues-list"]:visible');
       await page.getByRole("button", { name: "Closed", exact: true }).click();
+      await expect(issuesList.getByTestId("issue-kanban-column-closed")).toBeVisible();
+      await expect(issuesList.getByTestId("issue-kanban-column-open")).toHaveCount(0);
       await expect(
-        visibleIssuesList.getByRole("button", {
+        issuesList.getByRole("button", {
           name: /^Qualify Beads Central in Paseo, Closed,/u,
         }),
       ).toBeVisible();
       await expect(
-        visibleIssuesList.getByRole("button", { name: /^Preserve close draft isolation,/u }),
+        issuesList.getByRole("button", {
+          name: /^Preserve close draft isolation,/u,
+        }),
       ).toHaveCount(0);
       await page.getByRole("button", { name: "Open", exact: true }).click();
       await expect(
-        visibleIssuesList.getByRole("button", {
+        issuesList.getByRole("button", {
           name: /^Preserve close draft isolation, Open,/u,
         }),
       ).toBeVisible();
       await expect(
-        visibleIssuesList.getByRole("button", { name: /^Qualify Beads Central in Paseo,/u }),
+        issuesList.getByRole("button", {
+          name: /^Qualify Beads Central in Paseo,/u,
+        }),
       ).toHaveCount(0);
       await expect(page.locator('[data-testid="issues-truncation-notice"]:visible')).toHaveCount(0);
       await page.getByRole("button", { name: "All", exact: true }).click();
@@ -141,7 +157,9 @@ test.describe("Beads Central issue surface", () => {
 
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(buildHostProjectIssuesRoute(getServerId(), first.projectId));
-      await expect(page.getByTestId("issues-list")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("issues-list")).toBeVisible({
+        timeout: 30_000,
+      });
       await expect(page.getByText("Qualify Beads Central in Paseo", { exact: true })).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath("beads-issue-compact.png"),

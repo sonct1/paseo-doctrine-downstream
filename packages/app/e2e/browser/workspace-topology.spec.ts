@@ -6,7 +6,7 @@ import { expect, test } from "../support/fixtures";
 import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 
-function assignmentFor(roleId: PaseoRoleId): AssignmentEnvelope {
+function assignmentFor(roleId: PaseoRoleId, issueIds: string[] = []): AssignmentEnvelope {
   const disposition = {
     lead: "lead-direct",
     peer: "peer-execution",
@@ -21,6 +21,7 @@ function assignmentFor(roleId: PaseoRoleId): AssignmentEnvelope {
     externalEffectBoundary: { mode: "denied" },
     evidence: "Expose the daemon-issued role and relationship in the workspace topology.",
     handbackAndStop: "Stop after topology verification or a material blocker.",
+    ...(issueIds.length > 0 ? { resourceGrants: { beadsIssueIds: issueIds } } : {}),
   };
 }
 
@@ -47,7 +48,7 @@ test.describe("workspace topology", () => {
         modeId: "load-test",
         model: "ten-second-stream",
         roleId: "peer",
-        assignment: assignmentFor("peer"),
+        assignment: assignmentFor("peer", ["ps-topology-e2e"]),
         labels: { [PARENT_AGENT_ID_LABEL]: lead.id },
       });
       await workspace.client.createAgent({
@@ -62,11 +63,11 @@ test.describe("workspace topology", () => {
       });
 
       await page.goto(buildHostWorkspaceRoute(getServerId(), workspace.workspaceId));
-      await expect(page.getByTestId("workspace-header-menu-trigger")).toBeVisible({
+      await expect(page.getByTestId("workspace-header-topology")).toBeVisible({
         timeout: 30_000,
       });
-      await page.getByTestId("workspace-header-menu-trigger").click();
-      await page.getByTestId("workspace-header-show-topology").click();
+      await expect(page.getByTestId("workspace-header-issues")).toBeVisible();
+      await page.getByTestId("workspace-header-topology").click();
 
       const topology = page.getByTestId("workspace-topology-panel");
       await expect(topology).toBeVisible({ timeout: 30_000 });
@@ -76,9 +77,15 @@ test.describe("workspace topology", () => {
       await expect(topology.getByLabel(/Open Topology Supervisor, supervisor,/u)).toBeVisible();
       await expect(topology.getByText("delegates", { exact: true })).toBeVisible();
       await expect(topology.getByText("observes · inferred", { exact: true })).toBeVisible();
+      await expect(topology.getByText("1 assigned issue", { exact: true })).toBeVisible();
+      await expect(topology.getByText("ps-topology-e2e", { exact: true })).toBeVisible();
 
       await topology.getByLabel(/Open Topology Peer, peer,/u).click();
       await expect(page.getByTestId(`workspace-tab-agent_${peer.id}`).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.getByTestId("workspace-header-issues").click();
+      await expect(page.getByTestId("issues-screen")).toBeVisible({
         timeout: 30_000,
       });
     } finally {

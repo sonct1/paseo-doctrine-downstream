@@ -8,6 +8,7 @@ function agent(input: {
   parentAgentId?: string | null;
   workspaceId?: string;
   archived?: boolean;
+  issueIds?: string[];
 }): Agent {
   return {
     id: input.id,
@@ -17,7 +18,14 @@ function agent(input: {
     status: "idle",
     workspaceId: input.workspaceId ?? "workspace-1",
     parentAgentId: input.parentAgentId ?? null,
-    roleBinding: input.role ? ({ roleId: input.role } as Agent["roleBinding"]) : undefined,
+    roleBinding: input.role
+      ? ({
+          roleId: input.role,
+          assignment: {
+            resourceGrants: input.issueIds?.length ? { beadsIssueIds: input.issueIds } : undefined,
+          },
+        } as unknown as Agent["roleBinding"])
+      : undefined,
     archivedAt: input.archived ? new Date("2026-08-09T00:00:00.000Z") : null,
     requiresAttention: false,
     createdAt: new Date(`2026-08-09T00:00:0${input.id.length}.000Z`),
@@ -102,5 +110,20 @@ describe("buildWorkspaceTopology", () => {
       warnings: [],
       counts: { lead: 0, peer: 0, supervisor: 0, unbound: 0 },
     });
+  });
+
+  it("projects exact Beads issue grants onto the owning agent node", () => {
+    const topology = buildWorkspaceTopology(
+      agentMap(
+        agent({
+          id: "peer",
+          role: "peer",
+          issueIds: ["ps-issue-b", "ps-issue-a", "ps-issue-a"],
+        }),
+      ),
+      "workspace-1",
+    );
+
+    expect(topology.nodes[0]?.issueIds).toEqual(["ps-issue-a", "ps-issue-b"]);
   });
 });

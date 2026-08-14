@@ -25,6 +25,7 @@ import {
   Ellipsis,
   Globe,
   Import as ImportIcon,
+  ListChecks,
   Network,
   PanelRight,
   Settings,
@@ -180,6 +181,7 @@ import type { SurfaceBackdrop } from "@/styles/surface-backdrop";
 import { useContainerWidthBelow } from "@/hooks/use-container-width";
 import {
   buildHostRootRoute,
+  buildHostProjectIssuesRoute,
   buildSettingsHostRoute,
   buildSettingsHostSectionRoute,
 } from "@/utils/host-routes";
@@ -249,6 +251,7 @@ const ThemedSquarePen = withUnistyles(SquarePen);
 const ThemedSquareTerminal = withUnistyles(SquareTerminal);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
+const ThemedListChecks = withUnistyles(ListChecks);
 const ThemedNetwork = withUnistyles(Network);
 const ThemedSettings = withUnistyles(Settings);
 const ThemedPanelRight = withUnistyles(PanelRight);
@@ -279,6 +282,7 @@ const MENU_NEW_AGENT_ICON = <ThemedSquarePen size={16} uniProps={mutedColorMappi
 const MENU_NEW_TERMINAL_ICON = <ThemedSquareTerminal size={16} uniProps={mutedColorMapping} />;
 const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
+const MENU_ISSUES_ICON = <ThemedListChecks size={16} uniProps={mutedColorMapping} />;
 const MENU_TOPOLOGY_ICON = <ThemedNetwork size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
@@ -913,6 +917,7 @@ function useCloseTabs(): UseCloseTabsResult {
 interface WorkspaceHeaderMenuProps {
   normalizedServerId: string;
   currentBranchName: string | null;
+  showIssues: boolean;
   showWorkspaceSetup: boolean;
   showCreateBrowserTab: boolean;
   isMobile: boolean;
@@ -923,6 +928,7 @@ interface WorkspaceHeaderMenuProps {
   menuNewTerminalIcon: ReactElement;
   menuNewBrowserIcon: ReactElement;
   menuImportIcon: ReactElement;
+  menuIssuesIcon: ReactElement;
   menuTopologyIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
@@ -931,6 +937,7 @@ interface WorkspaceHeaderMenuProps {
   onCreateTerminalWithProfile: (profile: TerminalProfileInput) => void;
   onCreateBrowser: () => void;
   onOpenImportSheet: () => void;
+  onOpenIssues: () => void;
   onOpenTopologyTab: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
@@ -990,6 +997,7 @@ function WorkspaceHeaderMenuTriggerIcon({ hovered, open }: { hovered: boolean; o
 function WorkspaceHeaderMenu({
   normalizedServerId,
   currentBranchName,
+  showIssues,
   showWorkspaceSetup,
   showCreateBrowserTab,
   isMobile,
@@ -1000,6 +1008,7 @@ function WorkspaceHeaderMenu({
   menuNewTerminalIcon,
   menuNewBrowserIcon,
   menuImportIcon,
+  menuIssuesIcon,
   menuTopologyIcon,
   menuCopyIcon,
   menuSettingsIcon,
@@ -1008,6 +1017,7 @@ function WorkspaceHeaderMenu({
   onCreateTerminalWithProfile,
   onCreateBrowser,
   onOpenImportSheet,
+  onOpenIssues,
   onOpenTopologyTab,
   onCopyWorkspacePath,
   onCopyBranchName,
@@ -1063,6 +1073,15 @@ function WorkspaceHeaderMenu({
             onSelect={onCreateBrowser}
           >
             {t("workspace.header.actions.newBrowser")}
+          </DropdownMenuItem>
+        ) : null}
+        {showIssues ? (
+          <DropdownMenuItem
+            testID="workspace-header-show-issues"
+            leading={menuIssuesIcon}
+            onSelect={onOpenIssues}
+          >
+            Issues
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem
@@ -1188,6 +1207,7 @@ interface WorkspaceHeaderTitleBarProps {
   currentBranchName: string | null;
   normalizedServerId: string;
   normalizedWorkspaceId: string;
+  showIssues: boolean;
   workspaceScripts: WorkspaceDescriptor["scripts"];
   liveTerminalIds: string[];
   showWorkspaceSetup: boolean;
@@ -1200,6 +1220,7 @@ interface WorkspaceHeaderTitleBarProps {
   menuNewTerminalIcon: ReactElement;
   menuNewBrowserIcon: ReactElement;
   menuImportIcon: ReactElement;
+  menuIssuesIcon: ReactElement;
   menuTopologyIcon: ReactElement;
   menuCopyIcon: ReactElement;
   menuSettingsIcon: ReactElement;
@@ -1208,6 +1229,7 @@ interface WorkspaceHeaderTitleBarProps {
   onCreateTerminalWithProfile: (profile: TerminalProfileInput) => void;
   onCreateBrowser: () => void;
   onOpenImportSheet: () => void;
+  onOpenIssues: () => void;
   onOpenTopologyTab: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
@@ -1225,6 +1247,7 @@ function WorkspaceHeaderTitleBar({
   currentBranchName,
   normalizedServerId,
   normalizedWorkspaceId,
+  showIssues,
   workspaceScripts,
   liveTerminalIds,
   showWorkspaceSetup,
@@ -1237,6 +1260,7 @@ function WorkspaceHeaderTitleBar({
   menuNewTerminalIcon,
   menuNewBrowserIcon,
   menuImportIcon,
+  menuIssuesIcon,
   menuTopologyIcon,
   menuCopyIcon,
   menuSettingsIcon,
@@ -1245,6 +1269,7 @@ function WorkspaceHeaderTitleBar({
   onCreateTerminalWithProfile,
   onCreateBrowser,
   onOpenImportSheet,
+  onOpenIssues,
   onOpenTopologyTab,
   onCopyWorkspacePath,
   onCopyBranchName,
@@ -1272,9 +1297,50 @@ function WorkspaceHeaderTitleBar({
         </View>
       )}
       <View style={styles.compactHeaderMenuCluster}>
+        {!isMobile && showIssues ? (
+          <HeaderToggleButton
+            testID="workspace-header-issues"
+            onPress={onOpenIssues}
+            tooltipLabel="Issues"
+            tooltipKeys={[]}
+            tooltipSide="bottom"
+            style={styles.compactHeaderActionButton}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Open project issues"
+          >
+            {({ hovered, pressed }) => (
+              <ThemedListChecks
+                size={16}
+                uniProps={hovered || pressed ? foregroundColorMapping : mutedColorMapping}
+              />
+            )}
+          </HeaderToggleButton>
+        ) : null}
+        {!isMobile ? (
+          <HeaderToggleButton
+            testID="workspace-header-topology"
+            onPress={onOpenTopologyTab}
+            tooltipLabel="Topology"
+            tooltipKeys={[]}
+            tooltipSide="bottom"
+            style={styles.compactHeaderActionButton}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Open workspace topology"
+          >
+            {({ hovered, pressed }) => (
+              <ThemedNetwork
+                size={16}
+                uniProps={hovered || pressed ? foregroundColorMapping : mutedColorMapping}
+              />
+            )}
+          </HeaderToggleButton>
+        ) : null}
         <WorkspaceHeaderMenu
           normalizedServerId={normalizedServerId}
           currentBranchName={currentBranchName}
+          showIssues={showIssues}
           showWorkspaceSetup={showWorkspaceSetup}
           showCreateBrowserTab={showCreateBrowserTab}
           isMobile={isMobile}
@@ -1285,6 +1351,7 @@ function WorkspaceHeaderTitleBar({
           menuNewTerminalIcon={menuNewTerminalIcon}
           menuNewBrowserIcon={menuNewBrowserIcon}
           menuImportIcon={menuImportIcon}
+          menuIssuesIcon={menuIssuesIcon}
           menuTopologyIcon={menuTopologyIcon}
           menuCopyIcon={menuCopyIcon}
           menuSettingsIcon={menuSettingsIcon}
@@ -1293,6 +1360,7 @@ function WorkspaceHeaderTitleBar({
           onCreateTerminalWithProfile={onCreateTerminalWithProfile}
           onCreateBrowser={onCreateBrowser}
           onOpenImportSheet={onOpenImportSheet}
+          onOpenIssues={onOpenIssues}
           onOpenTopologyTab={onOpenTopologyTab}
           onCopyWorkspacePath={onCopyWorkspacePath}
           onCopyBranchName={onCopyBranchName}
@@ -1733,6 +1801,7 @@ function WorkspaceScreenContent({
   recoveryAgentId,
 }: WorkspaceScreenContentProps) {
   const { t } = useTranslation();
+  const router = useRouter();
   const _insets = useSafeAreaInsets();
   const toast = useToast();
   const isMobile = useIsCompactFormFactor();
@@ -2932,6 +3001,14 @@ function WorkspaceScreenContent({
     }
   }, [navigateToTabId, openWorkspaceTabFocused, persistenceKey]);
 
+  const handleOpenIssues = useCallback(() => {
+    const projectId = workspaceDescriptor?.projectId;
+    if (!projectId) {
+      return;
+    }
+    router.push(buildHostProjectIssuesRoute(normalizedServerId, projectId) as Href);
+  }, [normalizedServerId, router, workspaceDescriptor?.projectId]);
+
   const handleBulkCloseTabs = useCallback(
     async (input: { tabsToClose: WorkspaceTabDescriptor[]; title: string; logLabel: string }) => {
       const { tabsToClose, title, logLabel } = input;
@@ -3765,6 +3842,7 @@ function WorkspaceScreenContent({
                 currentBranchName={currentBranchName}
                 normalizedServerId={normalizedServerId}
                 normalizedWorkspaceId={normalizedWorkspaceId}
+                showIssues={Boolean(workspaceDescriptor?.projectId)}
                 workspaceScripts={workspaceScripts}
                 liveTerminalIds={liveTerminalIds}
                 showWorkspaceSetup={showWorkspaceSetup}
@@ -3777,6 +3855,7 @@ function WorkspaceScreenContent({
                 menuNewTerminalIcon={menuNewTerminalIcon}
                 menuNewBrowserIcon={MENU_NEW_BROWSER_ICON}
                 menuImportIcon={MENU_IMPORT_ICON}
+                menuIssuesIcon={MENU_ISSUES_ICON}
                 menuTopologyIcon={MENU_TOPOLOGY_ICON}
                 menuCopyIcon={menuCopyIcon}
                 menuSettingsIcon={menuSettingsIcon}
@@ -3785,6 +3864,7 @@ function WorkspaceScreenContent({
                 onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
                 onCreateBrowser={handleCreateBrowserTab}
                 onOpenImportSheet={openImportSheet}
+                onOpenIssues={handleOpenIssues}
                 onOpenTopologyTab={handleOpenTopologyTab}
                 onCopyWorkspacePath={handleCopyWorkspacePath}
                 onCopyBranchName={handleCopyBranchName}
