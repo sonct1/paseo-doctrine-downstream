@@ -25,16 +25,24 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function trackerCheckpointForRole(roleId: PaseoRoleId): string {
-  const receiptRule =
-    "Resolve the exact logical tool from the current provider tool catalog; never guess or hard-code an MCP namespace. Only an authoritative Paseo tool receipt counts as the checkpoint; a missing or failed selector is BLOCKED with issue state UNKNOWN.";
+function trackerCheckpointForRole(
+  roleId: PaseoRoleId,
+  effectClass: AssignmentEnvelope["effectClass"],
+): string {
+  const canMutateTracker =
+    assignmentExternalEffectBoundaryFor(roleId, effectClass).mode === "bounded";
+  const receiptRule = `Resolve the exact logical tool from the current provider tool catalog; never guess or hard-code an MCP namespace. Only an authoritative Paseo tool receipt counts as the checkpoint; a missing or failed selector leaves issue state UNKNOWN${canMutateTracker ? " and blocks tracker mutation" : " while source inspection continues inside the no-write lease"}.`;
   if (roleId === "lead") {
     return `Mandatory Beads Central checkpoint: call beads_status at assignment start. ${receiptRule} Inspect or create the durable issue before material routing/work; update authoritative evidence at handoff; close only after your engineering verdict. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
   }
   if (roleId === "peer") {
-    return `Mandatory Beads Central checkpoint: call beads_status and inspect the granted issue at assignment start. ${receiptRule} Claim before owned mutation, update evidence/blockers before handoff, and never close. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
+    const issueScope =
+      effectClass === "mutating"
+        ? "inspect the daemon-verified granted issue"
+        : "inspect a relevant issue when one is available; no issue grant is required for read-only source inspection";
+    return `Mandatory Beads Central checkpoint: call beads_status and ${issueScope} at assignment start. ${receiptRule} Claim before owned mutation, update evidence/blockers before handoff, and never close. If Central is unavailable, do not use native bd or another tracker${canMutateTracker ? "; report BLOCKED" : "; continue only the read-only source inspection and report issue state UNKNOWN"}.`;
   }
-  return `Mandatory Beads Central checkpoint: call beads_status and read the relevant issue graph at supervision start and material handoff. ${receiptRule} Remain read-only. If Central is unavailable, report BLOCKED and do not use native bd or another tracker.`;
+  return `Mandatory Beads Central checkpoint: call beads_status and read the relevant issue graph at supervision start and material handoff when Central is available. ${receiptRule} Remain read-only. If Central is unavailable, continue only the no-write inspection, report issue state UNKNOWN, and do not use native bd or another tracker.`;
 }
 
 function requireFuture(iso: string | undefined, now: Date, field: string): void {
@@ -83,9 +91,13 @@ function validateExternalEffectBoundary(roleId: PaseoRoleId, envelope: Assignmen
 }
 
 function validateResourceGrants(roleId: PaseoRoleId, envelope: AssignmentEnvelope): void {
-  if (roleId === "peer" && !envelope.resourceGrants?.beadsIssueIds?.length) {
+  if (
+    roleId === "peer" &&
+    envelope.effectClass === "mutating" &&
+    !envelope.resourceGrants?.beadsIssueIds?.length
+  ) {
     throw new Error(
-      `${ASSIGNMENT_CONTRACT_INVALID_ERROR}: Peer requires an exact Beads issue grant`,
+      `${ASSIGNMENT_CONTRACT_INVALID_ERROR}: mutating Peer requires an exact Beads issue grant`,
     );
   }
 }
@@ -197,7 +209,7 @@ export function buildAssignmentInstruction(contract: PersistedAssignmentContract
       ? `bounded (${envelope.externalEffectBoundary.scope})`
       : "denied";
   const beadsIssueGrants = envelope.resourceGrants?.beadsIssueIds?.join(", ") || "none";
-  const trackerCheckpoint = trackerCheckpointForRole(receipt.roleId);
+  const trackerCheckpoint = trackerCheckpointForRole(receipt.roleId, envelope.effectClass);
   return [
     `Assignment Contract: sha256=${receipt.assignmentDigest}; disposition=${envelope.disposition}; effect=${envelope.effectClass}.`,
     `Objective: ${envelope.objective}`,

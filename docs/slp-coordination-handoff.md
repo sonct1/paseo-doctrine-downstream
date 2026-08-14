@@ -5,11 +5,11 @@ Nó không thay thế role contracts, Human lease hoặc repository protocol.
 
 ## Mức trưởng thành hiện tại
 
-| Slice                  | Trạng thái                              | Đã có                                                                                                                     | Chưa được chứng minh                             |
-| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| P0 coordination signal | Candidate, integrated-runtime-qualified | protocol, persistence, idle-boundary delivery, native paid-provider resolution, CLI/client/tool, native attention policy  | release activation, multi-day operational effect |
-| P1 manual handoff      | Pilot đã chạy                           | predecessor packet, independent successor review, rejection evidence                                                      | multi-day operational effect                     |
-| P2 handoff artifact    | Candidate, integrated-runtime-qualified | immutable packet core, explicit ordered receipts, role/Human gates, write-lease enforcement, paid-provider release canary | release activation, multi-day operational effect |
+| Slice                  | Trạng thái                                           | Đã có                                                                                                                               | Chưa được chứng minh                             |
+| ---------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| P0 coordination signal | Candidate, integrated-runtime-qualified, default-off | protocol, persistence, idle-boundary delivery, native paid-provider resolution, CLI/client/tool, flag-gated native attention policy | release activation, multi-day operational effect |
+| P1 manual handoff      | Pilot đã chạy                                        | predecessor packet, independent successor review, rejection evidence                                                                | multi-day operational effect                     |
+| P2 handoff artifact    | Candidate, integrated-runtime-qualified              | immutable packet core, explicit ordered receipts, role/Human gates, write-lease enforcement, paid-provider release canary           | release activation, multi-day operational effect |
 
 Không được gọi ba slice này là shipped production capability chỉ vì focused tests xanh.
 
@@ -26,6 +26,9 @@ authority.
 - Manual handoff/detach recommendation chỉ target role-bound Lead.
 - Native continuity attention dùng provider telemetry hoặc repeated terminal failures. Missing context
   telemetry fail closed.
+- Automatic native policy không start mặc định; internal pilot phải đặt exact
+  `PASEO_ENABLE_NATIVE_COORDINATION_POLICY=1`. Manual signal và pending safe-boundary delivery không phụ
+  thuộc flag này.
 
 Ví dụ:
 

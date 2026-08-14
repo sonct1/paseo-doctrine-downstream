@@ -108,11 +108,15 @@ describe("Foundation skill policy", () => {
     });
     expect(merged).toContainEqual({
       path: path.join("/home/test/.codex", "skills", "frontend-design", "SKILL.md"),
-      enabled: true,
+      enabled: false,
     });
     expect(merged).toContainEqual({
       path: path.join("/home/test/.codex", "skills", "repo-refresh", "SKILL.md"),
       enabled: false,
+    });
+    expect(merged).toContainEqual({
+      path: policy.skillPaths.get("frontend-design"),
+      enabled: true,
     });
   });
 

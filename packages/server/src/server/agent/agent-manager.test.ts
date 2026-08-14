@@ -10201,6 +10201,7 @@ test("onWorkspaceStateMayHaveChanged is not called for running shell tool calls"
   expect(onWorkspaceStateMayHaveChanged).not.toHaveBeenCalled();
 });
 
+// oxlint-disable-next-line complexity -- This integration-style contract test intentionally covers one complete launch/reload boundary.
 test("role-bound create persists immutable binding and passes only launch instructions", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-binding-"));
   writeFileSync(
@@ -10299,7 +10300,11 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(client.preRegistrationRoleIds[0]).toBe("lead");
     expect(preCatalogRoleIds[0]).toBe("lead");
     expect(client.launchConfigs[0]?.mcpServers?.paseo).toBeUndefined();
-    expect(manager.getPaseoToolPolicy(created.id)).toBeUndefined();
+    expect(manager.getPaseoToolPolicy(created.id)).toMatchObject({
+      enabled: true,
+      allowedTools: expect.arrayContaining(["create_agent", "beads_status"]),
+    });
+    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(29);
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
     expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({
@@ -10368,6 +10373,72 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(manager.getAgent(created.id)?.roleBinding?.definitionDigest).toBe(
       created.roleBinding?.definitionDigest,
     );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("mutating Peer grant verification rejects before provider launch and state mutation", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-peer-grant-verification-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
+  class GrantVerificationClient extends TestAgentClient {
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      if (!input.config.model) throw new Error("missing test model");
+      return {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: input.config.model,
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+  }
+  const client = new GrantVerificationClient("codex");
+  const verifyRoleResourceGrants = vi
+    .fn()
+    .mockRejectedValue(new Error("beads_issue_grant_verification_failed: missing issue"));
+  const manager = new AgentManager({
+    clients: { codex: client },
+    logger,
+    verifyRoleResourceGrants,
+  });
+  const deleteAgentState = vi.spyOn(manager, "deleteAgentState");
+
+  try {
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+        "00000000-0000-4000-8000-000000000127",
+        {
+          workspaceId: "workspace-peer-grant-verification",
+          roleId: "peer",
+          assignment: {
+            version: 1,
+            disposition: "peer-execution",
+            objective: "Implement the exact granted issue.",
+            effectClass: "mutating",
+            mutationBoundary: { mode: "bounded-write", scope: workdir },
+            externalEffectBoundary: {
+              mode: "bounded",
+              scope:
+                "Beads Central issue/work graph for this assignment only; no other external effects",
+            },
+            resourceGrants: { beadsIssueIds: ["ps-missing-issue"] },
+            evidence: "Return exact changed scope and verification.",
+            handbackAndStop: "Stop after the bounded implementation or a material blocker.",
+          },
+        },
+      ),
+    ).rejects.toThrow("beads_issue_grant_verification_failed");
+    expect(verifyRoleResourceGrants).toHaveBeenCalledTimes(1);
+    expect(deleteAgentState).not.toHaveBeenCalled();
+    expect(client.createdConfigs).toHaveLength(0);
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

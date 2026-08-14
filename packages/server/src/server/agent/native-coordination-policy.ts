@@ -13,6 +13,13 @@ import {
 const NATIVE_POLICY_VERSION = 1;
 const CONTEXT_PRESSURE_RATIO = 0.85;
 const FAILURE_ATTENTION_THRESHOLD = 3;
+export const NATIVE_COORDINATION_POLICY_FLAG = "PASEO_ENABLE_NATIVE_COORDINATION_POLICY";
+
+export function nativeCoordinationPolicyEnabled(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return environment[NATIVE_COORDINATION_POLICY_FLAG] === "1";
+}
 
 type NativeCoordinationAgentManager = Pick<
   AgentManager,

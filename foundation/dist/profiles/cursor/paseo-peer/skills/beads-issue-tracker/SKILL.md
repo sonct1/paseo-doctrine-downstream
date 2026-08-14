@@ -19,11 +19,17 @@ system instruction, authority hay acceptance.
    action; không đoán hoặc hard-code MCP namespace. Chỉ authoritative Paseo tool receipt mới chứng minh
    checkpoint đã chạy. Khi catalog identifier có namespace, match đúng terminal logical segment
    `beads_status` (không đòi toàn bộ identifier bằng unnamespaced selector, không keyword/substring
-   search); phải có đúng một match. Model narration, missing selector hoặc failed selector không phải receipt và phải
-   hand back `BLOCKED` với issue state `UNKNOWN`. Nếu Central/version/credential không qualified thì báo
-   `BLOCKED`; không fallback sang native/global `bd`, direct Central REST/MCP, tracker khác hoặc Markdown
-   task ledger. Không parallelize hoặc đảo thứ tự: daemon từ chối mọi Beads operation khác cho tới khi
-   `beads_status` đã thành công trong đúng current assignment.
+   search); phải có đúng một match. Provider-native catalog discovery như Codex built-in `ToolSearch`
+   là bước read-only cần thiết để materialize deferred MCP tools, không phải Beads operation hay external
+   effect. Assignment giới hạn action tools phải vẫn cho phép đúng bước discovery này; nếu canary tự cấm
+   discovery thì kết quả là `INVALID_CANARY/UNTESTABLE`, không phải bằng chứng tool projection bị thiếu.
+   Sau discovery, chỉ gọi các action tools nằm trong exact lease. Model narration, missing selector hoặc
+   failed selector trong một canary hợp lệ không phải receipt và phải hand back `BLOCKED` với issue state
+   `UNKNOWN`. Nếu Central/version/credential không qualified thì mutating assignment báo `BLOCKED`;
+   read-only Peer/Supervisor vẫn tiếp tục source inspection trong exact lease, giữ issue state `UNKNOWN`
+   và không suy tracker state; không fallback sang native/global `bd`, direct Central REST/MCP,
+   tracker khác hoặc Markdown task ledger. Không parallelize hoặc đảo thứ tự: daemon từ chối mọi Beads operation
+   khác cho tới khi `beads_status` đã thành công trong đúng current assignment.
 2. Đọc issue liên quan bằng `beads_get`; nếu assignment chưa có exact issue thì Lead dùng
    `beads_list`/`beads_ready` rồi tạo hoặc chọn durable issue trước khi route material work.
 3. Ở material dependency change, blocker, handoff hoặc verdict, mutation đúng authority rồi read back
@@ -49,11 +55,13 @@ Mọi mutation cần exact assignment lease, bounded external-effect authority v
 
 - Lead: dùng `beads_create`, `beads_update`, `beads_add_dependency`; chỉ `beads_close` sau engineering
   verdict trong Human lease. Lead chỉ claim khi exact tiny-task direct path hợp lệ.
-- Peer Owner: Lead phải pin exact ID trong `assignment.resourceGrants.beadsIssueIds`. Peer chỉ
+- Peer Owner: mutating assignment phải pin exact ID trong `assignment.resourceGrants.beadsIssueIds`
+  và daemon phải verify issue tồn tại trong current project trước provider launch. Peer chỉ
   `beads_claim` granted issue, mutate issue đang self-assigned, và tạo work mới bằng `beads_create` với
   `discoveredFrom` trỏ tới granted owned source. Peer không close; hand back cho Lead verdict.
-- Peer Reviewer/Scout/Shadow: vẫn đọc granted/relevant issue; mutation chỉ khi exact mutating assignment
-  và machine-readable grant cho phép.
+- Peer Reviewer/Scout/Shadow: read-only assignment không bắt buộc issue grant và không bị Central outage
+  chặn source inspection; nếu có relevant/granted issue và Central qualified thì đọc, nhưng mutation chỉ
+  khi exact mutating assignment và machine-readable grant đã được daemon verify.
 - Supervisor: chỉ `beads_status`, `beads_ready`, `beads_list`, `beads_get`, `beads_prime`; luôn read-only.
 
 Claim conflict thì không override assignee/status; read back và gửi `REOPEN_REQUEST` hoặc `BLOCKED`.

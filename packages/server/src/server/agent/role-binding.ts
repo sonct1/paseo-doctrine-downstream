@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import {
   isProviderRoleBindingSupportedForRole,
   PaseoRoleIdSchema,
@@ -91,6 +90,38 @@ const PEER_PASEO_TOOLS = [
   "beads_update",
   "beads_add_dependency",
   "beads_prime",
+] as const;
+
+const LEAD_PASEO_TOOLS = [
+  "list_workspaces",
+  "list_workspace_scripts",
+  "create_agent",
+  "send_agent_prompt",
+  "signal_agent",
+  "prepare_lead_handoff",
+  "transition_lead_handoff",
+  "resolve_agent_signal",
+  "get_agent_status",
+  "list_agents",
+  "cancel_agent",
+  "archive_agent",
+  "get_agent_activity",
+  "create_room",
+  "read_room",
+  "post_room",
+  "beads_status",
+  "beads_ready",
+  "beads_list",
+  "beads_get",
+  "beads_create",
+  "beads_claim",
+  "beads_update",
+  "beads_close",
+  "beads_add_dependency",
+  "beads_prime",
+  "list_providers",
+  "list_models",
+  "inspect_provider",
 ] as const;
 
 function sha256(value: string): string {
@@ -226,6 +257,10 @@ function resolveConfiguredACPRoleBindingSupport(
   return null;
 }
 
+// COMPAT(legacyProviderRoleDetection): fail-closed migration guard only. Delete after
+// 2026-09-30 together with Foundation legacy role-link inventory; no installer creates these.
+export const LEGACY_PROVIDER_ROLE_DETECTION_EXPIRES_AT = "2026-09-30";
+
 export function detectLegacyProviderRole(
   command: readonly string[] | undefined,
 ): PaseoRoleId | null {
@@ -353,7 +388,7 @@ function buildProtocolInstruction(
   return `Workspace Protocol binding: full-read required at ${receipt.path}; sha256=${receipt.digest}. Read the exact current file before orchestration. If current bytes no longer match this digest, stop and request a fresh binding instead of relying on stale protocol state.`;
 }
 
-function buildMandatoryBeadsSkillInstruction(roleId: PaseoRoleId): string {
+function buildBeadsSkillAdmissionInstruction(roleId: PaseoRoleId): string {
   const policy = loadFoundationSkillPolicy(roleId);
   const skillPath = policy.skillPaths.get("beads-issue-tracker");
   if (policy.status !== "bound" || !policy.enabledNames.has("beads-issue-tracker") || !skillPath) {
@@ -361,26 +396,7 @@ function buildMandatoryBeadsSkillInstruction(roleId: PaseoRoleId): string {
       "foundation_skill_admission_required: beads-issue-tracker is not bound for this role",
     );
   }
-  let skill: string;
-  try {
-    skill = readFileSync(skillPath, "utf8");
-  } catch (error) {
-    throw new Error(
-      `foundation_skill_admission_required: cannot read beads-issue-tracker at ${skillPath}`,
-      { cause: error },
-    );
-  }
-  if (!skill.startsWith("---\nname: beads-issue-tracker\n")) {
-    throw new Error(
-      `foundation_skill_admission_required: invalid beads-issue-tracker package at ${skillPath}`,
-    );
-  }
-  return [
-    "Mandatory role-projected skill package: the daemon has loaded these exact bytes for this assignment. Apply them directly; do not search for, load, or read another beads-issue-tracker copy.",
-    '<paseo-role-skill name="beads-issue-tracker">',
-    skill,
-    "</paseo-role-skill>",
-  ].join("\n\n");
+  return "Role skill admission: `beads-issue-tracker` is active from the immutable Foundation bundle. Its assignment-start checkpoint, mutation boundary, and handback rule are projected in the Assignment Contract above; do not search for or load a second copy.";
 }
 
 export async function materializeRoleBinding(
@@ -443,7 +459,7 @@ export async function materializeRoleBinding(
     executionProfile?.instructions,
     buildProtocolInstruction(workspaceProtocol, hasProtocolException),
     buildAssignmentInstruction(assignmentContract),
-    buildMandatoryBeadsSkillInstruction(input.roleId),
+    buildBeadsSkillAdmissionInstruction(input.roleId),
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");
@@ -507,7 +523,10 @@ export function applyRolePaseoToolPolicy(
     };
   }
   if (roleId === "lead") {
-    return providerPolicy ? { ...providerPolicy, enabled: true } : undefined;
+    return {
+      enabled: true,
+      allowedTools: intersectRoleTools(LEAD_PASEO_TOOLS, providerPolicy),
+    };
   }
   return {
     enabled: true,

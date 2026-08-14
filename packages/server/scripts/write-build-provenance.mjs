@@ -44,6 +44,22 @@ const foundationSkillsOutputRoot = resolve(
 const productSkillsSourceRoot = resolve(repositoryRoot, "skills");
 const productSkillAdmissionSourcePath = resolve(productSkillsSourceRoot, "role-admission.json");
 const productSkillsOutputRoot = resolve(packageRoot, "dist/server/server/agent/product-skills");
+const workspaceProtocolContractSourcePath = resolve(
+  repositoryRoot,
+  "foundation/dist/templates/workspace-protocol-contract.json",
+);
+const workspaceProtocolFixturesSourcePath = resolve(
+  repositoryRoot,
+  "foundation/dist/templates/workspace-protocol-fixtures.json",
+);
+const workspaceProtocolContractOutputPath = resolve(
+  packageRoot,
+  "dist/server/utils/foundation-workspace-protocol-contract.json",
+);
+const workspaceProtocolFixturesOutputPath = resolve(
+  packageRoot,
+  "dist/server/utils/foundation-workspace-protocol-fixtures.json",
+);
 
 function readFoundationSkillAdmission() {
   let manifest;
@@ -223,6 +239,9 @@ writeFileSync(outputPath, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
 mkdirSync(dirname(roleOutputPath), { recursive: true });
 copyFileSync(roleSourcePath, roleOutputPath);
 copyFileSync(executionSpecializationSourcePath, executionSpecializationOutputPath);
+mkdirSync(dirname(workspaceProtocolContractOutputPath), { recursive: true });
+copyFileSync(workspaceProtocolContractSourcePath, workspaceProtocolContractOutputPath);
+copyFileSync(workspaceProtocolFixturesSourcePath, workspaceProtocolFixturesOutputPath);
 
 const foundationRoleSkillPackages = readFoundationSkillAdmission();
 rmSync(foundationSkillsOutputRoot, { recursive: true, force: true });

@@ -8,7 +8,7 @@ import { FoundationManifestSchema, InstallRecordSchema } from "./schema.js";
 import {
   resolveInstallLayout,
   resolveProductLayout,
-  roleLinks,
+  legacyRoleLinks,
   type ProductLayout,
 } from "./layout.js";
 
@@ -361,7 +361,8 @@ export function inspectMachine(
   const manifestRaw: unknown = readJson(product.manifestPath);
   const manifest = FoundationManifestSchema.parse(manifestRaw);
   const install = resolveInstallLayout({ home, distributionVersion: manifest.distributionVersion });
-  const links = roleLinks({
+  // These are retirement candidates, never desired runtime links.
+  const links = legacyRoleLinks({
     home,
     releasePath: install.releasePath,
     skillInventoryRoot: product.distributionRoot,

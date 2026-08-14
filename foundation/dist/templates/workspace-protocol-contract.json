@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "emittedVersion": 3,
+  "maxBytes": 65536,
+  "titlePattern": "^#\\s+Workspace Protocol\\b",
+  "markerMentionPattern": "<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->",
+  "wellFormedMarkerPattern": "^<!--\\s*PASEO_WORKSPACE_PROTOCOL_VERSION:\\s*([1-9]\\d{0,3})\\s*-->$",
+  "placeholderPattern": "\\{\\{REQUIRED:[^{}]+\\}\\}",
+  "targetRequiredFields": [
+    "identity",
+    "issue tracker"
+  ],
+  "canonicalFields": [
+    "identity",
+    "project risk/protected areas",
+    "default topology",
+    "ownership/hotspots",
+    "routing defaults",
+    "issue tracker",
+    "existing harness",
+    "project policy",
+    "review/evidence",
+    "escalation/Human decisions",
+    "repository exceptions/anti-patterns"
+  ],
+  "canonicalIssueTrackerValue": "Beads Central là durable issue/work graph bắt buộc cho Lead, Peer và Supervisor. Mỗi role gọi `beads_status` khi bắt đầu assignment, dùng đúng project do Paseo bind, đọc issue liên quan trước action và ghi authoritative readback ở material handoff; Central unavailable thì mutation `BLOCKED` và issue state giữ `UNKNOWN`, việc inspect không mutation vẫn tiếp tục, không fallback native `bd`/tracker khác. Lead create/update và chỉ close sau verdict; mutating Peer claim/update exact granted issue và dùng `discoveredFrom`; read-only Peer không cần issue grant để inspect; Supervisor read-only.",
+  "fixtureCorpus": "workspace-protocol-fixtures.json"
+}

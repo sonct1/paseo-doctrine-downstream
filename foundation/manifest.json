@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.13",
+  "distributionVersion": "0.1.0-dev.14",
   "foundationSource": {
-    "commit": "5b9deed40b1108402acf74f159ad0353f6d97290",
-    "ref": "foundation-v0.1.0-dev.13"
+    "commit": "57109b7fd0739e8885bc0f01d9bc731a71473c7a",
+    "ref": "foundation-v0.1.0-dev.14"
   },
   "files": [
     {
@@ -54,7 +54,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "607a0a486a0a6d818e8d918d265c9de544e7ae9ba16f77a9333a3d34993db727"
+      "sha256": "efd052c925dd25b673dc8d0b5e2b347f7778990d7028bb353417c2aa2c7ac3fc"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
@@ -64,7 +64,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/skills/beads-issue-tracker/agents/openai.yaml",
@@ -99,7 +99,7 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "65a01608c0f055dfa09fcc74c14e8106c9aa3af4a41ba080556337bbff38ef64"
+      "sha256": "989cb159ff4dd2d64e4ede414570bcac49e2a7e2ccc5982bd7ad284b8feaeeb6"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
@@ -109,7 +109,7 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/skills/beads-issue-tracker/agents/openai.yaml",
@@ -124,7 +124,7 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "8c87a53cf404f0023814689cf1dd377255b17dd62c031df0f7ce99596045b4c0"
+      "sha256": "117cf33145e5e529dd3da5afa6863ea0a5a14f365a01deb8ec726ab2eac452fb"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
@@ -139,7 +139,7 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/skills/beads-issue-tracker/agents/openai.yaml",
@@ -209,7 +209,7 @@
     {
       "path": "profiles/cursor/paseo-lead/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/cursor/paseo-lead/skills/beads-issue-tracker/agents/openai.yaml",
@@ -254,7 +254,7 @@
     {
       "path": "profiles/cursor/paseo-peer/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/cursor/paseo-peer/skills/beads-issue-tracker/agents/openai.yaml",
@@ -284,7 +284,7 @@
     {
       "path": "profiles/cursor/paseo-supervisor/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/cursor/paseo-supervisor/skills/beads-issue-tracker/agents/openai.yaml",
@@ -344,7 +344,7 @@
     {
       "path": "profiles/opencode-role-roots/lead/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/opencode-role-roots/lead/skills/beads-issue-tracker/agents/openai.yaml",
@@ -379,7 +379,7 @@
     {
       "path": "profiles/opencode-role-roots/peer/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/opencode-role-roots/peer/skills/beads-issue-tracker/agents/openai.yaml",
@@ -399,7 +399,7 @@
     {
       "path": "profiles/opencode-role-roots/supervisor/skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "profiles/opencode-role-roots/supervisor/skills/beads-issue-tracker/agents/openai.yaml",
@@ -489,7 +489,7 @@
     {
       "path": "skills/beads-issue-tracker/SKILL.md",
       "mode": "0644",
-      "sha256": "0d30d09fdaa3c05dd806f72cdeb242e5df33314b1d6aafa611d53ca0183a947d"
+      "sha256": "3d2c5b291d34c94f0e8b909693bad2570ae9363959fbf2d7c9e705dbf931d45a"
     },
     {
       "path": "skills/beads-issue-tracker/agents/openai.yaml",
@@ -554,12 +554,22 @@
     {
       "path": "templates/WORKSPACE_PROTOCOL.md",
       "mode": "0644",
-      "sha256": "18fd8f80fc4dc42c001f6ef5ad7bafd73d2f2c3a15c297269a74d1d6c56bd89e"
+      "sha256": "042cc5937566b694e67b8f958063bf8b1aa60d71c0c7aa0fe4f54b7ffdfe6ecc"
     },
     {
       "path": "templates/paseo-provider-overrides.example.json",
       "mode": "0644",
       "sha256": "e6b91edc3a2b2ee46bf336d886f39f5106378dcb2140ab329d943bb032676825"
+    },
+    {
+      "path": "templates/workspace-protocol-contract.json",
+      "mode": "0644",
+      "sha256": "9e67a8788d961432030fa4787578b3371e3c1b0e3459e274aeb0e03b7cefd0e7"
+    },
+    {
+      "path": "templates/workspace-protocol-fixtures.json",
+      "mode": "0644",
+      "sha256": "200878d8671cd50d1a8186880fe9bc6c6fec51991927ec9a1d9044fd2a2266be"
     }
   ]
 }

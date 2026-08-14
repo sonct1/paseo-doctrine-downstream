@@ -16,10 +16,10 @@ import type {
   WorkspaceProtocolRpcError,
   WorkspaceProtocolSnapshot,
 } from "@getpaseo/protocol/workspace-protocol-schema";
+import { WORKSPACE_PROTOCOL_CONTRACT } from "./workspace-protocol-contract.js";
 
 export const WORKSPACE_PROTOCOL_FILE_NAME = "WORKSPACE_PROTOCOL.md";
-export const WORKSPACE_PROTOCOL_VERSION = 3;
-const MAX_WORKSPACE_PROTOCOL_BYTES = 64 * 1024;
+export const WORKSPACE_PROTOCOL_VERSION = WORKSPACE_PROTOCOL_CONTRACT.emittedVersion;
 
 /**
  * Schema evolves additively: a new version may only add optional clauses, so any version this
@@ -29,21 +29,10 @@ const MAX_WORKSPACE_PROTOCOL_BYTES = 64 * 1024;
  * something we control, and a build that refuses the future locks its own users out.
  * Only a malformed marker is rejected, because that is corruption rather than a version.
  */
-const WELL_FORMED_MARKER = /^<!--\s*PASEO_WORKSPACE_PROTOCOL_VERSION:\s*([1-9]\d{0,3})\s*-->$/u;
-const IDENTITY_CATEGORIES: readonly (readonly RegExp[])[] = [
-  [/\bowner\b/iu, /chủ sở hữu/iu, /\bauthority\b/iu, /thẩm quyền/iu],
-  [/\bapplies_to\b/iu, /áp dụng/iu, /phạm vi/iu, /\brepository\b/iu, /\bproject\b/iu],
-  [/\bversion\b/iu, /\blast_reviewed\b/iu, /trạng thái/iu, /\bstatus\b/iu, /\breview/iu],
-];
-const REQUIRED_TRACKER_TERMS = [
-  "beads central",
-  "lead",
-  "peer",
-  "supervisor",
-  "beads_status",
-  "blocked",
-  "read-only",
-] as const;
+const TITLE_PATTERN = new RegExp(WORKSPACE_PROTOCOL_CONTRACT.titlePattern, "mu");
+const MARKER_MENTION_PATTERN = new RegExp(WORKSPACE_PROTOCOL_CONTRACT.markerMentionPattern, "gu");
+const WELL_FORMED_MARKER = new RegExp(WORKSPACE_PROTOCOL_CONTRACT.wellFormedMarkerPattern, "u");
+const PLACEHOLDER_PATTERN = new RegExp(WORKSPACE_PROTOCOL_CONTRACT.placeholderPattern, "u");
 
 export type WriteWorkspaceProtocolResult =
   | { ok: true; snapshot: WorkspaceProtocolSnapshot }
@@ -66,7 +55,7 @@ export function buildWorkspaceProtocolTemplate(repoRoot: string, now = new Date(
 - default topology: Lead-direct cho exact tiny task; chỉ thêm smallest useful Peer/Supervisor khi uncertainty, risk hoặc independent judgment thật sự cần.
 - ownership/hotspots: mỗi moving/coupled scope có một write Owner; assignment phải nêu shared hoặc coupled surfaces trước delegation.
 - routing defaults: discover rồi pin provider/model/effort trong bounded assignment; không silent fallback; route phải có reason, scope và expiry.
-- issue tracker: Beads Central là durable issue/work graph bắt buộc cho Lead, Peer và Supervisor. Mỗi role phải gọi \`beads_status\` khi bắt đầu assignment, dùng đúng project do Paseo bind, đọc issue liên quan trước action và ghi authoritative readback ở material handoff; nếu Central unavailable thì mutation \`BLOCKED\` và issue state giữ \`UNKNOWN\`, việc inspect không mutation vẫn tiếp tục, không fallback sang native \`bd\` hoặc tracker thứ hai. Lead create/update graph và chỉ close sau verdict; Peer claim/update đúng granted issue và tạo discovered work bằng \`discoveredFrom\`; Supervisor read-only.
+- issue tracker: ${WORKSPACE_PROTOCOL_CONTRACT.canonicalIssueTrackerValue}
 - existing harness: chưa khảo sát. Ghi ra những gì đã cai trị repository này (\`AGENTS.md\`, \`CONTRIBUTING\`, CI gates, review conventions) và protocol này nhường cái nào; chỉ ghi \`none\` sau khi đã thực sự nhìn.
 - project policy: \`none\`; chỉ activate exact package + version + scope + authority + conflict rule bằng Human decision hoặc protocol revision mới.
 - review/evidence: focused checks và current diff là mặc định; independent review theo material risk; Lead/Human giữ acceptance authority.
@@ -75,12 +64,15 @@ export function buildWorkspaceProtocolTemplate(repoRoot: string, now = new Date(
 `;
 }
 
-function hasMandatoryIssueTrackerClause(content: string): boolean {
-  const trackerClauses = content.match(/^- issue tracker:[^\n]+$/gimu) ?? [];
-  if (trackerClauses.length !== 1) return false;
-  const trackerClause = trackerClauses[0]?.toLowerCase() ?? "";
-  const marksMandatory = trackerClause.includes("bắt buộc") || trackerClause.includes("mandatory");
-  return marksMandatory && REQUIRED_TRACKER_TERMS.every((term) => trackerClause.includes(term));
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function hasOneNonBlankField(content: string, field: string): boolean {
+  const matches = content.match(new RegExp(`^- ${escapeRegExp(field)}:[ \\t]*(.*)$`, "gmu"));
+  if (matches?.length !== 1) return false;
+  const value = matches[0]?.slice(matches[0].indexOf(":") + 1).trim() ?? "";
+  return value.replace(/^`+|`+$/gu, "").trim().length > 0;
 }
 
 function canonicalIdentityPath(value: string): string {
@@ -109,25 +101,22 @@ export function validateWorkspaceProtocol(
   const issues: WorkspaceProtocolIssue[] = [];
   const byteLength = Buffer.byteLength(content, "utf8");
   if (byteLength === 0 || content.trim().length === 0) issues.push("empty");
-  if (byteLength > MAX_WORKSPACE_PROTOCOL_BYTES) issues.push("too_large");
-  if (!/^#\s+Workspace Protocol\b/mu.test(content)) issues.push("missing_title");
-  const markerMentions = content.match(/<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu) ?? [];
+  if (byteLength > WORKSPACE_PROTOCOL_CONTRACT.maxBytes) issues.push("too_large");
+  if (!TITLE_PATTERN.test(content)) issues.push("missing_title");
+  const markerMentions = content.match(MARKER_MENTION_PATTERN) ?? [];
   if (markerMentions.length === 0) issues.push("missing_version_marker");
   if (markerMentions.length > 1) issues.push("duplicate_version_marker");
   if (markerMentions.some((marker) => !WELL_FORMED_MARKER.test(marker.trim()))) {
     issues.push("unsupported_version");
   }
-  if (/\{\{REQUIRED:[^{}]+\}\}/u.test(content)) issues.push("unresolved_placeholder");
+  if (PLACEHOLDER_PATTERN.test(content)) issues.push("unresolved_placeholder");
   if (/^(?:<{7}|={7}|>{7})(?:\s|$)/mu.test(content)) issues.push("conflict_marker");
 
-  const identityCategoryCount = IDENTITY_CATEGORIES.filter((patterns) =>
-    patterns.some((pattern) => pattern.test(content)),
-  ).length;
-  if (identityCategoryCount < 2) issues.push("missing_identity");
+  if (!hasOneNonBlankField(content, "identity")) issues.push("missing_identity");
   if (repoRoot && hasMismatchedIdentityScope(content, repoRoot)) {
     issues.push("mismatched_identity_scope");
   }
-  if (!hasMandatoryIssueTrackerClause(content)) issues.push("missing_issue_tracker");
+  if (!hasOneNonBlankField(content, "issue tracker")) issues.push("missing_issue_tracker");
   return issues;
 }
 

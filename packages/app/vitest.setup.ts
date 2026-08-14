@@ -6,6 +6,30 @@ const globalWithTestShims = globalThis as typeof globalThis & Record<string, unk
 
 globalWithTestShims.__DEV__ = false;
 
+const asyncStorageItems = new Map<string, string>();
+vi.mock("@react-native-async-storage/async-storage", () => ({
+  default: {
+    clear: vi.fn(async () => asyncStorageItems.clear()),
+    getAllKeys: vi.fn(async () => [...asyncStorageItems.keys()]),
+    getItem: vi.fn(async (key: string) => asyncStorageItems.get(key) ?? null),
+    multiGet: vi.fn(async (keys: string[]) =>
+      keys.map((key) => [key, asyncStorageItems.get(key) ?? null] as const),
+    ),
+    multiRemove: vi.fn(async (keys: string[]) => {
+      for (const key of keys) asyncStorageItems.delete(key);
+    }),
+    multiSet: vi.fn(async (entries: Array<readonly [string, string]>) => {
+      for (const [key, value] of entries) asyncStorageItems.set(key, value);
+    }),
+    removeItem: vi.fn(async (key: string) => {
+      asyncStorageItems.delete(key);
+    }),
+    setItem: vi.fn(async (key: string, value: string) => {
+      asyncStorageItems.set(key, value);
+    }),
+  },
+}));
+
 if (typeof globalThis.self === "undefined") {
   globalWithTestShims.self = globalThis;
 }

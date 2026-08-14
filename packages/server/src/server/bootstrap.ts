@@ -137,7 +137,10 @@ import {
   resumePendingCoordinationSignalDeliveries,
   type CoordinationSignalDependencies,
 } from "./agent/coordination-signals.js";
-import { startNativeCoordinationPolicy } from "./agent/native-coordination-policy.js";
+import {
+  nativeCoordinationPolicyEnabled,
+  startNativeCoordinationPolicy,
+} from "./agent/native-coordination-policy.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
 import { createAgentMcpServer } from "./agent/mcp-server.js";
 import {
@@ -162,6 +165,7 @@ import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
 import { BeadsCentralService } from "./beads/beads-central-service.js";
+import { createMutatingPeerGrantVerifier } from "./beads/beads-grant-verifier.js";
 import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import { WorkspaceGitServiceImpl } from "./workspace-git-service.js";
 import { resolveWorkspaceIdForPath } from "./resolve-workspace-id-for-path.js";
@@ -898,6 +902,10 @@ export async function createPaseoDaemon(
     mcpRuntimeId: randomUUID(),
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    verifyRoleResourceGrants: createMutatingPeerGrantVerifier({
+      service: beadsService,
+      workspaceRegistry,
+    }),
     logger,
   });
 
@@ -1326,11 +1334,18 @@ export async function createPaseoDaemon(
     sendAtSafeBoundary: sendCoordinationMessageAtSafeBoundary,
     logger,
   };
-  const stopNativeCoordinationPolicy = startNativeCoordinationPolicy({
-    ...coordinationSignalDependencies,
-    agentManager,
-    agentStorage,
-  });
+  const automaticCoordinationEnabled = nativeCoordinationPolicyEnabled();
+  const stopNativeCoordinationPolicy = automaticCoordinationEnabled
+    ? startNativeCoordinationPolicy({
+        ...coordinationSignalDependencies,
+        agentManager,
+        agentStorage,
+      })
+    : () => undefined;
+  logger.info(
+    { enabled: automaticCoordinationEnabled, maturity: "candidate" },
+    "Native automatic coordination policy boundary resolved",
+  );
   const stopPendingCoordinationSignalDeliveries = await resumePendingCoordinationSignalDeliveries({
     ...coordinationSignalDependencies,
     agentStorage,

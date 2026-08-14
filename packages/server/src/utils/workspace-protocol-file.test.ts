@@ -16,6 +16,7 @@ import {
   validateWorkspaceProtocol,
   writeWorkspaceProtocol,
 } from "./workspace-protocol-file.js";
+import { loadWorkspaceProtocolFixtureCorpus } from "./workspace-protocol-contract.js";
 
 const tempDirs: string[] = [];
 
@@ -30,6 +31,14 @@ function makeRoot(): string {
 }
 
 describe("workspace protocol file", () => {
+  test("shares the canonical Foundation fixture corpus", () => {
+    for (const fixture of loadWorkspaceProtocolFixtureCorpus().cases) {
+      expect(validateWorkspaceProtocol(fixture.content).length === 0, fixture.name).toBe(
+        fixture.valid,
+      );
+    }
+  });
+
   test("rejects an explicit applies_to path bound to another repository", () => {
     const repoRoot = makeRoot();
     const otherRoot = makeRoot();
@@ -101,7 +110,7 @@ describe("workspace protocol file", () => {
     ).toContain("duplicate_version_marker");
   });
 
-  test("requires one complete mandatory Beads Central role clause", () => {
+  test("requires one non-blank tracker field without guessing prose semantics", () => {
     const complete = buildWorkspaceProtocolTemplate(makeRoot());
     expect(validateWorkspaceProtocol(complete)).toEqual([]);
     expect(
@@ -109,7 +118,7 @@ describe("workspace protocol file", () => {
     ).toContain("missing_issue_tracker");
     expect(
       validateWorkspaceProtocol(complete.replace("Supervisor read-only", "Supervisor writes")),
-    ).toContain("missing_issue_tracker");
+    ).not.toContain("missing_issue_tracker");
     expect(validateWorkspaceProtocol(`${complete}- issue tracker: duplicate\n`)).toContain(
       "missing_issue_tracker",
     );

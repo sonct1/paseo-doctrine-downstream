@@ -857,7 +857,7 @@ describe("ForgeService", () => {
 
     now = EXPECTED_GITHUB_SLOW_POLL_MS;
     await vi.advanceTimersByTimeAsync(EXPECTED_GITHUB_SLOW_POLL_MS - EXPECTED_GITHUB_FAST_POLL_MS);
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1);
     expect(currentPullRequestStatusCalls(runner.calls)).toHaveLength(2);
     expect(reads.map((read) => read.reason)).toEqual([undefined, "self-heal-github"]);
 

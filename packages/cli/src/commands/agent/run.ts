@@ -446,11 +446,12 @@ function validateRunOptions(prompt: string, options: AgentRunOptions, outputSche
       message: "--beads-issue is only valid with --role peer",
     } satisfies CommandError;
   }
-  if (roleId === "peer" && beadsIssueIds.length === 0) {
+  if (roleId === "peer" && assignmentEffect === "mutating" && beadsIssueIds.length === 0) {
     throw {
       code: "INVALID_OPTIONS",
-      message: "--beads-issue is required with --role peer",
-      details: "Pin at least one exact durable issue ID for the mandatory Peer tracker checkpoint",
+      message: "--beads-issue is required with --role peer --assignment-effect mutating",
+      details:
+        "Pin at least one exact durable issue ID; the daemon verifies it in the bound project before provider launch",
     } satisfies CommandError;
   }
 

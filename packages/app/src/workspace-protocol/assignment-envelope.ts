@@ -41,8 +41,8 @@ export function buildAssignmentEnvelope(input: {
   const beadsIssueIds = Array.from(
     new Set((input.beadsIssueIds ?? []).map((issueId) => issueId.trim()).filter(Boolean)),
   );
-  if (input.roleId === "peer" && beadsIssueIds.length === 0) {
-    throw new Error("assignment_contract_required: Peer Beads issue grant");
+  if (input.roleId === "peer" && input.effectClass === "mutating" && beadsIssueIds.length === 0) {
+    throw new Error("assignment_contract_required: mutating Peer Beads issue grant");
   }
   return {
     version: PASEO_ASSIGNMENT_CONTRACT_VERSION,

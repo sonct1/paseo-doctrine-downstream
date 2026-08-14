@@ -28,7 +28,7 @@ import {
   FOUNDATION_SKILL_NAMES,
   resolveInstallLayout,
   resolveProductLayout,
-  roleLinks,
+  legacyRoleLinks,
 } from "./layout.js";
 import { createInstallPlan, readInstallPlan } from "./plan.js";
 import type { InstallPlan } from "./schema.js";
@@ -73,7 +73,7 @@ describe("Foundation role links", () => {
       writeFileSync(path.join(skillRoot, "SKILL.md"), `---\nname: ${name}\n---\n`);
     }
 
-    const skillTargets = roleLinks({ home, releasePath, skillInventoryRoot: inventoryRoot })
+    const skillTargets = legacyRoleLinks({ home, releasePath, skillInventoryRoot: inventoryRoot })
       .map(({ target }) => target)
       .filter((target) => path.dirname(target) === path.join(home, ".codex", "skills"));
 
@@ -90,7 +90,7 @@ describe("Foundation role links", () => {
     writeFileSync(path.join(skillRoot, "SKILL.md"), "---\nname: foreign-skill\n---\n");
 
     expect(() =>
-      roleLinks({
+      legacyRoleLinks({
         home,
         releasePath: path.join(home, "release"),
         skillInventoryRoot: inventoryRoot,
@@ -272,7 +272,7 @@ describe("Foundation project readiness", () => {
 
     writeFileSync(
       path.join(projectRoot, "WORKSPACE_PROTOCOL.md"),
-      "owner: Human\napplies_to: repository root\nversion: 1\n",
+      "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 99 -->\n\n- identity: owner Human\n- issue tracker: opaque versioned contract\n",
     );
     expect(inspectProjectReadiness(projectRoot).status).toBe("UNKNOWN");
   });
@@ -422,7 +422,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const home = temporaryHome();
     const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
     materializeLegacySupervisorSkill(legacyRelease);
-    const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
+    const legacyLinks = legacyRoleLinks({ home, releasePath: legacyRelease });
     const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
     mkdirSync(path.dirname(layout.currentLink), { recursive: true });
     symlinkSync(legacyRelease, layout.currentLink);
@@ -515,12 +515,12 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const applied = applyInstallPlan(plan);
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     const foreignTarget = path.join(home, "foreign-owned-link");
-    symlinkSync(applied.record.installedLinks[0]!.source, foreignTarget);
+    symlinkSync("/tmp/legacy-foundation-link", foreignTarget);
     const tamperedRecord = {
       ...applied.record,
-      installedLinks: [
-        { ...applied.record.installedLinks[0]!, target: foreignTarget },
-        ...applied.record.installedLinks.slice(1),
+      previousLinks: [
+        { ...applied.record.previousLinks![0]!, target: foreignTarget },
+        ...applied.record.previousLinks!.slice(1),
       ],
     };
     writeFileSync(layout.installRecordPath, `${JSON.stringify(tamperedRecord, null, 2)}\n`);
@@ -626,8 +626,15 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
 
   it("cleans final paths and links after a late install failure", () => {
     const home = temporaryHome();
+    const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
+    materializeLegacySupervisorSkill(legacyRelease);
+    const legacyLinks = legacyRoleLinks({ home, releasePath: legacyRelease });
+    for (const link of legacyLinks) {
+      mkdirSync(path.dirname(link.target), { recursive: true });
+      symlinkSync(link.source, link.target);
+    }
     const plan = createInstallPlan({
-      mode: "clean-empty",
+      mode: "migration",
       home,
       productRoot: productRoot(),
       environmentPath: "",
@@ -635,19 +642,27 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     });
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     const codexRoot = path.join(home, ".codex");
-    mkdirSync(codexRoot, { recursive: true, mode: 0o700 });
     chmodSync(codexRoot, 0o500);
     try {
       expect(() => applyInstallPlan(plan)).toThrow();
     } finally {
       chmodSync(codexRoot, 0o700);
     }
+    expect(recoverInterruptedInstall(home)).toBe(true);
 
     expect(existsSync(layout.transactionPath)).toBe(false);
     expect(existsSync(layout.releasePath)).toBe(false);
     expect(existsSync(layout.controlHome)).toBe(false);
     expect(existsSync(layout.currentLink)).toBe(false);
-    for (const link of plan.links) expect(existsSync(link.target)).toBe(false);
+    for (const link of plan.links) {
+      if (link.previousTarget === null) {
+        expect(existsSync(link.target)).toBe(false);
+      } else {
+        expect(path.resolve(path.dirname(link.target), readlinkSync(link.target))).toBe(
+          link.previousTarget,
+        );
+      }
+    }
   });
 
   it("restores every legacy target when a migration is rolled back", () => {
@@ -655,7 +670,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     const layout = resolveInstallLayout({ home, distributionVersion: "legacy" });
     const legacyRelease = path.join(home, "old", "paseo-foundation", "release");
     materializeLegacySupervisorSkill(legacyRelease);
-    const legacyLinks = roleLinks({ home, releasePath: legacyRelease });
+    const legacyLinks = legacyRoleLinks({ home, releasePath: legacyRelease });
     mkdirSync(path.dirname(layout.currentLink), { recursive: true });
     symlinkSync(legacyRelease, layout.currentLink);
     for (const link of legacyLinks) {

@@ -112,9 +112,18 @@ function packInternalPackages() {
   mkdirSync(PACK_ROOT, { recursive: true });
   const tarballs = [];
   for (const workspace of INTERNAL_PACKAGES) {
+    // buildProduct() already built every package in INTERNAL_PACKAGES. Do not let npm pack rerun
+    // prepack hooks that clean those shared outputs or rebuild the daemon web UI a second time.
     const output = run(
       "npm",
-      ["pack", "--silent", "--json", `--workspace=${workspace}`, `--pack-destination=${PACK_ROOT}`],
+      [
+        "pack",
+        "--silent",
+        "--json",
+        "--ignore-scripts",
+        `--workspace=${workspace}`,
+        `--pack-destination=${PACK_ROOT}`,
+      ],
       { capture: true },
     );
     const packed = parseTrailingJson(output, workspace);
@@ -288,6 +297,10 @@ fi
 if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
   PREFLIGHT_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/paseo-downstream-preflight.XXXXXX")
   trap 'rm -rf "$PREFLIGHT_ROOT"' EXIT INT TERM
+  LAUNCHD_LOADED=0
+  if launchctl print "gui/$USER_ID/$LABEL" >/dev/null 2>&1; then
+    LAUNCHD_LOADED=1
+  fi
   if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/status.json"; then
     echo "Refusing to replace the existing Paseo installation because daemon status could not be read." >&2
     exit 1
@@ -320,13 +333,36 @@ if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
         fi
       done
 
-    printf 'Existing idle Paseo detected at %s; stopping it before activation.\n' "$EXISTING_PASEO"
-    PASEO_HOST= "$EXISTING_PASEO" daemon stop --json >/dev/null
-    if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/stopped.json" ||
-       ! grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"stopped"' "$PREFLIGHT_ROOT/stopped.json"; then
+    if [ "$LAUNCHD_LOADED" -eq 1 ]; then
+      # The launchd job owns the supervisor process and KeepAlive will respawn it if only the
+      # worker receives the daemon shutdown RPC. Remove the owner first, then wait for Paseo's
+      # authoritative stopped readback before replacing the installed release.
+      printf 'Existing idle launchd-managed Paseo detected at %s; unloading it before activation.\n' "$EXISTING_PASEO"
+      if ! launchctl bootout "gui/$USER_ID/$LABEL"; then
+        echo "Existing Paseo launchd service could not be unloaded; installation aborted." >&2
+        exit 1
+      fi
+    else
+      printf 'Existing idle unmanaged Paseo detected at %s; stopping it before activation.\n' "$EXISTING_PASEO"
+      PASEO_HOST= "$EXISTING_PASEO" daemon stop --json >/dev/null
+    fi
+
+    STOPPED=0
+    for _attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/stopped.json" 2>/dev/null &&
+         grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"stopped"' "$PREFLIGHT_ROOT/stopped.json"; then
+        STOPPED=1
+        break
+      fi
+      sleep 1
+    done
+    if [ "$STOPPED" -ne 1 ]; then
       echo "Existing Paseo daemon did not report a stopped readback; installation aborted." >&2
       exit 1
     fi
+  elif [ "$LAUNCHD_LOADED" -eq 1 ]; then
+    echo "Refusing to replace a loaded Paseo launchd service whose daemon is not authoritatively running." >&2
+    exit 1
   fi
   rm -rf "$PREFLIGHT_ROOT"
   trap - EXIT INT TERM
@@ -625,20 +661,66 @@ function emitArtifact() {
   );
 }
 
+// Every step below mutates shared, unversioned output: packages/*/dist, packages/app/dist,
+// packages/foundation-cli/assets and artifacts/.staging. Two artifact builds at once therefore
+// clean directories the other is compiling against, and the loser fails somewhere unrelated to
+// the real cause. mkdir is atomic, so it doubles as the lock.
+const BUILD_LOCK_DIR = path.join(ARTIFACTS_ROOT, ".build-lock");
+
+function acquireArtifactLock() {
+  mkdirSync(ARTIFACTS_ROOT, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      mkdirSync(BUILD_LOCK_DIR);
+      writeFileSync(path.join(BUILD_LOCK_DIR, "pid"), String(process.pid), "utf8");
+      return;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      let owner = Number.NaN;
+      try {
+        owner = Number.parseInt(readFileSync(path.join(BUILD_LOCK_DIR, "pid"), "utf8"), 10);
+      } catch {
+        owner = Number.NaN;
+      }
+      if (Number.isInteger(owner) && isProcessAlive(owner)) {
+        fail(
+          `Another artifact build is running (pid ${owner}). Wait for it, or remove ${BUILD_LOCK_DIR} if that process is gone.`,
+        );
+      }
+      rmSync(BUILD_LOCK_DIR, { recursive: true, force: true });
+    }
+  }
+  fail(`Could not acquire ${BUILD_LOCK_DIR}`);
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
 function main() {
-  const nodeRoot = resolveBundledNodeRoot();
-  assertReleaseInputs(nodeRoot);
-  rmSync(STAGING_ROOT, { recursive: true, force: true });
-  mkdirSync(STAGING_ROOT, { recursive: true });
-  buildProduct();
-  const tarballs = packInternalPackages();
-  installProductionPayload(nodeRoot, tarballs);
-  copyNodeRuntime(nodeRoot);
-  createLaunchers();
-  createInstallScripts();
-  createManifest(nodeRoot);
-  validateStaging(nodeRoot);
-  emitArtifact();
+  acquireArtifactLock();
+  try {
+    const nodeRoot = resolveBundledNodeRoot();
+    assertReleaseInputs(nodeRoot);
+    rmSync(STAGING_ROOT, { recursive: true, force: true });
+    mkdirSync(STAGING_ROOT, { recursive: true });
+    buildProduct();
+    const tarballs = packInternalPackages();
+    installProductionPayload(nodeRoot, tarballs);
+    copyNodeRuntime(nodeRoot);
+    createLaunchers();
+    createInstallScripts();
+    createManifest(nodeRoot);
+    validateStaging(nodeRoot);
+    emitArtifact();
+  } finally {
+    rmSync(BUILD_LOCK_DIR, { recursive: true, force: true });
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

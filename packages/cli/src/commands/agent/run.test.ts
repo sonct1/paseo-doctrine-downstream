@@ -142,10 +142,17 @@ describe("runRunCommand option validation", () => {
     );
   });
 
-  it("requires an exact issue grant for every Peer assignment", async () => {
+  it("allows a read-only Peer without a grant and requires one for mutation", async () => {
+    await expect(
+      runRunCommand(
+        "inspect current bytes",
+        { role: "peer", assignmentEffect: "read-only", json: true },
+        {} as never,
+      ),
+    ).rejects.not.toMatchObject({ code: "INVALID_OPTIONS" });
     await expectInvalidOptions(
-      { role: "peer", assignmentEffect: "read-only" },
-      /--beads-issue is required with --role peer/,
+      { role: "peer", assignmentEffect: "mutating" },
+      /--beads-issue is required with --role peer --assignment-effect mutating/,
     );
   });
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from "node:fs";
 import path from "node:path";
 import { inspectMachine } from "./inspection.js";
-import { resolveInstallLayout } from "./layout.js";
+import { resolveInstallLayout, resolveProductLayout } from "./layout.js";
 import { FoundationManifestSchema } from "./schema.js";
 
 export type GateStatus = "PASS" | "FAIL" | "UNKNOWN";
@@ -67,6 +67,7 @@ function runtimeGate(input: {
   currentLink: string;
   releasePath: string;
   links: Array<{ source: string; target: string }>;
+  retiredLinks?: Array<{ target: string }>;
   daemonReachable: boolean;
   daemonEvidence: string[];
   interruptedTransactionPresent: boolean;
@@ -79,6 +80,9 @@ function runtimeGate(input: {
     if (resolvedLinkTarget(link.target) !== link.source)
       failures.push(`${link.target}: wrong target`);
   }
+  for (const link of input.retiredLinks ?? []) {
+    if (existsSync(link.target)) failures.push(`${link.target}: legacy runtime link still present`);
+  }
   if (input.interruptedTransactionPresent) {
     failures.push("an interrupted Foundation install transaction requires recovery");
   }
@@ -87,18 +91,43 @@ function runtimeGate(input: {
     ? {
         name: "RUNTIME_EFFECTIVE",
         status: "PASS",
-        evidence: ["owned links and exact local daemon identity readback pass"],
+        evidence: ["native distribution, retired legacy links, and exact daemon readback pass"],
       }
     : { name: "RUNTIME_EFFECTIVE", status: "FAIL", evidence: failures };
 }
 
 function roleBoundaryGate(releasePath: string): DoctorGate {
   const failures: string[] = [];
+  const definitions = JSON.parse(
+    readFileSync(path.join(releasePath, "profiles", "native", "role-definitions.json"), "utf8"),
+  ) as Record<string, unknown>;
+  const bundles = JSON.parse(
+    readFileSync(path.join(releasePath, "skills", "role-bundles.json"), "utf8"),
+  ) as Record<string, unknown>;
+  if (definitions.schemaVersion !== 1 || bundles.schemaVersion !== 1) {
+    failures.push("native role definition or role-skill manifest has an unsupported schema");
+  }
+  const definitionRoles = definitions.roles as Record<string, unknown> | undefined;
+  const bundleRoles = bundles.roles as
+    | Record<string, { active?: unknown; explicitOnly?: unknown }>
+    | undefined;
   for (const role of ["lead", "peer", "supervisor"]) {
-    const profilePath = path.join(releasePath, "profiles", "codex", `${role}.config.toml`);
-    const profile = readFileSync(profilePath, "utf8");
-    for (const required of ["multi_agent = false", "multi_agent_v2 = false", "enabled = false"]) {
-      if (!profile.includes(required)) failures.push(`${role}: missing ${required}`);
+    if (!Array.isArray(definitionRoles?.[role]) || definitionRoles[role].length === 0) {
+      failures.push(`${role}: native role definition is missing`);
+    }
+    const active = bundleRoles?.[role]?.active;
+    const explicitOnly = bundleRoles?.[role]?.explicitOnly;
+    const admitted = [
+      ...(Array.isArray(active) ? active : []),
+      ...(Array.isArray(explicitOnly) ? explicitOnly : []),
+    ];
+    if (
+      !Array.isArray(active) ||
+      !Array.isArray(explicitOnly) ||
+      !admitted.every((name) => typeof name === "string") ||
+      admitted.length >= 10
+    ) {
+      failures.push(`${role}: native role skill admission must stay below 10 packages`);
     }
   }
   if (failures.length > 0) {
@@ -107,11 +136,29 @@ function roleBoundaryGate(releasePath: string): DoctorGate {
   return {
     name: "ROLE_BOUNDARY_QUALIFIED",
     status: "UNKNOWN",
-    evidence: ["static role guards pass; no fresh role/tool canary evidence was supplied"],
+    evidence: ["native role bytes and <10 skill admission pass; fresh role/tool canary is pending"],
   };
 }
 
-export function inspectProjectReadiness(projectRoot?: string): DoctorGate {
+function workspaceProtocolContract(productRoot?: string): Record<string, unknown> {
+  const product = resolveProductLayout(productRoot);
+  return JSON.parse(
+    readFileSync(
+      path.join(product.distributionRoot, "templates", "workspace-protocol-contract.json"),
+      "utf8",
+    ),
+  ) as Record<string, unknown>;
+}
+
+function hasOneNonBlankField(protocol: string, field: string): boolean {
+  const escaped = field.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const matches = protocol.match(new RegExp(`^- ${escaped}:[ \\t]*(.*)$`, "gmu"));
+  if (matches?.length !== 1) return false;
+  const value = matches[0]?.slice(matches[0].indexOf(":") + 1).trim() ?? "";
+  return value.replace(/^`+|`+$/gu, "").trim().length > 0;
+}
+
+export function inspectProjectReadiness(projectRoot?: string, productRoot?: string): DoctorGate {
   if (!projectRoot) {
     return {
       name: "PROJECT_READY",
@@ -156,27 +203,23 @@ export function inspectProjectReadiness(projectRoot?: string): DoctorGate {
   }
 
   const protocol = readFileSync(protocolPath, "utf8");
-  const markers = protocol.match(/<!--[^>]*PASEO_WORKSPACE_PROTOCOL_VERSION[^>]*-->/gu) ?? [];
-  const supportedMarkers = new Set([
-    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->",
-    "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 2 -->",
-  ]);
-  const normalized = protocol.toLocaleLowerCase("en-US");
-  const identityCategories = [
-    [/\bowner\b/u, /chủ sở hữu/u, /\bauthority\b/u, /thẩm quyền/u],
-    [/\bapplies_to\b/u, /áp dụng/u, /phạm vi/u, /\brepository\b/u, /\bproject\b/u],
-    [/\bversion\b/u, /\blast_reviewed\b/u, /trạng thái/u, /\bstatus\b/u, /\breview/u, /hiệu lực/u],
-  ];
-  const matchedCategories = identityCategories.filter((category) =>
-    category.some((pattern) => pattern.test(normalized)),
-  ).length;
+  const contract = workspaceProtocolContract(productRoot);
+  const markerPattern = new RegExp(String(contract.markerMentionPattern), "gu");
+  const wellFormedMarker = new RegExp(String(contract.wellFormedMarkerPattern), "u");
+  const markers = protocol.match(markerPattern) ?? [];
+  const requiredFields = contract.targetRequiredFields;
   const invalid =
     !protocol.trim() ||
-    /\{\{REQUIRED:[^{}]+\}\}/u.test(protocol) ||
+    Buffer.byteLength(protocol, "utf8") > Number(contract.maxBytes) ||
+    !new RegExp(String(contract.titlePattern), "mu").test(protocol) ||
+    new RegExp(String(contract.placeholderPattern), "u").test(protocol) ||
     ["<<<<<<<", "=======", ">>>>>>>"].some((marker) => protocol.includes(marker)) ||
-    markers.length > 1 ||
-    (markers.length === 1 && !supportedMarkers.has(markers[0]?.trim() ?? "")) ||
-    matchedCategories < 2;
+    markers.length !== 1 ||
+    !wellFormedMarker.test(markers[0]?.trim() ?? "") ||
+    !Array.isArray(requiredFields) ||
+    !requiredFields.every(
+      (field) => typeof field === "string" && hasOneNonBlankField(protocol, field),
+    );
   return invalid
     ? { name: "PROJECT_READY", status: "FAIL", evidence: ["workspace protocol is invalid"] }
     : {
@@ -215,7 +258,7 @@ export function doctorFoundation(input: {
           status: "UNKNOWN",
           evidence: ["Foundation is not installed"],
         },
-        inspectProjectReadiness(input.projectRoot),
+        inspectProjectReadiness(input.projectRoot, input.productRoot),
       ],
     };
   }
@@ -228,12 +271,13 @@ export function doctorFoundation(input: {
         currentLink: install.currentLink,
         releasePath: record.releasePath,
         links: record.installedLinks,
+        retiredLinks: record.previousLinks ?? [],
         daemonReachable: inspection.paseoDaemonReachable,
         daemonEvidence: inspection.paseoDaemonEvidence,
         interruptedTransactionPresent: inspection.interruptedTransactionPresent,
       }),
       roleBoundaryGate(record.releasePath),
-      inspectProjectReadiness(input.projectRoot),
+      inspectProjectReadiness(input.projectRoot, input.productRoot),
     ],
   };
 }

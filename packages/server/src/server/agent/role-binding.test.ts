@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   applyRolePaseoToolPolicy,
   detectLegacyProviderRole,
+  LEGACY_PROVIDER_ROLE_DETECTION_EXPIRES_AT,
   materializeRoleBinding,
   resolveProviderRoleBindingSupport,
   toRoleBindingReceipt,
@@ -63,6 +64,7 @@ function assignmentBinding(roleId: "lead" | "peer" | "supervisor", cwd: string) 
 
 describe("native Foundation role materialization", () => {
   test("detects only exact legacy role transport commands", () => {
+    expect(LEGACY_PROVIDER_ROLE_DETECTION_EXPIRES_AT).toBe("2026-09-30");
     expect(detectLegacyProviderRole(["/opt/paseo/codex-profile", "lead"])).toBe("lead");
     expect(detectLegacyProviderRole(["claude", "--agent", "paseo-supervisor"])).toBe("supervisor");
     expect(detectLegacyProviderRole(["custom-provider", "peer"])).toBeNull();
@@ -101,10 +103,9 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("Broad agent lists may omit internal loop workers");
     expect(binding.instructions).toContain(binding.workspaceProtocol.digest);
     expect(binding.instructions).toContain("Mutation boundary: no-write");
-    expect(binding.instructions).toContain("Mandatory role-projected skill package");
-    expect(binding.instructions).toContain('<paseo-role-skill name="beads-issue-tracker">');
-    expect(binding.instructions).toContain("daemon từ chối mọi Beads operation khác cho tới khi");
-    expect(binding.instructions).toContain("label values");
+    expect(binding.instructions).toContain("Role skill admission: `beads-issue-tracker`");
+    expect(binding.instructions).not.toContain('<paseo-role-skill name="beads-issue-tracker">');
+    expect(binding.instructions).toContain("Mandatory Beads Central checkpoint");
     expect(binding.assignment).toMatchObject({ effectClass: "read-only" });
     const receipt = toRoleBindingReceipt(binding);
     expect(receipt).not.toHaveProperty("instructions");
@@ -495,13 +496,36 @@ describe("native Foundation role materialization", () => {
 
   test("role-bound tool policy owns enablement while provider filters can narrow it", () => {
     expect(applyRolePaseoToolPolicy(undefined, { enabled: false })).toEqual({ enabled: false });
-    expect(applyRolePaseoToolPolicy("lead", { enabled: false })).toEqual({ enabled: true });
+    const leadPolicy = applyRolePaseoToolPolicy("lead", { enabled: false });
+    expect(leadPolicy).toEqual({
+      enabled: true,
+      allowedTools: expect.arrayContaining([
+        "create_agent",
+        "get_agent_status",
+        "beads_status",
+        "beads_close",
+        "list_providers",
+      ]),
+    });
+    expect(leadPolicy?.allowedTools).toHaveLength(29);
+    expect(leadPolicy?.allowedTools).not.toEqual(
+      expect.arrayContaining([
+        "browser_list_tabs",
+        "create_terminal",
+        "create_schedule",
+        "respond_to_permission",
+        "create_workspace",
+      ]),
+    );
     expect(
       applyRolePaseoToolPolicy("lead", {
         enabled: false,
         disabledTools: ["list_agents"],
       }),
-    ).toEqual({ enabled: true, disabledTools: ["list_agents"] });
+    ).toEqual({
+      enabled: true,
+      allowedTools: expect.not.arrayContaining(["list_agents"]),
+    });
     expect(applyRolePaseoToolPolicy("peer", { enabled: false })).toEqual({
       enabled: true,
       allowedTools: expect.arrayContaining([

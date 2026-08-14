@@ -167,8 +167,9 @@ CLI/client/tool, idle-boundary delivery và paid-provider integrated-runtime can
 production dependency.
 
 Native context pressure, compaction và repeated-failure attention đã có candidate routing/coalescing
-policy; missing telemetry fail closed. Các attention này và manual signal đều không tự handoff, detach,
-replace Lead hoặc đổi authority.
+policy nhưng daemon mặc định không start policy này. Chỉ exact internal pilot đặt
+`PASEO_ENABLE_NATIVE_COORDINATION_POLICY=1`; missing telemetry fail closed. Các attention này và manual
+signal đều không tự handoff, detach, replace Lead hoặc đổi authority.
 
 ## Manual stop conditions
 

@@ -294,7 +294,77 @@ esac
   }
 });
 
-test("artifact installer retries launchd bootstrap after an idle-daemon takeover race", () => {
+test("artifact installer unloads a KeepAlive launchd owner before replacing an idle daemon", () => {
+  const fixture = createArtifactFixture(`#!/bin/sh
+printf '%s\\n' "$*" >> "$EXISTING_PASEO_MARKER"
+case "$1 $2" in
+  'daemon status')
+    if [ -f "$LAUNCHD_BOOTED_OUT" ]; then
+      echo '{"localDaemon":"stopped"}'
+    else
+      echo '{"localDaemon":"running"}'
+    fi
+    ;;
+  'ls --global') echo '[]' ;;
+  'workspace ls') echo '[]' ;;
+  'daemon stop') exit 88 ;;
+  *) exit 2 ;;
+esac
+`);
+  const launchctlLog = path.join(fixture.root, "launchctl.log");
+  const bootstrapFailed = path.join(fixture.root, "bootstrap-failed");
+  const launchdBootedOut = path.join(fixture.root, "launchd-booted-out");
+  writeExecutable(
+    path.join(fixture.oldBin, "launchctl"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$LAUNCHCTL_LOG"
+case "$1" in
+  print) exit 0 ;;
+  bootout) : > "$LAUNCHD_BOOTED_OUT"; exit 0 ;;
+  kickstart) exit 0 ;;
+  bootstrap)
+    if [ ! -f "$LAUNCHCTL_BOOTSTRAP_FAILED" ]; then
+      : > "$LAUNCHCTL_BOOTSTRAP_FAILED"
+      exit 5
+    fi
+    exit 0
+    ;;
+  *) exit 2 ;;
+esac
+`,
+  );
+  try {
+    const result = runArtifactFixture(
+      fixture,
+      ["--prefix", fixture.prefix, "--bin-dir", fixture.binDir, "--skip-foundation"],
+      {
+        LAUNCHCTL_LOG: launchctlLog,
+        LAUNCHCTL_BOOTSTRAP_FAILED: bootstrapFailed,
+        LAUNCHD_BOOTED_OUT: launchdBootedOut,
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const paseoCalls = readFileSync(fixture.marker, "utf8").trim().split("\n");
+    assert.equal(
+      paseoCalls.some((line) => line.startsWith("daemon stop")),
+      false,
+    );
+    const launchctlCalls = readFileSync(launchctlLog, "utf8").trim().split("\n");
+    const firstBootout = launchctlCalls.findIndex((line) => line.startsWith("bootout "));
+    const firstBootstrap = launchctlCalls.findIndex((line) => line.startsWith("bootstrap "));
+    assert.notEqual(firstBootout, -1);
+    assert.equal(firstBootout < firstBootstrap, true);
+    assert.equal(launchctlCalls.filter((line) => line.startsWith("bootstrap ")).length, 2);
+    assert.equal(
+      launchctlCalls.some((line) => line.startsWith("kickstart -k ")),
+      true,
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("artifact installer stops an idle unmanaged daemon through the CLI", () => {
   const fixture = createArtifactFixture(`#!/bin/sh
 printf '%s\\n' "$*" >> "$EXISTING_PASEO_MARKER"
 case "$1 $2" in
@@ -312,20 +382,13 @@ case "$1 $2" in
 esac
 `);
   const launchctlLog = path.join(fixture.root, "launchctl.log");
-  const bootstrapFailed = path.join(fixture.root, "bootstrap-failed");
   writeExecutable(
     path.join(fixture.oldBin, "launchctl"),
     `#!/bin/sh
 printf '%s\\n' "$*" >> "$LAUNCHCTL_LOG"
 case "$1" in
-  bootout|kickstart) exit 0 ;;
-  bootstrap)
-    if [ ! -f "$LAUNCHCTL_BOOTSTRAP_FAILED" ]; then
-      : > "$LAUNCHCTL_BOOTSTRAP_FAILED"
-      exit 5
-    fi
-    exit 0
-    ;;
+  print) exit 1 ;;
+  bootout|bootstrap|kickstart) exit 0 ;;
   *) exit 2 ;;
 esac
 `,
@@ -337,14 +400,12 @@ esac
       {
         EXISTING_PASEO_STOPPED: path.join(fixture.root, "existing-paseo-stopped"),
         LAUNCHCTL_LOG: launchctlLog,
-        LAUNCHCTL_BOOTSTRAP_FAILED: bootstrapFailed,
       },
     );
     assert.equal(result.status, 0, result.stderr);
-    const launchctlCalls = readFileSync(launchctlLog, "utf8").trim().split("\n");
-    assert.equal(launchctlCalls.filter((line) => line.startsWith("bootstrap ")).length, 2);
+    const paseoCalls = readFileSync(fixture.marker, "utf8").trim().split("\n");
     assert.equal(
-      launchctlCalls.some((line) => line.startsWith("kickstart -k ")),
+      paseoCalls.some((line) => line.startsWith("daemon stop")),
       true,
     );
   } finally {

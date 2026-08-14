@@ -112,7 +112,11 @@ export function resolveInstallLayout(input: {
   };
 }
 
-export function roleLinks(input: {
+// COMPAT(legacyRoleLinks): detection/removal only. Delete this inventory after 2026-09-30
+// once supported installs have crossed the native role-binding migration window.
+export const LEGACY_ROLE_LINK_MIGRATION_EXPIRES_AT = "2026-09-30";
+
+export function legacyRoleLinks(input: {
   home: string;
   releasePath: string;
   skillInventoryRoot?: string;

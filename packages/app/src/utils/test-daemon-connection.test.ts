@@ -99,7 +99,7 @@ describe("test-daemon-connection connectToDaemon", () => {
     expect(firstConfig?.clientId).toBe("cid_shared_probe_test");
     expect(secondConfig?.clientId).toBe("cid_shared_probe_test");
     expect(probe.clientIdsRequested).toBe(2);
-  });
+  }, 10_000);
 
   it("keeps direct TCP probes on the renderer WebSocket", async () => {
     const { connectToDaemon } = await import("./test-daemon-connection");

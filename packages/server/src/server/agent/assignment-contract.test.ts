@@ -91,13 +91,28 @@ describe("immutable assignment contract", () => {
     expect(buildAssignmentInstruction(supervisor)).toContain("material handoff");
   });
 
-  test("rejects a Peer assignment without an exact Beads issue grant", () => {
-    expect(() =>
+  test("requires an issue grant only for a mutating Peer", () => {
+    expect(
       materialize({
         roleId: "peer",
         envelope: envelope({ disposition: "peer-execution" }),
+      }).envelope.resourceGrants,
+    ).toBeUndefined();
+    expect(() =>
+      materialize({
+        roleId: "peer",
+        envelope: envelope({
+          disposition: "peer-execution",
+          effectClass: "mutating",
+          mutationBoundary: { mode: "bounded-write", scope: "/repo" },
+          externalEffectBoundary: {
+            mode: "bounded",
+            scope:
+              "Beads Central issue/work graph for this assignment only; no other external effects",
+          },
+        }),
       }),
-    ).toThrow("Peer requires an exact Beads issue grant");
+    ).toThrow("mutating Peer requires an exact Beads issue grant");
   });
 
   test("fails closed when a role-bound create omits the assignment", () => {

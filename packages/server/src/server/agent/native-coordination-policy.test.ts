@@ -3,7 +3,10 @@ import { describe, expect, test, vi } from "vitest";
 
 import type { AgentManagerEvent, ManagedAgent } from "./agent-manager.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
-import { startNativeCoordinationPolicy } from "./native-coordination-policy.js";
+import {
+  nativeCoordinationPolicyEnabled,
+  startNativeCoordinationPolicy,
+} from "./native-coordination-policy.js";
 
 function roleBinding(roleId: "lead" | "peer" | "supervisor") {
   return {
@@ -122,6 +125,16 @@ function createHarness() {
 }
 
 describe("native coordination policy", () => {
+  test("is disabled by default and requires the exact candidate flag", () => {
+    expect(nativeCoordinationPolicyEnabled({})).toBe(false);
+    expect(
+      nativeCoordinationPolicyEnabled({ PASEO_ENABLE_NATIVE_COORDINATION_POLICY: "true" }),
+    ).toBe(false);
+    expect(nativeCoordinationPolicyEnabled({ PASEO_ENABLE_NATIVE_COORDINATION_POLICY: "1" })).toBe(
+      true,
+    );
+  });
+
   test("records context pressure and wakes Lead only at an idle boundary", async () => {
     const harness = createHarness();
     harness.addAgent({ id: "lead-1", roleId: "lead", lifecycle: "running" });

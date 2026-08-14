@@ -147,6 +147,11 @@ archive sau readback:
 | `peer` + transport-only route       | Không đọc full protocol; trả role marker và tool visibility; không edit                    | Không có coordination tools; inspect pin exact selected provider/model/auth route                |
 | `supervisor` + transport-only route | Governance canary read-only; trả role marker và tool visibility; không create/update agent | Chỉ có supervision surface; inspect pin exact selected route, không có fallback                  |
 
+Với Codex và provider defer MCP tools, lease phải cho phép provider-native `ToolSearch` chỉ để resolve
+exact terminal logical selector trước action call. Một prompt cấm mọi auxiliary tool sẽ tự chặn deferred
+discovery; kết quả đó là `INVALID_CANARY/UNTESTABLE`, không chứng minh tool projection bị thiếu. Sau
+discovery, canary vẫn chỉ được gọi action tools nằm trong exact lease.
+
 Sau mỗi canary, đọc route từ daemon thay vì hỏi agent tự mô tả:
 
 ```bash

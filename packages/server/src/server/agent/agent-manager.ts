@@ -351,11 +351,21 @@ export interface AgentManagerOptions {
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  verifyRoleResourceGrants?: RoleResourceGrantVerifier;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   rescueTimeouts?: AgentManagerRescueTimeouts;
   logger: Logger;
 }
+
+export interface RoleResourceGrantVerificationInput {
+  agentId: string;
+  roleBinding: PersistedRoleBinding;
+}
+
+export type RoleResourceGrantVerifier = (
+  input: RoleResourceGrantVerificationInput,
+) => Promise<void>;
 
 function resolveAgentIdFactory(idFactory: AgentManagerOptions["idFactory"]): () => string {
   return idFactory ?? randomUUID;
@@ -734,6 +744,7 @@ export class AgentManager {
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
   private readonly roleBindingsAwaitingRegistration = new Map<string, PersistedRoleBinding>();
   private resolvePaseoToolPolicy: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  private readonly verifyRoleResourceGrants?: RoleResourceGrantVerifier;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -753,6 +764,7 @@ export class AgentManager {
     this.mcpRuntimeId = options?.mcpRuntimeId;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
+    this.verifyRoleResourceGrants = options.verifyRoleResourceGrants;
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({
       module: "agent",
@@ -1305,6 +1317,7 @@ export class AgentManager {
         roleBinding: options.roleBinding,
         launchContract: options.launchContract,
       });
+    await this.verifyMutatingPeerResourceGrants(resolvedAgentId, roleBinding);
     this.requireEnabledProvider(storedConfig.provider);
     const client = await this.requireAvailableClient({
       provider: storedConfig.provider,
@@ -1340,6 +1353,22 @@ export class AgentManager {
     } finally {
       this.roleBindingsAwaitingRegistration.delete(resolvedAgentId);
     }
+  }
+
+  private async verifyMutatingPeerResourceGrants(
+    agentId: string,
+    roleBinding: PersistedRoleBinding | undefined,
+  ): Promise<void> {
+    const assignment = roleBinding?.assignmentContract;
+    if (roleBinding?.roleId !== "peer" || assignment?.envelope.effectClass !== "mutating") {
+      return;
+    }
+    if (!this.verifyRoleResourceGrants) {
+      throw new Error(
+        "beads_issue_grant_verification_required: mutating Peer cannot launch without an authoritative verifier",
+      );
+    }
+    await this.verifyRoleResourceGrants({ agentId, roleBinding });
   }
 
   private buildCreateSessionOptions(options?: {

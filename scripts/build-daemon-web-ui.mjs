@@ -33,6 +33,7 @@ async function acquireBuildLock() {
       if (Number.isInteger(owner) && isProcessAlive(owner)) {
         throw new Error(
           `Another daemon web UI build is running (pid ${owner}). Wait for it, or remove ${LOCK_DIR} if that process is gone.`,
+          { cause: error },
         );
       }
       // The owner died mid-build and left the lock behind; its output is untrustworthy anyway.

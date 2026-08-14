@@ -165,6 +165,12 @@ function codexSkillName(value: unknown): string | null {
   return match?.[1] ?? null;
 }
 
+function codexSkillPath(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const skillPath = (value as { path?: unknown }).path;
+  return typeof skillPath === "string" ? skillPath : null;
+}
+
 export function mergeCodexFoundationSkillConfig(
   existing: unknown,
   policy: FoundationSkillPolicy,
@@ -176,10 +182,32 @@ export function mergeCodexFoundationSkillConfig(
         return name === null || !policy.packageNames.has(name);
       })
     : [];
-  const projected = [...policy.packageNames].sort().map((name) => ({
-    path: path.join(codexHome, "skills", name, "SKILL.md"),
-    enabled: policy.enabledNames.has(name),
-  }));
+  const configuredFoundationPaths = (Array.isArray(existing) ? existing : []).flatMap((entry) => {
+    const name = codexSkillName(entry);
+    const skillPath = codexSkillPath(entry);
+    return name && skillPath && policy.packageNames.has(name) ? [skillPath] : [];
+  });
+  const projected: Array<{ path: string; enabled: boolean }> = [];
+  const emittedPaths = new Set<string>();
+  const push = (skillPath: string, enabled: boolean): void => {
+    const key = path.resolve(skillPath);
+    if (emittedPaths.has(key)) return;
+    emittedPaths.add(key);
+    projected.push({ path: skillPath, enabled });
+  };
+  for (const skillPath of configuredFoundationPaths) push(skillPath, false);
+  for (const name of [...policy.packageNames].sort()) {
+    push(path.join(codexHome, "skills", name, "SKILL.md"), false);
+    const canonicalPath = policy.skillPaths.get(name);
+    if (canonicalPath) {
+      emittedPaths.delete(path.resolve(canonicalPath));
+      const priorIndex = projected.findIndex(
+        (entry) => path.resolve(entry.path) === path.resolve(canonicalPath),
+      );
+      if (priorIndex >= 0) projected.splice(priorIndex, 1);
+      push(canonicalPath, policy.status === "bound" && policy.enabledNames.has(name));
+    }
+  }
   return [...retained, ...projected];
 }
 

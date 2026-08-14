@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -76,15 +75,14 @@ try {
   const activeRecord = JSON.parse(readFileSync(activeRecordPath, "utf8"));
   assert.equal(activeRecord.status, "active");
   assert.equal(lstatSync(activeRecord.currentLink).isSymbolicLink(), true);
-  for (const link of activeRecord.installedLinks) {
-    assert.equal(lstatSync(link.target).isSymbolicLink(), true);
-  }
+  assert.deepEqual(activeRecord.installedLinks, []);
+  for (const link of activeRecord.previousLinks) assert.equal(existsSync(link.target), false);
 
   runCli(binPath, ["uninstall", "--home", home]);
   const uninstalledRecord = JSON.parse(readFileSync(activeRecordPath, "utf8"));
   assert.equal(uninstalledRecord.status, "uninstalled");
   assert.equal(existsSync(activeRecord.currentLink), false);
-  for (const link of activeRecord.installedLinks) assert.equal(existsSync(link.target), false);
+  for (const link of activeRecord.previousLinks) assert.equal(existsSync(link.target), false);
   assert.equal(existsSync(activeRecord.releasePath), true);
   assert.equal(activeRecord.controlHome, null);
   assert.equal(existsSync(path.join(home, ".paseo-control")), false);
@@ -146,20 +144,16 @@ try {
   runCli(binPath, ["install", "--plan", migrationPlanPath]);
   const migrationRecordPath = path.join(migrationHome, ".paseo-foundation", "install.json");
   const migrationRecord = JSON.parse(readFileSync(migrationRecordPath, "utf8"));
-  assert.equal(migrationRecord.previousLinks.length, migrationRecord.installedLinks.length);
+  assert.deepEqual(migrationRecord.installedLinks, []);
   assert.deepEqual(
     migrationRecord.previousLinks
       .map(({ previousTarget }) => previousTarget)
       .filter((previousTarget) => previousTarget !== null),
     legacyLinks.map(({ source }) => source),
   );
+  for (const link of legacyLinks) assert.equal(existsSync(link.target), false);
   runCli(binPath, ["uninstall", "--home", migrationHome]);
-  for (const link of legacyLinks) {
-    assert.equal(
-      path.resolve(path.dirname(link.target), readlinkSync(link.target)),
-      path.resolve(link.source),
-    );
-  }
+  for (const link of legacyLinks) assert.equal(existsSync(link.target), false);
 
   process.stdout.write(`Foundation packaged lifecycle passed on ${process.version}\n`);
 } finally {

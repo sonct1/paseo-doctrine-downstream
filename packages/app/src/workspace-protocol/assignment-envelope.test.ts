@@ -30,15 +30,15 @@ describe("assignment envelope", () => {
     });
   });
 
-  test("requires and normalizes the exact Peer issue grant", () => {
-    expect(() =>
+  test("allows read-only Peer without a grant and normalizes an optional exact grant", () => {
+    expect(
       buildAssignmentEnvelope({
         roleId: "peer",
         effectClass: "read-only",
-        objective: "Review the granted issue",
+        objective: "Review source without graph mutation",
         cwd: "/repo",
-      }),
-    ).toThrow("assignment_contract_required: Peer Beads issue grant");
+      }).resourceGrants,
+    ).toBeUndefined();
 
     expect(
       buildAssignmentEnvelope({
@@ -49,6 +49,15 @@ describe("assignment envelope", () => {
         beadsIssueIds: [" ps123-abc ", "ps123-abc"],
       }).resourceGrants,
     ).toEqual({ beadsIssueIds: ["ps123-abc"] });
+
+    expect(() =>
+      buildAssignmentEnvelope({
+        roleId: "peer",
+        effectClass: "mutating",
+        objective: "Implement the granted issue",
+        cwd: "/repo",
+      }),
+    ).toThrow("assignment_contract_required: mutating Peer Beads issue grant");
   });
 
   test("keeps read-only and Supervisor launches externally denied", () => {

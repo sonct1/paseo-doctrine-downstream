@@ -21,7 +21,7 @@ import {
   foundationSkillNamesFromTargets,
   resolveInstallLayout,
   resolveProductLayout,
-  roleLinks,
+  legacyRoleLinks,
 } from "./layout.js";
 import {
   FoundationManifestSchema,
@@ -288,7 +288,7 @@ function validateTransactionOwnership(home: string, transaction: InstallTransact
   });
   const transactionTargets = transaction.previousLinks.map(({ target }) => target);
   const skillNames = foundationSkillNamesFromTargets(resolvedHome, transactionTargets);
-  const expectedTargets = roleLinks({
+  const expectedTargets = legacyRoleLinks({
     home: resolvedHome,
     releasePath: transaction.releasePath,
     skillNames,
@@ -356,7 +356,7 @@ export function recoverInterruptedInstall(home: string): boolean {
     transaction.home,
     transaction.previousLinks.map(({ target }) => target),
   );
-  const activeLinks = roleLinks({
+  const activeLinks = legacyRoleLinks({
     home: transaction.home,
     releasePath: transaction.releasePath,
     skillNames,
@@ -365,6 +365,7 @@ export function recoverInterruptedInstall(home: string): boolean {
     if (
       !linkMatchesAllowedState(previous.target, [
         previous.previousTarget,
+        null,
         activeLinks[index]?.source ?? null,
       ])
     ) {
@@ -531,7 +532,12 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
     if (staging.releaseStagingPath) renameSync(staging.releaseStagingPath, install.releasePath);
     if (staging.controlStagingPath) renameSync(staging.controlStagingPath, install.controlHome);
     atomicSymlink(install.releasePath, install.currentLink);
-    for (const link of plan.links) atomicSymlink(link.source, link.target);
+    for (const link of plan.links) {
+      if (!linkMatchesAllowedState(link.target, [link.previousTarget])) {
+        throw new Error(`refusing to retire a changed legacy runtime link: ${link.target}`);
+      }
+      unlinkIfPresent(link.target);
+    }
 
     const existingRecord = inspection.installRecord;
     const previousReleasePath =
@@ -548,7 +554,7 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
       releasePath: install.releasePath,
       currentLink: install.currentLink,
       controlHome: plan.includeControlWorkspace ? install.controlHome : null,
-      installedLinks: plan.links.map(({ source, target }) => ({ source, target })),
+      installedLinks: [],
       previousReleasePath:
         previousReleasePath && previousReleasePath !== install.releasePath
           ? previousReleasePath
@@ -577,24 +583,34 @@ export function applyInstallPlan(plan: InstallPlan): AppliedInstall {
 function validateRecordOwnership(home: string, record: InstallRecord): void {
   const install = resolveInstallLayout({ home, distributionVersion: record.distributionVersion });
   const recordLinks = record.installedLinks.map(({ source, target }) => ({ source, target }));
-  const skillNames = foundationSkillNamesFromTargets(
-    install.home,
-    recordLinks.map(({ target }) => target),
-  );
-  const expectedLinks = roleLinks({
+  const previousTargets = record.previousLinks?.map(({ target }) => target);
+  const ownershipTargets =
+    recordLinks.length > 0 ? recordLinks.map(({ target }) => target) : (previousTargets ?? []);
+  const skillNames = foundationSkillNamesFromTargets(install.home, ownershipTargets);
+  const expectedLinks = legacyRoleLinks({
     home: install.home,
     releasePath: install.releasePath,
     skillNames,
   });
-  const previousTargets = record.previousLinks?.map(({ target }) => target);
   const expectedTargets = expectedLinks.map(({ target }) => target);
+  let linkLayoutValid: boolean;
+  if (record.mode === "migration" && recordLinks.length === 0 && previousTargets === undefined) {
+    linkLayoutValid = true;
+  } else if (recordLinks.length === 0) {
+    linkLayoutValid =
+      previousTargets !== undefined &&
+      JSON.stringify(previousTargets) === JSON.stringify(expectedTargets);
+  } else {
+    linkLayoutValid =
+      JSON.stringify(recordLinks) === JSON.stringify(expectedLinks) &&
+      (previousTargets === undefined ||
+        JSON.stringify(previousTargets) === JSON.stringify(expectedTargets));
+  }
   if (
     record.releasePath !== install.releasePath ||
     record.currentLink !== install.currentLink ||
     (record.controlHome !== null && record.controlHome !== install.controlHome) ||
-    JSON.stringify(recordLinks) !== JSON.stringify(expectedLinks) ||
-    (previousTargets !== undefined &&
-      JSON.stringify(previousTargets) !== JSON.stringify(expectedTargets)) ||
+    !linkLayoutValid ||
     (record.previousReleasePath !== null &&
       releaseWithin(install.releasesRoot, record.previousReleasePath) === null) ||
     (record.legacyRecordPath !== null && record.legacyRecordPath !== install.legacyRecordPath)
@@ -663,18 +679,18 @@ export function rollbackInstall(home: string): InstallRecord {
     path.join(previousReleasePath, ".foundation-manifest.json"),
   );
   verifyDistribution(previousReleasePath, previousManifest);
-  const previousLinks = record.installedLinks.map((link) => ({
-    target: link.target,
-    source: path.join(previousReleasePath, path.relative(record.releasePath, link.source)),
-  }));
+  const previousSnapshots = record.previousLinks ?? [];
+  const previousLinks = previousSnapshots.flatMap((link) =>
+    link.previousTarget === null ? [] : [{ target: link.target, source: link.previousTarget }],
+  );
   const priorCurrentTarget = linkTarget(record.currentLink);
-  const priorLinkTargets = record.installedLinks.map((link) => ({
+  const priorLinkTargets = previousSnapshots.map((link) => ({
     target: link.target,
     previousTarget: linkTarget(link.target),
   }));
-  for (const [index, link] of record.installedLinks.entries()) {
-    if (priorLinkTargets[index]?.previousTarget !== link.source) {
-      throw new Error(`refusing rollback because an owned runtime link changed: ${link.target}`);
+  for (const link of priorLinkTargets) {
+    if (link.previousTarget !== null) {
+      throw new Error(`refusing rollback because a retired runtime target changed: ${link.target}`);
     }
   }
   if (priorCurrentTarget !== record.releasePath) {

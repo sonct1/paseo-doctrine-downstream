@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "contractSchemaVersion": 1,
+  "cases": [
+    {
+      "name": "minimal-v1",
+      "valid": true,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 1 -->\n\n- identity: owner Human; applies_to repository\n- issue tracker: durable graph follows the versioned Foundation contract\n"
+    },
+    {
+      "name": "future-additive-v99",
+      "valid": true,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 99 -->\n\n- identity: owner Human; applies_to repository\n- issue tracker: future wording remains opaque to this structural reader\n- future optional clause: ignored by this reader\n"
+    },
+    {
+      "name": "tracker-prose-is-not-token-parsed",
+      "valid": true,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human; applies_to repository\n- issue tracker: semantics are declared by the versioned contract, not guessed from prose tokens\n"
+    },
+    {
+      "name": "blank",
+      "valid": false,
+      "content": "   \n"
+    },
+    {
+      "name": "missing-title",
+      "valid": false,
+      "content": "<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human\n- issue tracker: graph\n"
+    },
+    {
+      "name": "malformed-marker",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: v3 -->\n\n- identity: owner Human\n- issue tracker: graph\n"
+    },
+    {
+      "name": "duplicate-marker",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human\n- issue tracker: graph\n"
+    },
+    {
+      "name": "missing-identity",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- issue tracker: graph\n"
+    },
+    {
+      "name": "blank-identity",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: ``\n- issue tracker: graph\n"
+    },
+    {
+      "name": "missing-tracker",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human\n"
+    },
+    {
+      "name": "duplicate-tracker",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human\n- issue tracker: graph one\n- issue tracker: graph two\n"
+    },
+    {
+      "name": "unresolved-placeholder",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: {{REQUIRED: owner}}\n- issue tracker: graph\n"
+    },
+    {
+      "name": "conflict-marker",
+      "valid": false,
+      "content": "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->\n\n- identity: owner Human\n- issue tracker: graph\n<<<<<<< HEAD\n=======\n>>>>>>> branch\n"
+    }
+  ]
+}
