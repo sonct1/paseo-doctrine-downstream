@@ -7,8 +7,9 @@ import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
-const { asyncStorage } = vi.hoisted(() => ({
+const { asyncStorage, applyRoleProfileDefaults } = vi.hoisted(() => ({
   asyncStorage: new Map<string, string>(),
+  applyRoleProfileDefaults: vi.fn(() => true),
 }));
 
 vi.hoisted(() => {
@@ -29,6 +30,31 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 
 vi.mock("@/attachments/service", () => ({
   garbageCollectAttachments: async () => undefined,
+}));
+
+vi.mock("@/hooks/use-role-profiles", () => ({
+  useRoleProfiles: () => ({
+    catalog: {
+      profiles: [
+        { roleId: "lead", preferences: {} },
+        {
+          roleId: "peer",
+          preferences: {
+            defaults: {
+              provider: "gemini-antigravity",
+              model: "gemini-3-pro",
+              modeId: "plan",
+            },
+          },
+        },
+        { roleId: "supervisor", preferences: {} },
+      ],
+    },
+    isLoading: false,
+    error: null,
+    supported: true,
+    refetch: async () => null,
+  }),
 }));
 
 vi.mock("@/hooks/use-agent-form-state", () => ({
@@ -148,6 +174,7 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     modelError: null,
     refreshProviderModels: () => undefined,
     setProviderAndModelFromUser: () => undefined,
+    applyRoleProfileDefaults,
     workingDirIsEmpty: false,
     persistFormPreferences: async () => undefined,
   }),
@@ -184,6 +211,7 @@ beforeAll(async () => {
 describe("useAgentInputDraft live contract", () => {
   beforeEach(() => {
     asyncStorage.clear();
+    applyRoleProfileDefaults.mockClear();
     const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
       url: "http://localhost",
     });
@@ -271,6 +299,11 @@ describe("useAgentInputDraft live contract", () => {
     );
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("peer");
+    });
+    expect(applyRoleProfileDefaults).toHaveBeenCalledWith({
+      provider: "gemini-antigravity",
+      model: "gemini-3-pro",
+      modeId: "plan",
     });
     expect(
       getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),

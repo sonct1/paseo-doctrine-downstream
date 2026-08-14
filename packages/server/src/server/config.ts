@@ -434,6 +434,10 @@ function resolveAppendSystemPrompt(persisted: ReturnType<typeof loadPersistedCon
   return persisted.daemon?.appendSystemPrompt ?? "";
 }
 
+function resolveRoleProfiles(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return persisted.daemon?.roleProfiles ?? {};
+}
+
 function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
@@ -467,6 +471,7 @@ function resolveStaticLoadConfigSettings(
     beadsCentral: resolveBeadsCentralConfig(env, persisted),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
+    roleProfiles: resolveRoleProfiles(persisted),
     terminalProfiles: persisted.daemon?.terminalProfiles,
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -496,6 +501,7 @@ export function loadConfig(
     beadsCentral,
     autoArchiveAfterMerge,
     appendSystemPrompt,
+    roleProfiles,
     terminalProfiles,
     hostnames,
     trustedProxies,
@@ -538,6 +544,7 @@ export function loadConfig(
     autoArchiveAfterMerge,
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
+    roleProfiles,
     terminalProfiles,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",

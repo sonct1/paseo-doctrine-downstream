@@ -8,8 +8,10 @@ import {
   type ProviderRoleBindingSupport,
   type RoleBindingInjectionMethod,
   type RoleBindingReceipt,
+  type RoleProfileBindingReceipt,
   type WorkspaceProtocolBindingReceipt,
 } from "@getpaseo/protocol/role-binding";
+import type { RoleProfilePreferences } from "@getpaseo/protocol/role-profile";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import type {
   AssignmentAssignerReceipt,
@@ -25,6 +27,7 @@ import {
 } from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
 import { loadFoundationSkillPolicy } from "./foundation-skill-policy.js";
+import { materializeRoleProfileBindingReceipt, ROLE_TOOL_CEILINGS } from "./role-profiles.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
 import {
   buildAssignmentInstruction,
@@ -52,77 +55,9 @@ export interface MaterializeRoleBindingInput {
   workspaceId: string;
   assignment?: AssignmentEnvelope;
   assignmentAssigner: AssignmentAssignerReceipt;
+  roleProfilePreferences?: RoleProfilePreferences;
   createdAt?: Date;
 }
-
-const SUPERVISOR_PASEO_TOOLS = [
-  "list_workspaces",
-  "list_workspace_scripts",
-  "get_agent_status",
-  "list_agents",
-  "get_agent_activity",
-  "list_pending_permissions",
-  "list_terminals",
-  "capture_terminal",
-  "list_schedules",
-  "inspect_schedule",
-  "schedule_logs",
-  "list_providers",
-  "list_models",
-  "inspect_provider",
-  "signal_agent",
-  "resolve_agent_signal",
-  "beads_status",
-  "beads_ready",
-  "beads_list",
-  "beads_get",
-  "beads_prime",
-] as const;
-
-const PEER_PASEO_TOOLS = [
-  "post_room",
-  "beads_status",
-  "beads_ready",
-  "beads_list",
-  "beads_get",
-  "beads_create",
-  "beads_claim",
-  "beads_update",
-  "beads_add_dependency",
-  "beads_prime",
-] as const;
-
-const LEAD_PASEO_TOOLS = [
-  "list_workspaces",
-  "list_workspace_scripts",
-  "create_agent",
-  "send_agent_prompt",
-  "signal_agent",
-  "prepare_lead_handoff",
-  "transition_lead_handoff",
-  "resolve_agent_signal",
-  "get_agent_status",
-  "list_agents",
-  "cancel_agent",
-  "archive_agent",
-  "get_agent_activity",
-  "create_room",
-  "read_room",
-  "post_room",
-  "beads_status",
-  "beads_ready",
-  "beads_list",
-  "beads_get",
-  "beads_create",
-  "beads_claim",
-  "beads_update",
-  "beads_close",
-  "beads_add_dependency",
-  "beads_prime",
-  "list_providers",
-  "list_models",
-  "inspect_provider",
-] as const;
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -388,10 +323,18 @@ function buildProtocolInstruction(
   return `Workspace Protocol binding: full-read required at ${receipt.path}; sha256=${receipt.digest}. Read the exact current file before orchestration. If current bytes no longer match this digest, stop and request a fresh binding instead of relying on stale protocol state.`;
 }
 
-function buildBeadsSkillAdmissionInstruction(roleId: PaseoRoleId): string {
+function buildBeadsSkillAdmissionInstruction(
+  roleId: PaseoRoleId,
+  roleProfile: RoleProfileBindingReceipt,
+): string {
   const policy = loadFoundationSkillPolicy(roleId);
   const skillPath = policy.skillPaths.get("beads-issue-tracker");
-  if (policy.status !== "bound" || !policy.enabledNames.has("beads-issue-tracker") || !skillPath) {
+  if (
+    policy.status !== "bound" ||
+    !policy.enabledNames.has("beads-issue-tracker") ||
+    !roleProfile.allowedSkills.includes("beads-issue-tracker") ||
+    !skillPath
+  ) {
     throw new Error(
       "foundation_skill_admission_required: beads-issue-tracker is not bound for this role",
     );
@@ -422,6 +365,10 @@ export async function materializeRoleBinding(
   }
 
   const definition = getFoundationRoleDefinition(input.roleId);
+  const roleProfile = materializeRoleProfileBindingReceipt(
+    input.roleId,
+    input.roleProfilePreferences,
+  );
   const createdAt = input.createdAt ?? new Date();
   const assignmentContract = materializeAssignmentContract({
     roleId: input.roleId,
@@ -459,7 +406,7 @@ export async function materializeRoleBinding(
     executionProfile?.instructions,
     buildProtocolInstruction(workspaceProtocol, hasProtocolException),
     buildAssignmentInstruction(assignmentContract),
-    buildBeadsSkillAdmissionInstruction(input.roleId),
+    buildBeadsSkillAdmissionInstruction(input.roleId, roleProfile),
   ]
     .filter((part): part is string => Boolean(part))
     .join("\n\n");
@@ -474,6 +421,7 @@ export async function materializeRoleBinding(
     qualification: "implementation-supported",
     workspaceProtocol,
     assignment: assignmentContract.receipt,
+    roleProfile,
     assignmentContract,
     createdAt: createdAt.toISOString(),
     instructions,
@@ -512,25 +460,18 @@ function intersectRoleTools(
 export function applyRolePaseoToolPolicy(
   roleId: PaseoRoleId | undefined,
   providerPolicy: ProviderPaseoToolsPolicy | undefined,
+  roleAllowedTools?: readonly string[],
 ): ProviderPaseoToolsPolicy | undefined {
   if (!roleId) {
     return providerPolicy;
   }
-  if (roleId === "peer") {
-    return {
-      enabled: true,
-      allowedTools: intersectRoleTools(PEER_PASEO_TOOLS, providerPolicy),
-    };
-  }
-  if (roleId === "lead") {
-    return {
-      enabled: true,
-      allowedTools: intersectRoleTools(LEAD_PASEO_TOOLS, providerPolicy),
-    };
-  }
+  const ceiling = ROLE_TOOL_CEILINGS[roleId];
+  const selected = roleAllowedTools
+    ? ceiling.filter((tool) => roleAllowedTools.includes(tool))
+    : ceiling;
   return {
     enabled: true,
-    allowedTools: intersectRoleTools(SUPERVISOR_PASEO_TOOLS, providerPolicy),
+    allowedTools: intersectRoleTools(selected, providerPolicy),
   };
 }
 

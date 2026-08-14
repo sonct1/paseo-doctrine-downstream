@@ -9,6 +9,7 @@ import {
   MutableDaemonConfigPatchSchema,
 } from "@getpaseo/protocol/messages";
 import { resolveFoundationCredentialFile } from "./foundation-credential-store.js";
+import { validateRoleProfilePreferencesMap } from "./agent/role-profiles.js";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 
@@ -221,9 +222,24 @@ export class DaemonConfigStore {
         "Relay is controlled by a daemon launch override. Remove PASEO_RELAY_ENABLED or the relay CLI flag before changing it here.",
       );
     }
-    const { removeProviders = [], ...configPatch } = parsedPatch;
+    const {
+      removeProviders = [],
+      roleProfiles: roleProfilePatch,
+      resetRoleProfiles = [],
+      ...configPatch
+    } = parsedPatch;
     const removedProviders = Array.from(new Set(removeProviders));
-    const merged = deepMerge(this.current, configPatch);
+    const nextRoleProfiles = { ...this.current.roleProfiles };
+    for (const [roleId, preferences] of Object.entries(roleProfilePatch ?? {})) {
+      if (preferences) nextRoleProfiles[roleId as keyof typeof nextRoleProfiles] = preferences;
+    }
+    for (const roleId of new Set(resetRoleProfiles)) {
+      delete nextRoleProfiles[roleId];
+    }
+    const merged = {
+      ...deepMerge(this.current, configPatch),
+      roleProfiles: validateRoleProfilePreferencesMap(nextRoleProfiles),
+    };
     const parsedNext = MutableDaemonConfigSchema.parse(
       omitMetadataGenerationProvidersFromConfig(
         omitProvidersFromConfig(merged, removedProviders),
@@ -388,6 +404,7 @@ function mergeMutableConfigIntoPersistedConfig(params: {
       autoArchiveAfterMerge: mutable.autoArchiveAfterMerge,
       enableTerminalAgentHooks: mutable.enableTerminalAgentHooks,
       appendSystemPrompt: mutable.appendSystemPrompt,
+      roleProfiles: mutable.roleProfiles ?? {},
       ...(mutable.terminalProfiles !== undefined
         ? { terminalProfiles: mutable.terminalProfiles }
         : {}),

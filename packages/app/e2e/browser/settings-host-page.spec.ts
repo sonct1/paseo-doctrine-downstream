@@ -45,6 +45,43 @@ test.describe("Settings host page", () => {
     await expectHostInjectMcpCard(page);
   });
 
+  test("role profiles persist a narrower Peer tool policy and reset to Foundation", async ({
+    page,
+  }) => {
+    const serverId = getServerId();
+
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, serverId);
+    await openHostSection(page, serverId, "agents");
+
+    const card = page.getByTestId("host-role-profiles-card");
+    await expect(card).toBeVisible();
+    await card.getByTestId("role-profile-tab-peer").click();
+    await card.getByTestId("role-profile-peer-tool-disclosure").click();
+    const postRoom = card.getByTestId("role-profile-peer-tool-post_room");
+    await expect(postRoom).toBeChecked();
+
+    await postRoom.click();
+    await expect(postRoom).not.toBeChecked();
+    const save = card.getByTestId("role-profile-save");
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(save).toBeDisabled();
+
+    await page.reload();
+    const reloadedCard = page.getByTestId("host-role-profiles-card");
+    await expect(reloadedCard).toBeVisible();
+    await reloadedCard.getByTestId("role-profile-tab-peer").click();
+    await reloadedCard.getByTestId("role-profile-peer-tool-disclosure").click();
+    await expect(reloadedCard.getByTestId("role-profile-peer-tool-post_room")).not.toBeChecked();
+
+    const reset = reloadedCard.getByTestId("role-profile-reset");
+    await reset.click();
+    await expect(reloadedCard.getByTestId("role-profile-peer-tool-post_room")).toBeChecked();
+    await expect(reset).toBeDisabled();
+  });
+
   test("providers section shows the providers card", async ({ page }) => {
     const serverId = getServerId();
 

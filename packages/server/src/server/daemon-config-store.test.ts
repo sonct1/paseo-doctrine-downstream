@@ -119,6 +119,43 @@ describe("DaemonConfigStore", () => {
     expect(JSON.stringify(store.get())).not.toContain("token");
   });
 
+  test("replaces and resets complete role profile entries", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-role-profile-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: { enabled: false },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      roleProfiles: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({
+      roleProfiles: {
+        peer: {
+          defaults: { provider: "codex", model: "gpt-5.4" },
+          allowedTools: ["beads_status", "beads_get", "beads_prime"],
+          allowedSkills: ["beads-issue-tracker"],
+        },
+      },
+    });
+    store.patch({ roleProfiles: { peer: { defaults: { provider: "claude" } } } });
+
+    expect(store.get().roleProfiles.peer).toEqual({ defaults: { provider: "claude" } });
+    expect(loadPersistedConfig(paseoHome).daemon?.roleProfiles?.peer).toEqual({
+      defaults: { provider: "claude" },
+    });
+
+    store.patch({ resetRoleProfiles: ["peer"] });
+
+    expect(store.get().roleProfiles.peer).toBeUndefined();
+    expect(loadPersistedConfig(paseoHome).daemon?.roleProfiles?.peer).toBeUndefined();
+  });
+
   test("materializes only a credential file path in provider runtime env", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

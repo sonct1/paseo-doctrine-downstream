@@ -196,6 +196,7 @@ import type {
   AgentProviderRuntimeSettingsMap,
   ProviderOverride,
 } from "./agent/provider-launch-config.js";
+import type { RoleProfilePreferencesMap } from "@getpaseo/protocol/role-profile";
 import { loadPersistedConfig, type PersistedConfig } from "./persisted-config.js";
 import { createServiceProxySubsystem, type ServiceProxySubsystem } from "./service-proxy.js";
 import { releaseWorkspaceServicePortPlan } from "./workspace-service-port-registry.js";
@@ -423,6 +424,7 @@ export interface PaseoDaemonConfig {
   autoArchiveAfterMerge?: boolean;
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
+  roleProfiles?: RoleProfilePreferencesMap;
   terminalProfiles?: TerminalProfile[];
   staticDir: string;
   mcpDebug: boolean;
@@ -575,6 +577,7 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
       credentialRef: "beads-central",
     },
     providers,
+    roleProfiles: config.roleProfiles ?? {},
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
     },
@@ -902,6 +905,7 @@ export async function createPaseoDaemon(
     mcpRuntimeId: randomUUID(),
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
+    resolveRoleProfilePreferences: (roleId) => daemonConfigStore.get().roleProfiles?.[roleId],
     verifyRoleResourceGrants: createMutatingPeerGrantVerifier({
       service: beadsService,
       workspaceRegistry,

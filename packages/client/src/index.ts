@@ -18,6 +18,7 @@ import type {
   SessionOutboundMessage,
   WorkspaceDescriptorPayload,
 } from "@getpaseo/protocol/messages";
+import type { RoleProfileCatalog } from "@getpaseo/protocol/role-profile";
 import { DaemonClient } from "./daemon-client.js";
 import type {
   FetchAgentTimelineCursor,
@@ -334,6 +335,9 @@ export interface PaseoClient {
   readonly agents: PaseoAgentActions;
   readonly providers: PaseoProviderActions;
   readonly config: PaseoConfigActions;
+  readonly roleProfiles: {
+    get(requestId?: string): Promise<{ requestId: string; catalog: RoleProfileCatalog }>;
+  };
   connect(): Promise<void>;
   close(): Promise<void>;
   ensureConnected(): void;
@@ -397,6 +401,9 @@ export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
     config: {
       get: (requestId) => daemonClient.getDaemonConfig(requestId),
       patch: (patch, requestId) => daemonClient.patchDaemonConfig(patch, requestId),
+    },
+    roleProfiles: {
+      get: (requestId) => daemonClient.getRoleProfiles(requestId),
     },
     connect: () => daemonClient.connect(),
     close: () => daemonClient.close(),

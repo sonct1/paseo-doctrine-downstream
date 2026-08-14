@@ -53,6 +53,7 @@ import {
   filterFoundationSkills,
   loadFoundationSkillPolicy,
   mergeCodexFoundationSkillConfig,
+  narrowFoundationSkillPolicy,
   type FoundationSkillPolicy,
 } from "../foundation-skill-policy.js";
 import {
@@ -3477,13 +3478,16 @@ export class CodexAppServerAgentSession implements AgentSession {
     private readonly roleInstructions?: string,
     private readonly providerLaunchBinding?: ProviderLaunchBinding,
     roleId?: PaseoRoleId,
+    allowedFoundationSkills?: readonly string[],
   ) {
     this.logger = logger.child({
       module: "agent",
       provider: CODEX_PROVIDER,
       agentId: this.agentId,
     });
-    this.foundationSkillPolicy = roleId ? loadFoundationSkillPolicy(roleId) : null;
+    this.foundationSkillPolicy = roleId
+      ? narrowFoundationSkillPolicy(loadFoundationSkillPolicy(roleId), allowedFoundationSkills)
+      : null;
     this.productSkillPolicy = roleId
       ? loadProductSkillPolicy(roleId, this.deps.productSkillBundleRoot)
       : null;
@@ -7163,6 +7167,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
+      launchContext?.roleBinding?.allowedSkills,
     );
     return this.connectPreparedSession(
       session,
@@ -7205,6 +7210,7 @@ export class CodexAppServerAgentClient implements AgentClient {
       launchContext?.roleBinding?.instructions,
       launchContext?.providerLaunchBinding,
       launchContext?.roleBinding?.roleId,
+      launchContext?.roleBinding?.allowedSkills,
     );
     return this.connectPreparedSession(
       session,

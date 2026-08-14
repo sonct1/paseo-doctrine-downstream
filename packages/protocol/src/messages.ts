@@ -14,6 +14,7 @@ import {
   RoleBindingReceiptSchema,
 } from "./role-binding.js";
 import { LaunchContractReceiptSchema } from "./launch-contract.js";
+import { RoleProfileCatalogSchema, RoleProfilePreferencesMapSchema } from "./role-profile.js";
 import {
   CoordinationSignalSchema,
   ManualCoordinationSignalKindSchema,
@@ -245,6 +246,8 @@ export const MutableDaemonConfigSchema = z
       credentialRef: "beads-central",
     }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
+    // COMPAT(roleProfiles): optional so current clients can still read older daemons.
+    roleProfiles: RoleProfilePreferencesMapSchema.optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
@@ -263,6 +266,8 @@ export const MutableDaemonConfigPatchSchema = z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
     removeProviders: z.array(z.string().min(1)).optional(),
+    roleProfiles: RoleProfilePreferencesMapSchema.optional(),
+    resetRoleProfiles: z.array(PaseoRoleIdSchema).optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
@@ -1336,6 +1341,11 @@ export const SetDaemonConfigRequestMessageSchema = z.object({
   type: z.literal("set_daemon_config_request"),
   requestId: z.string(),
   config: MutableDaemonConfigPatchSchema,
+});
+
+export const RoleProfilesGetRequestSchema = z.object({
+  type: z.literal("role_profiles.get.request"),
+  requestId: z.string(),
 });
 
 export const FoundationCredentialsGetStatusRequestSchema = z.object({
@@ -2771,6 +2781,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DiagnosticsRequestSchema,
   GetDaemonConfigRequestMessageSchema,
   SetDaemonConfigRequestMessageSchema,
+  RoleProfilesGetRequestSchema,
   FoundationCredentialsGetStatusRequestSchema,
   FoundationCredentialsSetRequestSchema,
   FoundationCredentialsDeleteRequestSchema,
@@ -3076,6 +3087,8 @@ export const ServerInfoStatusPayloadSchema = z
     features: z
       .object({
         providersSnapshot: z.boolean().optional(),
+        // COMPAT(roleProfiles): host-owned role profile editor and catalog RPC.
+        roleProfiles: z.boolean().optional(),
         // COMPAT(checkoutForgeSetAutoMerge): added in v0.1.106, remove old
         // checkoutGithubSetAutoMerge fallback after 2026-12-28.
         checkoutForgeSetAutoMerge: z.boolean().optional(),
@@ -4244,6 +4257,16 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
+    })
+    .passthrough(),
+});
+
+export const RoleProfilesGetResponseSchema = z.object({
+  type: z.literal("role_profiles.get.response"),
+  payload: z
+    .object({
+      requestId: z.string(),
+      catalog: RoleProfileCatalogSchema,
     })
     .passthrough(),
 });
@@ -5745,6 +5768,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DiagnosticsResponseSchema,
   GetDaemonConfigResponseMessageSchema,
   SetDaemonConfigResponseMessageSchema,
+  RoleProfilesGetResponseSchema,
   FoundationCredentialsGetStatusResponseSchema,
   FoundationCredentialsSetResponseSchema,
   FoundationCredentialsDeleteResponseSchema,

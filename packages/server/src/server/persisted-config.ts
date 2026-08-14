@@ -15,6 +15,7 @@ import {
   TerminalProfileSchema,
 } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
+import { RoleProfilePreferencesMapSchema } from "@getpaseo/protocol/role-profile";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
 export const LogFormatSchema = z.enum(["pretty", "json"]);
@@ -277,6 +278,7 @@ export const PersistedConfigSchema = z
         autoArchiveAfterMerge: z.boolean().optional(),
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
+        roleProfiles: RoleProfilePreferencesMapSchema.optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         cors: z
           .object({

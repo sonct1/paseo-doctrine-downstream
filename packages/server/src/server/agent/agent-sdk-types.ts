@@ -630,6 +630,8 @@ export interface AgentLaunchContext {
     executionProfile?: {
       id: import("./foundation-execution-profiles.js").FoundationExecutionProfileId;
     };
+    /** Immutable Foundation skill allowlist captured when the role binding was created. */
+    allowedSkills?: string[];
   };
   /** Exact daemon-owned provider route paired with the role for this session. */
   providerLaunchBinding?: ProviderLaunchBinding;

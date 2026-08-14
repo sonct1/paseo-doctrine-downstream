@@ -93,6 +93,24 @@ export function isProviderRoleBindingSupportedForRole(
 
 const Sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 
+export const RoleProfileBindingReceiptSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    profileDigest: Sha256DigestSchema,
+    defaults: z
+      .object({
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        modeId: z.string().min(1).optional(),
+        thinkingOptionId: z.string().min(1).optional(),
+      })
+      .strict(),
+    allowedTools: z.array(z.string().min(1)),
+    allowedSkills: z.array(z.string().min(1)),
+  })
+  .strict();
+export type RoleProfileBindingReceipt = z.infer<typeof RoleProfileBindingReceiptSchema>;
+
 export const WorkspaceProtocolBindingReceiptSchema = z.object({
   status: z.enum(["bound", "missing"]),
   readership: z.enum(["full", "assignment-only", "governance-only"]),
@@ -112,6 +130,8 @@ export const RoleBindingReceiptSchema = z.object({
   workspaceProtocol: WorkspaceProtocolBindingReceiptSchema,
   // COMPAT(assignmentContracts): added in v0.3.0-beta.1.paseo.2; old persisted agents omit it.
   assignment: AssignmentContractReceiptSchema.optional(),
+  // COMPAT(roleProfiles): agents created before host role profiles omit this immutable snapshot.
+  roleProfile: RoleProfileBindingReceiptSchema.optional(),
   createdAt: z.string(),
 });
 export type RoleBindingReceipt = z.infer<typeof RoleBindingReceiptSchema>;

@@ -4591,6 +4591,13 @@ export class DaemonClient {
     });
   }
 
+  async getRoleProfiles(requestId?: string) {
+    return this.sendNamespacedCorrelatedSessionRequest<"role_profiles.get.response">({
+      requestId,
+      message: { type: "role_profiles.get.request" },
+    });
+  }
+
   async getDaemonStatus(options?: DaemonStatusOptions): Promise<DaemonStatusPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId: options?.requestId,

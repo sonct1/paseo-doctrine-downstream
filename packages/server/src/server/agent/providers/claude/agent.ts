@@ -147,6 +147,7 @@ import {
   claudeMandatoryFoundationSkillDenyRules,
   filterFoundationSkills,
   loadFoundationSkillPolicy,
+  narrowFoundationSkillPolicy,
   mergeClaudeMandatoryFoundationPlugins,
   type FoundationSkillPolicy,
 } from "../../foundation-skill-policy.js";
@@ -419,6 +420,7 @@ interface ClaudeAgentSessionOptions {
   launchEnv?: Record<string, string>;
   roleInstructions?: string;
   roleId?: PaseoRoleId;
+  allowedFoundationSkills?: readonly string[];
   productSkillBundleRoot?: string;
   persistSession?: boolean;
   logger: Logger;
@@ -1527,6 +1529,7 @@ export class ClaudeAgentClient implements AgentClient {
       launchEnv: launchContext?.env,
       roleInstructions: launchContext?.roleBinding?.instructions,
       roleId: launchContext?.roleBinding?.roleId,
+      allowedFoundationSkills: launchContext?.roleBinding?.allowedSkills,
       productSkillBundleRoot: this.productSkillBundleRoot,
       persistSession: options?.persistSession,
       logger: this.logger,
@@ -1559,6 +1562,7 @@ export class ClaudeAgentClient implements AgentClient {
       launchEnv: launchContext?.env,
       roleInstructions: launchContext?.roleBinding?.instructions,
       roleId: launchContext?.roleBinding?.roleId,
+      allowedFoundationSkills: launchContext?.roleBinding?.allowedSkills,
       productSkillBundleRoot: this.productSkillBundleRoot,
       logger: this.logger,
       queryFactory: this.queryFactory,
@@ -2100,7 +2104,12 @@ class ClaudeAgentSession implements AgentSession {
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
     this.roleInstructions = options.roleInstructions;
-    this.foundationSkillPolicy = options.roleId ? loadFoundationSkillPolicy(options.roleId) : null;
+    this.foundationSkillPolicy = options.roleId
+      ? narrowFoundationSkillPolicy(
+          loadFoundationSkillPolicy(options.roleId),
+          options.allowedFoundationSkills,
+        )
+      : null;
     this.productSkillPolicy = options.roleId
       ? loadProductSkillPolicy(options.roleId, options.productSkillBundleRoot)
       : null;

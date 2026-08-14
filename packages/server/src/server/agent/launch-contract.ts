@@ -77,6 +77,8 @@ function canonicalContractBytes(
     roleBindingDigest: roleBinding.bindingDigest,
     // COMPAT(privateExecutionProfile): preserves existing launch-contract digests.
     executionProfile: roleBinding.executionProfile ?? null,
+    // COMPAT(roleProfiles): omit for legacy bindings so their contract digests remain stable.
+    ...(roleBinding.roleProfile ? { roleProfile: roleBinding.roleProfile } : {}),
     roleInstructions: roleBinding.instructions,
     providerBinding,
   });

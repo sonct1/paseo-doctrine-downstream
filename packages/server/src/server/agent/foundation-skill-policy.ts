@@ -156,6 +156,18 @@ export function loadFoundationSkillPolicy(
   return { packageNames, enabledNames, skillPaths, manifestPath, status: "bound" };
 }
 
+export function narrowFoundationSkillPolicy(
+  policy: FoundationSkillPolicy,
+  allowedNames: readonly string[] | undefined,
+): FoundationSkillPolicy {
+  if (!allowedNames) return policy;
+  const allowed = new Set(allowedNames);
+  return {
+    ...policy,
+    enabledNames: new Set([...policy.enabledNames].filter((name) => allowed.has(name))),
+  };
+}
+
 function codexSkillName(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const skillPath = (value as { path?: unknown }).path;

@@ -82,6 +82,7 @@ import type {
   AssignmentAssignerReceipt,
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
+import type { RoleProfilePreferences } from "@getpaseo/protocol/role-profile";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -351,6 +352,7 @@ export interface AgentManagerOptions {
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  resolveRoleProfilePreferences?: (roleId: PaseoRoleId) => RoleProfilePreferences | undefined;
   verifyRoleResourceGrants?: RoleResourceGrantVerifier;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
@@ -744,6 +746,9 @@ export class AgentManager {
   private readonly paseoToolPolicies = new Map<string, ProviderPaseoToolsPolicy | undefined>();
   private readonly roleBindingsAwaitingRegistration = new Map<string, PersistedRoleBinding>();
   private resolvePaseoToolPolicy: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
+  private readonly resolveRoleProfilePreferences: (
+    roleId: PaseoRoleId,
+  ) => RoleProfilePreferences | undefined;
   private readonly verifyRoleResourceGrants?: RoleResourceGrantVerifier;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
@@ -764,6 +769,7 @@ export class AgentManager {
     this.mcpRuntimeId = options?.mcpRuntimeId;
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
+    this.resolveRoleProfilePreferences = options.resolveRoleProfilePreferences ?? (() => undefined);
     this.verifyRoleResourceGrants = options.verifyRoleResourceGrants;
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({
@@ -5018,6 +5024,7 @@ export class AgentManager {
         assignmentAssigner: role.assignmentAssigner ?? {
           kind: "human-session",
         },
+        roleProfilePreferences: this.resolveRoleProfilePreferences(role.roleId),
       });
       const providerBinding = await this.materializeProviderLaunchBinding({
         config: storedConfig,
@@ -5035,7 +5042,7 @@ export class AgentManager {
     }
     const paseoToolPolicy = this.resolveEffectivePaseoToolPolicy(
       storedConfig.provider,
-      roleBinding?.roleId,
+      roleBinding,
       client,
     );
     const launchConfig = this.applyDaemonAppendSystemPrompt(
@@ -5061,13 +5068,17 @@ export class AgentManager {
 
   private resolveEffectivePaseoToolPolicy(
     provider: AgentProvider,
-    roleId: PersistedRoleBinding["roleId"] | undefined,
+    roleBinding: PersistedRoleBinding | undefined,
     client: AgentClient,
   ): ProviderPaseoToolsPolicy | undefined {
     if (!this.paseoToolsEnabled && !client.capabilities.supportsNativePaseoTools) {
       return { enabled: false };
     }
-    return applyRolePaseoToolPolicy(roleId, this.resolvePaseoToolPolicy(provider));
+    return applyRolePaseoToolPolicy(
+      roleBinding?.roleId,
+      this.resolvePaseoToolPolicy(provider),
+      roleBinding?.roleProfile?.allowedTools,
+    );
   }
 
   private assertCurrentRoleAdmission(
@@ -5172,6 +5183,9 @@ export class AgentManager {
               instructions: roleBinding.instructions,
               ...(roleBinding.executionProfile
                 ? { executionProfile: { id: roleBinding.executionProfile.id } }
+                : {}),
+              ...(roleBinding.roleProfile
+                ? { allowedSkills: roleBinding.roleProfile.allowedSkills }
                 : {}),
             },
           }

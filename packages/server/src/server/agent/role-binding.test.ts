@@ -95,6 +95,11 @@ describe("native Foundation role materialization", () => {
       path: join(cwd, "WORKSPACE_PROTOCOL.md"),
     });
     expect(binding.workspaceProtocol.digest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(binding.roleProfile).toMatchObject({
+      schemaVersion: 1,
+      allowedTools: expect.arrayContaining(["create_agent", "beads_status"]),
+      allowedSkills: expect.arrayContaining(["beads-issue-tracker"]),
+    });
     expect(binding.instructions).toContain("Role: Lead");
     expect(binding.instructions).not.toContain("Council compatibility marker");
     expect(binding.instructions).toContain("Demonthorn Agent Orchestration Deep Dive");
@@ -508,6 +513,12 @@ describe("native Foundation role materialization", () => {
       ]),
     });
     expect(leadPolicy?.allowedTools).toHaveLength(29);
+    expect(
+      applyRolePaseoToolPolicy("lead", undefined, ["beads_status", "beads_get", "beads_prime"]),
+    ).toEqual({
+      enabled: true,
+      allowedTools: ["beads_status", "beads_get", "beads_prime"],
+    });
     expect(leadPolicy?.allowedTools).not.toEqual(
       expect.arrayContaining([
         "browser_list_tabs",

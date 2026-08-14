@@ -9,6 +9,7 @@ import {
   loadFoundationSkillPolicy,
   mergeClaudeMandatoryFoundationPlugins,
   mergeCodexFoundationSkillConfig,
+  narrowFoundationSkillPolicy,
 } from "./foundation-skill-policy.js";
 
 const temporaryRoots: string[] = [];
@@ -128,6 +129,15 @@ describe("Foundation skill policy", () => {
         policy,
       ),
     ).toEqual([{ name: "frontend-design" }, { name: "third-party-skill" }]);
+  });
+
+  test("narrows active Foundation skills without changing package ownership", () => {
+    const policy = loadFoundationSkillPolicy("peer", manifestPath());
+    const narrowed = narrowFoundationSkillPolicy(policy, []);
+
+    expect(narrowed.enabledNames.size).toBe(0);
+    expect(narrowed.packageNames).toEqual(policy.packageNames);
+    expect(narrowed.skillPaths).toEqual(policy.skillPaths);
   });
 
   test("projects the canonical mandatory tracker into Claude and replaces stale copies", () => {

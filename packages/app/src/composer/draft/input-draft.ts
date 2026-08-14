@@ -8,6 +8,7 @@ import {
   type UseAgentFormStateResult,
 } from "@/hooks/use-agent-form-state";
 import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
+import { useRoleProfiles } from "@/hooks/use-role-profiles";
 import {
   buildDraftAgentControls,
   hasDraftContent,
@@ -139,6 +140,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     isCreateFlow: true,
     onlineServerIds: composerOptions?.onlineServerIds ?? [],
   });
+  const roleProfiles = useRoleProfiles(formState.selectedServerId);
   const draftKey = useMemo(
     () =>
       resolveDraftKey({
@@ -318,14 +320,33 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         : null,
     [selectedAssignmentEffect, selectedRole],
   );
+  const applyRoleProfileForSelection = useCallback(
+    (roleId: PaseoRoleId) => {
+      const profile = roleProfiles.catalog?.profiles.find((entry) => entry.roleId === roleId);
+      if (!profile) return;
+      const provider = profile.preferences.defaults?.provider;
+      if (!provider) return;
+      const providerEntry = allProviderEntries?.find((entry) => entry.provider === provider);
+      if (
+        providerEntry?.enabled === false ||
+        providerEntry?.status !== "ready" ||
+        !isProviderRoleBindingSupportedForRole(providerEntry.roleBinding, roleId)
+      ) {
+        return;
+      }
+      formState.applyRoleProfileDefaults(profile.preferences.defaults ?? {});
+    },
+    [allProviderEntries, formState, roleProfiles.catalog],
+  );
   const setRoleAndNormalizeEffect = useCallback(
     (roleId: PaseoRoleId) => {
       setSelectedRole(roleId);
+      applyRoleProfileForSelection(roleId);
       if (!isAssignmentEffectAllowedForRole(roleId, selectedAssignmentEffect)) {
         setSelectedAssignmentEffect("read-only");
       }
     },
-    [selectedAssignmentEffect],
+    [applyRoleProfileForSelection, selectedAssignmentEffect],
   );
   const setAgentControlFeature = useCallback(
     (featureId: string, value: unknown) => {
@@ -378,13 +399,15 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     const roleBindingAvailable = formState.allProviderEntries?.some(
       (entry) => entry.roleBinding !== undefined,
     );
+    const roleSelectionAvailable =
+      roleBindingAvailable && (!roleProfiles.supported || roleProfiles.catalog !== null);
     const compatibleProviderIds = new Set(
       (formState.allProviderEntries ?? [])
         .filter((entry) => isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole))
         .map((entry) => entry.provider),
     );
     const roleAwareFormState =
-      roleBindingAvailable && selectedRole
+      roleSelectionAvailable && selectedRole
         ? {
             ...formState,
             providerDefinitions: formState.providerDefinitions.filter((definition) =>
@@ -404,11 +427,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       featureValues: draftFeatureValues,
       agentControls: buildDraftAgentControls({
         formState: roleAwareFormState,
-        roleOptions: roleBindingAvailable ? PASEO_ROLE_SUMMARIES : [],
-        selectedRole: roleBindingAvailable ? selectedRole : null,
+        roleOptions: roleSelectionAvailable ? PASEO_ROLE_SUMMARIES : [],
+        selectedRole: roleSelectionAvailable ? selectedRole : null,
         onSelectRole: setRoleAndNormalizeEffect,
         features:
-          roleBindingAvailable && (assignmentEffectFeature || beadsIssueGrant.feature)
+          roleSelectionAvailable && (assignmentEffectFeature || beadsIssueGrant.feature)
             ? [
                 ...(draftFeatures ?? []),
                 ...(assignmentEffectFeature ? [assignmentEffectFeature] : []),
@@ -418,7 +441,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         onSetFeature: setAgentControlFeature,
       }),
       commandDraftConfig,
-      selectedRole: roleBindingAvailable ? selectedRole : null,
+      selectedRole: roleSelectionAvailable ? selectedRole : null,
       setRoleFromUser: setRoleAndNormalizeEffect,
       selectedAssignmentEffect,
       selectedBeadsIssueIds: beadsIssueGrant.selectedIssueIds,
@@ -433,6 +456,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     beadsIssueGrant,
     draftFeatureValues,
     formState,
+    roleProfiles.catalog,
+    roleProfiles.supported,
     selectedRole,
     selectedAssignmentEffect,
     setAgentControlFeature,

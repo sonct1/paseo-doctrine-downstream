@@ -79,6 +79,7 @@ import {
 } from "./lifecycle-reasons.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { buildRoleProfileCatalog } from "./agent/role-profiles.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -2111,6 +2112,15 @@ export class Session {
           payload: {
             requestId: msg.requestId,
             config: this.daemonConfigStore.patch(msg.config),
+          },
+        });
+        return undefined;
+      case "role_profiles.get.request":
+        this.emit({
+          type: "role_profiles.get.response",
+          payload: {
+            requestId: msg.requestId,
+            catalog: buildRoleProfileCatalog(this.daemonConfigStore.get().roleProfiles ?? {}),
           },
         });
         return undefined;

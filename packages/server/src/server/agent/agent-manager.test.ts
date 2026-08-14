@@ -10355,6 +10355,7 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(client.launchContexts[1]?.roleBinding).toEqual({
       roleId: "lead",
       instructions: exactInstructions,
+      allowedSkills: created.roleBinding?.roleProfile?.allowedSkills,
     });
     expect(client.launchContexts[1]?.providerLaunchBinding).toEqual(
       client.launchContexts[0]?.providerLaunchBinding,
@@ -10534,6 +10535,7 @@ test("Council specialization persists exact bytes through create and resume", as
       roleId: "peer",
       instructions: exactInstructions,
       executionProfile: { id: "solution-architect" },
+      allowedSkills: created.roleBinding?.roleProfile?.allowedSkills,
     });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
