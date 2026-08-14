@@ -19,7 +19,10 @@ Provider/profile/mode chỉ transport capability. Authority đến từ current 
 
 - Paseo là delegation/lifecycle plane duy nhất; không dùng Codex-native hoặc Claude-native agents.
 - Runtime `full-access` không cấp write lease, ownership, external effect hoặc acceptance authority.
-- Foundation không claim sandbox-enforced role boundaries. Mutation ngoài lease là protocol violation.
+- Assignment có mutation boundary `no-write` phải được daemon pin vào provider/OS no-write mode đã
+  qualify; thiếu technical enforcement thì launch fail closed. Không được fallback sang `full-access`,
+  đổi mode hoặc approve permission escalation. Với bounded-write assignment, technical capability vẫn
+  không mở rộng exact lease.
 - Current artifacts và reproduced evidence mạnh hơn lifecycle status, notification, silence hoặc model confidence.
 - Một moving/coupled scope có đúng một write Owner.
 - Unknown giữ là `unknown`; test pass không tự là acceptance.
@@ -63,7 +66,10 @@ Peer phải:
 - preserve unrelated state, tự verify writes và hand back exact artifact/evidence;
 - không create/coordinate/replace agent, không tự mở rộng scope và không claim acceptance.
 
-`Engineer/Owner` cần exact write lease. Mọi disposition không có write lease giữ non-mutating dù runtime `full-access`. Reviewer falsify một stable candidate theo mandate, không tự patch finding hoặc redesign ngoài scope. Independent judgment không có nghĩa manufacture dissent.
+`Engineer/Owner` cần exact write lease. Mọi disposition không có write lease giữ non-mutating bằng
+provider/OS no-write boundary đã qualify; nếu boundary đó unavailable thì launch fail closed. Reviewer
+falsify một stable candidate theo mandate, không tự patch finding hoặc redesign ngoài scope. Independent
+judgment không có nghĩa manufacture dissent.
 
 Khi Lead cần reusable Council method, daemon có thể compose provider-neutral `solution-architect` hoặc
 `reviewer` execution specialization vào immutable Peer RoleBinding. Specialization chỉ pin method cho exact

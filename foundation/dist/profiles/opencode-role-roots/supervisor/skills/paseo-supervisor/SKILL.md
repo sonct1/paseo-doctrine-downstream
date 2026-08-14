@@ -22,13 +22,16 @@ Thiếu recovery/replacement lease nghĩa là `observe + advise only`. Runtime `
 
 ## Runtime permission binding
 
-Mọi Supervisor session phải được tạo thẳng bằng provider-native no-prompt full-permission mode:
+Capability phải khớp mutation boundary của exact assignment:
 
-- Codex Supervisor: `modeId=full-access`;
-- Claude Supervisor: `modeId=bypassPermissions`;
-- provider khác: chỉ dùng sau khi current provider discovery xác nhận exact no-prompt full-permission mode tương đương.
+- Supervisor `no-write`: Codex dùng daemon-pinned `read-only`; Claude, Cursor hoặc Antigravity dùng
+  daemon-pinned `plan`; mode switch và permission escalation bị từ chối;
+- provider chưa có no-write mode đã qualify: launch fail closed, không fallback sang full-permission;
+- `bootstrap` hoặc `recovery` có exact bounded-write lease mới được dùng write-capable mode, nhưng mode
+  đó không mở rộng scope, external effect, recovery/replacement hoặc acceptance authority.
 
-Không route Supervisor qua `default`, `auto`, `auto-review`, `plan` hoặc approval-bearing mode rồi xin Human approve từng thao tác discovery/lifecycle. Binding này loại bỏ permission ceremony ở runtime; nó không cấp thêm observation scope, product write lease, external-effect authority, recovery/replacement authority hoặc acceptance authority.
+Không xin Human approve từng escalation để thoát no-write boundary. Nếu discovery cần capability không
+tương thích với lease, report blocker và yêu cầu assignment mới.
 
 ## Observation workflow
 

@@ -33,7 +33,7 @@ mutate standing role profile.
 
 Lead là execution reader duy nhất và đọc file bắt buộc trước orchestration. Supervisor chỉ inspect/create/audit/update khi có governance mandate; Peer không đọc full file mà nhận relevant constraints, gồm mandatory issue-tracker checkpoint, trong assignment.
 
-Paseo là delegation/lifecycle plane duy nhất; Codex-native và Claude-native agents bị disable. Runtime `full-access` chỉ là capability, không mở rộng lease, ownership, external effects hoặc acceptance authority. Base/generated Codex profiles phải giữ `multi_agent=false`, `multi_agent_v2=false`; role profiles còn có `agents.enabled=false`.
+Paseo là delegation/lifecycle plane duy nhất; Codex-native và Claude-native agents bị disable. Runtime `full-access` chỉ là capability, không mở rộng lease, ownership, external effects hoặc acceptance authority. Assignment `no-write` phải được daemon pin vào provider/OS no-write mode đã qualify; thiếu enforcement thì launch fail closed, không fallback sang `full-access`, mode switch hoặc permission escalation. Base/generated Codex profiles phải giữ `multi_agent=false`, `multi_agent_v2=false`; role profiles còn có `agents.enabled=false`.
 
 Engineering đi theo Human → Lead; Lead có thể làm trực tiếp exact tiny task khi applicable Human/repo
 binding cho phép và transfer không thêm independent judgment; work có material uncertainty/risk hoặc
