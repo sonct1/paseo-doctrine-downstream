@@ -1793,6 +1793,23 @@ function useWorkspaceTerminalTabActions({
   };
 }
 
+function getWorkspaceProjectId(
+  workspace: WorkspaceDescriptor | null | undefined,
+): string | undefined {
+  return workspace?.projectId;
+}
+
+function useOpenProjectIssues(serverId: string, projectId: string | null | undefined) {
+  const router = useRouter();
+
+  return useCallback(() => {
+    if (!projectId) {
+      return;
+    }
+    router.push(buildHostProjectIssuesRoute(serverId, projectId) as Href);
+  }, [projectId, router, serverId]);
+}
+
 function WorkspaceScreenContent({
   serverId,
   workspaceId,
@@ -1801,7 +1818,6 @@ function WorkspaceScreenContent({
   recoveryAgentId,
 }: WorkspaceScreenContentProps) {
   const { t } = useTranslation();
-  const router = useRouter();
   const _insets = useSafeAreaInsets();
   const toast = useToast();
   const isMobile = useIsCompactFormFactor();
@@ -1815,6 +1831,7 @@ function WorkspaceScreenContent({
     [workspaceId],
   );
   const workspaceDescriptor = useWorkspace(normalizedServerId, normalizedWorkspaceId);
+  const workspaceProjectId = getWorkspaceProjectId(workspaceDescriptor);
   const workspaceScripts = getWorkspaceScripts(workspaceDescriptor);
   const { handleRetryHost, handleManageHost, handleDismissMissingWorkspace } =
     useWorkspaceRouteActions(normalizedServerId);
@@ -3001,13 +3018,7 @@ function WorkspaceScreenContent({
     }
   }, [navigateToTabId, openWorkspaceTabFocused, persistenceKey]);
 
-  const handleOpenIssues = useCallback(() => {
-    const projectId = workspaceDescriptor?.projectId;
-    if (!projectId) {
-      return;
-    }
-    router.push(buildHostProjectIssuesRoute(normalizedServerId, projectId) as Href);
-  }, [normalizedServerId, router, workspaceDescriptor?.projectId]);
+  const handleOpenIssues = useOpenProjectIssues(normalizedServerId, workspaceProjectId);
 
   const handleBulkCloseTabs = useCallback(
     async (input: { tabsToClose: WorkspaceTabDescriptor[]; title: string; logLabel: string }) => {
@@ -3842,7 +3853,7 @@ function WorkspaceScreenContent({
                 currentBranchName={currentBranchName}
                 normalizedServerId={normalizedServerId}
                 normalizedWorkspaceId={normalizedWorkspaceId}
-                showIssues={Boolean(workspaceDescriptor?.projectId)}
+                showIssues={Boolean(workspaceProjectId)}
                 workspaceScripts={workspaceScripts}
                 liveTerminalIds={liveTerminalIds}
                 showWorkspaceSetup={showWorkspaceSetup}
