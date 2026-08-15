@@ -54,6 +54,7 @@ if (manifest.beadsBackend !== "central") process.exit(1);
 if (manifest.beadsCentralClientIncluded !== true) process.exit(1);
 if (manifest.beadsCentralRequiredVersion !== "1.2.0") process.exit(1);
 if (manifest.bundledBeadsBinary !== false) process.exit(1);
+if (manifest.internalPackages?.["@paseo/plugin"] !== manifest.version) process.exit(1);
 ' "$SMOKE_ROOT/install/current/manifest.json"
 
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
@@ -82,5 +83,5 @@ HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
 wait "$SMOKE_PID" >/dev/null 2>&1 || true
 SMOKE_PID=""
 
-printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok central_client=ok native_bd=absent daemon=ok webui=ok\n' "$HELP_FILES"
+printf 'SMOKE_OK help_side_effects=%s cli=ok foundation=ok plugin=ok central_client=ok native_bd=absent daemon=ok webui=ok\n' "$HELP_FILES"
 printf 'SMOKE_ROOT=%s\n' "$SMOKE_ROOT"
