@@ -63,7 +63,6 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     setSelectedServerId: () => undefined,
     setSelectedServerIdFromUser: () => undefined,
     selectedProvider: "codex",
-    setProviderFromUser: () => undefined,
     selectedMode: "auto",
     setModeFromUser: () => undefined,
     selectedModel: "",
@@ -369,9 +368,23 @@ describe("useAgentInputDraft live contract", () => {
       thinkingOptionId: "high",
     });
 
+    const hydratedReplacementKey = getLatest().textReplacementKey;
+
     await act(async () => {
-      getLatest().setText("hello world");
+      getLatest().editText("hello world");
       getLatest().setAttachments([{ kind: "image", metadata: image }]);
+    });
+
+    expect(getLatest().textReplacementKey).toBe(hydratedReplacementKey);
+
+    await act(async () => {
+      getLatest().replaceText("replacement text");
+    });
+
+    expect(getLatest().textReplacementKey).not.toBe(hydratedReplacementKey);
+
+    await act(async () => {
+      getLatest().editText("hello world");
     });
 
     await act(async () => {
@@ -563,7 +576,7 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     await act(async () => {
-      getLatest().setText("with attachment");
+      getLatest().editText("with attachment");
       getLatest().setAttachments([{ kind: "image", metadata: image }]);
     });
 
@@ -645,7 +658,7 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     await act(async () => {
-      getLatest().setText("queued message");
+      getLatest().editText("queued message");
       getLatest().setAttachments([{ kind: "image", metadata: image }]);
     });
 
@@ -699,7 +712,7 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     await act(async () => {
-      getLatest().setText("queued message");
+      getLatest().editText("queued message");
       getLatest().setAttachments([{ kind: "image", metadata: sentImage }]);
     });
 
@@ -715,7 +728,7 @@ describe("useAgentInputDraft live contract", () => {
     });
 
     await act(async () => {
-      getLatest().setText("draft again");
+      getLatest().editText("draft again");
     });
 
     await act(async () => {

@@ -23,6 +23,7 @@ export function buildDraftAgentControls(input: {
   formState: UseAgentFormStateResult;
   features?: DraftAgentControlsProps["features"];
   onSetFeature?: DraftAgentControlsProps["onSetFeature"];
+  onApplyAgentProfile: DraftAgentControlsProps["onApplyAgentProfile"];
   onDropdownClose?: DraftAgentControlsProps["onDropdownClose"];
   roleOptions?: DraftAgentControlsProps["roleOptions"];
   selectedRole?: PaseoRoleId | null;
@@ -32,6 +33,7 @@ export function buildDraftAgentControls(input: {
     formState,
     features,
     onSetFeature,
+    onApplyAgentProfile,
     onDropdownClose,
     roleOptions,
     selectedRole,
@@ -40,7 +42,6 @@ export function buildDraftAgentControls(input: {
   return {
     providerDefinitions: formState.providerDefinitions,
     selectedProvider: formState.selectedProvider,
-    onSelectProvider: formState.setProviderFromUser,
     modeOptions: formState.modeOptions,
     selectedMode: formState.selectedMode,
     onSelectMode: formState.setModeFromUser,
@@ -54,6 +55,7 @@ export function buildDraftAgentControls(input: {
     thinkingOptions: formState.availableThinkingOptions,
     selectedThinkingOptionId: formState.selectedThinkingOptionId,
     onSelectThinkingOption: formState.setThinkingOptionFromUser,
+    onApplyAgentProfile,
     features,
     onSetFeature,
     onDropdownClose,

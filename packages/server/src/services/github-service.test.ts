@@ -771,6 +771,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
       now: () => now,
     });
     const reads = recordCurrentPullRequestStatusReads(service);
@@ -802,6 +803,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
     });
     const reads = recordCurrentPullRequestStatusReads(service);
 
@@ -841,6 +843,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
       now: () => now,
     });
     const reads = recordCurrentPullRequestStatusReads(service);
@@ -887,6 +890,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
       now: () => now,
     });
     const reads = recordCurrentPullRequestStatusReads(service);
@@ -930,6 +934,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
       now: () => now,
     });
 
@@ -959,6 +964,7 @@ describe("ForgeService", () => {
       ttlMs: 0,
       runner: runner.runner,
       resolveGhPath: async () => "/usr/bin/gh",
+      resolveRepoHost: async () => null,
       now: () => now,
     });
 

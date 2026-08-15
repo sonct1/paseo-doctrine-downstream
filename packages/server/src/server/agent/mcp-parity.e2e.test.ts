@@ -144,6 +144,15 @@ let parentAgentId: string;
 let parentAgentCwd: string;
 let launchConfigsByProvider: Record<AgentProvider, AgentSessionConfig[]>;
 
+const seededAgentProfile = {
+  id: "ui-profile",
+  name: "UI work",
+  provider: "claude",
+  model: "claude-test-model",
+  modeId: "bypassPermissions",
+  notes: "Use for UI work: components, layout, design tokens. Not for backend.",
+};
+
 function createRecordingAgentClients(): Record<AgentProvider, AgentClient> {
   const baseClients = createTestAgentClients();
   launchConfigsByProvider = {};
@@ -260,7 +269,10 @@ beforeAll(async () => {
   tempRoot = await mkdtemp(path.join(os.tmpdir(), "mcp-parity-e2e-"));
   parentAgentCwd = await makeCwd("parent-agent-cwd");
 
-  daemonHandle = await createTestPaseoDaemon({ agentClients: createRecordingAgentClients() });
+  daemonHandle = await createTestPaseoDaemon({
+    agentClients: createRecordingAgentClients(),
+    agentProfiles: [seededAgentProfile],
+  });
   topLevelClient = await createMcpClient(`http://127.0.0.1:${daemonHandle.port}/mcp/agents`);
 
   const parentPayload = await callToolStructured(topLevelClient, "create_agent", {
@@ -789,5 +801,11 @@ describe("Suite D: Provider Tools", () => {
     });
     expect(payload.provider).toBe("claude");
     expect(Array.isArray(payload.models)).toBe(true);
+  });
+
+  test("list_profiles returns configured agent profiles, including notes", async () => {
+    const payload = await callToolStructured(topLevelClient, "list_profiles");
+    const profiles = recordArr(payload.profiles);
+    expect(profiles).toEqual([seededAgentProfile]);
   });
 });

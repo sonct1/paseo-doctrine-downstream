@@ -77,7 +77,9 @@ type DraftComposerState = UseAgentFormStateResult & {
 
 export interface AgentInputDraft {
   text: string;
-  setText: (text: string) => void;
+  editText: (text: string) => void;
+  replaceText: (text: string) => void;
+  textReplacementKey: string;
   attachments: UserComposerAttachment[];
   setAttachments: (updater: AttachmentUpdater) => void;
   clear: (lifecycle: "sent" | "abandoned") => void;
@@ -162,6 +164,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     selectedRole,
     composerOptions?.beadsIssueOptions,
   );
+  const [textReplacementRevision, setTextReplacementRevision] = useState(0);
   const text = draft?.text ?? "";
   const attachments = draft?.attachments ?? [];
   const isHydrated = hydratedDraftKey === draftKey;
@@ -185,9 +188,17 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [draftKey],
   );
 
-  const setText = useCallback(
+  const editText = useCallback(
     (nextText: string) => {
       saveDraft((current) => ({ ...current, text: nextText }));
+    },
+    [saveDraft],
+  );
+
+  const replaceText = useCallback(
+    (nextText: string) => {
+      saveDraft((current) => ({ ...current, text: nextText }));
+      setTextReplacementRevision((revision) => revision + 1);
     },
     [saveDraft],
   );
@@ -214,6 +225,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     void (async () => {
       await useDraftStore.getState().hydrateDraftInput({ draftKey });
       if (!cancelled) {
+        setTextReplacementRevision((revision) => revision + 1);
         setHydratedDraftKey(draftKey);
       }
     })();
@@ -266,7 +278,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const workingDir = lockedWorkingDir || formState.workingDir;
   const allProviderEntries = formState.allProviderEntries;
   const selectedProvider = formState.selectedProvider;
-  const setProviderFromUser = formState.setProviderFromUser;
+  const setProviderAndModelFromUser = formState.setProviderAndModelFromUser;
   useEffect(() => {
     if (!selectedRole) {
       return;
@@ -286,14 +298,15 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole),
     );
     if (compatible) {
-      setProviderFromUser(compatible.provider);
+      setProviderAndModelFromUser(compatible.provider, "");
     }
-  }, [allProviderEntries, selectedProvider, selectedRole, setProviderFromUser]);
+  }, [allProviderEntries, selectedProvider, selectedRole, setProviderAndModelFromUser]);
 
   const {
     features: draftFeatures,
     featureValues: draftFeatureValues,
     setFeatureValue: setDraftFeatureValue,
+    applyProfileFeatureValues,
   } = useDraftAgentFeatures({
     serverId: formState.selectedServerId,
     provider: formState.selectedProvider,
@@ -370,6 +383,14 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     [beadsIssueGrant, selectedRole, setDraftFeatureValue],
   );
 
+  const applyDraftAgentProfile = useCallback(
+    (profile: Parameters<typeof formState.applyProfileFromUser>[0]) => {
+      formState.applyProfileFromUser(profile);
+      applyProfileFeatureValues(profile.featureValues);
+    },
+    [applyProfileFeatureValues, formState],
+  );
+
   const commandDraftConfig = useMemo(
     () =>
       composerOptions
@@ -439,6 +460,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
               ]
             : draftFeatures,
         onSetFeature: setAgentControlFeature,
+        onApplyAgentProfile: applyDraftAgentProfile,
       }),
       commandDraftConfig,
       selectedRole: roleSelectionAvailable ? selectedRole : null,
@@ -455,6 +477,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     assignmentEffectFeature,
     beadsIssueGrant,
     draftFeatureValues,
+    applyDraftAgentProfile,
     formState,
     roleProfiles.catalog,
     roleProfiles.supported,
@@ -467,7 +490,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
 
   return {
     text,
-    setText,
+    editText,
+    replaceText,
+    textReplacementKey: `${draftKey}:${textReplacementRevision}`,
     attachments,
     setAttachments,
     clear,

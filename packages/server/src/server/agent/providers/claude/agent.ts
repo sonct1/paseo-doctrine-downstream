@@ -45,6 +45,7 @@ import {
 } from "./model-manifest.js";
 import { parsePartialJsonObject } from "./partial-json.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
+import { ClaudeTaskState } from "./task-state.js";
 import {
   ClaudeTaskProtocolSource,
   type ClaudeHookObservationInput,
@@ -121,9 +122,11 @@ import {
   type ListImportableSessionsOptions,
   type McpServerConfig,
   type ProviderCatalog,
+  type ProviderRefreshContext,
   type ResolveAgentDefaultModeInput,
 } from "../../agent-sdk-types.js";
 import { importSessionFromPersistence } from "../../provider-session-import.js";
+import { runProviderRefreshActivity } from "../../provider-refresh-deadline.js";
 import {
   checkProviderLaunchAvailable,
   createProviderEnv,
@@ -407,7 +410,7 @@ interface ClaudeAgentClientOptions {
   runtimeSettings?: ProviderRuntimeSettings;
   queryFactory?: ClaudeQueryFactory;
   resolveBinary?: () => Promise<string>;
-  resolveVersion?: () => Promise<string>;
+  resolveVersion?: (signal?: AbortSignal) => Promise<string>;
   configDir?: string;
   productSkillBundleRoot?: string;
 }
@@ -1496,7 +1499,7 @@ export class ClaudeAgentClient implements AgentClient {
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
-  private readonly resolveVersion: () => Promise<string>;
+  private readonly resolveVersion: (signal?: AbortSignal) => Promise<string>;
   private readonly configDir?: string;
   private readonly productSkillBundleRoot?: string;
 
@@ -1507,7 +1510,8 @@ export class ClaudeAgentClient implements AgentClient {
     this.queryFactory = options.queryFactory;
     this.resolveBinary = options.resolveBinary ?? (() => resolveClaudeBinary(this.runtimeSettings));
     this.resolveVersion =
-      options.resolveVersion ?? (() => resolveClaudeCodeVersion(this.runtimeSettings));
+      options.resolveVersion ??
+      ((signal) => resolveClaudeCodeVersion(this.runtimeSettings, signal));
     this.configDir = options.configDir;
     this.productSkillBundleRoot = options.productSkillBundleRoot;
   }
@@ -1570,18 +1574,21 @@ export class ClaudeAgentClient implements AgentClient {
     });
   }
 
-  async fetchCatalog(_options: FetchCatalogOptions): Promise<ProviderCatalog> {
+  async fetchCatalog(
+    _options: FetchCatalogOptions,
+    context?: ProviderRefreshContext,
+  ): Promise<ProviderCatalog> {
     // Claude exposes a global catalog here; cwd/force are intentionally irrelevant.
     let claudeCodeVersion: string | undefined;
     try {
-      claudeCodeVersion = await this.resolveVersion();
+      claudeCodeVersion = await runProviderRefreshActivity(context, "version", () =>
+        this.resolveVersion(context?.signal),
+      );
     } catch (error) {
       this.logger.warn({ err: error }, "Failed to resolve Claude Code version for model catalog");
     }
-    const models = await getClaudeModelsWithSettings(
-      this.logger,
-      this.configDir,
-      claudeCodeVersion,
+    const models = await runProviderRefreshActivity(context, "settings", () =>
+      getClaudeModelsWithSettings(this.logger, this.configDir, claudeCodeVersion),
     );
     const modes = detectIneligibleAutoModeTransport(
       createProviderEnv({ baseEnv: process.env, runtimeSettings: this.runtimeSettings }),
@@ -1710,6 +1717,7 @@ async function resolveClaudeBinary(runtimeSettings?: ProviderRuntimeSettings): P
 
 export async function resolveClaudeCodeVersion(
   runtimeSettings?: ProviderRuntimeSettings,
+  signal?: AbortSignal,
 ): Promise<string> {
   const launch = await resolveProviderLaunch({
     commandConfig: runtimeSettings?.command,
@@ -1723,6 +1731,7 @@ export async function resolveClaudeCodeVersion(
   const { stdout, stderr } = await execCommand(executable, [...launch.args, "--version"], {
     ...createProviderEnvSpec({ runtimeSettings }),
     timeout: 5_000,
+    signal,
   });
   const version = parseClaudeCodeVersion(`${stdout}\n${stderr}`);
   if (!version) {
@@ -2059,6 +2068,7 @@ class ClaudeAgentSession implements AgentSession {
   private autonomousTurn: AutonomousTurnState | null = null;
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private readonly timelineAssembler = new TimelineAssembler();
+  private readonly taskState = new ClaudeTaskState();
   private readonly taskProtocolSource = new ClaudeTaskProtocolSource({
     getToolInput: (toolUseId) => this.toolUseCache.get(toolUseId)?.input ?? null,
     readWorkflowResult: readClaudeWorkflowResultFile,
@@ -2851,6 +2861,7 @@ class ClaudeAgentSession implements AgentSession {
     this.userMessageIds = [];
     this.emittedUserMessageIds.clear();
     this.rewindTurnAnchors.length = 0;
+    this.taskState.reset();
     this.loadPersistedHistory(sessionId);
     if (oldSessionId && oldSessionId !== sessionId) {
       this.dispatchEvents([
@@ -2881,6 +2892,7 @@ class ClaudeAgentSession implements AgentSession {
     this.userMessageIds = [];
     this.emittedUserMessageIds.clear();
     this.rewindTurnAnchors.length = 0;
+    this.taskState.reset();
   }
 
   private rememberUserMessageId(messageId: string | null | undefined): void {
@@ -3132,14 +3144,7 @@ class ClaudeAgentSession implements AgentSession {
     return createProviderEnv({
       baseEnv: process.env,
       runtimeSettings: this.runtimeSettings,
-      overlays: [
-        {
-          // Increase MCP timeouts for long-running tool calls (10 minutes)
-          MCP_TIMEOUT: "600000",
-          MCP_TOOL_TIMEOUT: "600000",
-        },
-        this.launchEnv,
-      ],
+      overlays: [this.launchEnv],
     });
   }
 
@@ -3933,6 +3938,7 @@ class ClaudeAgentSession implements AgentSession {
     }
 
     const events: AgentStreamEvent[] = [];
+    this.appendTaskStateEvent(message, events);
 
     // Subagent identity and lifecycle are announced by Claude Code's task protocol, so they are
     // read rather than inferred from sidechain frames. `task_started` precedes the child's first
@@ -3995,6 +4001,11 @@ class ClaudeAgentSession implements AgentSession {
     }
 
     return events;
+  }
+
+  private appendTaskStateEvent(message: SDKMessage, events: AgentStreamEvent[]): void {
+    const item = this.taskState.observe(message);
+    if (item) events.push({ type: "timeline", provider: "claude", item });
   }
 
   /**
@@ -4655,6 +4666,7 @@ class ClaudeAgentSession implements AgentSession {
 
   private loadPersistedHistory(sessionId: string): void {
     try {
+      this.taskState.reset();
       const historyPath = this.resolveHistoryPath(sessionId);
       if (!historyPath || !fs.existsSync(historyPath)) {
         return;
@@ -4779,7 +4791,8 @@ class ClaudeAgentSession implements AgentSession {
     }
 
     const historyTimestamp = normalizeProviderReplayTimestamp(entry.timestamp);
-    const items = this.convertHistoryEntry(entry);
+    const taskSnapshot = this.taskState.observe(entry);
+    const items = [...(taskSnapshot ? [taskSnapshot] : []), ...this.convertHistoryEntry(entry)];
     const isVisibleUserEntry =
       entry.type === "user" &&
       typeof entry.uuid === "string" &&

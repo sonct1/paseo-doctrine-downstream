@@ -98,6 +98,14 @@ trước khi gọi Central. Artifact không bundle native `bd` và không có ba
 Xem [Beads Central issue graph](docs/beads-central.md) để biết binding, authority, WebUI và agent-tool
 boundaries.
 
+## Upstream Paseo 0.4
+
+Bản `0.4.0-paseo.1` mang các capability mới của upstream vào distribution Foundation: reusable agent
+profiles, managed local plugins, workspace file search và file actions, Mermaid preview, live task
+progress, daemon config reload, provider refresh diagnostics, sortable workspace pins và các sửa lỗi
+worktree/subagent. Downstream vẫn giữ native Rooms, `paseo loop`, role-bound assignments, Beads Central,
+Councils và bộ cài macOS riêng.
+
 ## Uninstall
 
 ```bash

@@ -12,6 +12,9 @@ import { ensurePrivateFile, writePrivateFileAtomicSync } from "./private-files.j
 import {
   BeadsCentralEndpointSchema,
   FoundationCredentialRefSchema,
+  AgentProfileSchema,
+  PluginIdSchema,
+  PluginSourceSchema,
   TerminalProfileSchema,
 } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
@@ -280,6 +283,7 @@ export const PersistedConfigSchema = z
         appendSystemPrompt: z.string().optional(),
         roleProfiles: RoleProfilePreferencesMapSchema.optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
+        agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),
@@ -324,11 +328,14 @@ export const PersistedConfigSchema = z
       .optional(),
 
     providers: ProvidersSchema.optional(),
+    pluginsEnabled: z.boolean().optional(),
+    plugins: z.record(PluginIdSchema, PluginSourceSchema).optional(),
     worktrees: WorktreesConfigSchema.optional(),
     agents: z
       .object({
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
         credentials: AgentCredentialsSchema.optional(),
+        catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
       })
       .strict()
