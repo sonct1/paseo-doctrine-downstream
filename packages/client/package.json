@@ -1,6 +1,6 @@
 {
   "name": "@getpaseo/client",
-  "version": "0.3.1-paseo.9",
+  "version": "0.3.1-paseo.10",
   "private": true,
   "description": "Paseo client SDK package",
   "files": [
