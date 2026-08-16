@@ -7,6 +7,11 @@ contribution in the app runtime. Plugin code is trusted code; this first slice d
 Foundation roles never own plugin lifecycle. Supervisor, Lead, and Peer cannot install, enable,
 disable, reload, or remove plugins; a Human uses the trusted WebUI or CLI for those host-level changes.
 An assignment, Agent profile note, runtime mode, or plugin-provided surface cannot expand that boundary.
+The CLI rejects mutating plugin commands whenever it has the runtime-issued `PASEO_AGENT_ID`; listing
+and reading logs remain available for diagnosis. This is a product/authority guardrail, not an OS
+sandbox: a malicious process with the same full-access Unix identity could remove environment markers
+or call a local protocol directly. Role contracts, tool ceilings, and the Human-owned WebUI remain the
+governing boundary for trusted Foundation agents.
 
 ## Install a directory source
 

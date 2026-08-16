@@ -1,6 +1,12 @@
 import { Command } from "commander";
 import type { PluginListItem, PluginLogEntry } from "@getpaseo/protocol/messages";
-import type { CommandOptions, ListResult, OutputSchema, SingleResult } from "../../output/index.js";
+import type {
+  CommandError,
+  CommandOptions,
+  ListResult,
+  OutputSchema,
+  SingleResult,
+} from "../../output/index.js";
 import { withOutput } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions, addJsonOption } from "../../utils/command-options.js";
 import { scaffoldPluginDirectory, type PluginScaffold } from "./scaffold.js";
@@ -39,11 +45,25 @@ const pluginLogsSchema: OutputSchema<PluginLogEntry> = {
   ],
 };
 
+export function assertPluginLifecycleHumanContext(
+  env: { PASEO_AGENT_ID?: string } = process.env,
+): void {
+  const callerAgentId = env.PASEO_AGENT_ID?.trim();
+  if (!callerAgentId) return;
+  throw {
+    code: "PLUGIN_LIFECYCLE_HUMAN_REQUIRED",
+    message:
+      "Plugin lifecycle is Human-owned. Paseo agents cannot initialize, install, reload, enable, disable, or remove plugins.",
+    details: `Caller agent: ${callerAgentId}`,
+  } satisfies CommandError;
+}
+
 export async function runPluginInitCommand(
   directory: string,
   options: PluginOptions,
   _command: Command,
 ): Promise<SingleResult<PluginScaffold>> {
+  assertPluginLifecycleHumanContext();
   return {
     type: "single",
     data: await scaffoldPluginDirectory(directory, options.id),
@@ -68,33 +88,36 @@ export async function runPluginLogsCommand(
   return { type: "list", data, schema: pluginLogsSchema };
 }
 
-async function install(
+export async function runPluginInstallCommand(
   directory: string,
   options: PluginOptions,
   _command: Command,
 ): Promise<SingleResult<PluginListItem>> {
+  assertPluginLifecycleHumanContext();
   const data = await withPluginManagementClient(options.host, (client) =>
     client.installDirectoryPlugin(directory, options.id),
   );
   return { type: "single", data, schema: pluginSchema };
 }
 
-async function act(
+export async function runPluginActionCommand(
   action: "reload" | "enable" | "disable",
   pluginId: string,
   options: PluginOptions,
 ): Promise<SingleResult<PluginListItem>> {
+  assertPluginLifecycleHumanContext();
   const data = await withPluginManagementClient(options.host, (client) =>
     client[`${action}Plugin`](pluginId),
   );
   return { type: "single", data, schema: pluginSchema };
 }
 
-async function remove(
+export async function runPluginRemoveCommand(
   pluginId: string,
   options: PluginOptions,
   _command: Command,
 ): Promise<SingleResult<PluginListItem>> {
+  assertPluginLifecycleHumanContext();
   const data = await withPluginManagementClient(options.host, async (client) => {
     const current = (await client.listPlugins()).find((plugin) => plugin.id === pluginId);
     if (!current) throw new Error(`Plugin is not configured: ${pluginId}`);
@@ -125,18 +148,18 @@ export function createPluginCommand(): Command {
       .description("Install a local plugin directory")
       .argument("<directory>", "Host filesystem directory")
       .option("--id <id>", "Runtime plugin ID (defaults to paseo-plugin.json id)"),
-  ).action(withOutput(install));
+  ).action(withOutput(runPluginInstallCommand));
   for (const action of ["reload", "enable", "disable"] as const) {
     addJsonAndDaemonHostOptions(
       plugin.command(action).description(`${action} a local plugin`).argument("<id>"),
     ).action(
       withOutput((id: string, options: PluginOptions, _command: Command) =>
-        act(action, id, options),
+        runPluginActionCommand(action, id, options),
       ),
     );
   }
   addJsonAndDaemonHostOptions(
     plugin.command("remove").description("Remove plugin configuration").argument("<id>"),
-  ).action(withOutput(remove));
+  ).action(withOutput(runPluginRemoveCommand));
   return plugin;
 }
