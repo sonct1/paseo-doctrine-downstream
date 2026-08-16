@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0-paseo.3 - 2026-08-16
+
+Bản downstream này làm cho Foundation doctor phản ánh đúng qualification của live daemon và biến việc
+activate local development stack thành điều kiện hoàn tất bắt buộc sau mọi thay đổi runtime.
+
+### Added
+
+- Thêm gate `ORCHESTRATION_READY`, kiểm tra exact provider/model route, provider fingerprint và connection receipt còn hiệu lực với live daemon.
+- Thêm role-boundary canary receipt gắn với daemon identity, source fingerprint, Foundation manifest và exact RoleBinding digests của Lead, Peer, Supervisor.
+
+### Fixed
+
+- Không còn để `paseo-foundation doctor` báo orchestration sẵn sàng dựa trên provider ID hoặc receipt cũ sau khi daemon đã đổi version, restart hoặc thay source bytes.
+- Buộc release handback kiểm tra source, artifact, installed CLI, Foundation CLI và live daemon cùng một downstream version/commit; provider và role receipts phải được qualify lại sau runtime identity change.
+
+### Qualified
+
+- Qualify clean macOS Web/CLI artifact, local-stack install/restart, provider connection và ba role read-only canary trên exact downstream release commit.
+
 ## 0.4.0-paseo.2 - 2026-08-16
 
 Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Profiles và contract Foundation SLP, đồng thời tái qualification toàn bộ bề mặt customization sau merge Paseo 0.4.

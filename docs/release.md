@@ -21,6 +21,19 @@ Quy trình downstream:
 Release qualification downstream hiện target macOS và Linux. Windows jobs có thể giữ làm portability
 signal nhưng không block tag và không được dùng để claim Windows-qualified.
 
+### Local development activation invariant
+
+Thay đổi ảnh hưởng runtime chưa hoàn tất chỉ vì source đã build hoặc test xanh. Trước handback, exact
+clean downstream release commit phải được build thành macOS Web/CLI artifact, cài vào local stack và
+restart daemon bằng `./scripts/local-stack.sh --apply`. Readback `./scripts/local-stack.sh` phải exit 0,
+`paseo --version` và `paseo-foundation --version` phải bằng package downstream version, còn live daemon
+phải báo cùng source commit, clean source fingerprint và artifact provenance.
+
+Daemon version, source fingerprint hoặc daemon identity thay đổi làm provider connection receipt và
+role-boundary canary receipt cũ stale theo thiết kế. Release chỉ được handback sau khi qualify lại live
+provider route, chạy lại Lead/Peer/Supervisor canary cần thiết và `paseo-foundation doctor` phản ánh đúng
+receipts mới. Không được claim local stack mới nhất chỉ từ semver, test pass hoặc source checkout.
+
 Không dùng `release:publish` hoặc upstream `vX.Y.Z` tag cho distribution này. Các lệnh stable/beta npm
 ở phần dưới chỉ áp dụng cho upstream release track.
 
