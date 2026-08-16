@@ -14,6 +14,7 @@ import {
   type MaterializedAgentProfile,
 } from "./materialize-profile";
 import { buildAgentProfileTags } from "./profile-summary";
+import { agentProfileTargetAllowsApply } from "./target-policy";
 import { useAgentProfiles } from "./use-agent-profiles";
 
 /** The draft composer owns profile application as one state transition. */
@@ -22,7 +23,12 @@ export interface DraftAgentProfileControls {
 }
 
 export type AgentProfileApplyTarget =
-  | { kind: "agent"; agentId: string; availableModeIds: readonly string[] | null }
+  | {
+      kind: "agent";
+      agentId: string;
+      availableModeIds: readonly string[] | null;
+      roleBound: boolean;
+    }
   | { kind: "draft"; controls: DraftAgentProfileControls };
 
 /** Everything the model picker renders for one profile. It never sees the profile itself. */
@@ -64,6 +70,7 @@ export function useAgentProfilePicker(
   input: UseAgentProfilePickerInput,
 ): AgentProfilePicker | null {
   const { serverId, availableProviders, target } = input;
+  const targetAllowsApply = agentProfileTargetAllowsApply(target);
   const { t } = useTranslation();
   const { profiles, isSupported } = useAgentProfiles(serverId);
   // Profiles are host config, so their labels read from the host-wide catalog
@@ -75,12 +82,12 @@ export function useAgentProfilePicker(
   const toast = useToast();
 
   const applicableProfiles = useMemo(() => {
-    if (!isSupported || !profiles) {
+    if (!targetAllowsApply || !isSupported || !profiles) {
       return [];
     }
     const available = new Set(availableProviders);
     return profiles.filter((profile) => available.has(profile.provider));
-  }, [availableProviders, isSupported, profiles]);
+  }, [availableProviders, isSupported, profiles, targetAllowsApply]);
 
   const formatFeatureCount = useCallback(
     (count: number) =>
@@ -127,6 +134,9 @@ export function useAgentProfilePicker(
 
   const applyProfile = useCallback(
     (profileId: string) => {
+      if (!targetAllowsApply) {
+        return;
+      }
       const profile = applicableProfiles.find((entry) => entry.id === profileId);
       if (!profile) {
         return;
@@ -154,11 +164,11 @@ export function useAgentProfilePicker(
           toast.error(toErrorMessage(error));
         });
     },
-    [applicableProfiles, client, persistSelection, target, toast],
+    [applicableProfiles, client, persistSelection, target, targetAllowsApply, toast],
   );
 
   return useMemo(
-    () => (isSupported && profiles !== null ? { rows, applyProfile } : null),
-    [applyProfile, isSupported, profiles, rows],
+    () => (targetAllowsApply && isSupported && profiles !== null ? { rows, applyProfile } : null),
+    [applyProfile, isSupported, profiles, rows, targetAllowsApply],
   );
 }

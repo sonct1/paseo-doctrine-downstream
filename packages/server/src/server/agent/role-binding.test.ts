@@ -510,9 +510,10 @@ describe("native Foundation role materialization", () => {
         "beads_status",
         "beads_close",
         "list_providers",
+        "list_profiles",
       ]),
     });
-    expect(leadPolicy?.allowedTools).toHaveLength(29);
+    expect(leadPolicy?.allowedTools).toHaveLength(30);
     expect(
       applyRolePaseoToolPolicy("lead", undefined, ["beads_status", "beads_get", "beads_prime"]),
     ).toEqual({

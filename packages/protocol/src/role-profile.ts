@@ -33,6 +33,9 @@ export const RoleProfileLaunchDefaultsSchema = z
 
 export const RoleProfilePreferencesSchema = z
   .object({
+    // COMPAT(roleProfileLaunchDefaults): pre-0.4 clients may still send this field. Current apps
+    // migrate it to daemon.agentProfiles and never apply it from a standing role. Remove after
+    // 2027-08-16 when every supported client has crossed the migration window.
     defaults: RoleProfileLaunchDefaultsSchema.optional(),
     allowedTools: UniqueStringListSchema.optional(),
     allowedSkills: UniqueStringListSchema.optional(),

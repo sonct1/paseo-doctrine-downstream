@@ -22,6 +22,7 @@ export const ROLE_TOOL_CEILINGS = {
   lead: [
     "list_workspaces",
     "list_workspace_scripts",
+    "list_profiles",
     "create_agent",
     "send_agent_prompt",
     "signal_agent",

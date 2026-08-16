@@ -72,7 +72,10 @@ import { registerWorkspaceRouteNavigationRef } from "@/navigation/workspace-rout
 import { ThemedStack } from "@/navigation/themed-stack";
 import { shouldUseDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { AgentNavigationListener } from "@/desktop/agent-navigation";
-import { legacyFavoriteProfileMigration } from "@/agent-profiles/migration";
+import {
+  legacyFavoriteProfileMigration,
+  roleDefaultProfileMigration,
+} from "@/agent-profiles/migration";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { updateDesktopWindowControls } from "@/desktop/electron/window";
 import { getDesktopHost } from "@/desktop/host";
@@ -270,13 +273,13 @@ function ManagedDaemonSession({ daemon }: { daemon: HostProfile }) {
 
   return (
     <SessionProvider key={daemon.serverId} serverId={daemon.serverId} client={client}>
-      <LegacyFavoriteProfileMigrationBootstrap serverId={daemon.serverId} client={client} />
+      <AgentProfileMigrationBootstrap serverId={daemon.serverId} client={client} />
       <PluginCatalogSync serverId={daemon.serverId} client={client} />
     </SessionProvider>
   );
 }
 
-function LegacyFavoriteProfileMigrationBootstrap({
+function AgentProfileMigrationBootstrap({
   serverId,
   client,
 }: {
@@ -290,8 +293,11 @@ function LegacyFavoriteProfileMigrationBootstrap({
     if (!serverInfo || !isConnected) {
       return;
     }
-    void legacyFavoriteProfileMigration.migrateHost(serverId, client).catch((error) => {
-      console.warn("[AgentProfiles] Failed to migrate legacy favourites", error);
+    void (async () => {
+      await roleDefaultProfileMigration.migrateHost(serverId, client);
+      await legacyFavoriteProfileMigration.migrateHost(serverId, client);
+    })().catch((error) => {
+      console.warn("[AgentProfiles] Failed to migrate legacy launch preferences", error);
     });
   }, [client, isConnected, serverId, serverInfo]);
 

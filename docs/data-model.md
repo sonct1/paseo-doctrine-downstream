@@ -292,6 +292,11 @@ Absent and empty mean different things for terminal profiles — omitting the ke
 `DEFAULT_TERMINAL_PROFILES`, while `[]` means the user removed them all. Agent profiles have no
 defaults, so both mean none.
 
+Standing role preferences no longer own launch routing. On connection, a current client moves legacy
+`roleProfiles.<role>.defaults` into a host-wide Agent profile and removes only that `defaults` field;
+tool and skill selections remain on the standing role. The migration uses one daemon config patch so
+the route is not removed before its replacement exists.
+
 `PersistedConfigSchema` parses strictly, so a daemon that predates a field drops it on write
 rather than storing something it cannot describe. That is why the client gates the agent profiles
 UI on `server_info.features.agentProfiles` instead of letting a save appear to succeed against an

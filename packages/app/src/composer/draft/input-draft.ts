@@ -333,33 +333,14 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         : null,
     [selectedAssignmentEffect, selectedRole],
   );
-  const applyRoleProfileForSelection = useCallback(
-    (roleId: PaseoRoleId) => {
-      const profile = roleProfiles.catalog?.profiles.find((entry) => entry.roleId === roleId);
-      if (!profile) return;
-      const provider = profile.preferences.defaults?.provider;
-      if (!provider) return;
-      const providerEntry = allProviderEntries?.find((entry) => entry.provider === provider);
-      if (
-        providerEntry?.enabled === false ||
-        providerEntry?.status !== "ready" ||
-        !isProviderRoleBindingSupportedForRole(providerEntry.roleBinding, roleId)
-      ) {
-        return;
-      }
-      formState.applyRoleProfileDefaults(profile.preferences.defaults ?? {});
-    },
-    [allProviderEntries, formState, roleProfiles.catalog],
-  );
   const setRoleAndNormalizeEffect = useCallback(
     (roleId: PaseoRoleId) => {
       setSelectedRole(roleId);
-      applyRoleProfileForSelection(roleId);
       if (!isAssignmentEffectAllowedForRole(roleId, selectedAssignmentEffect)) {
         setSelectedAssignmentEffect("read-only");
       }
     },
-    [applyRoleProfileForSelection, selectedAssignmentEffect],
+    [selectedAssignmentEffect],
   );
   const setAgentControlFeature = useCallback(
     (featureId: string, value: unknown) => {

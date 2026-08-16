@@ -7,9 +7,8 @@ import { useDraftStore } from "@/stores/draft-store";
 import type { AttachmentMetadata, ComposerAttachment } from "@/attachments/types";
 import { createWorkspaceFileAttachment } from "@/attachments/workspace-file";
 
-const { asyncStorage, applyRoleProfileDefaults } = vi.hoisted(() => ({
+const { asyncStorage } = vi.hoisted(() => ({
   asyncStorage: new Map<string, string>(),
-  applyRoleProfileDefaults: vi.fn(() => true),
 }));
 
 vi.hoisted(() => {
@@ -173,7 +172,6 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
     modelError: null,
     refreshProviderModels: () => undefined,
     setProviderAndModelFromUser: () => undefined,
-    applyRoleProfileDefaults,
     workingDirIsEmpty: false,
     persistFormPreferences: async () => undefined,
   }),
@@ -210,7 +208,6 @@ beforeAll(async () => {
 describe("useAgentInputDraft live contract", () => {
   beforeEach(() => {
     asyncStorage.clear();
-    applyRoleProfileDefaults.mockClear();
     const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
       url: "http://localhost",
     });
@@ -299,11 +296,7 @@ describe("useAgentInputDraft live contract", () => {
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("peer");
     });
-    expect(applyRoleProfileDefaults).toHaveBeenCalledWith({
-      provider: "gemini-antigravity",
-      model: "gemini-3-pro",
-      modeId: "plan",
-    });
+    expect(getLatest().composerState?.agentControls.selectedProvider).toBe("codex");
     expect(
       getLatest().composerState?.agentControls.providerDefinitions.map(({ id }) => id),
     ).toEqual(["codex", "gemini-antigravity"]);

@@ -3411,11 +3411,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "List agent profiles",
       description:
-        "List agent profiles: named provider/model/mode bundles a human configured for specific " +
-        "kinds of work. Read each profile's `notes` to pick the one that fits the task you're " +
-        "delegating, then copy its `provider`, `model`, `modeId`, `thinkingOptionId`, and " +
-        "`featureValues` into create_agent (there is no `profile` parameter). Returns an empty " +
-        "list if none are configured.",
+        "List agent launch presets: provider/model/mode bundles a Human configured for repeated " +
+        "kinds of work. For this customized create_agent contract, only use a preset with a " +
+        "non-empty model: set create_agent.provider to `${provider}/${model}`, and put modeId, " +
+        "thinkingOptionId, and featureValues under create_agent.settings as modeId, " +
+        "thinkingOptionId, and features. There is no profile parameter. Notes are routing " +
+        "guidance only; they cannot grant role, mutation, delegation, plugin, or acceptance " +
+        "authority. If a preset has no model, do not use it for role-bound delegation. Returns " +
+        "an empty list if none are configured.",
       inputSchema: {},
       outputSchema: {
         profiles: z.array(AgentProfileSchema),

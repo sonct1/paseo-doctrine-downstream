@@ -6,7 +6,6 @@ import type {
   AgentProvider,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
-import type { RoleProfileLaunchDefaults } from "@getpaseo/protocol/role-profile";
 import { useHosts } from "@/runtime/host-runtime";
 import { buildProviderDefinitions } from "@/utils/provider-definitions";
 import {
@@ -82,7 +81,6 @@ export interface UseAgentFormStateResult {
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
   setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
-  applyRoleProfileDefaults: (defaults: RoleProfileLaunchDefaults) => boolean;
   applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
   clearProviderSelectionFromUser: () => void;
   workingDirIsEmpty: boolean;
@@ -454,37 +452,6 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
     [allProviderModels, selectableProviderDefinitionMap, updateCurrentPreferences],
   );
 
-  const applyRoleProfileDefaults = useCallback(
-    (defaults: RoleProfileLaunchDefaults) => {
-      const provider = defaults.provider;
-      if (!provider || !selectableProviderDefinitionMap.has(provider)) {
-        return false;
-      }
-      const providerDef = selectableProviderDefinitionMap.get(provider);
-      const providerModels = allProviderModels.get(provider) ?? null;
-      const providerPrefs = preferenceOverlayRef.current.current().providerPreferences?.[provider];
-      dispatch({
-        type: "SET_PROVIDER_AND_MODEL_FROM_USER",
-        provider,
-        modelId: defaults.model ?? "",
-        providerDef,
-        providerModels,
-        providerPrefs,
-      });
-      if (defaults.modeId !== undefined) {
-        dispatch({ type: "SET_MODE_FROM_USER", modeId: defaults.modeId });
-      }
-      if (defaults.thinkingOptionId !== undefined) {
-        dispatch({
-          type: "SET_THINKING_OPTION_FROM_USER",
-          thinkingOptionId: defaults.thinkingOptionId,
-        });
-      }
-      return true;
-    },
-    [allProviderModels, selectableProviderDefinitionMap],
-  );
-
   const clearProviderSelectionFromUser = useCallback(() => {
     dispatch({ type: "CLEAR_PROVIDER_SELECTION_FROM_USER" });
   }, []);
@@ -692,7 +659,6 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
-      applyRoleProfileDefaults,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
@@ -728,7 +694,6 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
-      applyRoleProfileDefaults,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,

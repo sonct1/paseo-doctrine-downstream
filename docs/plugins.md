@@ -4,6 +4,10 @@ Local plugins contribute daemon RPCs, native app surfaces, and composer attachme
 `index.tsx`. Paseo executes the server contribution in a subprocess and evaluates the client
 contribution in the app runtime. Plugin code is trusted code; this first slice does not sandbox it.
 
+Foundation roles never own plugin lifecycle. Supervisor, Lead, and Peer cannot install, enable,
+disable, reload, or remove plugins; a Human uses the trusted WebUI or CLI for those host-level changes.
+An assignment, Agent profile note, runtime mode, or plugin-provided surface cannot expand that boundary.
+
 ## Install a directory source
 
 Create a typecheckable plugin project, install its development dependencies, then install it into

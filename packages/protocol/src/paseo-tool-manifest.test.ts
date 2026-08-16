@@ -9,6 +9,7 @@ const EXPECTED_TOOL_IDS = [
   "list_workspace_scripts",
   "start_workspace_script",
   "stop_workspace_script",
+  "list_profiles",
   "create_agent",
   "send_agent_prompt",
   "signal_agent",
@@ -123,6 +124,6 @@ describe("Paseo tool manifest", () => {
     }
 
     expect(PASEO_TOOL_MANIFEST.filter((entry) => entry.browser)).toHaveLength(22);
-    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(55);
+    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(56);
   });
 });

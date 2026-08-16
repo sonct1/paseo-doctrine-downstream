@@ -3,33 +3,18 @@ import { ChevronDown, ChevronRight, LockKeyhole, RotateCcw, Save } from "lucide-
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import type { AgentProvider, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
-import {
-  PASEO_ROLE_SUMMARIES,
-  isProviderRoleBindingSupportedForRole,
-  type PaseoRoleId,
-} from "@getpaseo/protocol/role-binding";
+import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type {
   RoleProfileDescriptor,
   RoleProfilePreferences,
   RoleProfilePreferencesMap,
 } from "@getpaseo/protocol/role-profile";
 
-import { CombinedModelSelector } from "@/components/combined-model-selector";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/form-field";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import {
-  SelectField,
-  SelectFieldTrigger,
-  type SelectFieldDisplay,
-  type SelectFieldOption,
-} from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
-import { useProvidersSnapshot } from "@/hooks/use-providers-snapshot";
 import { useRoleProfiles } from "@/hooks/use-role-profiles";
-import { buildSelectableProviderSelectorProviders } from "@/provider-selection/provider-selection";
 import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 
@@ -42,32 +27,6 @@ const ThemedLockKeyhole = withUnistyles(LockKeyhole);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronRight = withUnistyles(ChevronRight);
 const mutedIconMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-
-function compatibleProviderEntries(
-  entries: ProviderSnapshotEntry[] | undefined,
-  roleId: PaseoRoleId,
-): ProviderSnapshotEntry[] {
-  return (entries ?? []).filter(
-    (entry) => entry.enabled && isProviderRoleBindingSupportedForRole(entry.roleBinding, roleId),
-  );
-}
-
-function optionDisplay(
-  options: readonly SelectFieldOption<string>[],
-  value: string,
-): SelectFieldDisplay | null {
-  const option = options.find((entry) => entry.value === value);
-  return option ? { label: option.label, description: option.description } : null;
-}
-
-function replaceDefaults(
-  draft: RoleProfilePreferences,
-  defaults: RoleProfilePreferences["defaults"],
-): RoleProfilePreferences {
-  return defaults && Object.keys(defaults).length > 0
-    ? { ...draft, defaults }
-    : Object.fromEntries(Object.entries(draft).filter(([key]) => key !== "defaults"));
-}
 
 function ToggleRow({
   name,
@@ -162,106 +121,17 @@ function CapabilityGroup({
 }
 
 function ProfileEditor({
-  serverId,
   descriptor,
   draft,
   setDraft,
 }: {
-  serverId: string;
   descriptor: RoleProfileDescriptor;
   draft: RoleProfilePreferences;
   setDraft: React.Dispatch<React.SetStateAction<RoleProfilePreferences>>;
 }) {
-  const providerSnapshot = useProvidersSnapshot(serverId);
-  const entries = useMemo(
-    () => compatibleProviderEntries(providerSnapshot.entries, descriptor.roleId),
-    [descriptor.roleId, providerSnapshot.entries],
-  );
-  const selectorProviders = useMemo(
-    () => buildSelectableProviderSelectorProviders(entries),
-    [entries],
-  );
-  const defaults = draft.defaults ?? {};
-  const providerEntry = entries.find((entry) => entry.provider === defaults.provider);
-  const selectedModel = providerEntry?.models?.find((model) => model.id === defaults.model);
-  const modeOptions = useMemo<SelectFieldOption<string>[]>(
-    () => [
-      { id: "provider-default", value: "", label: "Provider default" },
-      ...(providerEntry?.modes ?? []).map((mode) => ({
-        id: mode.id,
-        value: mode.id,
-        label: mode.label,
-        description: mode.description,
-      })),
-    ],
-    [providerEntry?.modes],
-  );
-  const thinkingOptions = useMemo<SelectFieldOption<string>[]>(
-    () => [
-      { id: "model-default", value: "", label: "Model default" },
-      ...(selectedModel?.thinkingOptions ?? []).map((option) => ({
-        id: option.id,
-        value: option.id,
-        label: option.label,
-        description: option.description,
-      })),
-    ],
-    [selectedModel?.thinkingOptions],
-  );
   const selectedTools = draft.allowedTools ?? descriptor.effective.allowedTools;
   const selectedSkills = draft.allowedSkills ?? descriptor.effective.allowedSkills;
 
-  const updateDefault = useCallback(
-    (key: "modeId" | "thinkingOptionId", value: string) => {
-      setDraft((current) => {
-        const currentDefaults = current.defaults ?? {};
-        const nextDefaults = { ...currentDefaults, [key]: value || undefined };
-        return replaceDefaults(current, nextDefaults);
-      });
-    },
-    [setDraft],
-  );
-  const handleModelSelect = useCallback(
-    (provider: AgentProvider, model: string) => {
-      setDraft((current) =>
-        replaceDefaults(current, {
-          provider,
-          ...(model ? { model } : {}),
-        }),
-      );
-    },
-    [setDraft],
-  );
-  const handleClearDefaults = useCallback(() => {
-    setDraft((current) => replaceDefaults(current, undefined));
-  }, [setDraft]);
-  const renderModelTrigger = useCallback(
-    ({
-      selectedModelLabel,
-      disabled,
-      isOpen,
-      hovered,
-      pressed,
-    }: {
-      selectedModelLabel: string;
-      onPress: () => void;
-      disabled: boolean;
-      isOpen: boolean;
-      hovered: boolean;
-      pressed: boolean;
-    }): ReactNode => (
-      <SelectFieldTrigger
-        label={selectedModelLabel}
-        isPlaceholder={!defaults.provider}
-        placeholder="Use per-launch selection"
-        disabled={disabled}
-        active={hovered || pressed || isOpen}
-        size="sm"
-        testID={`role-profile-${descriptor.roleId}-model-trigger`}
-      />
-    ),
-    [defaults.provider, descriptor.roleId],
-  );
   const toggleList = useCallback(
     (kind: "allowedTools" | "allowedSkills", name: string, enabled: boolean) => {
       setDraft((current) => {
@@ -277,23 +147,6 @@ function ProfileEditor({
       });
     },
     [descriptor, setDraft],
-  );
-  const handleModelOpen = useCallback(() => {
-    providerSnapshot.refetchIfStale(defaults.provider);
-  }, [defaults.provider, providerSnapshot]);
-  const handleRetryProvider = useCallback(
-    (provider: AgentProvider) => {
-      void providerSnapshot.refresh([provider]);
-    },
-    [providerSnapshot],
-  );
-  const handleModeChange = useCallback(
-    (value: string) => updateDefault("modeId", value),
-    [updateDefault],
-  );
-  const handleThinkingChange = useCallback(
-    (value: string) => updateDefault("thinkingOptionId", value),
-    [updateDefault],
   );
   const handleToolToggle = useCallback(
     (name: string, enabled: boolean) => toggleList("allowedTools", name, enabled),
@@ -318,71 +171,12 @@ function ProfileEditor({
       </View>
 
       <View style={styles.sectionBlock}>
-        <View style={styles.groupHeader}>
-          <Text style={styles.groupTitle}>Launch defaults</Text>
-          {defaults.provider ? (
-            <Button variant="ghost" size="xs" onPress={handleClearDefaults}>
-              Clear
-            </Button>
-          ) : null}
-        </View>
+        <Text style={styles.groupTitle}>Launch routing</Text>
         <Text style={styles.groupHint}>
-          Prefills new WebUI agents. A launch can still choose a different compatible provider.
+          Configure reusable provider, model, mode, thinking, and feature presets under Agent
+          profiles. Legacy role defaults migrate there automatically; standing roles keep only
+          authority and capability policy.
         </Text>
-        <View style={styles.fields}>
-          <Field label="Provider & model">
-            <CombinedModelSelector
-              providers={selectorProviders}
-              selectedProvider={defaults.provider ?? ""}
-              selectedModel={defaults.model ?? ""}
-              onSelect={handleModelSelect}
-              isLoading={providerSnapshot.isLoading || providerSnapshot.isFetching}
-              renderTrigger={renderModelTrigger}
-              triggerFill
-              serverId={serverId}
-              onOpen={handleModelOpen}
-              onRetryProvider={handleRetryProvider}
-              isRetryingProvider={providerSnapshot.isRefreshing}
-            />
-          </Field>
-          {defaults.provider && !providerEntry && !providerSnapshot.isLoading ? (
-            <Text style={styles.errorText}>
-              The configured provider is unavailable or no longer compatible with this role.
-            </Text>
-          ) : null}
-          <View style={styles.twoColumns}>
-            <View style={styles.fieldColumn}>
-              <SelectField
-                label="Mode"
-                value={defaults.modeId ?? ""}
-                selectedDisplay={optionDisplay(modeOptions, defaults.modeId ?? "")}
-                options={modeOptions}
-                onChange={handleModeChange}
-                placeholder="Provider default"
-                emptyText="No modes"
-                size="sm"
-                disabled={!defaults.provider}
-                searchable={false}
-                triggerTestID={`role-profile-${descriptor.roleId}-mode-trigger`}
-              />
-            </View>
-            <View style={styles.fieldColumn}>
-              <SelectField
-                label="Thinking"
-                value={defaults.thinkingOptionId ?? ""}
-                selectedDisplay={optionDisplay(thinkingOptions, defaults.thinkingOptionId ?? "")}
-                options={thinkingOptions}
-                onChange={handleThinkingChange}
-                placeholder="Model default"
-                emptyText="No thinking options"
-                size="sm"
-                disabled={!defaults.model}
-                searchable={false}
-                triggerTestID={`role-profile-${descriptor.roleId}-thinking-trigger`}
-              />
-            </View>
-          </View>
-        </View>
       </View>
 
       <CapabilityGroup
@@ -407,7 +201,7 @@ function ProfileEditor({
       <View style={styles.previewBlock} testID={`role-profile-${descriptor.roleId}-preview`}>
         <Text style={styles.previewTitle}>Effective profile for new agents</Text>
         <Text style={styles.previewText}>
-          Foundation baseline → host profile → Workspace Protocol → bounded assignment
+          Foundation baseline → host capability policy → Workspace Protocol → bounded assignment
         </Text>
         <Text style={styles.previewMeta}>
           {selectedTools.length} tools · {selectedSkills.length} skills · existing agents unchanged
@@ -482,14 +276,7 @@ export function RoleProfilesCard({ serverId }: { serverId: string }) {
       </View>
     );
   } else if (descriptor) {
-    profileContent = (
-      <ProfileEditor
-        serverId={serverId}
-        descriptor={descriptor}
-        draft={draft}
-        setDraft={setDraft}
-      />
-    );
+    profileContent = <ProfileEditor descriptor={descriptor} draft={draft} setDraft={setDraft} />;
   } else {
     profileContent = (
       <View style={styles.stateBlock}>
@@ -504,7 +291,8 @@ export function RoleProfilesCard({ serverId }: { serverId: string }) {
         <View style={styles.headerCopy}>
           <Text style={settingsStyles.rowTitle}>Role profiles</Text>
           <Text style={settingsStyles.rowHint}>
-            Configure host defaults and narrow capabilities without editing the Foundation contract.
+            Narrow tools and skills without editing the Foundation contract. Configure launch
+            routing under Agent profiles.
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -597,16 +385,12 @@ const styles = StyleSheet.create((theme) => ({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
-  fields: { gap: theme.spacing[3], marginTop: theme.spacing[3] },
-  twoColumns: { flexDirection: "row", gap: theme.spacing[3] },
-  fieldColumn: { flex: 1 },
   capabilityGroup: {
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[4],
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
-  groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   disclosureHeader: {
     flexDirection: "row",
     alignItems: "center",

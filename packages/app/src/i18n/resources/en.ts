@@ -2306,7 +2306,7 @@ export const en = {
         notesLabel: "Notes for agents",
         notesPlaceholder: "Use for UI work — components, layout and design tokens.",
         notesHint:
-          "Returned by the list_profiles MCP tool. Write it as an instruction to another agent.",
+          "Returned by list_profiles. Describe routing fit only; notes never grant authority.",
         save: "Save",
         saving: "Saving...",
         remove: "Remove",

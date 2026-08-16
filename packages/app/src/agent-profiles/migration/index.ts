@@ -2,6 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
+import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type {
+  RoleProfileLaunchDefaults,
+  RoleProfilePreferences,
+  RoleProfilePreferencesMap,
+} from "@getpaseo/protocol/role-profile";
 import { FormPreferencesSchema } from "@/create-agent-preferences/preferences";
 import { readValidatedJson, readValidatedString } from "@/storage/validated-storage";
 
@@ -28,9 +34,138 @@ export interface LegacyFavoriteMigrationHost {
   getProvidersSnapshot(): Promise<{ entries: ProviderSnapshotEntry[] }>;
 }
 
-function supportsMigration(host: LegacyFavoriteMigrationHost): boolean {
+function supportsMigration(host: {
+  getLastServerInfoMessage(): {
+    features?: { agentProfiles?: boolean; agentConfigApply?: boolean };
+  } | null;
+}): boolean {
   const features = host.getLastServerInfoMessage()?.features;
   return features?.agentProfiles === true && features.agentConfigApply === true;
+}
+
+export interface RoleDefaultProfileMigrationHost {
+  getLastServerInfoMessage(): {
+    features?: { agentProfiles?: boolean; agentConfigApply?: boolean };
+  } | null;
+  getDaemonConfig(): Promise<{
+    config: {
+      agentProfiles?: AgentProfile[];
+      roleProfiles?: RoleProfilePreferencesMap;
+    };
+  }>;
+  patchDaemonConfig(patch: {
+    agentProfiles: AgentProfile[];
+    roleProfiles: RoleProfilePreferencesMap;
+  }): Promise<{
+    config: {
+      agentProfiles?: AgentProfile[];
+      roleProfiles?: RoleProfilePreferencesMap;
+    };
+  }>;
+}
+
+function roleDefaultSelectionKey(defaults: RoleProfileLaunchDefaults): string {
+  return JSON.stringify({
+    provider: defaults.provider ?? "",
+    model: defaults.model ?? "",
+    modeId: defaults.modeId ?? "",
+    thinkingOptionId: defaults.thinkingOptionId ?? "",
+  });
+}
+
+function agentProfileSelectionKey(profile: AgentProfile): string {
+  return roleDefaultSelectionKey({
+    provider: profile.provider,
+    ...(profile.model ? { model: profile.model } : {}),
+    ...(profile.modeId ? { modeId: profile.modeId } : {}),
+    ...(profile.thinkingOptionId ? { thinkingOptionId: profile.thinkingOptionId } : {}),
+  });
+}
+
+function withoutRoleDefaults(preferences: RoleProfilePreferences): RoleProfilePreferences {
+  const { defaults: _legacyDefaults, ...capabilities } = preferences;
+  return capabilities;
+}
+
+function migratedRoleDefaultProfile(input: {
+  roleId: PaseoRoleId;
+  defaults: RoleProfileLaunchDefaults;
+}): AgentProfile {
+  const label =
+    PASEO_ROLE_SUMMARIES.find((role) => role.id === input.roleId)?.label ?? input.roleId;
+  return {
+    id: `legacy_role_default:${input.roleId}`,
+    name: `${label} · migrated launch preset`,
+    provider: input.defaults.provider ?? "",
+    ...(input.defaults.model ? { model: input.defaults.model } : {}),
+    ...(input.defaults.modeId ? { modeId: input.defaults.modeId } : {}),
+    ...(input.defaults.thinkingOptionId
+      ? { thinkingOptionId: input.defaults.thinkingOptionId }
+      : {}),
+    notes:
+      `Audience: ${input.roleId}\n` +
+      "Source: migrated SLP role launch defaults.\n" +
+      "Authority: none; exact role binding and assignment remain required.",
+  };
+}
+
+/** Moves deprecated route defaults out of standing role preferences in one host config patch. */
+export class RoleDefaultProfileMigration {
+  private readonly inFlight = new Map<string, Promise<void>>();
+
+  migrateHost(serverId: string, host: RoleDefaultProfileMigrationHost): Promise<void> {
+    const active = this.inFlight.get(serverId);
+    if (active) {
+      return active;
+    }
+    const migration = this.run(host).finally(() => {
+      if (this.inFlight.get(serverId) === migration) {
+        this.inFlight.delete(serverId);
+      }
+    });
+    this.inFlight.set(serverId, migration);
+    return migration;
+  }
+
+  private async run(host: RoleDefaultProfileMigrationHost): Promise<void> {
+    if (!supportsMigration(host)) {
+      return;
+    }
+    const { config } = await host.getDaemonConfig();
+    const roleProfiles = config.roleProfiles ?? {};
+    const existingProfiles = config.agentProfiles ?? [];
+    const existingSelections = new Set(existingProfiles.map(agentProfileSelectionKey));
+    const existingIds = new Set(existingProfiles.map((profile) => profile.id));
+    const migratedProfiles: AgentProfile[] = [];
+    const roleProfilesPatch: RoleProfilePreferencesMap = {};
+
+    for (const summary of PASEO_ROLE_SUMMARIES) {
+      const preferences = roleProfiles[summary.id];
+      const defaults = preferences?.defaults;
+      if (!preferences || !defaults?.provider) {
+        continue;
+      }
+      roleProfilesPatch[summary.id] = withoutRoleDefaults(preferences);
+      if (existingSelections.has(roleDefaultSelectionKey(defaults))) {
+        continue;
+      }
+      const profile = migratedRoleDefaultProfile({ roleId: summary.id, defaults });
+      if (existingIds.has(profile.id)) {
+        profile.id = `${profile.id}:migrated`;
+      }
+      existingIds.add(profile.id);
+      existingSelections.add(agentProfileSelectionKey(profile));
+      migratedProfiles.push(profile);
+    }
+
+    if (Object.keys(roleProfilesPatch).length === 0) {
+      return;
+    }
+    await host.patchDaemonConfig({
+      agentProfiles: [...existingProfiles, ...migratedProfiles],
+      roleProfiles: roleProfilesPatch,
+    });
+  }
 }
 
 function completionKey(serverId: string): string {
@@ -212,3 +347,4 @@ export class LegacyFavoriteProfileMigration {
 }
 
 export const legacyFavoriteProfileMigration = new LegacyFavoriteProfileMigration(AsyncStorage);
+export const roleDefaultProfileMigration = new RoleDefaultProfileMigration();

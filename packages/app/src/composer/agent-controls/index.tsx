@@ -444,6 +444,10 @@ function resolveBoundRoleId(agent: AgentControlsSlice): PaseoRoleId | undefined 
   return agent?.launchContract?.roleId;
 }
 
+function isRoleBoundAgent(agent: AgentControlsSlice): boolean {
+  return Boolean(agent?.launchContract);
+}
+
 function resolveSnapshotSelectedEntry(
   snapshotEntries: ReturnType<typeof useProvidersSnapshot>["entries"],
   agentProvider: string | undefined,
@@ -1765,6 +1769,7 @@ export const AgentControls = memo(function AgentControls({
   }, [modelSelection.thinkingOptions]);
 
   const agentProvider = agent?.provider;
+  const agentIsRoleBound = isRoleBoundAgent(agent);
   const activeModelId = modelSelection.activeModelId;
   const { roleId: boundRoleId, options: boundRoleOptions } = useBoundRoleControls(agent);
 
@@ -1802,8 +1807,13 @@ export const AgentControls = memo(function AgentControls({
     [snapshotSelectedEntry],
   );
   const profileTarget = useMemo<AgentProfileApplyTarget>(
-    () => ({ kind: "agent", agentId, availableModeIds: profileModeIds }),
-    [agentId, profileModeIds],
+    () => ({
+      kind: "agent",
+      agentId,
+      availableModeIds: profileModeIds,
+      roleBound: agentIsRoleBound,
+    }),
+    [agentId, agentIsRoleBound, profileModeIds],
   );
   const agentProfiles = useAgentProfilePicker({
     serverId,

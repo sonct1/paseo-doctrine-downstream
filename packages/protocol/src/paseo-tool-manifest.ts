@@ -70,6 +70,13 @@ export const PASEO_TOOL_MANIFEST = [
     group: "Workspaces",
   },
   {
+    id: "list_profiles",
+    label: "List agent launch presets",
+    description:
+      "List the host-wide provider/model/mode presets a Human configured for repeated agent launches.",
+    group: "Agents",
+  },
+  {
     id: "create_agent",
     label: "Create agent",
     description:

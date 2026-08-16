@@ -20,6 +20,15 @@ describe("Foundation role profiles", () => {
     expect(catalog.profiles.find((profile) => profile.roleId === "peer")?.toolCeiling).toHaveLength(
       10,
     );
+    expect(catalog.profiles.find((profile) => profile.roleId === "lead")?.toolCeiling).toContain(
+      "list_profiles",
+    );
+    expect(
+      catalog.profiles.find((profile) => profile.roleId === "peer")?.toolCeiling,
+    ).not.toContain("list_profiles");
+    expect(
+      catalog.profiles.find((profile) => profile.roleId === "supervisor")?.toolCeiling,
+    ).not.toContain("list_profiles");
     for (const profile of catalog.profiles) {
       expect(profile.effective.allowedTools).toEqual(profile.toolCeiling);
       expect(profile.effective.allowedSkills).toEqual(profile.skillCeiling);

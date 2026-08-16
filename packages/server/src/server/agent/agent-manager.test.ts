@@ -10485,9 +10485,9 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(client.launchConfigs[0]?.mcpServers?.paseo).toBeUndefined();
     expect(manager.getPaseoToolPolicy(created.id)).toMatchObject({
       enabled: true,
-      allowedTools: expect.arrayContaining(["create_agent", "beads_status"]),
+      allowedTools: expect.arrayContaining(["create_agent", "beads_status", "list_profiles"]),
     });
-    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(29);
+    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(30);
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.config.modeId).toBe("read-only");
     expect(created.roleBinding?.instructions).toContain("Role: Lead");

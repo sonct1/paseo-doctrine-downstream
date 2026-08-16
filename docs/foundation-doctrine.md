@@ -118,6 +118,17 @@ hoặc override materialized role bytes. Incompatible provider fail closed; khô
 prompt hoặc provider khác. Chi tiết nằm trong
 [Native Role Binding ADR](native-role-binding.md).
 
+### Agent launch preset chỉ là route shortlist
+
+Agent profile lưu provider, model, mode, thinking, feature values và routing notes do Human cấu hình.
+Nó không chứa standing instruction, Workspace Protocol, assignment hoặc authority. Human có thể chọn
+preset khi launch Lead/Supervisor; Lead được đọc `list_profiles` để chọn candidate cho Peer rồi vẫn phải
+kiểm current provider/model/features trước `create_agent`. Peer và Supervisor không nhận tool này.
+
+Role-bound session chỉ áp preset ở create-time. Route đã bind cần thay đổi thì respawn qua role-first
+flow để có LaunchContract mới; không apply preset lên live role-bound agent. `full-access`, fast mode hay
+notes trong preset không mở rộng mutation, delegation, plugin hoặc acceptance lease.
+
 ### Skill admission theo attention
 
 Foundation skill không được expose đồng đều cho mọi role. Role bundle chỉ admit package phù hợp với

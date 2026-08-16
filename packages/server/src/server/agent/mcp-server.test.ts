@@ -88,6 +88,7 @@ interface LooseContentBlock {
 
 interface RegisteredMcpTool {
   inputSchema: LooseInputSchema;
+  description?: string;
   callback?: (
     input: unknown,
     extra?: unknown,
@@ -5707,6 +5708,11 @@ describe("agent profile listing MCP tool", () => {
       logger,
     });
     const tool = registeredTool(server, "list_profiles");
+
+    expect(tool.description).toContain("`${provider}/${model}`");
+    expect(tool.description).toContain("create_agent.settings");
+    expect(tool.description).toContain("routing guidance only");
+    expect(tool.description).toContain("do not use it for role-bound delegation");
 
     const response = await tool.handler({});
 

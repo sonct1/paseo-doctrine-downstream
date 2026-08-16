@@ -69,6 +69,12 @@ Tạo Supervisor bằng `--role supervisor` trong một governance assignment ri
 Paseo `create_agent` với `role=peer`, exact workspace, discovered provider/model và bounded assignment.
 Không dùng provider alias hoặc initial prompt để giả lập role.
 
+Agent profile là route shortlist do Human cấu hình, không phải role profile. Lead có thể gọi
+`list_profiles`, đọc routing notes, bỏ qua preset thiếu model, rồi verify candidate bằng
+`list_providers`/`list_models`/`inspect_provider`. Với customized `create_agent`, Lead ghép
+`provider/model` vào `provider` và đặt mode, thinking, features dưới `settings`. Preset không cấp
+assignment authority và không được apply lên live role-bound agent; đổi route cần create replacement.
+
 Ở agent-scoped action boundary, Lead đã bind role chỉ được tạo `role=peer` và chỉ được
 `send_agent_prompt` tới direct child có `paseo.parent-agent-id` trỏ về chính Lead. Peer hoặc Supervisor
 đã bind role bị từ chối nếu tool bị expose nhầm; session cũ không có `RoleBinding` giữ behavior hiện tại.
@@ -100,6 +106,7 @@ hết hiệu lực ở handback/stop.
 ### Lead
 
 - bind exact identity, workspace, Human objective và Lead lease;
+- dùng `list_profiles` như advisory shortlist khi route Peer, không coi notes là authority hoặc qualification;
 - chọn topology nhỏ nhất và một Owner cho mỗi moving scope;
 - giao neutral outcome brief, không giao conclusion cần xác nhận;
 - nhận counterevidence và issue concrete ruling;
