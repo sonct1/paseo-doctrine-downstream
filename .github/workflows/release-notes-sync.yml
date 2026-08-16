@@ -53,6 +53,10 @@ jobs:
             args+=(--tag "$INPUT_TAG")
           fi
 
+          if [ "$EVENT_NAME" = "push" ] && [[ "$REF" == refs/heads/* ]]; then
+            args+=(--skip-unsupported-version)
+          fi
+
           create_if_missing="false"
           if [[ "$EVENT_NAME" = "push" && "$REF" == refs/tags/v* ]]; then
             create_if_missing="true"

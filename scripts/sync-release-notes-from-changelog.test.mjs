@@ -98,3 +98,47 @@ test("converts contributor profile links to mentions in synced release notes", (
     assert.doesNotMatch(syncedNotes, /\[@therainisme\]\(https:\/\/github\.com\/therainisme\)/);
   }, changelogText);
 });
+
+test("skips downstream changelog versions on branch-triggered sync", () => {
+  const changelogText = "## 0.4.0-paseo.2 - 2026-08-16\n\n- Downstream notes.\n";
+
+  withTempChangelog(() => {
+    const calls = [];
+    const messages = [];
+    const originalLog = console.log;
+    console.log = (message) => messages.push(String(message));
+
+    try {
+      syncReleaseNotes(
+        ["--repo", "webplode/paseo-doctrine-downstream", "--skip-unsupported-version"],
+        {
+          execFileSync: (...args) => calls.push(args),
+        },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    assert.deepEqual(calls, []);
+    assert.equal(messages.length, 1);
+    assert.match(messages[0], /Skipping release notes sync/);
+    assert.match(messages[0], /0\.4\.0-paseo\.2/);
+  }, changelogText);
+});
+
+test("keeps unsupported explicit release sync strict", () => {
+  const changelogText = "## 0.4.0-paseo.2 - 2026-08-16\n\n- Downstream notes.\n";
+
+  withTempChangelog(() => {
+    assert.throws(
+      () =>
+        syncReleaseNotes([
+          "--repo",
+          "webplode/paseo-doctrine-downstream",
+          "--tag",
+          "v0.4.0-paseo.2",
+        ]),
+      /Unsupported release version/,
+    );
+  }, changelogText);
+});

@@ -18,6 +18,8 @@ Options:
   --repo <owner/repo>       Repository slug. Defaults to $GITHUB_REPOSITORY.
   --tag <tag>               Release tag (e.g. v0.1.14). Defaults to latest changelog entry.
   --create-if-missing       Create release if it does not already exist.
+  --skip-unsupported-version
+                             Exit successfully when the selected version is not an upstream release.
 `;
   process.stderr.write(usage.trimStart());
   process.stderr.write("\n");
@@ -29,6 +31,7 @@ function parseArgs(argv) {
     repo: process.env.GITHUB_REPOSITORY || "",
     tag: "",
     createIfMissing: false,
+    skipUnsupportedVersion: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -55,6 +58,11 @@ function parseArgs(argv) {
 
     if (arg === "--create-if-missing") {
       args.createIfMissing = true;
+      continue;
+    }
+
+    if (arg === "--skip-unsupported-version") {
+      args.skipUnsupportedVersion = true;
       continue;
     }
     usageAndExit();
@@ -158,8 +166,20 @@ export function syncReleaseNotes(argv = process.argv.slice(2), deps = {}) {
   const changelogText = readFileSync(changelogPath, "utf8");
   const entries = parseChangelog(changelogText);
 
-  const targetTag = args.tag ? normalizeReleaseTag(args.tag) : entries[0].tag;
-  const releaseInfo = getReleaseInfoFromSourceTag(targetTag);
+  let targetTag;
+  let releaseInfo;
+  try {
+    targetTag = args.tag ? normalizeReleaseTag(args.tag) : entries[0].tag;
+    releaseInfo = getReleaseInfoFromSourceTag(targetTag);
+  } catch (error) {
+    if (!args.skipUnsupportedVersion) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`Skipping release notes sync: ${message}`);
+    return;
+  }
   const targetEntry = entries.find((entry) => entry.tag === targetTag);
 
   let notes = targetEntry?.notes ?? null;
