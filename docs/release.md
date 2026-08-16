@@ -2,6 +2,25 @@
 
 All workspaces share one version and release together.
 
+## Downstream Foundation release
+
+Repository `webplode/paseo-doctrine-downstream` không publish các package dưới upstream npm scope.
+`scripts/downstream-publish-guard.test.mjs` giữ boundary này fail-closed. Release downstream dùng
+version dạng `X.Y.Z-paseo.N` và tag khớp chính xác `paseo-vX.Y.Z-paseo.N`.
+
+Quy trình downstream:
+
+1. Commit code/docs của feature hoặc fix riêng; không trộn version bump vào code commit.
+2. Push `main`, chờ required CI của exact commit xanh và xử lý mọi downstream qualification drift.
+3. Commit `CHANGELOG.md`, synchronized workspace versions và lockfile bằng một release commit riêng.
+4. Chạy format, lint, typecheck, focused downstream matrix, serialized macOS artifact build/smoke và
+   clean local-stack install/readback trên exact clean release commit.
+5. Tạo annotated tag `paseo-v<package-version>`, push `main` và tag, rồi chờ
+   `Downstream macOS Release` hoàn tất cho cả `arm64` và `x64`.
+
+Không dùng `release:publish` hoặc upstream `vX.Y.Z` tag cho distribution này. Các lệnh stable/beta npm
+ở phần dưới chỉ áp dụng cho upstream release track.
+
 ## Two steps
 
 A release has exactly two steps. The agent does the first, the user authorizes the second.

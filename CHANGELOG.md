@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0-paseo.2 - 2026-08-16
+
+Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Profiles và contract Foundation SLP, đồng thời tái qualification toàn bộ bề mặt customization sau merge Paseo 0.4.
+
+### Added
+
+- Cho Lead đọc host-wide agent launch presets qua `list_profiles` và chuyển preset sang đúng shape `create_agent` downstream; Peer và Supervisor không nhận tool này.
+- Tự migrate legacy role launch defaults sang Agent Profiles mà vẫn giữ nguyên standing tool/skill policy.
+- Cập nhật package-runner ACP pins cho `glm-acp-agent` và Qoder lên registry versions hiện hành.
+
+### Improved
+
+- Tách route preset khỏi authority: profile notes chỉ là routing guidance, profile không cấp write, delegation, plugin hoặc acceptance authority.
+- Chỉ cho áp dụng Agent Profile trong draft/create flow; live role-bound agents phải respawn qua role-first flow khi đổi provider/model route.
+- Giữ progress messages trong ACP timeline nhưng trả `finalText` theo message boundary cuối, tránh dính progress của Cursor vào exact handback.
+
+### Qualified
+
+- Re-qualify Foundation packaging, role binding, Workspace Protocol v3, no-write leases, provider adapters, MCP parity, Rooms, Council, Issues/topology, CLI chat/loop/schedule, downstream installer và macOS artifact lifecycle.
+
 ## 0.4.0-paseo.1 - 2026-08-15
 
 Bản downstream này tích hợp upstream Paseo 0.4.0 và các commit mới trên `upstream/main`, đồng thời giữ các contract Foundation.
