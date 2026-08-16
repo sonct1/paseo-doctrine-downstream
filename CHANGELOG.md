@@ -19,11 +19,11 @@ Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Pro
 ### Fixed
 
 - Preapprove đúng tập Paseo MCP tools trong role ceiling cho provider hỗ trợ exact MCP policy, tránh prompt permission không thể duyệt ở assignment `no-write`; assignment và Beads guards vẫn fail closed và không bị nới quyền.
-- Giữ Windows CI qualification đúng platform contract: native Antigravity vẫn fail closed trên Windows, còn skill/path/newline assertions và Git-observer waits không phụ thuộc POSIX formatting hoặc runner contention.
+- Giữ native Antigravity fail closed trên Windows và làm các assertion skill/path/newline cùng Git-observer waits độc lập với POSIX formatting hoặc runner contention; Windows không nằm trong release qualification scope của bản downstream này.
 
 ### Qualified
 
-- Re-qualify Foundation packaging, role binding, Workspace Protocol v3, no-write leases, provider adapters, MCP parity, Rooms, Council, Issues/topology, CLI chat/loop/schedule, downstream installer và macOS artifact lifecycle.
+- Re-qualify Foundation packaging, role binding, Workspace Protocol v3, no-write leases, provider adapters, MCP parity, Rooms, Council, Issues/topology, CLI chat/loop/schedule, downstream installer, macOS artifact lifecycle và Linux Docker/Nix builds.
 
 ## 0.4.0-paseo.1 - 2026-08-15
 
