@@ -23,7 +23,7 @@ test.describe("optional Workspace Protocol settings", () => {
 
       await expect(page.getByTestId("workspace-protocol-missing")).toBeVisible({ timeout: 30_000 });
       const editor = page.getByTestId("workspace-protocol-input");
-      await expect(editor).toHaveValue(/PASEO_WORKSPACE_PROTOCOL_VERSION: 2/u);
+      await expect(editor).toHaveValue(/PASEO_WORKSPACE_PROTOCOL_VERSION: 3/u);
 
       await page.getByTestId("workspace-protocol-save").click();
       await expect(page.getByTestId("workspace-protocol-missing")).toHaveCount(0, {
@@ -32,7 +32,7 @@ test.describe("optional Workspace Protocol settings", () => {
       await expect(page.getByTestId("workspace-protocol-editor-section")).toBeVisible();
 
       const persisted = await readFile(protocolPath, "utf8");
-      expect(persisted).toContain("PASEO_WORKSPACE_PROTOCOL_VERSION: 2");
+      expect(persisted).toContain("PASEO_WORKSPACE_PROTOCOL_VERSION: 3");
     } finally {
       await workspace.cleanup();
     }

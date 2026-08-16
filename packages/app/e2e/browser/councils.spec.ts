@@ -91,7 +91,7 @@ test.describe("Council case surface", () => {
       await expect(detail).toBeVisible({ timeout: 30_000 });
       await expect(detail.getByText(CASE_TITLE, { exact: true })).toBeVisible();
       await expect(
-        page.getByText("One accountable Lead. Independent seats. No vote."),
+        page.getByText("One accountable Lead. Architect + Reviewer. No vote."),
       ).toBeVisible();
       await expect(
         page.getByTestId(`council-row-phase-${CASE_ID}-${scenario.workspaceId}`),
