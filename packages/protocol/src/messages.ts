@@ -845,6 +845,7 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     type: z.literal("timeline"),
     provider: AgentProviderSchema,
     item: AgentTimelineItemPayloadSchema,
+    turnId: z.string().optional(),
   }),
   z.object({
     type: z.literal("permission_requested"),
@@ -1239,11 +1240,15 @@ const ImageAttachmentSchema = z.object({
   mimeType: z.string(), // e.g., "image/jpeg", "image/png"
 });
 
+export const ActiveTurnBehaviorSchema = z.enum(["interrupt", "steer"]);
+export type ActiveTurnBehavior = z.infer<typeof ActiveTurnBehaviorSchema>;
+
 export const SendAgentMessageSchema = z.object({
   type: z.literal("send_agent_message"),
   agentId: z.string(),
   text: z.string(),
   messageId: z.string().optional(), // Client-provided ID for deduplication
+  activeTurnBehavior: ActiveTurnBehaviorSchema.optional(),
   images: z.array(ImageAttachmentSchema).optional(),
   attachments: AgentAttachmentsSchema,
 });
@@ -1396,6 +1401,7 @@ export const SendAgentMessageRequestSchema = z.object({
   agentId: z.string(),
   text: z.string(),
   messageId: z.string().optional(), // Client-provided ID for deduplication
+  activeTurnBehavior: ActiveTurnBehaviorSchema.optional(),
   images: z.array(ImageAttachmentSchema).optional(),
   attachments: AgentAttachmentsSchema,
 });
@@ -1452,6 +1458,12 @@ export const PluginCatalogGetRequestSchema = z.object({
 export const PluginListRequestSchema = z.object({
   type: z.literal("plugin.list.request"),
   requestId: z.string(),
+});
+
+export const PluginLogsGetRequestSchema = z.object({
+  type: z.literal("plugin.logs.get.request"),
+  requestId: z.string(),
+  pluginId: PluginIdSchema,
 });
 
 export const PluginDirectoryInstallRequestSchema = z.object({
@@ -3034,6 +3046,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DiagnosticsRequestSchema,
   PluginCatalogGetRequestSchema,
   PluginListRequestSchema,
+  PluginLogsGetRequestSchema,
   PluginDirectoryInstallRequestSchema,
   PluginDirectoryInspectRequestSchema,
   PluginReloadRequestSchema,
@@ -3384,6 +3397,8 @@ export const ServerInfoStatusPayloadSchema = z
         plugins: z.boolean().optional(),
         // COMPAT(pluginManagement): added in v0.4.0, remove gate after 2027-08-14.
         pluginManagement: z.boolean().optional(),
+        // COMPAT(pluginLogs): added in v0.4.0, remove gate after 2027-08-16.
+        pluginLogs: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -4232,6 +4247,7 @@ const AgentTimelineSeqRangeSchema = z.object({
 export const AgentTimelineEntryPayloadSchema = z.object({
   provider: AgentProviderSchema,
   item: AgentTimelineItemPayloadSchema,
+  turnId: z.string().optional(),
   timestamp: z.string(),
   seqStart: z.number().int().nonnegative(),
   seqEnd: z.number().int().nonnegative(),
@@ -6151,9 +6167,26 @@ export const PluginListItemSchema = z.object({
 });
 export type PluginListItem = z.infer<typeof PluginListItemSchema>;
 
+export const PluginLogEntrySchema = z.object({
+  sequence: z.number().int().nonnegative(),
+  timestamp: z.string().datetime(),
+  stream: z.enum(["stdout", "stderr"]),
+  message: z.string(),
+});
+export type PluginLogEntry = z.infer<typeof PluginLogEntrySchema>;
+
 export const PluginListResponseSchema = z.object({
   type: z.literal("plugin.list.response"),
   payload: z.object({ requestId: z.string(), plugins: z.array(PluginListItemSchema) }),
+});
+
+export const PluginLogsGetResponseSchema = z.object({
+  type: z.literal("plugin.logs.get.response"),
+  payload: z.object({
+    requestId: z.string(),
+    pluginId: PluginIdSchema,
+    entries: z.array(PluginLogEntrySchema),
+  }),
 });
 
 export const PluginDirectoryInstallResponseSchema = z.object({
@@ -6198,6 +6231,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   BrowserAutomationExecuteRequestSchema,
   PluginCatalogGetResponseSchema,
   PluginListResponseSchema,
+  PluginLogsGetResponseSchema,
   PluginDirectoryInstallResponseSchema,
   PluginDirectoryInspectResponseSchema,
   PluginReloadResponseSchema,

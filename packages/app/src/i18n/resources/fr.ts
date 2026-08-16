@@ -99,6 +99,7 @@ export const fr: TranslationResources = {
       interruptAgent: "Agent d'interruption",
       queueMessage: "Message de file d'attente",
       sendAndInterrupt: "Envoyer et interrompre",
+      sendAndSteer: "Envoyer et guider",
       sendMessage: "Envoyer un message",
       queue: "File d'attente",
       send: "Envoyer",
@@ -596,6 +597,7 @@ export const fr: TranslationResources = {
         renameAgent: "Renommer l'agent",
       },
       actions: {
+        newTab: "Nouvel onglet",
         newAgent: "Nouvel agent",
         newTerminal: "Nouveau terminal",
         preparingTerminal: "Préparation de l'onglet du terminal",
@@ -604,6 +606,9 @@ export const fr: TranslationResources = {
         exitFocusMode: "Quitter le mode concentration",
         splitRight: "Volet divisé à droite",
         splitDown: "Diviser le volet vers le bas",
+        changes: "Modifications",
+        files: "Fichiers",
+        pullRequest: "Demande de fusion",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles…",
         pinTarget: "Épingler",
@@ -1005,6 +1010,8 @@ export const fr: TranslationResources = {
       },
       show: {
         label: "Afficher",
+        branch: "Branche",
+        project: "Projet",
         host: "Hôte",
         changeRequest: "Pull request",
         checks: "Vérifications",
@@ -1468,6 +1475,7 @@ export const fr: TranslationResources = {
     defaultModel: "Défaut",
     profiles: "Profils",
     providers: "Fournisseurs",
+    model: "Modèle",
     editProfiles: "Modifier",
     editProfilesLabel: "Modifier les profils d'agent",
     createProfile: "Créer un profil",
@@ -1713,6 +1721,18 @@ export const fr: TranslationResources = {
         reloadMessage: "Vos modifications locales seront perdues.",
       },
     },
+    files: {
+      label: "Fichiers",
+      subtitle: "Fichiers de l’espace de travail",
+      tooltip: "Parcourir les fichiers de l’espace de travail",
+    },
+    pullRequest: {
+      label: "Demande de fusion",
+      subtitle: "Détails de la demande de fusion",
+      emptyTitle: "Aucune demande de fusion pour le moment",
+      emptyDescription:
+        "Créez une demande de fusion pour cette copie de travail afin d’afficher ses détails ici.",
+    },
     diff: {
       changesLabel: "Modifications",
       changesSubtitle: "Différences de l'arbre de travail",
@@ -1883,11 +1903,14 @@ export const fr: TranslationResources = {
         descriptions: {
           interrupt:
             "Lorsque l'agent est en cours d'exécution, Entrée interrompt. Commande/Ctrl+Entrée met en file d'attente.",
+          steer:
+            "Lorsque l’agent est en cours d’exécution, Entrée oriente le tour actif. Commande/Ctrl+Entrée met en file d’attente.",
           queue:
             "Lorsque l'agent est en cours d'exécution, Entrée met en file d'attente. Commande/Ctrl+Entrée envoie.",
         },
         options: {
           interrupt: "Interrompre",
+          steer: "Orienter",
           queue: "File d'attente",
         },
       },

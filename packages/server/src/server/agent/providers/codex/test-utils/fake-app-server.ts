@@ -47,8 +47,11 @@ type CodexAppServerChildProcess = ChildProcessWithoutNullStreams & {
 export interface FakeCodexAppServer {
   readonly child: CodexAppServerChildProcess;
   readonly recordedRollbacks: JsonObject[];
+  requests(): readonly JsonObject[];
   assertNoErrors(): void;
   waitForTurnStart(): Promise<JsonObject>;
+  waitForRequest(method: string): Promise<JsonObject>;
+  disconnect(): void;
   nextResponse(): Promise<string>;
   startsTurn(params: { threadId: string; turnId?: string }): void;
   startsCompaction(params: { threadId: string; itemId: string }): void;
@@ -225,6 +228,11 @@ export function createFakeCodexAppServer(
 
     Promise.resolve(handler(message.params))
       .then((result) => {
+        const rpcError = toJsonObject(result).__jsonRpcError;
+        if (rpcError) {
+          child.stdout.write(`${JSON.stringify({ id: message.id, error: rpcError })}\n`);
+          return undefined;
+        }
         child.stdout.write(`${JSON.stringify({ id: message.id, result })}\n`);
         return undefined;
       })
@@ -317,6 +325,9 @@ export function createFakeCodexAppServer(
   return {
     child,
     recordedRollbacks,
+    requests() {
+      return messages;
+    },
     assertNoErrors() {
       if (errors.length > 0) {
         throw errors[0];
@@ -328,6 +339,16 @@ export function createFakeCodexAppServer(
         "turn start request",
       );
       return toJsonObject(message.params);
+    },
+    async waitForRequest(method) {
+      const message = await waitForMessage(
+        (candidate) => candidate.method === method,
+        `${method} request`,
+      );
+      return toJsonObject(message.params);
+    },
+    disconnect() {
+      child.emit("exit", null, "SIGTERM");
     },
     nextResponse() {
       return new Promise<string>((resolve) => {

@@ -10,6 +10,7 @@ import type { AgentStorage } from "./agent-storage.js";
 import { ensureAgentLoaded } from "./agent-loading.js";
 import { assertAgentPromptLease } from "./lead-handoffs.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
+import type { ActiveTurnBehavior } from "@getpaseo/protocol/messages";
 
 export type AgentUnarchiveController = Pick<AgentManager, "notifyAgentState" | "unarchiveSnapshot">;
 
@@ -20,11 +21,61 @@ export type AgentRunController = Pick<
   | "hasInFlightRun"
   | "replaceAgentRun"
   | "startAuthorizedAgentStream"
+  | "steerOrReplaceActiveTurnAuthorized"
 >;
 
 export interface StartAgentRunOptions {
   replaceRunning?: boolean;
+  activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
+}
+
+export type PromptDispatchDisposition = "out_of_band" | "steered" | "turn_started";
+
+async function steerOrReplaceActiveRun(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+): Promise<
+  | { disposition: "steered" }
+  | {
+      disposition: "turn_started";
+      iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>;
+    }
+  | null
+> {
+  if (options?.activeTurnBehavior !== "steer") {
+    return null;
+  }
+  const result = await agentManager.steerOrReplaceActiveTurnAuthorized(
+    agentId,
+    prompt,
+    options.runOptions,
+  );
+  if (result.status === "steered") {
+    return { disposition: "steered" };
+  }
+  if (result.status === "replaced") {
+    return { disposition: "turn_started", iterator: result.iterator };
+  }
+  return null;
+}
+
+async function startOrReplaceRun(
+  agentManager: AgentRunController,
+  agentId: string,
+  prompt: AgentPromptInput,
+  options: StartAgentRunOptions | undefined,
+): Promise<{
+  iterator: AsyncGenerator<import("./agent-sdk-types.js").AgentStreamEvent>;
+  replaced: boolean;
+}> {
+  const replaced = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
+  const iterator = replaced
+    ? await agentManager.replaceAgentRun(agentId, prompt, options?.runOptions)
+    : await agentManager.startAuthorizedAgentStream(agentId, prompt, options?.runOptions);
+  return { iterator, replaced };
 }
 
 export async function startAgentRun(
@@ -33,7 +84,7 @@ export async function startAgentRun(
   prompt: AgentPromptInput,
   logger: Logger,
   options?: StartAgentRunOptions,
-): Promise<{ outOfBand: boolean }> {
+): Promise<{ disposition: PromptDispatchDisposition }> {
   const snapshot = agentManager.getAgent(agentId);
   logger.trace(
     {
@@ -44,6 +95,7 @@ export async function startAgentRun(
       promptType: typeof prompt === "string" ? "string" : "structured",
       hasRunOptions: Boolean(options?.runOptions),
       replaceRunning: Boolean(options?.replaceRunning),
+      activeTurnBehavior: options?.activeTurnBehavior,
     },
     "agent.session.start_stream.request",
   );
@@ -51,19 +103,21 @@ export async function startAgentRun(
   // in-flight turn — replaceAgentRun would interrupt the running turn. The
   // intercept lives at this layer so it covers every prompt entrypoint.
   if (await agentManager.tryRunOutOfBandAuthorized(agentId, prompt, options?.runOptions)) {
-    return { outOfBand: true };
+    return { disposition: "out_of_band" };
   }
-  const shouldReplace = Boolean(options?.replaceRunning && agentManager.hasInFlightRun(agentId));
-  const runOptions = options?.runOptions;
-  const iterator = shouldReplace
-    ? await agentManager.replaceAgentRun(agentId, prompt, runOptions)
-    : await agentManager.startAuthorizedAgentStream(agentId, prompt, runOptions);
+  const steered = await steerOrReplaceActiveRun(agentManager, agentId, prompt, options);
+  if (steered?.disposition === "steered") {
+    return steered;
+  }
+  const { iterator, replaced } = steered
+    ? { iterator: steered.iterator, replaced: true }
+    : await startOrReplaceRun(agentManager, agentId, prompt, options);
   logger.trace(
     {
       agentId,
       provider: snapshot?.provider,
       providerSessionId: snapshot?.persistence?.sessionId ?? undefined,
-      shouldReplace,
+      shouldReplace: replaced,
     },
     "agent.session.start_stream.iterator_returned",
   );
@@ -93,7 +147,7 @@ export async function startAgentRun(
       logger.error({ err: error, agentId }, "Agent stream failed");
     }
   })();
-  return { outOfBand: false };
+  return { disposition: "turn_started" };
 }
 
 /**
@@ -135,6 +189,7 @@ export interface SendPromptToAgentParams {
   /** Prompt to dispatch to the provider (may include image blocks or wrapped text). */
   prompt: AgentPromptInput;
   messageId?: string;
+  activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
   /** Optional mode to set on the agent before the run starts. */
   sessionMode?: string;
@@ -183,18 +238,18 @@ export async function waitForAgentRunStartWithTimeout(
  * drift between them.
  *
  * When `unarchive` is false and the agent is archived, the call is a silent
- * no-op (returns `{ outOfBand: false }`) — the agent is not run.
+ * no-op (returns the normal turn-start disposition) — the agent is not run.
  */
 export async function sendPromptToAgent(
   params: SendPromptToAgentParams,
-): Promise<{ outOfBand: boolean }> {
+): Promise<{ disposition: PromptDispatchDisposition }> {
   const unarchive = params.unarchive ?? true;
 
   const record = await params.agentStorage.get(params.agentId);
   assertAgentPromptLease(record);
   if (record?.archivedAt) {
     if (!unarchive) {
-      return { outOfBand: false };
+      return { disposition: "turn_started" };
     }
     await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId);
   }
@@ -215,6 +270,7 @@ export async function sendPromptToAgent(
 
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
     replaceRunning: params.replaceRunning ?? true,
+    activeTurnBehavior: params.activeTurnBehavior,
     runOptions,
   });
 }
@@ -241,7 +297,7 @@ export async function startCreatedAgentInitialPrompt(
     },
   );
 
-  if (!dispatchResult.outOfBand) {
+  if (dispatchResult.disposition === "turn_started") {
     await waitForAgentRunStartWithTimeout(params.agentManager, params.agentId);
   }
 

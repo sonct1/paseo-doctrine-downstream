@@ -44,5 +44,5 @@ export async function expectCompletedDiagram(page: Page, labels: readonly string
 }
 
 export async function reloadConversation(page: Page): Promise<void> {
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
 }

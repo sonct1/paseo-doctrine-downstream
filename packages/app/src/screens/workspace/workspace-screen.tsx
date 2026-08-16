@@ -76,6 +76,8 @@ import { traceInstant } from "@/performance/native-trace";
 import { useSessionStore, type WorkspaceDescriptor } from "@/stores/session-store";
 import {
   collectAllTabs,
+  createDefaultLayout,
+  findPaneById,
   getFocusedBrowserId,
   type WorkspaceLayout,
   useWorkspaceLayoutStore,
@@ -154,10 +156,7 @@ import {
   deriveWorkspaceAgentVisibility,
   workspaceAgentVisibilityEqual,
 } from "@/workspace-tabs/agent-visibility";
-import {
-  deriveWorkspacePaneState,
-  resolveSideFileOpenPlacement,
-} from "@/screens/workspace/workspace-pane-state";
+import { deriveWorkspacePaneState } from "@/screens/workspace/workspace-pane-state";
 import {
   buildWorkspacePaneContentModel,
   WorkspacePaneContent,
@@ -207,6 +206,7 @@ import {
 } from "@/workspace/file-open";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useWorkspaceCheckoutStatus } from "@/screens/workspace/use-workspace-checkout-status";
+import { usePullRequestAutoAdd } from "@/panels/pull-request";
 
 const WORKSPACE_SETUP_AUTO_OPEN_WINDOW_MS = 30_000;
 const WORKSPACE_FLOATING_PANEL_PORTAL_HOST_PREFIX = "workspace-floating-panels";
@@ -352,6 +352,8 @@ function getFallbackTabOptionLabel(
     topology: string;
     agent: string;
     changes: string;
+    files: string;
+    pullRequest: string;
   },
 ): string {
   if (tab.target.kind === "draft") {
@@ -375,6 +377,12 @@ function getFallbackTabOptionLabel(
   if (tab.target.kind === "working_diff") {
     return labels.changes;
   }
+  if (tab.target.kind === "files") {
+    return labels.files;
+  }
+  if (tab.target.kind === "pull_request") {
+    return labels.pullRequest;
+  }
   if (tab.target.kind === "commit_diff") {
     return tab.target.sha.slice(0, 7);
   }
@@ -391,6 +399,8 @@ function getFallbackTabOptionDescription(
     browser: string;
     topology: string;
     changes: string;
+    files: string;
+    pullRequest: string;
   },
 ): string {
   if (tab.target.kind === "draft") {
@@ -419,6 +429,12 @@ function getFallbackTabOptionDescription(
   }
   if (tab.target.kind === "working_diff") {
     return labels.changes;
+  }
+  if (tab.target.kind === "files") {
+    return labels.files;
+  }
+  if (tab.target.kind === "pull_request") {
+    return labels.pullRequest;
   }
   return tab.target.path;
 }
@@ -619,6 +635,8 @@ function MobileWorkspaceTabOption({
       topology: "Topology",
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
+      files: t("panels.files.label"),
+      pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
   );
@@ -1724,6 +1742,75 @@ function buildWorkspaceTerminalScopeKey(serverId: string, workspaceId: string): 
   return `${serverId}:${workspaceId}`;
 }
 
+function canObservePullRequest(isRouteFocused: boolean, isGitCheckout: boolean): boolean {
+  return isRouteFocused && isGitCheckout;
+}
+
+interface ToggleWorkspaceExplorerPaneInput {
+  isCompact: boolean;
+  persistenceKey: string | null;
+  checkout: ExplorerCheckoutContext | null;
+  toggleCompact: (input: { isCompact: boolean; checkout: ExplorerCheckoutContext }) => void;
+}
+
+function toggleWorkspaceExplorerPane(input: ToggleWorkspaceExplorerPaneInput): void {
+  if (input.isCompact || !supportsDesktopPaneSplits()) {
+    if (input.checkout) {
+      input.toggleCompact({ isCompact: input.isCompact, checkout: input.checkout });
+    }
+    return;
+  }
+  if (!input.persistenceKey) {
+    return;
+  }
+
+  const store = useWorkspaceLayoutStore.getState();
+  const layout = store.layoutByWorkspace[input.persistenceKey] ?? createDefaultLayout();
+  const parentTabId = findPaneById(layout.root, layout.focusedPaneId)?.focusedTabId ?? null;
+  const explorerPaneId = store.explorerPaneIdByWorkspace[input.persistenceKey] ?? null;
+  const explorerPane = findPaneById(layout.root, explorerPaneId);
+  if (explorerPane) {
+    if (explorerPane.hidden === true) {
+      store.showPane(input.persistenceKey, explorerPane.id);
+    } else {
+      store.hidePane(input.persistenceKey, explorerPane.id);
+    }
+    return;
+  }
+
+  const ensuredPane = store.ensureExplorerPane(input.persistenceKey);
+  if (!ensuredPane) {
+    return;
+  }
+  const tabId = parentTabId
+    ? store.openChildTabFocused(input.persistenceKey, { kind: "working_diff" }, parentTabId)
+    : store.openTabFocused(input.persistenceKey, { kind: "working_diff" });
+  if (tabId) {
+    store.moveTabToPane(input.persistenceKey, tabId, ensuredPane.paneId);
+  }
+}
+
+function isWorkspaceExplorerPaneOpen(
+  state: ReturnType<typeof useWorkspaceLayoutStore.getState>,
+  persistenceKey: string | null,
+): boolean {
+  if (!persistenceKey) {
+    return false;
+  }
+  const paneId = state.explorerPaneIdByWorkspace[persistenceKey];
+  const layout = state.layoutByWorkspace[persistenceKey];
+  const pane = paneId && layout ? findPaneById(layout.root, paneId) : null;
+  return Boolean(pane && pane.hidden !== true);
+}
+
+function resolveExplorerOpen(
+  isCompact: boolean,
+  compactExplorerOpen: boolean,
+  desktopExplorerOpen: boolean,
+): boolean {
+  return isCompact ? compactExplorerOpen : desktopExplorerOpen;
+}
+
 interface WorkspaceTerminalTabActionsInput {
   persistenceKey: string | null;
   focusWorkspacePane: (workspaceKey: string, paneId: string) => void;
@@ -2015,8 +2102,14 @@ function WorkspaceScreenContent({
     workspace: workspaceDescriptor,
     checkoutState: workspaceHeaderCheckoutState,
   });
+  usePullRequestAutoAdd({
+    workspaceKey: persistenceKey,
+    serverId: normalizedServerId,
+    cwd: workspaceDirectory,
+    enabled: canObservePullRequest(isRouteFocused, isGitCheckout),
+  });
 
-  const isExplorerOpen = usePanelStore((state) =>
+  const isCompactExplorerOpen = usePanelStore((state) =>
     selectIsFileExplorerOpen(state, { isCompact: isMobile }),
   );
   const toggleFileExplorerForCheckout = usePanelStore(
@@ -2035,15 +2128,14 @@ function WorkspaceScreenContent({
     };
   }, [isGitCheckout, normalizedServerId, workspaceDirectory]);
 
-  const handleToggleExplorer = useCallback(() => {
-    if (!activeExplorerCheckout) {
-      return;
-    }
-    toggleFileExplorerForCheckout({
-      isCompact: isMobile,
-      checkout: activeExplorerCheckout,
-    });
-  }, [activeExplorerCheckout, isMobile, toggleFileExplorerForCheckout]);
+  const isDesktopExplorerOpen = useWorkspaceLayoutStore((state) =>
+    isWorkspaceExplorerPaneOpen(state, persistenceKey),
+  );
+  const isExplorerOpen = resolveExplorerOpen(
+    isMobile,
+    isCompactExplorerOpen,
+    isDesktopExplorerOpen,
+  );
 
   const hasDiffStat = useMemo(() => Boolean(workspaceDescriptor?.diffStat), [workspaceDescriptor]);
   const explorerToggleStyle = useCallback(
@@ -2111,6 +2203,14 @@ function WorkspaceScreenContent({
   const splitWorkspacePane = useWorkspaceLayoutStore((state) => state.splitPane);
   const splitWorkspacePaneEmpty = useWorkspaceLayoutStore((state) => state.splitPaneEmpty);
   const moveWorkspaceTabToPane = useWorkspaceLayoutStore((state) => state.moveTabToPane);
+  const handleToggleExplorer = useCallback(() => {
+    toggleWorkspaceExplorerPane({
+      isCompact: isMobile,
+      persistenceKey,
+      checkout: activeExplorerCheckout,
+      toggleCompact: toggleFileExplorerForCheckout,
+    });
+  }, [activeExplorerCheckout, isMobile, persistenceKey, toggleFileExplorerForCheckout]);
   const paneFocusSuppressedRef = useRef(false);
   const resizeWorkspaceSplit = useWorkspaceLayoutStore((state) => state.resizeSplit);
   const reorderWorkspaceTabsInPane = useWorkspaceLayoutStore((state) => state.reorderTabsInPane);
@@ -2488,58 +2588,30 @@ function WorkspaceScreenContent({
     ],
   );
 
-  const handleOpenFileFromChatInSidePane = useCallback(
-    (input: {
-      location: WorkspaceFileLocation;
-      sourcePaneId?: string;
-      parentTabId?: string | null;
-    }) => {
+  const handleOpenAssistantFileInExplorerPane = useCallback(
+    (input: { location: WorkspaceFileLocation; parentTabId?: string | null }) => {
       const location = normalizeWorkspaceFileLocation(input.location);
       if (!location) {
         return;
       }
-      if (!persistenceKey || isMobile || !input.sourcePaneId) {
+      if (!persistenceKey || isMobile || !supportsDesktopPaneSplits()) {
         handleOpenFileFromChat(location, { parentTabId: input.parentTabId });
         return;
       }
 
       const target: WorkspaceTabTarget = createWorkspaceFileTabTarget(location);
-      const placement = resolveSideFileOpenPlacement({
-        layout: workspaceLayout,
-        sourcePaneId: input.sourcePaneId,
-        tabs: uiTabs,
-        target,
-      });
-      if (placement.kind === "focus-side-pane") {
-        focusWorkspacePane(persistenceKey, placement.paneId);
-      } else if (placement.kind === "split-side-pane") {
-        splitWorkspacePaneEmpty(persistenceKey, {
-          targetPaneId: placement.paneId,
-          position: "right",
+      const tabId = useWorkspaceLayoutStore
+        .getState()
+        .openTabInExplorerPaneFocused(persistenceKey, {
+          target,
+          parentTabId: input.parentTabId,
         });
-      }
-
-      const tabId = input.parentTabId
-        ? openWorkspaceChildTabFocused(persistenceKey, target, input.parentTabId)
-        : openWorkspaceTabFocused(persistenceKey, target);
       if (tabId) {
         requestFileNavigation(tabId);
         navigateToTabId(tabId);
       }
     },
-    [
-      handleOpenFileFromChat,
-      isMobile,
-      focusWorkspacePane,
-      navigateToTabId,
-      openWorkspaceChildTabFocused,
-      openWorkspaceTabFocused,
-      persistenceKey,
-      requestFileNavigation,
-      splitWorkspacePaneEmpty,
-      uiTabs,
-      workspaceLayout,
-    ],
+    [handleOpenFileFromChat, isMobile, navigateToTabId, persistenceKey, requestFileNavigation],
   );
 
   const handleOpenWorkspaceFileFromPane = useStableEvent(function handleOpenWorkspaceFileFromPane({
@@ -2557,9 +2629,8 @@ function WorkspaceScreenContent({
       focusWorkspacePane(persistenceKey, paneId);
     }
     if (request.disposition === "side") {
-      handleOpenFileFromChatInSidePane({
+      handleOpenAssistantFileInExplorerPane({
         location: request.location,
-        sourcePaneId: paneId ?? undefined,
         parentTabId,
       });
       return;
@@ -2639,6 +2710,8 @@ function WorkspaceScreenContent({
       topology: "Topology",
       agent: t("workspace.tabs.fallback.agent"),
       changes: t("panels.diff.changesLabel"),
+      files: t("panels.files.label"),
+      pullRequest: t("panels.pullRequest.label"),
     }),
     [t],
   );
@@ -4075,14 +4148,8 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minHeight: 0,
   },
-  // Compact steps the whole header down one rung of the scale. The title and the project line
-  // stack there, so at the shared size they read as two headings rather than a subject and its
-  // caption, and they cost two full lines of a header that has none to spare.
   headerTitle: {
-    fontSize: {
-      xs: theme.fontSize.sm,
-      md: theme.fontSize.base,
-    },
+    fontSize: theme.fontSize.sm,
   },
   headerTitleContainer: {
     flex: 1,
@@ -4132,7 +4199,7 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: {
       xs: theme.fontSize.xs,
-      md: theme.fontSize.base,
+      md: theme.fontSize.sm,
     },
     flexShrink: 1,
     minWidth: 0,

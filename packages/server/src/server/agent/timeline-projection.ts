@@ -13,6 +13,7 @@ export type TimelineLimitDirection = "tail" | "before" | "after";
 
 export interface TimelineProjectionEntry {
   item: AgentTimelineItem;
+  turnId?: string;
   timestamp: string;
   seqStart: number;
   seqEnd: number;
@@ -96,6 +97,7 @@ function mergeToolCallItems(
 function makeCanonicalEntries(rows: readonly AgentTimelineRow[]): WorkingEntry[] {
   return rows.map((row) => ({
     item: row.item,
+    ...(row.turnId ? { turnId: row.turnId } : {}),
     timestamp: row.timestamp,
     seqStart: row.seq,
     seqEnd: row.seq,
@@ -122,7 +124,7 @@ function collapseToolLifecycle(entries: readonly WorkingEntry[]): WorkingEntry[]
     }
 
     const existing = output[existingIndex];
-    if (!existing || existing.item.type !== "tool_call") {
+    if (!existing || existing.item.type !== "tool_call" || existing.turnId !== entry.turnId) {
       output.push(entry);
       continue;
     }
@@ -258,7 +260,8 @@ function mergeReasoningChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
       previous &&
       previous.item.type === "reasoning" &&
       entry.item.type === "reasoning" &&
-      previous.seqEnd + 1 === entry.seqStart;
+      previous.seqEnd + 1 === entry.seqStart &&
+      previous.turnId === entry.turnId;
 
     if (!shouldMerge || !previous) {
       output.push(entry);
@@ -298,7 +301,8 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
       previous &&
       previous.item.type === "assistant_message" &&
       entry.item.type === "assistant_message" &&
-      previous.seqEnd + 1 === entry.seqStart;
+      previous.seqEnd + 1 === entry.seqStart &&
+      previous.turnId === entry.turnId;
 
     if (!shouldMerge || !previous) {
       output.push(entry);

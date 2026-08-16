@@ -97,6 +97,7 @@ export const ptBR: TranslationResources = {
       interruptAgent: "Interromper agente",
       queueMessage: "Enfileirar mensagem",
       sendAndInterrupt: "Enviar e interromper",
+      sendAndSteer: "Enviar e orientar",
       sendMessage: "Enviar mensagem",
       queue: "Fila",
       send: "Enviar",
@@ -595,6 +596,7 @@ export const ptBR: TranslationResources = {
         renameAgent: "Renomear agente",
       },
       actions: {
+        newTab: "Nova aba",
         newAgent: "Novo agente",
         newTerminal: "Novo terminal",
         preparingTerminal: "Preparando aba de terminal",
@@ -603,6 +605,9 @@ export const ptBR: TranslationResources = {
         exitFocusMode: "Sair do modo de foco",
         splitRight: "Dividir painel à direita",
         splitDown: "Dividir painel abaixo",
+        changes: "Alterações",
+        files: "Arquivos",
+        pullRequest: "Pull request",
         terminalProfilesMenu: "Perfis de terminal",
         editTerminalProfiles: "Editar perfis…",
         pinTarget: "Fixar",
@@ -997,6 +1002,8 @@ export const ptBR: TranslationResources = {
       },
       show: {
         label: "Mostrar",
+        branch: "Branch",
+        project: "Projeto",
         host: "Host",
         changeRequest: "Pull request",
         checks: "Verificações",
@@ -1450,6 +1457,7 @@ export const ptBR: TranslationResources = {
     defaultModel: "Padrão",
     profiles: "Perfis",
     providers: "Provedores",
+    model: "Modelo",
     editProfiles: "Editar",
     editProfilesLabel: "Editar perfis de agente",
     createProfile: "Criar perfil",
@@ -1695,6 +1703,17 @@ export const ptBR: TranslationResources = {
         reloadMessage: "Suas alterações locais serão perdidas.",
       },
     },
+    files: {
+      label: "Arquivos",
+      subtitle: "Arquivos do espaço de trabalho",
+      tooltip: "Explorar arquivos do espaço de trabalho",
+    },
+    pullRequest: {
+      label: "Pull request",
+      subtitle: "Detalhes do pull request",
+      emptyTitle: "Ainda não há pull request",
+      emptyDescription: "Crie um pull request para este checkout para ver os detalhes aqui.",
+    },
     diff: {
       changesLabel: "Alterações",
       changesSubtitle: "Diff da árvore de trabalho",
@@ -1865,10 +1884,13 @@ export const ptBR: TranslationResources = {
         descriptions: {
           interrupt:
             "Quando o agente está em execução, Enter interrompe. Command/Ctrl+Enter enfileira.",
+          steer:
+            "Quando o agente está em execução, Enter orienta o turno ativo. Command/Ctrl+Enter enfileira.",
           queue: "Quando o agente está em execução, Enter enfileira. Command/Ctrl+Enter envia.",
         },
         options: {
           interrupt: "Interromper",
+          steer: "Orientar",
           queue: "Fila",
         },
       },

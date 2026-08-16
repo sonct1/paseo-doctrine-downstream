@@ -97,6 +97,7 @@ export const ar: TranslationResources = {
       interruptAgent: "عامل المقاطعة",
       queueMessage: "رسالة قائمة الانتظار",
       sendAndInterrupt: "إرسال ومقاطعة",
+      sendAndSteer: "إرسال وتوجيه",
       sendMessage: "أرسل رسالة",
       queue: "طابور",
       send: "يرسل",
@@ -591,6 +592,7 @@ export const ar: TranslationResources = {
         renameAgent: "إعادة تسمية الوكيل",
       },
       actions: {
+        newTab: "علامة تبويب جديدة",
         newAgent: "وكيل جديد",
         newTerminal: "محطة جديدة",
         preparingTerminal: "إعداد علامة التبويب المحطة الطرفية",
@@ -599,6 +601,9 @@ export const ar: TranslationResources = {
         exitFocusMode: "إنهاء وضع التركيز",
         splitRight: "تقسيم الجزء الأيمن",
         splitDown: "تقسيم الجزء لأسفل",
+        changes: "التغييرات",
+        files: "الملفات",
+        pullRequest: "طلب السحب",
         terminalProfilesMenu: "Terminal profiles",
         editTerminalProfiles: "Edit profiles…",
         pinTarget: "تثبيت",
@@ -975,6 +980,8 @@ export const ar: TranslationResources = {
       },
       show: {
         label: "إظهار",
+        branch: "الفرع",
+        project: "المشروع",
         host: "المضيف",
         changeRequest: "طلب السحب",
         checks: "الفحوصات",
@@ -1423,6 +1430,7 @@ export const ar: TranslationResources = {
     defaultModel: "تقصير",
     profiles: "الملفات الشخصية",
     providers: "المزودون",
+    model: "النموذج",
     editProfiles: "تحرير",
     editProfilesLabel: "تحرير ملفات الوكيل",
     createProfile: "إنشاء ملف شخصي",
@@ -1666,6 +1674,17 @@ export const ar: TranslationResources = {
         reloadMessage: "ستفقد تغييراتك المحلية.",
       },
     },
+    files: {
+      label: "الملفات",
+      subtitle: "ملفات مساحة العمل",
+      tooltip: "تصفح ملفات مساحة العمل",
+    },
+    pullRequest: {
+      label: "طلب السحب",
+      subtitle: "تفاصيل طلب السحب",
+      emptyTitle: "لا يوجد طلب سحب بعد",
+      emptyDescription: "أنشئ طلب سحب لنسخة العمل هذه لعرض تفاصيله هنا.",
+    },
     diff: {
       changesLabel: "التغييرات",
       changesSubtitle: "فروقات شجرة العمل",
@@ -1835,10 +1854,13 @@ export const ar: TranslationResources = {
         descriptions: {
           interrupt:
             "عند تشغيل الوكيل، يوقف Enter التشغيل. Command/Ctrl+Enter يضيف إلى قائمة الانتظار.",
+          steer:
+            "عند تشغيل الوكيل، يوجّه Enter الجولة النشطة. يضيف Command/Ctrl+Enter إلى قائمة الانتظار.",
           queue: "عند تشغيل الوكيل، يضيف Enter إلى قائمة الانتظار. Command/Ctrl+Enter يرسل.",
         },
         options: {
           interrupt: "مقاطعة",
+          steer: "توجيه",
           queue: "طابور",
         },
       },

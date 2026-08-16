@@ -154,6 +154,9 @@ function getCloseButtonTestId(tab: WorkspaceTabDescriptor): string {
   if (tab.target.kind === "topology") {
     return "workspace-topology-close";
   }
+  if (tab.target.kind === "files" || tab.target.kind === "pull_request") {
+    return `workspace-${tab.target.kind}-close`;
+  }
   return `workspace-file-close-${encodeFilePathForPathSegment(tab.target.path)}`;
 }
 

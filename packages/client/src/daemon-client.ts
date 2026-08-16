@@ -13,6 +13,7 @@ import {
   ShutdownRequestedStatusPayloadSchema,
   DaemonUpdateResponseSchema,
   SessionInboundMessageSchema,
+  type ActiveTurnBehavior,
   type ServerInfoStatusPayload,
 } from "@getpaseo/protocol/messages";
 import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outbound";
@@ -104,6 +105,7 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
   PluginListItem,
+  PluginLogEntry,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -336,6 +338,7 @@ export interface DaemonClientTrace {
 
 export interface SendMessageOptions {
   messageId?: string;
+  activeTurnBehavior?: ActiveTurnBehavior;
   images?: Array<{ data: string; mimeType: string }>;
   attachments?: SendAgentMessageRequest["attachments"];
 }
@@ -3106,6 +3109,7 @@ export class DaemonClient {
       agentId,
       text,
       ...(messageId ? { messageId } : {}),
+      ...(options?.activeTurnBehavior ? { activeTurnBehavior: options.activeTurnBehavior } : {}),
       ...(options?.images ? { images: options.images } : {}),
       ...(options?.attachments ? { attachments: options.attachments } : {}),
     });
@@ -5003,6 +5007,16 @@ export class DaemonClient {
       responseType: "plugin.list.response",
     });
     return payload.plugins;
+  }
+
+  async getPluginLogs(pluginId: string): Promise<PluginLogEntry[]> {
+    const requestId = this.createRequestId();
+    const payload = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "plugin.logs.get.request", requestId, pluginId },
+      responseType: "plugin.logs.get.response",
+    });
+    return payload.entries;
   }
 
   async installDirectoryPlugin(path: string, id?: string): Promise<PluginListItem> {
