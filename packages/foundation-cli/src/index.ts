@@ -10,6 +10,7 @@ import {
   uninstallFoundation,
 } from "./install.js";
 import { createInstallPlan, readInstallPlan, writeInstallPlan } from "./plan.js";
+import { installRoleBoundaryReceipt } from "./qualification.js";
 import type { InstallMode, InstallPlan, InstallRecord } from "./schema.js";
 import { resolveFoundationCliVersion } from "./version.js";
 
@@ -33,6 +34,11 @@ interface ApplyOptions {
 
 interface DoctorOptions extends CommonOptions {
   project?: string;
+  roleCanary?: string;
+}
+
+interface RecordRoleCanaryOptions extends CommonOptions {
+  receipt: string;
 }
 
 function resolvedHome(home?: string): string {
@@ -173,15 +179,57 @@ program
   .option("--home <path>", "User home to inspect")
   .option("--product-root <path>", "Product checkout or packaged assets root")
   .option("--project <path>", "Optional target project")
+  .option("--role-canary <path>", "Explicit role/tool canary receipt to validate")
   .option("--json", "Print JSON")
   .action((options: DoctorOptions) => {
     const report = doctorFoundation({
       home: resolvedHome(options.home),
       productRoot: options.productRoot,
       projectRoot: options.project,
+      roleCanaryPath: options.roleCanary,
     });
     if (options.json) writeJson(report);
     else printDoctor(report);
+  });
+
+program
+  .command("record-role-canary")
+  .description("Validate and install a machine-readable role/tool canary receipt")
+  .requiredOption("--receipt <path>", "Canary receipt produced by the qualification procedure")
+  .option("--home <path>", "User home to inspect")
+  .option("--product-root <path>", "Product checkout or packaged assets root")
+  .option("--json", "Print JSON")
+  .action((options: RecordRoleCanaryOptions) => {
+    const home = resolvedHome(options.home);
+    const report = doctorFoundation({
+      home,
+      productRoot: options.productRoot,
+      roleCanaryPath: options.receipt,
+    });
+    const required = new Set([
+      "DISTRIBUTION_VALID",
+      "RUNTIME_EFFECTIVE",
+      "ORCHESTRATION_READY",
+      "ROLE_BOUNDARY_QUALIFIED",
+    ]);
+    const failures = report.gates.filter(
+      (gate) => required.has(gate.name) && gate.status !== "PASS",
+    );
+    if (failures.length > 0) {
+      throw new Error(
+        `role canary receipt is not current: ${failures
+          .map((gate) => `${gate.name}=${gate.status} (${gate.evidence.join("; ")})`)
+          .join(", ")}`,
+      );
+    }
+    const installed = installRoleBoundaryReceipt({ home, sourcePath: options.receipt });
+    const result = {
+      path: installed.path,
+      qualifiedAt: installed.receipt.qualifiedAt,
+      route: installed.receipt.route,
+    };
+    if (options.json) writeJson(result);
+    else process.stdout.write(`Recorded current role/tool canary at ${installed.path}\n`);
   });
 
 program

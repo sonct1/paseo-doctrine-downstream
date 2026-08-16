@@ -99,16 +99,21 @@ paseo-foundation rollback
 paseo-foundation uninstall
 ```
 
-`doctor` báo bốn gate độc lập:
+`doctor` báo năm gate độc lập:
 
 - `DISTRIBUTION_VALID`: manifest và checksum.
 - `RUNTIME_EFFECTIVE`: symlink readback và exact local daemon identity. Gate này yêu cầu local
   `config.json`, `server-id`, `paseo.pid`, live supervisor PID và status JSON. Live RPC phải trả đúng
   `serverId`, `listen`, một daemon-worker PID đang chạy và `daemonVersion`; một daemon khác reachable trên
   default port không thể làm gate xanh. Worker PID có thể khác supervisor PID trong `paseo.pid`.
-- `ROLE_BOUNDARY_QUALIFIED`: static guards; giữ `UNKNOWN` cho tới khi có fresh role/tool canary.
-  `doctor` hiện không ingest canary evidence, nên `UNKNOWN` nghĩa là command chưa được cấp evidence,
-  không khẳng định canary chưa từng chạy.
+- `ORCHESTRATION_READY`: route `providers.audit` phải tồn tại trong live catalog, model phải được
+  configure và provider-connection receipt phải khớp exact daemon version, base URL, credential ref và
+  credential digest hiện tại. Receipt cũ trả `UNKNOWN` với `verification stale`; provider/model sai trả
+  `FAIL`.
+- `ROLE_BOUNDARY_QUALIFIED`: static guards vẫn fail closed. Khi static bytes pass, gate chỉ `PASS` nếu có
+  machine-readable Lead/Peer/Supervisor canary receipt khớp exact Foundation distribution/commit/role
+  bytes, daemon server/start/version/source fingerprint và current connection-qualified route. Thiếu,
+  partial hoặc stale receipt giữ `UNKNOWN`.
 - `PROJECT_READY`: protocol vắng mặt là zero-delta và giữ `UNKNOWN`; protocol hiện diện nhưng invalid thì `FAIL`. Activation và engineering evidence vẫn có thể `UNKNOWN` sau khi byte gate pass.
 
 `uninstall` chỉ gỡ owned runtime link; với migration record mới, nó restore exact legacy symlink snapshot.
@@ -117,6 +122,20 @@ Release cũ và một `~/.paseo-control` đã tồn tại được giữ để r
 Migration record cũ thiếu `previousLinks` hoặc `previousCurrentTarget` không đủ evidence để restore. CLI
 fail closed thay vì đoán target từ state đang active; dùng exact original install plan trong một bounded
 recovery, hoặc giữ installation active và handback nếu snapshot không thể chứng minh.
+
+Canary procedure tạo receipt ở một path tạm. Kiểm tra read-only trước, rồi chỉ record receipt sau khi đủ
+evidence:
+
+```bash
+paseo-foundation doctor --role-canary /absolute/path/to/role-boundary-canary.json
+paseo-foundation record-role-canary --receipt /absolute/path/to/role-boundary-canary.json
+paseo-foundation doctor
+```
+
+`record-role-canary` không tự biến operator assertion thành evidence: nó chỉ nhận receipt đúng schema khi
+bốn gate distribution/runtime/orchestration/role đều đang `PASS`, rồi lưu private file mode `0600` tại
+`~/.paseo-foundation/role-boundary-canary.json`. Bất kỳ Foundation bytes, daemon build/start, route hoặc
+connection qualification nào đổi đều làm receipt thành `UNKNOWN` cho tới canary mới.
 
 ## Thêm provider trên Paseo WebUI
 

@@ -3,12 +3,18 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from "nod
 import path from "node:path";
 import { inspectMachine } from "./inspection.js";
 import { resolveInstallLayout, resolveProductLayout } from "./layout.js";
+import { inspectAuditRoute, inspectRoleBoundaryReceipt } from "./qualification.js";
 import { FoundationManifestSchema } from "./schema.js";
 
 export type GateStatus = "PASS" | "FAIL" | "UNKNOWN";
 
 export interface DoctorGate {
-  name: "DISTRIBUTION_VALID" | "RUNTIME_EFFECTIVE" | "ROLE_BOUNDARY_QUALIFIED" | "PROJECT_READY";
+  name:
+    | "DISTRIBUTION_VALID"
+    | "RUNTIME_EFFECTIVE"
+    | "ORCHESTRATION_READY"
+    | "ROLE_BOUNDARY_QUALIFIED"
+    | "PROJECT_READY";
   status: GateStatus;
   evidence: string[];
 }
@@ -96,7 +102,10 @@ function runtimeGate(input: {
     : { name: "RUNTIME_EFFECTIVE", status: "FAIL", evidence: failures };
 }
 
-function roleBoundaryGate(releasePath: string): DoctorGate {
+function roleBoundaryGate(
+  releasePath: string,
+  qualification: { status: GateStatus; evidence: string[] },
+): DoctorGate {
   const failures: string[] = [];
   const definitions = JSON.parse(
     readFileSync(path.join(releasePath, "profiles", "native", "role-definitions.json"), "utf8"),
@@ -133,11 +142,7 @@ function roleBoundaryGate(releasePath: string): DoctorGate {
   if (failures.length > 0) {
     return { name: "ROLE_BOUNDARY_QUALIFIED", status: "FAIL", evidence: failures };
   }
-  return {
-    name: "ROLE_BOUNDARY_QUALIFIED",
-    status: "UNKNOWN",
-    evidence: ["native role bytes and <10 skill admission pass; fresh role/tool canary is pending"],
-  };
+  return { name: "ROLE_BOUNDARY_QUALIFIED", ...qualification };
 }
 
 function workspaceProtocolContract(productRoot?: string): Record<string, unknown> {
@@ -235,6 +240,7 @@ export function doctorFoundation(input: {
   home: string;
   productRoot?: string;
   projectRoot?: string;
+  roleCanaryPath?: string;
 }): DoctorReport {
   const inspection = inspectMachine({ home: input.home, productRoot: input.productRoot });
   const install = resolveInstallLayout({
@@ -254,6 +260,11 @@ export function doctorFoundation(input: {
         },
         { name: "RUNTIME_EFFECTIVE", status: "FAIL", evidence: ["Foundation is not installed"] },
         {
+          name: "ORCHESTRATION_READY",
+          status: "UNKNOWN",
+          evidence: ["Foundation is not installed"],
+        },
+        {
           name: "ROLE_BOUNDARY_QUALIFIED",
           status: "UNKNOWN",
           evidence: ["Foundation is not installed"],
@@ -262,6 +273,19 @@ export function doctorFoundation(input: {
       ],
     };
   }
+  const auditRoute = inspectAuditRoute({
+    home: inspection.home,
+    daemonIdentity: inspection.paseoDaemonIdentity,
+  });
+  const roleBoundary = inspectRoleBoundaryReceipt({
+    home: inspection.home,
+    receiptPath: input.roleCanaryPath,
+    releasePath: record.releasePath,
+    distributionVersion: record.distributionVersion,
+    foundationCommit: record.foundationCommit,
+    daemonIdentity: inspection.paseoDaemonIdentity,
+    auditRoute,
+  });
   return {
     distributionVersion: record.distributionVersion,
     foundationCommit: record.foundationCommit,
@@ -276,7 +300,8 @@ export function doctorFoundation(input: {
         daemonEvidence: inspection.paseoDaemonEvidence,
         interruptedTransactionPresent: inspection.interruptedTransactionPresent,
       }),
-      roleBoundaryGate(record.releasePath),
+      { name: "ORCHESTRATION_READY", status: auditRoute.status, evidence: auditRoute.evidence },
+      roleBoundaryGate(record.releasePath, roleBoundary),
       inspectProjectReadiness(input.projectRoot, input.productRoot),
     ],
   };

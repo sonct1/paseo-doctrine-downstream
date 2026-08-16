@@ -77,6 +77,95 @@ export const InstallTransactionSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
+const Sha256DigestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const GitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/u);
+
+export const RoleBoundaryCanaryRoleSchema = z
+  .object({
+    roleId: z.enum(["lead", "peer", "supervisor"]),
+    agentId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    assignmentEffect: z.literal("read-only"),
+    definitionDigest: Sha256DigestSchema,
+    bindingDigest: Sha256DigestSchema,
+    checks: z
+      .object({
+        immutableRoleBinding: z.literal(true),
+        workspaceProtocolBound: z.literal(true),
+        technicalNoWrite: z.literal(true),
+        toolContractObserved: z.literal(true),
+      })
+      .strict(),
+    evidence: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+export const RoleBoundaryCanaryReceiptSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    qualifiedAt: z.string().datetime(),
+    foundation: z
+      .object({
+        distributionVersion: z.string().min(1),
+        commit: GitCommitSchema,
+        roleDefinitionsDigest: Sha256DigestSchema,
+        roleBundlesDigest: Sha256DigestSchema,
+      })
+      .strict(),
+    daemon: z
+      .object({
+        serverId: z.string().min(1),
+        version: z.string().min(1),
+        startedAt: z.string().datetime(),
+        sourceCommit: GitCommitSchema,
+        sourceFingerprint: Sha256DigestSchema,
+      })
+      .strict(),
+    route: z
+      .object({
+        provider: z.string().min(1),
+        model: z.string().min(1),
+        providerConnectionQualifiedAt: z.string().datetime(),
+      })
+      .strict(),
+    roles: z.array(RoleBoundaryCanaryRoleSchema).length(3),
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    const qualifiedAt = Date.parse(receipt.qualifiedAt);
+    if (
+      qualifiedAt < Date.parse(receipt.daemon.startedAt) ||
+      qualifiedAt < Date.parse(receipt.route.providerConnectionQualifiedAt)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["qualifiedAt"],
+        message: "canary qualification must occur after daemon start and provider qualification",
+      });
+    }
+    const roles = receipt.roles.map((role) => role.roleId);
+    for (const required of ["lead", "peer", "supervisor"] as const) {
+      if (roles.filter((role) => role === required).length !== 1) {
+        context.addIssue({
+          code: "custom",
+          path: ["roles"],
+          message: `canary receipt must contain exactly one ${required}`,
+        });
+      }
+    }
+    for (const role of receipt.roles) {
+      if (role.provider !== receipt.route.provider || role.model !== receipt.route.model) {
+        context.addIssue({
+          code: "custom",
+          path: ["roles"],
+          message: `${role.roleId} route does not match the canary route`,
+        });
+      }
+    }
+  });
+
 export const PlannedLinkSchema = InstalledLinkSchema.extend({
   state: PathStateSchema,
   previousTarget: z.string().nullable(),
@@ -115,4 +204,5 @@ export type InstallMode = z.infer<typeof InstallModeSchema>;
 export type InstallPlan = z.infer<typeof InstallPlanSchema>;
 export type InstallRecord = z.infer<typeof InstallRecordSchema>;
 export type InstallTransaction = z.infer<typeof InstallTransactionSchema>;
+export type RoleBoundaryCanaryReceipt = z.infer<typeof RoleBoundaryCanaryReceiptSchema>;
 export type PathState = z.infer<typeof PathStateSchema>;

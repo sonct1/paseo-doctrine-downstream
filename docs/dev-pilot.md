@@ -132,9 +132,10 @@ Status phải chứng minh:
 - built-in `codex` và custom Codex provider dự kiến dùng trong pilot đều available và khai báo native role
   binding support.
 
-Doctor phải trả `DISTRIBUTION_VALID=PASS` và `RUNTIME_EFFECTIVE=PASS`. Doctor không ingest canary evidence,
-nên `ROLE_BOUNDARY_QUALIFIED=UNKNOWN` vẫn cần canary độc lập; không đổi `UNKNOWN` thành `PASS` trong báo
-cáo.
+Doctor phải trả `DISTRIBUTION_VALID=PASS`, `RUNTIME_EFFECTIVE=PASS` và
+`ORCHESTRATION_READY=PASS`. `ROLE_BOUNDARY_QUALIFIED` giữ `UNKNOWN` cho tới khi tester cung cấp một
+machine-readable canary receipt khớp exact Foundation, daemon source fingerprint và
+connection-qualified route; không đổi `UNKNOWN` thành `PASS` bằng prose hoặc static bytes.
 
 ### Role boundary canary
 
@@ -253,7 +254,8 @@ active cho tới khi owner cấp một recovery lease riêng.
 
 - Đây là source-linked pilot; npm packages, Docker image và native desktop/mobile artifacts chưa publish.
 - Native release slot vẫn theo upstream beta slot; suffix `.paseo.1` chưa có independent native channel.
-- `doctor` chưa ingest signed/fresh role canary evidence.
+- `doctor` ingest identity-bound role canary receipt, nhưng procedure tạo receipt vẫn là một qualification
+  episode riêng; CLI không tự launch agent hoặc tự suy diễn PASS từ source checks.
 - Custom cost route chưa qualified nếu tester chưa cung cấp endpoint/credential và chạy exact canary.
 - Frozen `npm ci` qualification ngày 2026-08-05 báo 83 npm advisories: 7 low, 38 moderate, 31 high và 7
   critical. Dependency remediation nằm ngoài scope của tag này; giữ exact `npm ci`/`npm audit` output trong
@@ -268,7 +270,7 @@ Mỗi tester gửi:
 - OS/architecture, Node.js và npm version;
 - exact tag và commit;
 - redacted `paseo daemon status --json`;
-- bốn doctor gate giữ nguyên `PASS/FAIL/UNKNOWN`;
+- năm doctor gate giữ nguyên `PASS/FAIL/UNKNOWN`;
 - authoritative `paseo agent inspect <agent-id> --json` đã redact cùng pass/fail của từng canary;
 - command, exact error và smallest reproducer cho failure;
 - `git status --short` và `git diff --check` của disposable project;

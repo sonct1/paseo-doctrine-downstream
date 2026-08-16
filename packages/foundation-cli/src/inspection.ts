@@ -47,6 +47,7 @@ export interface MachineInspection {
   foundationCommit: string;
   paseoDaemonReachable: boolean;
   paseoDaemonEvidence: string[];
+  paseoDaemonIdentity: PaseoDaemonIdentity | null;
   tools: ToolInspection[];
   providers: ProviderInspection[];
   links: LinkInspection[];
@@ -57,6 +58,16 @@ export interface MachineInspection {
   releasePresent: boolean;
   interruptedTransactionPresent: boolean;
   mutationFingerprint: string;
+}
+
+export interface PaseoDaemonIdentity {
+  serverId: string;
+  pid: number;
+  version: string;
+  startedAt: string;
+  sourceCommit: string;
+  sourceFingerprint: string;
+  availableProviders: string[];
 }
 
 const TOOL_PROBES: ToolProbe[] = [
@@ -198,6 +209,7 @@ function inspectInstallRecord(recordPath: string): InstallRecord | null {
 interface DaemonReadback {
   reachable: boolean;
   evidence: string[];
+  identity?: PaseoDaemonIdentity;
 }
 
 interface DaemonDiskIdentity {
@@ -303,7 +315,38 @@ function daemonStatusFailures(
   if (typeof status.daemonVersion !== "string" || !status.daemonVersion.trim()) {
     failures.push("daemon version readback is unavailable");
   }
+  failures.push(...daemonProvenanceFailures(status));
   return failures;
+}
+
+function daemonProvenanceFailures(status: Record<string, unknown>): string[] {
+  const failures: string[] = [];
+  if (typeof status.startedAt !== "string" || !Number.isFinite(Date.parse(status.startedAt))) {
+    failures.push("daemon start time readback is unavailable");
+  }
+  if (typeof status.sourceCommit !== "string" || !/^[a-f0-9]{40}$/u.test(status.sourceCommit)) {
+    failures.push("daemon source commit readback is unavailable");
+  }
+  if (
+    typeof status.sourceFingerprint !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(status.sourceFingerprint)
+  ) {
+    failures.push("daemon source fingerprint readback is unavailable");
+  }
+  if (!Array.isArray(status.providers))
+    failures.push("daemon provider catalog readback is unavailable");
+  return failures;
+}
+
+function availableProviderIds(status: Record<string, unknown>): string[] {
+  if (!Array.isArray(status.providers)) return [];
+  return status.providers
+    .flatMap((provider) =>
+      isRecord(provider) && typeof provider.label === "string" && provider.path === "available"
+        ? [provider.label]
+        : [],
+    )
+    .sort();
 }
 
 function daemonReadback(paseoCommand: string | null, home: string): DaemonReadback {
@@ -340,6 +383,15 @@ function daemonReadback(paseoCommand: string | null, home: string): DaemonReadba
           `pid=${identity.pid}`,
           `version=${status.daemonVersion}`,
         ],
+        identity: {
+          serverId: identity.serverId,
+          pid: identity.pid,
+          version: String(status.daemonVersion),
+          startedAt: String(status.startedAt),
+          sourceCommit: String(status.sourceCommit),
+          sourceFingerprint: String(status.sourceFingerprint),
+          availableProviders: availableProviderIds(status),
+        },
       };
 }
 
@@ -398,6 +450,7 @@ export function inspectMachine(
     foundationCommit: manifest.foundationSource.commit,
     paseoDaemonReachable: daemon.reachable,
     paseoDaemonEvidence: daemon.evidence,
+    paseoDaemonIdentity: daemon.identity ?? null,
     tools,
     providers: inspectProviders(path.join(home, ".paseo", "config.json")),
     links,

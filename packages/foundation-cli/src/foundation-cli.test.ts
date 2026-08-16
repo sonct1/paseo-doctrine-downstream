@@ -31,6 +31,7 @@ import {
   legacyRoleLinks,
 } from "./layout.js";
 import { createInstallPlan, readInstallPlan } from "./plan.js";
+import { inspectAuditRoute, inspectRoleBoundaryReceipt } from "./qualification.js";
 import type { InstallPlan } from "./schema.js";
 
 const temporaryHomes: string[] = [];
@@ -145,6 +146,10 @@ describe("Foundation host inspection", () => {
       home: paseoHome,
       listen,
       daemonVersion: "0.3.0-test",
+      startedAt: "2026-08-16T00:00:00.000Z",
+      sourceCommit: "1".repeat(40),
+      sourceFingerprint: "2".repeat(64),
+      providers: [{ label: "codex-test", path: "available" }],
     });
     mkdirSync(paseoHome, { recursive: true });
     mkdirSync(fakeBin, { recursive: true });
@@ -173,6 +178,15 @@ describe("Foundation host inspection", () => {
       `pid=${process.pid}`,
       "version=0.3.0-test",
     ]);
+    expect(inspection.paseoDaemonIdentity).toEqual({
+      serverId,
+      pid: process.pid,
+      version: "0.3.0-test",
+      startedAt: "2026-08-16T00:00:00.000Z",
+      sourceCommit: "1".repeat(40),
+      sourceFingerprint: "2".repeat(64),
+      availableProviders: ["codex-test"],
+    });
 
     const mismatchedStatus = JSON.stringify({
       ...(JSON.parse(status) as Record<string, unknown>),
@@ -275,6 +289,173 @@ describe("Foundation project readiness", () => {
       "# Workspace Protocol\n\n<!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 99 -->\n\n- identity: owner Human\n- issue tracker: opaque versioned contract\n",
     );
     expect(inspectProjectReadiness(projectRoot).status).toBe("UNKNOWN");
+  });
+});
+
+describe("Foundation runtime qualification receipts", () => {
+  const daemonIdentity = {
+    serverId: "srv_test",
+    pid: process.pid,
+    version: "0.4.0-test",
+    startedAt: "2026-08-16T00:00:00.000Z",
+    sourceCommit: "1".repeat(40),
+    sourceFingerprint: "2".repeat(64),
+    availableProviders: ["codex-zetscan"],
+  };
+
+  it("distinguishes a current audit route from a stale daemon-version receipt", () => {
+    const home = temporaryHome();
+    const paseoHome = path.join(home, ".paseo");
+    const apiKey = "test-api-key";
+    const target = (daemonVersion: string) =>
+      createHash("sha256")
+        .update(
+          JSON.stringify({
+            schemaVersion: 1,
+            daemonVersion,
+            provider: "codex-zetscan",
+            model: "gpt-5.6-sol",
+            baseUrl: "https://example.invalid/v1",
+            credentialRef: "codex-zetscan",
+            credentialDigest: createHash("sha256").update(apiKey).digest("hex"),
+          }),
+        )
+        .digest("hex");
+    mkdirSync(paseoHome, { recursive: true });
+    writeFileSync(
+      path.join(paseoHome, "orchestration-preferences.json"),
+      JSON.stringify({ providers: { audit: "codex-zetscan/gpt-5.6-sol" } }),
+    );
+    writeFileSync(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        agents: {
+          providers: {
+            "codex-zetscan": {
+              enabled: true,
+              extends: "codex",
+              credentialRef: "codex-zetscan",
+              env: { OPENAI_BASE_URL: "https://example.invalid/v1" },
+              additionalModels: [{ id: "gpt-5.6-sol" }],
+            },
+          },
+          credentials: { "codex-zetscan": { OPENAI_API_KEY: apiKey } },
+        },
+      }),
+    );
+    const receiptPath = path.join(paseoHome, "provider-connection-qualifications.json");
+    const writeReceipt = (daemonVersion: string) =>
+      writeFileSync(
+        receiptPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          receipts: {
+            "codex-zetscan": {
+              provider: "codex-zetscan",
+              model: "gpt-5.6-sol",
+              fingerprint: target(daemonVersion),
+              qualifiedAt: "2026-08-16T00:01:00.000Z",
+              latencyMs: 12,
+            },
+          },
+        }),
+      );
+
+    writeReceipt("0.3.1-old");
+    expect(inspectAuditRoute({ home, daemonIdentity }).status).toBe("UNKNOWN");
+    writeReceipt(daemonIdentity.version);
+    expect(inspectAuditRoute({ home, daemonIdentity })).toMatchObject({
+      status: "PASS",
+      route: { provider: "codex-zetscan", model: "gpt-5.6-sol" },
+    });
+  });
+
+  it("accepts only a complete canary receipt bound to current Foundation and daemon bytes", () => {
+    const home = temporaryHome();
+    const releasePath = path.join(productRoot(), "foundation", "dist");
+    const manifest = JSON.parse(
+      readFileSync(path.join(productRoot(), "foundation", "manifest.json"), "utf8"),
+    ) as { distributionVersion: string; foundationSource: { commit: string } };
+    const definitionsPath = path.join(releasePath, "profiles", "native", "role-definitions.json");
+    const bundlesPath = path.join(releasePath, "skills", "role-bundles.json");
+    const definitions = JSON.parse(readFileSync(definitionsPath, "utf8")) as {
+      universalBlocks: string[];
+      roles: Record<string, string[]>;
+    };
+    const definitionDigest = (roleId: string) =>
+      createHash("sha256")
+        .update(
+          `${definitions.universalBlocks.join("\n\n")}\n\n${definitions.roles[roleId]!.join("\n\n")}`,
+        )
+        .digest("hex");
+    const qualifiedAt = "2026-08-16T00:02:00.000Z";
+    const receiptPath = path.join(home, "canary.json");
+    const receipt = {
+      schemaVersion: 1,
+      qualifiedAt,
+      foundation: {
+        distributionVersion: manifest.distributionVersion,
+        commit: manifest.foundationSource.commit,
+        roleDefinitionsDigest: createHash("sha256")
+          .update(readFileSync(definitionsPath))
+          .digest("hex"),
+        roleBundlesDigest: createHash("sha256").update(readFileSync(bundlesPath)).digest("hex"),
+      },
+      daemon: {
+        serverId: daemonIdentity.serverId,
+        version: daemonIdentity.version,
+        startedAt: daemonIdentity.startedAt,
+        sourceCommit: daemonIdentity.sourceCommit,
+        sourceFingerprint: daemonIdentity.sourceFingerprint,
+      },
+      route: {
+        provider: "codex-zetscan",
+        model: "gpt-5.6-sol",
+        providerConnectionQualifiedAt: "2026-08-16T00:01:00.000Z",
+      },
+      roles: ["lead", "peer", "supervisor"].map((roleId) => ({
+        roleId,
+        agentId: `agent-${roleId}`,
+        workspaceId: "workspace-canary",
+        provider: "codex-zetscan",
+        model: "gpt-5.6-sol",
+        assignmentEffect: "read-only",
+        definitionDigest: definitionDigest(roleId),
+        bindingDigest: createHash("sha256").update(roleId).digest("hex"),
+        checks: {
+          immutableRoleBinding: true,
+          workspaceProtocolBound: true,
+          technicalNoWrite: true,
+          toolContractObserved: true,
+        },
+        evidence: [`${roleId} canary passed`],
+      })),
+    };
+    writeFileSync(receiptPath, JSON.stringify(receipt));
+    const auditRoute = {
+      status: "PASS" as const,
+      evidence: ["qualified"],
+      route: {
+        provider: "codex-zetscan",
+        model: "gpt-5.6-sol",
+        qualifiedAt: "2026-08-16T00:01:00.000Z",
+      },
+    };
+    const inspect = (identity = daemonIdentity) =>
+      inspectRoleBoundaryReceipt({
+        home,
+        receiptPath,
+        releasePath,
+        distributionVersion: manifest.distributionVersion,
+        foundationCommit: manifest.foundationSource.commit,
+        daemonIdentity: identity,
+        auditRoute,
+      });
+
+    expect(inspect().status).toBe("PASS");
+    expect(inspect({ ...daemonIdentity, sourceFingerprint: "3".repeat(64) }).status).toBe(
+      "UNKNOWN",
+    );
   });
 });
 
