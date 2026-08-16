@@ -48,7 +48,7 @@ describe("product role skill policy", () => {
     const councilSkill = readFileSync(
       path.resolve(import.meta.dirname, "../../../../../skills/council/SKILL.md"),
       "utf8",
-    );
+    ).replaceAll("\r\n", "\n");
     const admission = JSON.parse(
       readFileSync(
         path.resolve(import.meta.dirname, "../../../../../skills/role-admission.json"),

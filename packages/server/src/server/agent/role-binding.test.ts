@@ -395,11 +395,19 @@ describe("native Foundation role materialization", () => {
         ["agy"],
         false,
       ),
-    ).toMatchObject({
-      status: "unsupported",
-      reason: expect.stringContaining("mandatory Beads checkpoint"),
-      roleIds: ["peer"],
-    });
+    ).toMatchObject(
+      process.platform === "win32"
+        ? {
+            status: "unsupported",
+            reason: expect.stringContaining("not implemented on Windows"),
+            roleIds: ["peer"],
+          }
+        : {
+            status: "unsupported",
+            reason: expect.stringContaining("mandatory Beads checkpoint"),
+            roleIds: ["peer"],
+          },
+    );
     expect(
       resolveProviderRoleBindingSupport("gemini-antigravity", null, null, undefined, [
         "agy",

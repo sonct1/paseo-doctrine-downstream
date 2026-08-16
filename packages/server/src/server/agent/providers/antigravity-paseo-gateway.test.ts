@@ -28,30 +28,33 @@ function createCatalog(): PaseoToolCatalog {
 }
 
 describe("Antigravity Paseo command gateway", () => {
-  test("executes only the caller-scoped catalog through the generated CLI", async () => {
-    const catalog = createCatalog();
-    const gateway = await startAntigravityPaseoGateway({ catalog });
-    try {
-      const executable = gateway.env.PATH?.split(":")[0];
-      const result = await execFile(
-        `${executable}/paseo-agent-tool`,
-        ["beads_get", JSON.stringify({ issueId: "ps-test", view: "checkpoint" })],
-        {
-          env: { ...process.env, ...gateway.env },
-        },
-      );
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        ok: true,
-        result: { structuredContent: { name: "beads_get", input: { issueId: "ps-test" } } },
-      });
-      expect(catalog.executeTool).toHaveBeenCalledWith("beads_get", {
-        issueId: "ps-test",
-        view: "checkpoint",
-      });
-    } finally {
-      await gateway.close();
-    }
-  });
+  test.skipIf(process.platform === "win32")(
+    "executes only the caller-scoped catalog through the generated CLI",
+    async () => {
+      const catalog = createCatalog();
+      const gateway = await startAntigravityPaseoGateway({ catalog });
+      try {
+        const executable = gateway.env.PATH?.split(":")[0];
+        const result = await execFile(
+          `${executable}/paseo-agent-tool`,
+          ["beads_get", JSON.stringify({ issueId: "ps-test", view: "checkpoint" })],
+          {
+            env: { ...process.env, ...gateway.env },
+          },
+        );
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          ok: true,
+          result: { structuredContent: { name: "beads_get", input: { issueId: "ps-test" } } },
+        });
+        expect(catalog.executeTool).toHaveBeenCalledWith("beads_get", {
+          issueId: "ps-test",
+          view: "checkpoint",
+        });
+      } finally {
+        await gateway.close();
+      }
+    },
+  );
 
   test("rejects ungranted tools and invalid bearer credentials", async () => {
     const gateway = await startAntigravityPaseoGateway({ catalog: createCatalog() });

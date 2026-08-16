@@ -19,6 +19,7 @@ Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Pro
 ### Fixed
 
 - Preapprove đúng tập Paseo MCP tools trong role ceiling cho provider hỗ trợ exact MCP policy, tránh prompt permission không thể duyệt ở assignment `no-write`; assignment và Beads guards vẫn fail closed và không bị nới quyền.
+- Giữ Windows CI qualification đúng platform contract: native Antigravity vẫn fail closed trên Windows, còn skill/path/newline assertions và Git-observer waits không phụ thuộc POSIX formatting hoặc runner contention.
 
 ### Qualified
 

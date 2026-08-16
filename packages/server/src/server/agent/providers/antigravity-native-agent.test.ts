@@ -44,88 +44,96 @@ printf '{"event":"result","result":{"conversation_id":"%s","status":"SUCCESS","r
 }
 
 describe("native Antigravity provider", () => {
-  test("creates a role-bound session, streams output and persists the conversation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agy-native-test-"));
-    const profileRoot = join(root, "profiles");
-    const { binary, argvLog } = await createFakeAgy(root);
-    await mkdir(profileRoot, { recursive: true });
-    const client = new AntigravityNativeAgentClient({
-      logger: createTestLogger(),
-      command: [binary],
-      env: { PASEO_TEST_AGY_ARGV: argvLog },
-      profileRoot,
-      temporaryRoot: root,
-      resolveExecutable: async () => binary,
-    });
-    const session = await client.createSession(
-      {
-        provider: "gemini-antigravity",
-        cwd: root,
-        model: "gemini-test",
-        thinkingOptionId: "high",
-        modeId: "full-access",
-      },
-      {
-        agentId: "agent-native",
-        roleBinding: { roleId: "peer", instructions: "Immutable Peer instructions" },
-        paseoTools: catalog(),
-      },
-    );
-    try {
-      await expect(session.run("Return AGY_OK")).resolves.toMatchObject({
-        sessionId: "test-conversation",
-        finalText: "AGY_OK",
-        usage: { inputTokens: 10, outputTokens: 2 },
+  test.skipIf(process.platform === "win32")(
+    "creates a role-bound session, streams output and persists the conversation",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "agy-native-test-"));
+      const profileRoot = join(root, "profiles");
+      const { binary, argvLog } = await createFakeAgy(root);
+      await mkdir(profileRoot, { recursive: true });
+      const client = new AntigravityNativeAgentClient({
+        logger: createTestLogger(),
+        command: [binary],
+        env: { PASEO_TEST_AGY_ARGV: argvLog },
+        profileRoot,
+        temporaryRoot: root,
+        resolveExecutable: async () => binary,
       });
-      expect(session.describePersistence()).toMatchObject({
-        sessionId: "test-conversation",
-        nativeHandle: "test-conversation",
-      });
-      const argv = await readFile(argvLog, "utf8");
-      expect(argv).toContain("--dangerously-skip-permissions\n");
-      expect(argv).toContain("--agent\npaseo-peer-");
-      const profileNames = await import("node:fs/promises").then((fs) => fs.readdir(profileRoot));
-      const profile = await readFile(join(profileRoot, profileNames[0], "agent.md"), "utf8");
-      expect(profile).toContain("inheritMcp: false");
-      expect(profile).toContain("tools:\n  - run_command");
-      expect(profile).toContain("Immutable Peer instructions");
-      expect(profile).toContain("paseo-agent-tool <tool_name>");
-    } finally {
-      await session.close();
-    }
-  });
+      const session = await client.createSession(
+        {
+          provider: "gemini-antigravity",
+          cwd: root,
+          model: "gemini-test",
+          thinkingOptionId: "high",
+          modeId: "full-access",
+        },
+        {
+          agentId: "agent-native",
+          roleBinding: { roleId: "peer", instructions: "Immutable Peer instructions" },
+          paseoTools: catalog(),
+        },
+      );
+      try {
+        await expect(session.run("Return AGY_OK")).resolves.toMatchObject({
+          sessionId: "test-conversation",
+          finalText: "AGY_OK",
+          usage: { inputTokens: 10, outputTokens: 2 },
+        });
+        expect(session.describePersistence()).toMatchObject({
+          sessionId: "test-conversation",
+          nativeHandle: "test-conversation",
+        });
+        const argv = await readFile(argvLog, "utf8");
+        expect(argv).toContain("--dangerously-skip-permissions\n");
+        expect(argv).toContain("--agent\npaseo-peer-");
+        const profileNames = await import("node:fs/promises").then((fs) => fs.readdir(profileRoot));
+        const profile = await readFile(join(profileRoot, profileNames[0], "agent.md"), "utf8");
+        expect(profile).toContain("inheritMcp: false");
+        expect(profile).toContain("tools:\n  - run_command");
+        expect(profile).toContain("Immutable Peer instructions");
+        expect(profile).toContain("paseo-agent-tool <tool_name>");
+      } finally {
+        await session.close();
+      }
+    },
+  );
 
-  test("resumes the exact native conversation and keeps the gateway projection", async () => {
-    const root = await mkdtemp(join(tmpdir(), "agy-native-resume-test-"));
-    const { binary, argvLog } = await createFakeAgy(root);
-    const client = new AntigravityNativeAgentClient({
-      logger: createTestLogger(),
-      command: [binary],
-      env: { PASEO_TEST_AGY_ARGV: argvLog },
-      profileRoot: join(root, "profiles"),
-      temporaryRoot: root,
-      resolveExecutable: async () => binary,
-    });
-    const session = await client.resumeSession(
-      {
-        provider: "gemini-antigravity",
-        sessionId: "existing-conversation",
-        metadata: { config: { provider: "gemini-antigravity", cwd: root } },
-      },
-      { modeId: "full-access" },
-      {
-        agentId: "agent-native",
-        roleBinding: { roleId: "peer", instructions: "Immutable Peer instructions" },
-        paseoTools: catalog(),
-      },
-    );
-    try {
-      await session.run("resume");
-      expect(await readFile(argvLog, "utf8")).toContain("--conversation\nexisting-conversation\n");
-    } finally {
-      await session.close();
-    }
-  });
+  test.skipIf(process.platform === "win32")(
+    "resumes the exact native conversation and keeps the gateway projection",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "agy-native-resume-test-"));
+      const { binary, argvLog } = await createFakeAgy(root);
+      const client = new AntigravityNativeAgentClient({
+        logger: createTestLogger(),
+        command: [binary],
+        env: { PASEO_TEST_AGY_ARGV: argvLog },
+        profileRoot: join(root, "profiles"),
+        temporaryRoot: root,
+        resolveExecutable: async () => binary,
+      });
+      const session = await client.resumeSession(
+        {
+          provider: "gemini-antigravity",
+          sessionId: "existing-conversation",
+          metadata: { config: { provider: "gemini-antigravity", cwd: root } },
+        },
+        { modeId: "full-access" },
+        {
+          agentId: "agent-native",
+          roleBinding: { roleId: "peer", instructions: "Immutable Peer instructions" },
+          paseoTools: catalog(),
+        },
+      );
+      try {
+        await session.run("resume");
+        expect(await readFile(argvLog, "utf8")).toContain(
+          "--conversation\nexisting-conversation\n",
+        );
+      } finally {
+        await session.close();
+      }
+    },
+  );
 
   test("fails closed without an immutable role or caller-scoped tool catalog", async () => {
     const client = new AntigravityNativeAgentClient({
