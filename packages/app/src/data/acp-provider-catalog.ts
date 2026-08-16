@@ -183,10 +183,10 @@ const CATALOG_DATA = [
     title: "GLM Agent",
     description:
       "ACP agent powered by Zhipu AI's GLM Coding Plan models (glm-5.1, glm-5-turbo, glm-4.7, glm-4.5-air). Supports streaming, tool calls, mid-session model switching, image input via Z.AI Coding Plan Vision MCP, and session load/fork/resume with on-disk persistence.",
-    version: "1.4.0",
+    version: "1.5.0",
     iconId: "glm-acp-agent",
     installLink: "https://github.com/stefandevo/glm-acp-agent",
-    command: ["npx", "-y", "glm-acp-agent@1.4.0"],
+    command: ["npx", "-y", "glm-acp-agent@1.5.0"],
   },
   {
     id: "goose",
@@ -293,10 +293,10 @@ const CATALOG_DATA = [
     id: "qoder",
     title: "Qoder CLI",
     description: "AI coding assistant with agentic capabilities",
-    version: "1.1.22",
+    version: "1.1.23",
     iconId: "qoder",
     installLink: "https://qoder.com",
-    command: ["npx", "-y", "@qoder-ai/qodercli@1.1.22", "--acp"],
+    command: ["npx", "-y", "@qoder-ai/qodercli@1.1.23", "--acp"],
   },
   {
     id: "qwen-code",
