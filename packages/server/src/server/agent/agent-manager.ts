@@ -271,6 +271,7 @@ interface AgentManagerRescueTimeouts {
 
 interface ProviderEnabledFlag {
   enabled: boolean;
+  supportsExactMcpPreapproval?: boolean;
   derivedFromProviderId?: string | null;
   roleBindingSupport?: ProviderRoleBindingSupport;
   validateOptions?: (options: ProviderOptions | undefined) => ProviderOptions | undefined;
@@ -283,6 +284,19 @@ interface ProviderEnabledFlag {
     toolPolicy: ToolPolicy | undefined,
   ) => AgentSessionConfig;
 }
+
+function resolveRuntimePaseoPreapprovedTools(params: {
+  roleBound: boolean;
+  supportsNativePaseoTools: boolean;
+  supportsExactMcpPreapproval: boolean;
+  allowedTools?: readonly string[];
+}): readonly string[] | undefined {
+  if (!params.roleBound || params.supportsNativePaseoTools || !params.supportsExactMcpPreapproval) {
+    return undefined;
+  }
+  return params.allowedTools;
+}
+
 type ProviderEnabledMap = Partial<Record<AgentProvider, ProviderEnabledFlag>>;
 type ProviderClientMap = Partial<Record<AgentProvider, AgentClient>>;
 
@@ -5147,6 +5161,14 @@ export class AgentManager {
             : null,
         mcpAuthToken: this.mcpAuthToken,
         mcpRuntimeId: this.mcpRuntimeId,
+        preapprovedTools: resolveRuntimePaseoPreapprovedTools({
+          roleBound: roleBinding !== undefined,
+          supportsNativePaseoTools: client.capabilities.supportsNativePaseoTools === true,
+          supportsExactMcpPreapproval:
+            this.providerDefinitions.get(storedConfig.provider)?.supportsExactMcpPreapproval ===
+            true,
+          allowedTools: paseoToolPolicy?.allowedTools,
+        }),
       }),
     );
     return {

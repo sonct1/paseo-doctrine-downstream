@@ -10732,6 +10732,83 @@ test("Council specialization persists exact bytes through create and resume", as
   }
 });
 
+test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-tool-preapproval-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+
+  class RoleMcpCaptureClient extends TestAgentClient {
+    override readonly capabilities = {
+      ...TEST_CAPABILITIES,
+      supportsMcpServers: true,
+      supportsNativePaseoTools: false,
+    };
+    launchConfigs: AgentSessionConfig[] = [];
+
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      if (!input.config.model) throw new Error("missing test model");
+      return {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: input.config.model,
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      this.launchConfigs.push(config);
+      return new TestAgentSession(config);
+    }
+  }
+
+  const client = new RoleMcpCaptureClient("codex");
+  const manager = new AgentManager({
+    clients: { codex: client },
+    providerDefinitions: {
+      codex: { enabled: true, supportsExactMcpPreapproval: true },
+    },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000118",
+    mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+  });
+
+  try {
+    const created = await manager.createAgent(
+      { provider: "codex", model: "gpt-5.4", cwd: workdir },
+      undefined,
+      {
+        workspaceId: "workspace-role-tool-preapproval",
+        roleId: "lead",
+        assignment: leadAssignment(),
+      },
+    );
+
+    expect(client.launchConfigs[0]?.mcpServers?.paseo).toMatchObject({
+      type: "http",
+      url: expect.stringContaining(`callerAgentId=${created.id}`),
+    });
+    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toEqual(
+      expect.arrayContaining([
+        { kind: "mcp", server: "paseo", tool: "list_profiles" },
+        { kind: "mcp", server: "paseo", tool: "beads_status" },
+      ]),
+    );
+    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(30);
+    expect(created.config.toolPolicy).toBeUndefined();
+  } finally {
+    await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
 test("role-bound create rejects caller systemPrompt before provider launch", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-system-prompt-"));
   const client = new TestAgentClient("codex");

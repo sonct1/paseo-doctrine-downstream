@@ -53,6 +53,30 @@ describe("withRuntimePaseoMcpServer", () => {
     });
   });
 
+  test("adds exact role-tool preapprovals for the injected paseo server", () => {
+    const result = withRuntimePaseoMcpServer({
+      config: {
+        ...BASE_CONFIG,
+        mcpServers: {
+          hub: { type: "http", url: "https://hub.example.test/mcp" },
+        },
+        toolPolicy: {
+          preapproved: [{ kind: "mcp", server: "hub", tool: "finish_execution" }],
+        },
+      },
+      agentId: "agent-1",
+      mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+      mcpAuthToken: "cap-token",
+      preapprovedTools: ["list_profiles", "beads_status", "list_profiles"],
+    });
+
+    expect(result.toolPolicy?.preapproved).toEqual([
+      { kind: "mcp", server: "hub", tool: "finish_execution" },
+      { kind: "mcp", server: "paseo", tool: "list_profiles" },
+      { kind: "mcp", server: "paseo", tool: "beads_status" },
+    ]);
+  });
+
   test("does not inject when no MCP base URL is configured", () => {
     const result = withRuntimePaseoMcpServer({
       config: BASE_CONFIG,

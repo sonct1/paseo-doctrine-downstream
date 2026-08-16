@@ -37,6 +37,8 @@ export function withRuntimePaseoMcpServer(params: {
   config: AgentSessionConfig;
   agentId: string;
   mcpBaseUrl: string | null;
+  /** Exact role-ceiling tools that providers may run without a second approval prompt. */
+  preapprovedTools?: readonly string[];
   /** Non-secret daemon-run identity used to force provider MCP reconnection after resume. */
   mcpRuntimeId?: string;
   /**
@@ -66,8 +68,23 @@ export function withRuntimePaseoMcpServer(params: {
   };
   runtimePaseoMcpServers.add(runtimeServer);
 
+  const existingPreapprovals = storedConfig.toolPolicy?.preapproved ?? [];
+  const preapprovedTools = Array.from(new Set(params.preapprovedTools ?? []));
+  const paseoPreapprovals = preapprovedTools
+    .filter(
+      (tool) =>
+        !existingPreapprovals.some(
+          (grant) =>
+            grant.kind === "mcp" && grant.server === PASEO_MCP_SERVER_NAME && grant.tool === tool,
+        ),
+    )
+    .map((tool) => ({ kind: "mcp" as const, server: PASEO_MCP_SERVER_NAME, tool }));
+
   return {
     ...storedConfig,
+    ...(paseoPreapprovals.length > 0
+      ? { toolPolicy: { preapproved: [...existingPreapprovals, ...paseoPreapprovals] } }
+      : {}),
     mcpServers: {
       [PASEO_MCP_SERVER_NAME]: runtimeServer,
       ...storedConfig.mcpServers,

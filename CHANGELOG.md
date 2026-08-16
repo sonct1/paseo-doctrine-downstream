@@ -16,6 +16,10 @@ Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Pro
 - Chỉ cho áp dụng Agent Profile trong draft/create flow; live role-bound agents phải respawn qua role-first flow khi đổi provider/model route.
 - Giữ progress messages trong ACP timeline nhưng trả `finalText` theo message boundary cuối, tránh dính progress của Cursor vào exact handback.
 
+### Fixed
+
+- Preapprove đúng tập Paseo MCP tools trong role ceiling cho provider hỗ trợ exact MCP policy, tránh prompt permission không thể duyệt ở assignment `no-write`; assignment và Beads guards vẫn fail closed và không bị nới quyền.
+
 ### Qualified
 
 - Re-qualify Foundation packaging, role binding, Workspace Protocol v3, no-write leases, provider adapters, MCP parity, Rooms, Council, Issues/topology, CLI chat/loop/schedule, downstream installer và macOS artifact lifecycle.

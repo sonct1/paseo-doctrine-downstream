@@ -171,7 +171,12 @@ export interface AgentManagerProviderState {
       AgentProvider,
       Pick<
         ProviderDefinition,
-        "enabled" | "derivedFromProviderId" | "validateOptions" | "applyOptions" | "applyToolPolicy"
+        | "enabled"
+        | "derivedFromProviderId"
+        | "supportsExactMcpPreapproval"
+        | "validateOptions"
+        | "applyOptions"
+        | "applyToolPolicy"
       > & { roleBindingSupport: ProviderRoleBindingSupport }
     >
   >;
@@ -309,6 +314,7 @@ export class ProviderSnapshotManager {
       providerDefinitions[provider] = {
         enabled: definition.enabled,
         derivedFromProviderId: definition.derivedFromProviderId,
+        supportsExactMcpPreapproval: definition.supportsExactMcpPreapproval,
         roleBindingSupport: this.getRoleBindingSupport(provider),
         validateOptions: definition.validateOptions,
         applyOptions: definition.applyOptions,
