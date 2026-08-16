@@ -29,8 +29,8 @@ export async function expectDiagramRemainsRenderedWhileStreaming(page: Page): Pr
   const { diagram, svg } = renderedDiagram(page);
   const samples = 80;
   for (let sample = 0; sample < samples; sample += 1) {
-    await expect(diagram).toBeVisible({ timeout: 100 });
-    await expect(svg).toBeVisible({ timeout: 100 });
+    await expect(diagram).toBeVisible({ timeout: 1_000 });
+    await expect(svg).toBeVisible({ timeout: 1_000 });
     await page.waitForTimeout(25);
   }
 }

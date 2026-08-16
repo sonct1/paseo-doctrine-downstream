@@ -21,6 +21,7 @@ Bản downstream này hoàn tất lớp tương thích giữa upstream Agent Pro
 - Preapprove đúng tập Paseo MCP tools trong role ceiling cho provider hỗ trợ exact MCP policy, tránh prompt permission không thể duyệt ở assignment `no-write`; assignment và Beads guards vẫn fail closed và không bị nới quyền.
 - Giữ native Antigravity fail closed trên Windows và làm các assertion skill/path/newline cùng Git-observer waits độc lập với POSIX formatting hoặc runner contention; Windows không nằm trong release qualification scope của bản downstream này.
 - Giữ app subagent archive test deterministic bằng descriptor identity, không còn phụ thuộc hai lần đọc wall-clock cách nhau vài mili giây trên CI.
+- Cho Mermaid streaming E2E đủ ngân sách dưới CI load và dung sai iframe remount ngắn, trong khi vẫn fail nếu diagram biến mất quá một giây.
 
 ### Qualified
 
