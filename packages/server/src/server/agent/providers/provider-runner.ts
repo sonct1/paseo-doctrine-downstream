@@ -127,3 +127,26 @@ export function appendOrReplaceGrowingAssistantMessage({
   }
   return item.text.startsWith(current) ? item.text : `${current}${item.text}`;
 }
+
+/**
+ * Accumulates chunks within one assistant message, then resets when a provider
+ * starts a distinct message in the same turn. ACP uses stable message IDs, so
+ * progress updates remain in the timeline without leaking into finalText.
+ */
+export function createMessageBoundedFinalTextReducer(): ProviderFinalTextReducer {
+  let currentMessageId: string | undefined;
+  return ({ current, item }) => {
+    if (item.type !== "assistant_message") {
+      return current;
+    }
+    const startsNewMessage =
+      currentMessageId !== undefined &&
+      item.messageId !== undefined &&
+      item.messageId !== currentMessageId;
+    currentMessageId = item.messageId ?? currentMessageId;
+    return appendOrReplaceGrowingAssistantMessage({
+      current: startsNewMessage ? "" : current,
+      item,
+    });
+  };
+}

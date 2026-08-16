@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { AgentPromptInput, AgentRunOptions, AgentStreamEvent } from "../agent-sdk-types.js";
-import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "./provider-runner.js";
+import {
+  appendOrReplaceGrowingAssistantMessage,
+  createMessageBoundedFinalTextReducer,
+  runProviderTurn,
+} from "./provider-runner.js";
 
 class FakeTurnRunner {
   readonly events: AgentStreamEvent[] = [];
@@ -149,6 +153,41 @@ describe("runProviderTurn", () => {
 
     await expect(resultPromise).resolves.toMatchObject({
       finalText: "hello world!",
+    });
+  });
+
+  test("keeps progress messages out of message-bounded final text", async () => {
+    const runner = new FakeTurnRunner("turn-1", "session-1");
+    const resultPromise = runProviderTurn({
+      prompt: "hi",
+      startTurn: (prompt, options) => runner.startTurn(prompt, options),
+      subscribe: (callback) => runner.subscribe(callback),
+      getSessionId: () => runner.getSessionId(),
+      reduceFinalText: createMessageBoundedFinalTextReducer(),
+    });
+
+    runner.emit({
+      type: "timeline",
+      provider: "acp",
+      turnId: "turn-1",
+      item: { type: "assistant_message", messageId: "progress", text: "Reading" },
+    });
+    runner.emit({
+      type: "timeline",
+      provider: "acp",
+      turnId: "turn-1",
+      item: { type: "assistant_message", messageId: "final", text: "role=PEER" },
+    });
+    runner.emit({
+      type: "timeline",
+      provider: "acp",
+      turnId: "turn-1",
+      item: { type: "assistant_message", messageId: "final", text: " target=repo" },
+    });
+    runner.emit({ type: "turn_completed", provider: "acp", turnId: "turn-1" });
+
+    await expect(resultPromise).resolves.toMatchObject({
+      finalText: "role=PEER target=repo",
     });
   });
 });

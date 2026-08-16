@@ -113,7 +113,7 @@ import {
   type ProviderRuntimeSettings,
 } from "../provider-launch-config.js";
 import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
-import { appendOrReplaceGrowingAssistantMessage, runProviderTurn } from "./provider-runner.js";
+import { createMessageBoundedFinalTextReducer, runProviderTurn } from "./provider-runner.js";
 import {
   buildStringCommandShellInvocation,
   createStringCommandShellEnvOverlay,
@@ -1641,7 +1641,7 @@ export class ACPAgentSession implements AgentSession, ACPClient {
       startTurn: (p, o) => this.startTurn(p, o),
       subscribe: (callback) => this.subscribe(callback),
       getSessionId: () => this.sessionId ?? "",
-      reduceFinalText: appendOrReplaceGrowingAssistantMessage,
+      reduceFinalText: createMessageBoundedFinalTextReducer(),
     });
 
     if (!this.sessionId) {
