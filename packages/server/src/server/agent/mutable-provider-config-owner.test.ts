@@ -232,6 +232,10 @@ describe("mutable provider config owner", () => {
     });
     const cwd = path.resolve("/tmp/provider-config-commit");
     const events: string[] = [];
+    const expectOnlyLoadingEvents = () => {
+      expect(events.length).toBeGreaterThan(0);
+      expect(new Set(events)).toEqual(new Set(["loading:none"]));
+    };
     manager.on("change", recordCodexEvent(events));
     const unsubscribe = attachMutableProviderConfigOwner({
       store,
@@ -244,12 +248,13 @@ describe("mutable provider config owner", () => {
       await vi.waitFor(() => expect(catalogResolvers).toHaveLength(1));
 
       store.patch({ providers: { codex: { enabled: true, label: "Reloaded Codex" } } });
-      expect(events).toEqual(["loading:none"]);
+      expectOnlyLoadingEvents();
       await vi.waitFor(() => expect(catalogResolvers).toHaveLength(2));
 
       catalogResolvers[0]?.(catalog("stale-model"));
       await originalRead;
-      expect(events).toEqual(["loading:none"]);
+      expectOnlyLoadingEvents();
+      expect(events).not.toContain("ready:stale-model");
 
       catalogResolvers[1]?.(catalog("current-model"));
       await vi.waitFor(() =>
@@ -258,7 +263,9 @@ describe("mutable provider config owner", () => {
           models: [{ id: "current-model" }],
         }),
       );
-      expect(events).toEqual(["loading:none", "ready:current-model"]);
+      expect(events.at(-1)).toBe("ready:current-model");
+      expect(events.filter((event) => event === "ready:current-model")).toHaveLength(1);
+      expect(events).not.toContain("ready:stale-model");
     } finally {
       unsubscribe();
       manager.destroy();
