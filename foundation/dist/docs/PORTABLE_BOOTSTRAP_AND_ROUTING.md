@@ -1,8 +1,14 @@
 # Mandatory protocol bootstrap và routing status
 
-Trạng thái: repository candidate; activation/qualification theo từng route
-Runtime snapshots: Paseo `0.2.5`; OpenCode `1.18.12`; OMP `17.2.1`;
-Cursor Agent `2026.07.23-e383d2b`; Antigravity `1.1.10`; observed `2026-08-04`
+Trạng thái: local native Codex lane qualified; activation/qualification vẫn theo từng route
+Runtime snapshots: Paseo `0.4.0-paseo.4`; OpenCode `1.18.12`; OMP `17.2.10`;
+Cursor Agent `2026.08.04-aaa8809`; Antigravity `1.1.13`; observed `2026-08-17`
+
+Current SLP local lane là native Paseo role binding qua Codex developer instructions trên
+`codex-zetscan/gpt-5.6-sol`, không phải ACP role transport. Generic ACP chỉ còn là transport candidate
+cho provider không có native durable instruction channel; tồn tại ACP wrapper/pin không có nghĩa current
+Lead/Peer/Supervisor phụ thuộc ACP. E4 fresh canary đã phân biệt Lead full-protocol readership, Peer
+extracted constraints và Supervisor governance-only trên cùng route.
 
 ## Ba instruction layers
 
@@ -74,7 +80,7 @@ bundle nhưng vẫn cho phép micro skill implementation/test/debug/research ngo
 assignment lease. Standing profile và assignment vẫn cấm orchestration skill/authority; isolated
 role root cộng exact permission map là technical discovery boundary cho Foundation package.
 
-Paseo `0.2.5` CLI `--env` đi vào `launchContext.env`; generic ACP `session/new` và `prompt` vẫn không
+Paseo `0.4.0-paseo.4` CLI `--env` đi vào `launchContext.env`; generic ACP `session/new` và `prompt` vẫn không
 transport `systemPrompt`. Provider wiring, activation và fresh canary là Human-authorized work riêng.
 
 ## Provider-native role-source candidates

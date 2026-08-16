@@ -1,7 +1,7 @@
 {
   "name": "paseo-peer",
   "description": "Paseo peer role-bound skill projection",
-  "version": "0.1.0-dev.15",
+  "version": "0.1.0-dev.16",
   "author": {
     "name": "Paseo Foundation"
   }
