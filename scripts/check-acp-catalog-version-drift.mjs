@@ -2,11 +2,15 @@
 
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
+import { pathToFileURL } from "node:url";
 
 const execFileAsync = promisify(execFile);
 
-const CATALOG_PATH = new URL("../packages/app/src/data/acp-provider-catalog.ts", import.meta.url);
+const CATALOG_PATH = process.env.PASEO_ACP_CATALOG_PATH
+  ? pathToFileURL(path.resolve(process.env.PASEO_ACP_CATALOG_PATH))
+  : new URL("../packages/app/src/data/acp-provider-catalog.ts", import.meta.url);
 const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+].*)?$/;
 const HELP_TEXT = `Usage: npm run acp:version-drift [-- --json] [-- --fail-on-drift] [-- --no-network] [-- --update]
 
@@ -294,6 +298,8 @@ function buildStatus({ selector, catalogVersion, latestVersion, registryError })
     reasons.push("missing package version selector");
   } else if (!pinnedVersion) {
     reasons.push("command selector is not an exact version pin");
+  } else if (catalogVersion !== pinnedVersion) {
+    reasons.push("catalog version does not match command selector");
   }
 
   if (latestVersion) {

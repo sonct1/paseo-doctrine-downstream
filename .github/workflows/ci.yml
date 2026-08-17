@@ -542,7 +542,7 @@ jobs:
         run: npm ci
 
       - name: Verify release contracts
-        run: npm run release:toolchain:check && npm run acp:version-drift:check && git diff --exit-code
+        run: npm run release:toolchain:check && npm run acp:pin-consistency:check && git diff --exit-code
 
   cli-tests-1:
     name: cli-tests (shard 1/3)

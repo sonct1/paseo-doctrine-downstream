@@ -30,7 +30,60 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
 
 jobs:
+  qualification:
+    name: downstream-release-contracts
+    runs-on: ubuntu-22.04
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.SOURCE_REF }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.0"
+          cache: npm
+
+      - name: Install pinned downstream release toolchain
+        run: npm install --global npm@11.17.0
+
+      - name: Verify frozen dependency install
+        run: npm ci
+
+      - name: Verify deterministic downstream contracts
+        run: |
+          npm run release:toolchain:check
+          npm run acp:pin-consistency:check
+          node --test \
+            scripts/acp-catalog-pin-consistency.test.mjs \
+            scripts/ci-workflow.test.mjs \
+            scripts/daemon-launch-contract.test.mjs \
+            scripts/downstream-publish-guard.test.mjs \
+            scripts/install-macos.test.mjs
+          git diff --exit-code
+
+      - name: Check shipped source quality
+        run: npm run format:check && npm run lint
+
+      - name: Build shared server dependencies
+        run: npm run build:server
+
+      - name: Typecheck downstream shipped packages
+        run: |
+          npm run typecheck --workspace=@getpaseo/highlight
+          npm run typecheck --workspace=@paseo/plugin
+          npm run typecheck --workspace=@getpaseo/protocol
+          npm run typecheck --workspace=@getpaseo/client
+          npm run typecheck --workspace=@getpaseo/relay
+          npm run typecheck --workspace=@getpaseo/server
+          npm run typecheck --workspace=@getpaseo/app
+          npm run typecheck --workspace=@getpaseo/cli
+          npm run typecheck --workspace=@getpaseo/foundation-cli
+
   create-release:
+    needs: qualification
     if: ${{ github.event_name == 'push' || inputs.publish == true }}
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +116,7 @@ jobs:
           fi
 
   build:
-    needs: [create-release]
+    needs: [qualification, create-release]
     if: ${{ always() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
     strategy:
       fail-fast: false

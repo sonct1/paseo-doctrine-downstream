@@ -9,6 +9,10 @@ const dockerWorkflowPath = new URL(".github/workflows/docker.yml", repoRoot);
 const nixWorkflowPath = new URL(".github/workflows/nix.yml", repoRoot);
 const nixUpdateHashWorkflowPath = new URL(".github/workflows/nix-update-hash.yml", repoRoot);
 const websiteWorkflowPath = new URL(".github/workflows/deploy-website.yml", repoRoot);
+const portableReleaseWorkflowPath = new URL(
+  ".github/workflows/downstream-macos-release.yml",
+  repoRoot,
+);
 const filtersPath = new URL(".github/ci-paths.yml", repoRoot);
 const serverTsconfigPath = new URL("packages/server/tsconfig.server.json", repoRoot);
 const desktopPackagePath = new URL("packages/desktop/package.json", repoRoot);
@@ -148,8 +152,25 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(releaseQualification, /npm install --global npm@11\.17\.0/);
   assert.match(releaseQualification, /npm ci/);
   assert.match(releaseQualification, /npm run release:toolchain:check/);
-  assert.match(releaseQualification, /npm run acp:version-drift:check/);
+  assert.match(releaseQualification, /npm run acp:pin-consistency:check/);
+  assert.doesNotMatch(releaseQualification, /npm run acp:version-drift:check/);
   assert.match(releaseQualification, /git diff --exit-code/);
+});
+
+test("portable release gates the downstream distribution instead of upstream release surfaces", () => {
+  const source = readFileSync(portableReleaseWorkflowPath, "utf8");
+
+  assert.match(source, /name: downstream-release-contracts/);
+  assert.match(source, /npm run acp:pin-consistency:check/);
+  assert.doesNotMatch(source, /npm run acp:version-drift:check/);
+  assert.match(source, /npm run build:web-cli-artifact/);
+  assert.match(source, /npm run test:web-cli-artifact/);
+  assert.match(source, /macos-14/);
+  assert.match(source, /macos-15-intel/);
+  assert.match(source, /ubuntu-22\.04/);
+  assert.match(source, /windows-2025/);
+  assert.match(source, /needs: \[qualification, create-release\]/);
+  assert.doesNotMatch(source, /build:desktop|android:release|release:publish|npm publish/);
 });
 
 test("server builds exclude test utilities at every domain depth", () => {

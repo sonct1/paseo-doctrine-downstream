@@ -11,17 +11,40 @@ version dạng `X.Y.Z-paseo.N` và tag khớp chính xác `paseo-vX.Y.Z-paseo.N`
 Quy trình downstream:
 
 1. Commit code/docs của feature hoặc fix riêng; không trộn version bump vào code commit.
-2. Push `main`, chờ required CI của exact commit xanh và xử lý mọi downstream qualification drift.
+2. Push `main`, đọc CI của exact commit theo owning surface; failure trong source được bundle vào
+   WebUI + CLI + Foundation là hard blocker, còn upstream-only desktop/mobile/npm publishing không
+   được dùng làm proxy hoặc blocker cho downstream portable release.
 3. Commit `CHANGELOG.md`, synchronized workspace versions và lockfile bằng một release commit riêng.
-4. Chạy format, lint, typecheck, focused downstream matrix, host-native artifact build/install/smoke
-   trên macOS `arm64`/`x64`, Linux `x64`, Windows `x64`, Linux Docker/Nix builds và clean local-stack
-   install/readback trên exact clean release commit.
+4. Dispatch `Downstream Portable Release` trên exact release commit với `publish=false`. Workflow tự
+   chạy frozen install, deterministic downstream contracts, format/lint, typecheck các package được
+   ship và host-native artifact build/install/smoke trên macOS `arm64`/`x64`, Linux `x64`, Windows
+   `x64`. Docker/Nix là distribution channels độc lập và chỉ là hard gate khi release đó tuyên bố ship
+   hoặc thay đổi các channel này.
 5. Tạo annotated tag `paseo-v<package-version>`, push `main` và tag, rồi chờ
    `Downstream Portable Release` hoàn tất cho đủ bốn matrix leg.
 
 Trước tag, dispatch `Downstream Portable Release` với exact commit và `publish=false`; chỉ đi tiếp khi
 cả bốn host-native build/install/smoke leg xanh. Tag release chạy lại cùng matrix với `publish=true`.
 Không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
+
+### Boundary của downstream release gate
+
+Hard gate của `paseo-vX.Y.Z-paseo.N` chỉ chứng minh distribution hiện tại:
+
+- exact source ref, clean worktree, pinned npm toolchain và frozen lockfile;
+- deterministic Agent Profile package-runner pin consistency; registry có version mới chỉ là advisory
+  maintenance signal, không tự block release;
+- format/lint và typecheck cho `highlight`, plugin runtime SDK, protocol, client, relay, server, WebUI
+  app, CLI và Foundation CLI;
+- Foundation/bootstrap contracts và downstream publish guard;
+- artifact checksum, install, CLI/Foundation version, daemon health, WebUI và real PTY smoke trên từng
+  native OS/architecture leg.
+
+Electron desktop, Android/iOS, upstream npm publish, upstream `vX.Y.Z` tags và store rollout không nằm
+trong hard gate này. General `CI`, Docker, Nix và website workflow vẫn hữu ích để theo dõi repository
+health; failure của chúng chỉ block portable release khi nó chạm source/artifact được ship hoặc exact
+release scope đã tuyên bố gồm channel đó. Không đổi màu một failure bằng cách bỏ test: phải classify
+causal ownership trước, rồi sửa code hoặc sửa gate về đúng owning distribution.
 
 ### Local development activation invariant
 
