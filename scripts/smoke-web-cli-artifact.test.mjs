@@ -8,6 +8,9 @@ const gitAttributes = readFileSync(new URL("../.gitattributes", import.meta.url)
 test("portable artifact smoke binds every CLI probe to its isolated daemon", () => {
   assert.match(source, /PASEO_LISTEN: listen/);
   assert.match(source, /PASEO_RELAY_ENABLED: "false"/);
+  assert.match(source, /PASEO_DICTATION_ENABLED: "0"/);
+  assert.match(source, /PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"/);
+  assert.match(source, /PASEO_VOICE_MODE_ENABLED: "0"/);
   assert.match(source, /await waitForExit\(daemon\)/);
 });
 

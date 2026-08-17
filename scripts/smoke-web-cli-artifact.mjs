@@ -29,6 +29,9 @@ const env = {
   PASEO_HOME: path.join(home, ".paseo"),
   PASEO_LISTEN: listen,
   PASEO_RELAY_ENABLED: "false",
+  PASEO_DICTATION_ENABLED: "0",
+  PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
+  PASEO_VOICE_MODE_ENABLED: "0",
 };
 
 function fail(message) {
