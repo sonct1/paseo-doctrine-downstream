@@ -163,8 +163,7 @@ function validateArtifactManifest(manifest) {
     manifest.platform !== process.platform ||
     manifest.arch !== process.arch ||
     manifest.beadsBackend !== "central" ||
-    manifest.beadsCentralSidecarIncluded !== true ||
-    manifest.bundledBeadsBinary !== true ||
+    manifest.bundledBeadsBinary !== false ||
     manifest.internalPackages?.["@paseo/plugin"] !== manifest.version
   ) {
     fail("artifact manifest does not match the smoke host");
@@ -247,19 +246,6 @@ async function main() {
     ...(process.platform === "win32" ? ["bd.exe"] : ["bin", "bd"]),
   );
   if (existsSync(bundledBd)) fail("Central-only artifact unexpectedly contains a native bd binary");
-  const componentRoot = path.join(prefix, "current", "components", "beads-central");
-  const bundledSidecar = path.join(
-    componentRoot,
-    process.platform === "win32" ? "beads-central.exe" : "beads-central",
-  );
-  const componentBd = path.join(
-    componentRoot,
-    "bin",
-    process.platform === "win32" ? "bd.exe" : "bd",
-  );
-  if (!existsSync(bundledSidecar) || !existsSync(componentBd)) {
-    fail("installed artifact is missing the bundled Beads Central component");
-  }
   const cliEntry = path.join(
     prefix,
     "current",
