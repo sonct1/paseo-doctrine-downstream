@@ -13,6 +13,7 @@ import type { TerminalCell, TerminalState } from "@getpaseo/protocol/messages";
 import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import { TerminalActivityTracker } from "./activity/terminal-activity-tracker.js";
 import type { TerminalActivity, TerminalActivityState } from "@getpaseo/protocol/terminal-activity";
+import { signalProcessTree } from "../utils/tree-kill.js";
 
 const { Terminal } = xterm;
 const require = createRequire(import.meta.url);
@@ -1517,11 +1518,26 @@ export async function createTerminal(options: CreateTerminalOptions): Promise<Te
     const exitedGracefully = await waitForProcessExit(gracefulTimeoutMs);
     if (!exitedGracefully) {
       try {
-        killPtyProcess("SIGKILL");
+        if (process.platform === "win32") {
+          await signalProcessTree(
+            {
+              pid: ptyProcess.pid,
+              kill: () => {
+                killPtyProcess("SIGKILL");
+                return true;
+              },
+            },
+            "SIGKILL",
+          );
+        } else {
+          killPtyProcess("SIGKILL");
+        }
       } catch {
         // process may already be gone
       }
-      await waitForProcessExit(forceTimeoutMs);
+      if (!(await waitForProcessExit(forceTimeoutMs))) {
+        throw new Error(`Terminal process tree ${ptyProcess.pid} did not exit after forced kill`);
+      }
     }
 
     // Finalize bookkeeping (idempotent if ptyProcess.onExit already fired).

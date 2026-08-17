@@ -733,7 +733,14 @@ export class TerminalSessionController {
   }
 
   private async handleKillTerminalRequest(msg: KillTerminalRequest): Promise<void> {
-    const result = this.killTerminalForClose(msg.terminalId);
+    const result = { terminalId: msg.terminalId, success: this.terminalManager !== null };
+    if (this.terminalManager) {
+      this.detachStream(msg.terminalId, { emitExit: true });
+      await this.terminalManager.killTerminalAndWait(msg.terminalId, {
+        gracefulTimeoutMs: 2000,
+        forceTimeoutMs: 1500,
+      });
+    }
     this.emit({
       type: "kill_terminal_response",
       payload: {

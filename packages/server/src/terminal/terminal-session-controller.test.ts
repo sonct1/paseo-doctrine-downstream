@@ -51,6 +51,45 @@ function createLogger(): pino.Logger {
   } as unknown as pino.Logger;
 }
 
+describe("terminal-session-controller kill", () => {
+  test("waits for the PTY process to exit before reporting kill success", async () => {
+    const killed = deferred<void>();
+    const outboundMessages: SessionOutboundMessage[] = [];
+    const killTerminalAndWait = vi.fn(() => killed.promise);
+    const terminalManager = { killTerminalAndWait } as unknown as TerminalManager;
+    const controller = new TerminalSessionController({
+      terminalManager,
+      emit: (message) => outboundMessages.push(message),
+      emitBinary: vi.fn(),
+      hasBinaryChannel: () => true,
+      isPathWithinRoot: () => false,
+      sessionLogger: createLogger(),
+    });
+
+    const dispatched = controller.dispatch({
+      type: "kill_terminal_request",
+      terminalId: "term-1",
+      requestId: "req-1",
+    });
+    expect(outboundMessages).toEqual([]);
+    expect(killTerminalAndWait).toHaveBeenCalledWith("term-1", {
+      gracefulTimeoutMs: 2000,
+      forceTimeoutMs: 1500,
+    });
+
+    killed.resolve();
+    await dispatched;
+    expect(outboundMessages).toContainEqual({
+      type: "kill_terminal_response",
+      payload: {
+        terminalId: "term-1",
+        success: true,
+        requestId: "req-1",
+      },
+    });
+  });
+});
+
 describe("terminal-session-controller restore", () => {
   test("delivers output produced while restore is in flight after the restore frame", async () => {
     let terminalListener: ((message: ServerMessage) => void) | null = null;

@@ -21,6 +21,7 @@ Linux và Windows, đồng thời sửa các gate durability và release reprodu
 - Tách ACP registry-latest drift thành maintenance advisory; downstream hard gate chỉ enforce exact pin và catalog/command consistency.
 - Giữ artifact build fail closed khi source dirty nhưng in exact dirty paths để chẩn đoán runner mutation mà không cần bypass provenance gate.
 - Bound Windows archive/install smoke theo I/O timeout riêng và chỉ report success sau cleanup retry hữu hạn hoàn tất.
+- Chờ PTY process thoát trước khi `terminal kill` trả success để không để lại process hoặc filesystem handle trên Windows.
 
 ### Qualified
 
