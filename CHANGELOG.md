@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0-paseo.6 - 2026-08-17
+
+Bản downstream này mở rộng WebUI + CLI + Foundation distribution thành artifact host-native cho macOS,
+Linux và Windows, đồng thời sửa các gate durability và release reproducibility đã làm CI cũ fail.
+
+### Added
+
+- Thêm artifact và checksum riêng cho macOS arm64/x64, Linux x64 và Windows x64; mỗi leg được build và smoke trên native GitHub runner trước khi publish.
+- Thêm bootstrap installer dùng user `launchd` trên macOS, user `systemd` trên Linux và user Scheduled Task trên Windows, với versioned release, active pointer và authoritative daemon readback.
+- Thêm Foundation CLI lifecycle qualification trên Linux và Windows, gồm Windows junction, `PATHEXT` command discovery và `.cmd`/`.bat` invocation.
+- Giữ nguyên byte canonical của imported Foundation payload trên Windows checkout để manifest checksum có cùng ý nghĩa trên cả ba operating system.
+- Cập nhật README với requirements, install, verify, upgrade và uninstall riêng cho từng operating system.
+
+### Fixed
+
+- Giữ nguyên durable agent timeline epoch khi daemon hydrate provider history sau restart và làm concurrent flush test phản ánh đúng batch coalescing.
+- Đưa WebUI build lock ra ngoài shared `server/dist` để clean build không tự xóa lock rồi chạy producer song song.
+- Refresh Nix npm dependency hash và Qwen Code ACP package-runner pin theo live registry catalog.
+- Tách ACP registry-latest drift thành maintenance advisory; downstream hard gate chỉ enforce exact pin và catalog/command consistency.
+- Giữ artifact build fail closed khi source dirty nhưng in exact dirty paths để chẩn đoán runner mutation mà không cần bypass provenance gate.
+- Bound Windows archive/install smoke theo I/O timeout riêng và chỉ report success sau cleanup retry hữu hạn hoàn tất.
+
+### Qualified
+
+- Qualify focused unit/typecheck/format/lint và installed-artifact smoke gồm CLI, Foundation doctor, daemon, WebUI và real PTY terminal.
+- Pin release qualification vào đúng WebUI + CLI + Foundation distribution; upstream-only desktop/mobile/npm publishing không còn được dùng làm portable release proxy.
+- Qualify cùng release commit trên native macOS arm64/x64, Linux x64 và Windows x64 runners trước khi gắn tag.
+
 ## 0.4.0-paseo.3 - 2026-08-16
 
 Bản downstream này làm cho Foundation doctor phản ánh đúng qualification của live daemon và biến việc
