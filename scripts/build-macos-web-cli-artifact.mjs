@@ -107,7 +107,7 @@ function assertReleaseInputs(nodeRoot) {
   const dirty = run("git", ["status", "--porcelain"], { capture: true });
   if (dirty && process.env.PASEO_RELEASE_ALLOW_DIRTY !== "1") {
     fail(
-      "Refusing to build a release artifact from a dirty worktree. Set PASEO_RELEASE_ALLOW_DIRTY=1 only for a local candidate build.",
+      `Refusing to build a release artifact from a dirty worktree:\n${dirty}\nSet PASEO_RELEASE_ALLOW_DIRTY=1 only for a local candidate build.`,
     );
   }
   const bundledArch = run(nodeExecutable(nodeRoot), ["-p", "process.arch"], {
