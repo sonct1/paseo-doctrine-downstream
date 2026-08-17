@@ -34,12 +34,24 @@ function fail(message) {
 }
 
 function run(command, args, options = {}) {
+  const timeout = options.timeoutMs ?? 120_000;
+  process.stdout.write(
+    `SMOKE_COMMAND start=${command} args=${JSON.stringify(args)} timeout_ms=${timeout}\n`,
+  );
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: "utf8",
     env,
     stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    timeout,
   });
+  if (result.error) {
+    fail(
+      `${command} ${args.join(" ")} failed (${
+        result.error.code ?? result.error.message
+      })\n${result.stdout ?? ""}${result.stderr ?? ""}`,
+    );
+  }
   if (result.status !== 0) {
     fail(`${command} ${args.join(" ")} failed\n${result.stdout ?? ""}${result.stderr ?? ""}`);
   }
@@ -115,7 +127,9 @@ async function smokeTerminal() {
     }
     fail(`terminal output did not contain ${marker}`);
   } finally {
-    runCli("paseo", ["terminal", "kill", created.id, "--json"], { capture: true });
+    runCli("paseo", ["terminal", "kill", created.id, "--json"], {
+      capture: true,
+    });
   }
 }
 
@@ -131,7 +145,10 @@ async function main() {
     run("powershell.exe", [
       "-NoProfile",
       "-Command",
-      `Expand-Archive -Path '${archive.replaceAll("'", "''")}' -DestinationPath '${smokeRoot.replaceAll("'", "''")}' -Force`,
+      `Expand-Archive -Path '${archive.replaceAll(
+        "'",
+        "''",
+      )}' -DestinationPath '${smokeRoot.replaceAll("'", "''")}' -Force`,
     ]);
   } else {
     run("tar", ["-xzf", archive, "-C", smokeRoot]);
@@ -217,7 +234,9 @@ async function main() {
     runCli("paseo", ["daemon", "stop"]);
     await waitForExit(daemon);
     process.stdout.write(
-      `SMOKE_OK platform=${process.platform} arch=${process.arch} cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`,
+      `SMOKE_OK platform=${process.platform} arch=${
+        process.arch
+      } cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`,
     );
   } finally {
     if (daemon.exitCode === null) {
