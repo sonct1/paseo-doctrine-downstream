@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0-paseo.7 - 2026-08-17
+
+Bản downstream này sửa đường tạo workspace role-bound trên WebUI và bổ sung release gate trực tiếp cho
+contract đó.
+
+### Fixed
+
+- Giữ nguyên role, assignment effect và Beads issue grants khi New Workspace handoff sang draft tab trước khi tạo agent.
+- Kiểm tra create receipt phải trả đúng `RoleBinding` và `LaunchContract` đã yêu cầu thay vì tiếp tục với agent unbound.
+- Chặn concurrent submit và continuation trùng `clientMessageId`, tránh một thao tác chat tạo nhiều agent hoặc request.
+
+### Qualified
+
+- Thêm focused role-handoff, duplicate-submit và snapshot receipt tests vào downstream release qualification.
+- Tiếp tục qualify WebUI + CLI + Foundation artifact trên native macOS arm64/x64, Linux x64 và Windows x64; không dùng Electron, mobile hoặc npm publish gates của upstream.
+
 ## 0.4.0-paseo.6 - 2026-08-17
 
 Bản downstream này mở rộng WebUI + CLI + Foundation distribution thành artifact host-native cho macOS,
