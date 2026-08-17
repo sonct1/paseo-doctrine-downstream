@@ -242,11 +242,9 @@ async function main() {
     await smokeTerminal();
     runCli("paseo", ["daemon", "stop"]);
     await waitForExit(daemon);
-    process.stdout.write(
-      `SMOKE_OK platform=${process.platform} arch=${
-        process.arch
-      } cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`,
-    );
+    return `SMOKE_OK platform=${process.platform} arch=${
+      process.arch
+    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`;
   } finally {
     if (daemon.exitCode === null) {
       daemon.kill();
@@ -256,15 +254,34 @@ async function main() {
   }
 }
 
+function cleanupSmokeRoot() {
+  if (process.env.PASEO_KEEP_RELEASE_SMOKE === "1") {
+    process.stdout.write(`SMOKE_ROOT=${smokeRoot}\n`);
+    return;
+  }
+  rmSync(smokeRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: process.platform === "win32" ? 20 : 0,
+    retryDelay: 250,
+  });
+}
+
 main()
+  .then((success) => {
+    cleanupSmokeRoot();
+    process.stdout.write(success);
+  })
   .catch((error) => {
+    try {
+      cleanupSmokeRoot();
+    } catch (cleanupError) {
+      process.stderr.write(
+        `SMOKE_CLEANUP_FAILED ${
+          cleanupError instanceof Error ? cleanupError.stack : String(cleanupError)
+        }\n`,
+      );
+    }
     process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
     process.exitCode = 1;
-  })
-  .finally(() => {
-    if (process.env.PASEO_KEEP_RELEASE_SMOKE !== "1") {
-      rmSync(smokeRoot, { recursive: true, force: true });
-    } else {
-      process.stdout.write(`SMOKE_ROOT=${smokeRoot}\n`);
-    }
   });

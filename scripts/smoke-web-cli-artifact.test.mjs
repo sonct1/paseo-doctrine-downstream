@@ -20,6 +20,15 @@ test("portable artifact smoke fails closed when an installed command hangs", () 
   assert.match(source, /SMOKE_COMMAND start=/);
 });
 
+test("portable artifact smoke only reports success after bounded cleanup", () => {
+  assert.match(source, /maxRetries: process\.platform === "win32" \? 20 : 0/);
+  assert.match(source, /retryDelay: 250/);
+  assert.match(
+    source,
+    /\.then\(\(success\) => \{\s+cleanupSmokeRoot\(\);\s+process\.stdout\.write\(success\);/u,
+  );
+});
+
 test("Foundation manifest payload keeps canonical bytes on every checkout", () => {
   assert.match(gitAttributes, /^foundation\/dist\/\*\* -text$/mu);
 });
