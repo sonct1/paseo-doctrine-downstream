@@ -1,1 +1,3 @@
 foundation/dist/references/demonthorn-agent-orchestration-deep-dive.md whitespace=-blank-at-eol
+# foundation/manifest.json hashes the imported payload byte-for-byte. Checkout must not rewrite it.
+foundation/dist/** -text
