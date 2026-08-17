@@ -13,6 +13,7 @@ const bundleName = `paseo-web-cli-${version}-${platformName}-${process.arch}`;
 const archive = path.join(repoRoot, "artifacts", `${bundleName}${extension}`);
 const checksum = `${archive}.sha256`;
 const smokeRoot = mkdtempSync(path.join(os.tmpdir(), "paseo-release-smoke-"));
+const terminalRoot = mkdtempSync(path.join(os.tmpdir(), "paseo-release-terminal-"));
 const home = path.join(smokeRoot, "home");
 const prefix = path.join(smokeRoot, "install");
 const binDir = path.join(smokeRoot, "bin");
@@ -104,7 +105,7 @@ async function smokeTerminal() {
   const created = JSON.parse(
     runCli(
       "paseo",
-      ["terminal", "create", "--cwd", smokeRoot, "--name", "release-smoke", "--json"],
+      ["terminal", "create", "--cwd", terminalRoot, "--name", "release-smoke", "--json"],
       {
         capture: true,
       },
@@ -235,6 +236,7 @@ async function main() {
     [cliEntry, "daemon", "start", "--foreground", "--listen", listen, "--web-ui", "--no-relay"],
     { env, stdio: ["ignore", log, log] },
   );
+  let success;
   try {
     const health = await waitForHealth();
     const index = await (await fetch(`http://${listen}/`)).text();
@@ -242,7 +244,7 @@ async function main() {
     await smokeTerminal();
     runCli("paseo", ["daemon", "stop"]);
     await waitForExit(daemon);
-    return `SMOKE_OK platform=${process.platform} arch=${
+    success = `SMOKE_OK platform=${process.platform} arch=${
       process.arch
     } cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`;
   } finally {
@@ -252,29 +254,52 @@ async function main() {
     }
     closeSync(log);
   }
+  if (process.platform === "win32") {
+    run(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(bundle, "uninstall.ps1"),
+        "-Prefix",
+        prefix,
+        "-BinDir",
+        binDir,
+        "-TaskName",
+        `Paseo Release Smoke ${process.pid}`,
+        "-PurgeFoundation",
+      ],
+      { timeoutMs: windowsBundleIoTimeoutMs },
+    );
+  }
+  return success;
 }
 
-function cleanupSmokeRoot() {
+function cleanupSmokeRoots() {
   if (process.env.PASEO_KEEP_RELEASE_SMOKE === "1") {
-    process.stdout.write(`SMOKE_ROOT=${smokeRoot}\n`);
+    process.stdout.write(`SMOKE_ROOT=${smokeRoot}\nTERMINAL_ROOT=${terminalRoot}\n`);
     return;
   }
-  rmSync(smokeRoot, {
-    recursive: true,
-    force: true,
-    maxRetries: process.platform === "win32" ? 20 : 0,
-    retryDelay: 250,
-  });
+  for (const ownedRoot of [terminalRoot, smokeRoot]) {
+    rmSync(ownedRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === "win32" ? 20 : 0,
+      retryDelay: 250,
+    });
+  }
 }
 
 main()
   .then((success) => {
-    cleanupSmokeRoot();
+    cleanupSmokeRoots();
     return process.stdout.write(success);
   })
   .catch((error) => {
     try {
-      cleanupSmokeRoot();
+      cleanupSmokeRoots();
     } catch (cleanupError) {
       process.stderr.write(
         `SMOKE_CLEANUP_FAILED ${

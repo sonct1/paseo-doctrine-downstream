@@ -14,18 +14,23 @@ test("portable artifact smoke binds every CLI probe to its isolated daemon", () 
 test("portable artifact smoke fails closed when an installed command hangs", () => {
   assert.match(source, /const timeout = options\.timeoutMs \?\? 120_000/);
   assert.match(source, /const windowsBundleIoTimeoutMs = 10 \* 60_000/);
-  assert.equal(source.match(/timeoutMs: windowsBundleIoTimeoutMs/gu)?.length, 2);
+  assert.equal(source.match(/timeoutMs: windowsBundleIoTimeoutMs/gu)?.length, 3);
   assert.match(source, /timeout,/);
   assert.match(source, /if \(result\.error\)/);
   assert.match(source, /SMOKE_COMMAND start=/);
 });
 
 test("portable artifact smoke only reports success after bounded cleanup", () => {
+  assert.match(source, /const terminalRoot = mkdtempSync/);
+  assert.match(source, /"terminal", "create", "--cwd", terminalRoot/);
+  assert.match(source, /path\.join\(bundle, "uninstall\.ps1"\)/);
+  assert.match(source, /"-PurgeFoundation"/);
+  assert.match(source, /for \(const ownedRoot of \[terminalRoot, smokeRoot\]\)/);
   assert.match(source, /maxRetries: process\.platform === "win32" \? 20 : 0/);
   assert.match(source, /retryDelay: 250/);
   assert.match(
     source,
-    /\.then\(\(success\) => \{\s+cleanupSmokeRoot\(\);\s+return process\.stdout\.write\(success\);/u,
+    /\.then\(\(success\) => \{\s+cleanupSmokeRoots\(\);\s+return process\.stdout\.write\(success\);/u,
   );
 });
 
