@@ -61,7 +61,8 @@ jobs:
             scripts/build-daemon-web-ui.test.mjs \
             scripts/ci-workflow.test.mjs \
             scripts/daemon-launch-contract.test.mjs \
-            scripts/downstream-publish-guard.test.mjs
+            scripts/downstream-publish-guard.test.mjs \
+            scripts/smoke-web-cli-artifact.test.mjs
           git diff --exit-code
 
       - name: Check shipped source quality

@@ -25,6 +25,8 @@ const env = {
   LOCALAPPDATA: path.join(home, "AppData", "Local"),
   APPDATA: path.join(home, "AppData", "Roaming"),
   PASEO_HOME: path.join(home, ".paseo"),
+  PASEO_LISTEN: listen,
+  PASEO_RELAY_ENABLED: "false",
 };
 
 function fail(message) {
@@ -74,6 +76,14 @@ async function waitForHealth() {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   fail("daemon health endpoint did not become ready");
+}
+
+async function waitForExit(child, timeoutMs = 5_000) {
+  if (child.exitCode !== null) return;
+  await Promise.race([
+    new Promise((resolve) => child.once("exit", resolve)),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
 }
 
 async function smokeTerminal() {
@@ -205,15 +215,15 @@ async function main() {
     if (!index.includes("<title>Paseo</title>")) fail("WebUI title was not served");
     await smokeTerminal();
     runCli("paseo", ["daemon", "stop"]);
-    await Promise.race([
-      new Promise((resolve) => daemon.once("exit", resolve)),
-      new Promise((resolve) => setTimeout(resolve, 5_000)),
-    ]);
+    await waitForExit(daemon);
     process.stdout.write(
       `SMOKE_OK platform=${process.platform} arch=${process.arch} cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`,
     );
   } finally {
-    if (daemon.exitCode === null) daemon.kill();
+    if (daemon.exitCode === null) {
+      daemon.kill();
+      await waitForExit(daemon);
+    }
     closeSync(log);
   }
 }
