@@ -270,7 +270,7 @@ function cleanupSmokeRoot() {
 main()
   .then((success) => {
     cleanupSmokeRoot();
-    process.stdout.write(success);
+    return process.stdout.write(success);
   })
   .catch((error) => {
     try {

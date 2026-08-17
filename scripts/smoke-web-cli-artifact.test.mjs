@@ -25,7 +25,7 @@ test("portable artifact smoke only reports success after bounded cleanup", () =>
   assert.match(source, /retryDelay: 250/);
   assert.match(
     source,
-    /\.then\(\(success\) => \{\s+cleanupSmokeRoot\(\);\s+process\.stdout\.write\(success\);/u,
+    /\.then\(\(success\) => \{\s+cleanupSmokeRoot\(\);\s+return process\.stdout\.write\(success\);/u,
   );
 });
 
