@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from "react";
+import { useCallback, useMemo, useReducer, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComposerAttachment } from "@/attachments/types";
 import {
@@ -130,6 +130,8 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
   const clearPendingCreateAttempt = useCreateFlowStore((state) => state.clear);
   const formErrorMessage = machine.tag === "draft" ? machine.errorMessage : "";
   const isSubmitting = machine.tag === "creating";
+  const createPromiseByMessageIdRef = useRef(new Map<string, Promise<void>>());
+  const submitStartedRef = useRef(false);
 
   const submittedStreamItems = useMemo<StreamItem[]>(() => {
     if (machine.tag !== "creating") {
@@ -171,24 +173,21 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
   }, [buildDraftAgent, machine]);
 
   const runCreateAttempt = useCallback(
-    async ({ attempt, cwd }: { attempt: CreateAttempt; cwd: string }) => {
-      const pendingServerId = getPendingServerId();
-      if (!pendingServerId) {
-        const error = new Error(t("composer.errors.noHostSelected"));
-        dispatch({ type: "DRAFT_SET_ERROR", message: error.message });
-        throw error;
+    ({ attempt, cwd }: { attempt: CreateAttempt; cwd: string }): Promise<void> => {
+      const existing = createPromiseByMessageIdRef.current.get(attempt.clientMessageId);
+      if (existing) {
+        return existing;
       }
 
-      await onBeforeSubmit?.({
-        attempt,
-        text: attempt.text,
-        images: attempt.images,
-        attachments: attempt.attachments,
-        cwd,
-      });
+      const promise = (async () => {
+        const pendingServerId = getPendingServerId();
+        if (!pendingServerId) {
+          const error = new Error(t("composer.errors.noHostSelected"));
+          dispatch({ type: "DRAFT_SET_ERROR", message: error.message });
+          throw error;
+        }
 
-      try {
-        const createResult = await createRequest({
+        await onBeforeSubmit?.({
           attempt,
           text: attempt.text,
           images: attempt.images,
@@ -196,32 +195,49 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
           cwd,
         });
 
-        if (createResult.agentId) {
-          updatePendingAgentId({ draftId, agentId: createResult.agentId });
-          handoffCreatedAgentMessageSubmission(
-            pendingServerId,
-            createResult.agentId,
-            createUserMessage({
-              clientMessageId: attempt.clientMessageId,
-              text: attempt.text,
-              timestamp: attempt.timestamp,
-              images: attempt.images,
-              attachments: attempt.attachments,
-            }),
-          );
-          markPendingCreateLifecycle({ draftId, lifecycle: "sent" });
-        }
+        try {
+          const createResult = await createRequest({
+            attempt,
+            text: attempt.text,
+            images: attempt.images,
+            attachments: attempt.attachments,
+            cwd,
+          });
 
-        await onCreateSuccess({ result: createResult.result, attempt });
-      } catch (error) {
-        const resolved =
-          error instanceof Error ? error : new Error(t("composer.errors.failedToCreateAgent"));
-        dispatch({ type: "CREATE_FAILED", message: resolved.message });
-        markPendingCreateLifecycle({ draftId, lifecycle: "abandoned" });
-        clearPendingCreateAttempt({ draftId });
-        onCreateError?.(resolved);
-        throw error;
-      }
+          if (createResult.agentId) {
+            updatePendingAgentId({ draftId, agentId: createResult.agentId });
+            handoffCreatedAgentMessageSubmission(
+              pendingServerId,
+              createResult.agentId,
+              createUserMessage({
+                clientMessageId: attempt.clientMessageId,
+                text: attempt.text,
+                timestamp: attempt.timestamp,
+                images: attempt.images,
+                attachments: attempt.attachments,
+              }),
+            );
+            markPendingCreateLifecycle({ draftId, lifecycle: "sent" });
+          }
+
+          await onCreateSuccess({ result: createResult.result, attempt });
+        } catch (error) {
+          const resolved =
+            error instanceof Error ? error : new Error(t("composer.errors.failedToCreateAgent"));
+          dispatch({ type: "CREATE_FAILED", message: resolved.message });
+          markPendingCreateLifecycle({ draftId, lifecycle: "abandoned" });
+          clearPendingCreateAttempt({ draftId });
+          onCreateError?.(resolved);
+          throw error;
+        }
+      })();
+      createPromiseByMessageIdRef.current.set(attempt.clientMessageId, promise);
+      void promise.catch(() => {
+        if (createPromiseByMessageIdRef.current.get(attempt.clientMessageId) === promise) {
+          createPromiseByMessageIdRef.current.delete(attempt.clientMessageId);
+        }
+      });
+      return promise;
     },
     [
       clearPendingCreateAttempt,
@@ -237,12 +253,8 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
     ],
   );
 
-  const handleCreateFromInput = useCallback(
+  const createFromInput = useCallback(
     async ({ text, attachments, cwd }: SubmitContext) => {
-      if (isSubmitting) {
-        throw new Error(t("composer.errors.alreadyLoading"));
-      }
-
       dispatch({ type: "DRAFT_SET_ERROR", message: "" });
       const trimmedPrompt = text.trim();
       const pendingServerId = getPendingServerId();
@@ -308,13 +320,28 @@ export function useDraftAgentCreateFlow<TDraftAgent, TCreateResult>({
       allowEmptyText,
       draftId,
       getPendingServerId,
-      isSubmitting,
       onCreateStart,
       runCreateAttempt,
       setPendingCreateAttempt,
       t,
       validateBeforeSubmit,
     ],
+  );
+
+  const handleCreateFromInput = useCallback(
+    async (context: SubmitContext) => {
+      if (submitStartedRef.current || isSubmitting) {
+        throw new Error(t("composer.errors.alreadyLoading"));
+      }
+      submitStartedRef.current = true;
+      try {
+        await createFromInput(context);
+      } catch (error) {
+        submitStartedRef.current = false;
+        throw error;
+      }
+    },
+    [createFromInput, isSubmitting, t],
   );
 
   const continueCreateFromAttempt = useCallback(

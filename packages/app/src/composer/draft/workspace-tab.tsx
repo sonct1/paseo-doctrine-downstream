@@ -77,6 +77,9 @@ interface AutoSubmitConfig {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+  assignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+  beadsIssueIds: string[];
 }
 
 function resolveAutoSubmitConfig(
@@ -86,6 +89,9 @@ function resolveAutoSubmitConfig(
     model?: string | null;
     thinkingOptionId?: string | null;
     featureValues?: Record<string, unknown>;
+    roleId?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    assignmentEffect?: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+    beadsIssueIds?: string[];
   } | null,
 ): AutoSubmitConfig | null {
   if (!pending) return null;
@@ -95,6 +101,9 @@ function resolveAutoSubmitConfig(
     model: pending.model ?? null,
     thinkingOptionId: pending.thinkingOptionId ?? null,
     featureValues: pending.featureValues ?? {},
+    roleId: pending.roleId ?? null,
+    assignmentEffect: pending.assignmentEffect ?? "read-only",
+    beadsIssueIds: pending.beadsIssueIds ?? [],
   };
 }
 
@@ -165,6 +174,45 @@ function buildRoleCreateFields(input: {
   };
 }
 
+interface DraftRoleIntent {
+  roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId | null | undefined;
+  assignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+  beadsIssueIds: readonly string[];
+}
+
+function resolveDraftRoleIntent(
+  autoSubmitConfig: AutoSubmitConfig | null,
+  composerState: {
+    selectedRole?: import("@getpaseo/protocol/role-binding").PaseoRoleId | null;
+    selectedAssignmentEffect: import("@getpaseo/protocol/assignment-contract").AssignmentEffectClass;
+    selectedBeadsIssueIds: string[];
+  },
+): DraftRoleIntent {
+  if (autoSubmitConfig) {
+    return {
+      roleId: autoSubmitConfig.roleId,
+      assignmentEffect: autoSubmitConfig.assignmentEffect,
+      beadsIssueIds: autoSubmitConfig.beadsIssueIds,
+    };
+  }
+  return {
+    roleId: composerState.selectedRole,
+    assignmentEffect: composerState.selectedAssignmentEffect,
+    beadsIssueIds: composerState.selectedBeadsIssueIds,
+  };
+}
+
+function assertRoleLaunchReceipt(
+  result: AgentSnapshotPayload,
+  roleId: DraftRoleIntent["roleId"],
+): void {
+  if (!roleId) return;
+  if (result.roleBinding?.roleId === roleId && result.launchContract) return;
+  throw new Error(
+    `Role launch receipt mismatch: requested ${roleId}, received ${result.roleBinding?.roleId ?? "unbound"}`,
+  );
+}
+
 async function submitDraftCreateRequest(input: {
   attempt: { clientMessageId: string };
   text: string;
@@ -229,21 +277,24 @@ async function submitDraftCreateRequest(input: {
 
   const imagesData = await encodeImages(images);
   const attachmentsArray = Array.isArray(attachments) ? attachments : undefined;
+  const roleIntent = resolveDraftRoleIntent(autoSubmitConfig, composerState);
   const result = await client.createAgent({
     config,
     workspaceId,
     ...buildRoleCreateFields({
-      roleId: composerState.selectedRole,
-      effectClass: composerState.selectedAssignmentEffect,
+      roleId: roleIntent.roleId,
+      effectClass: roleIntent.assignmentEffect,
       objective: text,
       cwd: workspaceDirectory,
-      beadsIssueIds: composerState.selectedBeadsIssueIds,
+      beadsIssueIds: roleIntent.beadsIssueIds,
     }),
     ...(text ? { initialPrompt: text } : {}),
     clientMessageId: attempt.clientMessageId,
     ...(imagesData && imagesData.length > 0 ? { images: imagesData } : {}),
     ...(attachmentsArray && attachmentsArray.length > 0 ? { attachments: attachmentsArray } : {}),
   });
+
+  assertRoleLaunchReceipt(result, roleIntent.roleId);
 
   return {
     agentId: result.id,
@@ -324,6 +375,14 @@ function buildDraftInitialValues(input: {
     modeId: input.initialSetup.modeId,
     model: input.initialSetup.model,
     thinkingOptionId: input.initialSetup.thinkingOptionId,
+  };
+}
+
+function buildDraftInitialRoleValues(initialSetup: WorkspaceDraftTabSetup | null) {
+  return {
+    initialRoleId: initialSetup?.roleId,
+    initialAssignmentEffect: initialSetup?.assignmentEffect,
+    initialBeadsIssueIds: initialSetup?.beadsIssueIds,
   };
 }
 
@@ -431,6 +490,7 @@ export function WorkspaceDraftAgentTab({
       initialServerId: serverId,
       initialValues: draftInitialValues,
       initialFeatureValues: draftSetup?.featureValues,
+      ...buildDraftInitialRoleValues(draftSetup),
       isVisible: true,
       onlineServerIds,
       lockedWorkingDir: draftWorkingDirectory ?? undefined,
@@ -576,7 +636,8 @@ export function WorkspaceDraftAgentTab({
       }),
     createRequest: async ({ attempt, text, images, attachments, cwd }) => {
       try {
-        if (composerState.selectedRole) {
+        const { roleId } = resolveDraftRoleIntent(autoSubmitConfig, composerState);
+        if (roleId) {
           invariant(client, "Connected daemon client is required for role admission");
           invariant(workspaceFields?.projectId, "Project id is required for role admission");
           await requireWorkspaceProtocolForRole({
@@ -584,7 +645,7 @@ export function WorkspaceDraftAgentTab({
             serverId,
             projectId: workspaceFields.projectId,
             repoRoot: draftWorkingDirectory ?? cwd,
-            roleId: composerState.selectedRole,
+            roleId,
             supported: supportsWorkspaceProtocol,
           });
         }

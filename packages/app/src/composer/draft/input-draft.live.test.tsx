@@ -386,7 +386,7 @@ describe("useAgentInputDraft live contract", () => {
 
     root = createRoot(container);
     await act(async () => {
-      root.render(
+      root!.render(
         <QueryClientProvider client={queryClient}>
           <Probe draftKey="draft:setup" />
         </QueryClientProvider>,
@@ -395,6 +395,45 @@ describe("useAgentInputDraft live contract", () => {
 
     expect(getLatest().text).toBe("hello world");
     expect(getLatest().attachments).toEqual([{ kind: "image", metadata: image }]);
+  });
+
+  it("restores role authority and grants from a workspace draft handoff", async () => {
+    let latest: ReturnType<typeof useAgentInputDraft> | null = null;
+    function Probe() {
+      latest = useAgentInputDraft({
+        draftKey: "draft:role-handoff",
+        composer: {
+          initialServerId: "host-1",
+          initialValues: { workingDir: "/repo" },
+          isVisible: true,
+          onlineServerIds: ["host-1"],
+          lockedWorkingDir: "/repo",
+          beadsIssueOptions: [{ id: "ps123-abc", label: "ps123-abc — Fix tracker" }],
+          initialRoleId: "peer",
+          initialAssignmentEffect: "mutating",
+          initialBeadsIssueIds: ["ps123-abc"],
+        },
+      });
+      return null;
+    }
+    const queryClient = new QueryClient();
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing root container");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Probe />
+        </QueryClientProvider>,
+      );
+    });
+
+    const composerState = (latest as ReturnType<typeof useAgentInputDraft> | null)?.composerState;
+    expect(composerState?.selectedRole).toBe("peer");
+    expect(composerState?.selectedAssignmentEffect).toBe("mutating");
+    expect(composerState?.selectedBeadsIssueIds).toEqual(["ps123-abc"]);
+    await act(async () => root.unmount());
   });
 
   it("migrates legacy image drafts to image attachments on hydration", async () => {

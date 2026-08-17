@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { ComposerAttachment } from "@/attachments/types";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { AssignmentEffectClass } from "@getpaseo/protocol/assignment-contract";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
 
 export interface PendingWorkspaceDraftSubmission {
@@ -17,6 +19,9 @@ export interface PendingWorkspaceDraftSubmission {
   model?: string;
   thinkingOptionId?: string;
   featureValues?: Record<string, unknown>;
+  roleId?: PaseoRoleId | null;
+  assignmentEffect?: AssignmentEffectClass;
+  beadsIssueIds?: string[];
   allowEmptyText?: boolean;
 }
 

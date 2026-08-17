@@ -57,11 +57,31 @@ interface AgentInputDraftComposerOptions {
   onlineServerIds?: string[];
   lockedWorkingDir?: string;
   beadsIssueOptions?: readonly BeadsIssueGrantOption[];
+  initialRoleId?: PaseoRoleId | null;
+  initialAssignmentEffect?: AssignmentEffectClass;
+  initialBeadsIssueIds?: readonly string[];
 }
 
 interface UseAgentInputDraftInput {
   draftKey: DraftKeyInput;
   composer?: AgentInputDraftComposerOptions;
+}
+
+function resolveInitialRoleState(composerOptions: AgentInputDraftComposerOptions | null): {
+  roleId: PaseoRoleId | null;
+  assignmentEffect: AssignmentEffectClass;
+  beadsIssueIds: readonly string[] | undefined;
+} {
+  const initialEffect = composerOptions?.initialAssignmentEffect ?? "read-only";
+  const initialRole = composerOptions?.initialRoleId;
+  return {
+    roleId: initialRole ?? null,
+    assignmentEffect:
+      initialRole && isAssignmentEffectAllowedForRole(initialRole, initialEffect)
+        ? initialEffect
+        : "read-only",
+    beadsIssueIds: composerOptions?.initialBeadsIssueIds,
+  };
 }
 
 type DraftComposerState = UseAgentFormStateResult & {
@@ -93,8 +113,12 @@ export interface AgentInputDraft {
 function useBeadsIssueGrantControl(
   selectedRole: PaseoRoleId | null,
   issueOptions: readonly BeadsIssueGrantOption[] | undefined,
+  initialIssueIds: readonly string[] | undefined,
 ) {
-  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(() => {
+    const initialIssueId = initialIssueIds?.[0]?.trim() ?? "";
+    return initialIssueId || null;
+  });
   const feature = useMemo<AgentFeature | null>(
     () =>
       selectedRole === "peer"
@@ -115,10 +139,7 @@ function useBeadsIssueGrantControl(
       setSelectedIssueId(null);
       return;
     }
-    if (selectedIssueId && !issueOptions?.some((option) => option.id === selectedIssueId)) {
-      setSelectedIssueId(null);
-    }
-  }, [issueOptions, selectedIssueId, selectedRole]);
+  }, [selectedRole]);
 
   const setFromFeatureValue = useCallback(
     (value: unknown) => {
@@ -137,6 +158,7 @@ function useBeadsIssueGrantControl(
 
 export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDraft {
   const composerOptions = input.composer ?? null;
+  const initialRoleState = resolveInitialRoleState(composerOptions);
   const formState = useAgentFormState({
     initialServerId: composerOptions?.initialServerId ?? null,
     initialValues: composerOptions?.initialValues,
@@ -159,12 +181,14 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     (state) => state.attachmentFocusRequestByDraftKey[draftKey] ?? 0,
   );
   const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<PaseoRoleId | null>(null);
-  const [selectedAssignmentEffect, setSelectedAssignmentEffect] =
-    useState<AssignmentEffectClass>("read-only");
+  const [selectedRole, setSelectedRole] = useState<PaseoRoleId | null>(initialRoleState.roleId);
+  const [selectedAssignmentEffect, setSelectedAssignmentEffect] = useState<AssignmentEffectClass>(
+    initialRoleState.assignmentEffect,
+  );
   const beadsIssueGrant = useBeadsIssueGrantControl(
     selectedRole,
     composerOptions?.beadsIssueOptions,
+    initialRoleState.beadsIssueIds,
   );
   const [textReplacementRevision, setTextReplacementRevision] = useState(0);
   const text = draft?.text ?? "";

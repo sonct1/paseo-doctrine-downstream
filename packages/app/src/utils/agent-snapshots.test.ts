@@ -102,6 +102,45 @@ describe("normalizeAgentSnapshot", () => {
     ).toEqual(launchContract);
   });
 
+  it("round-trips role receipts through incremental directory reconciliation", () => {
+    const roleBinding: NonNullable<AgentSnapshotPayload["roleBinding"]> = {
+      roleId: "supervisor",
+      definitionVersion: "1",
+      definitionDigest: "b".repeat(64),
+      bindingDigest: "c".repeat(64),
+      provider: "claude",
+      injectionMethod: "claude-system-prompt",
+      qualification: "implementation-supported",
+      workspaceProtocol: {
+        status: "bound",
+        readership: "governance-only",
+        path: "/repo/WORKSPACE_PROTOCOL.md",
+        digest: "d".repeat(64),
+      },
+      createdAt: "2026-08-17T00:00:00.000Z",
+    };
+    const launchContract: NonNullable<AgentSnapshotPayload["launchContract"]> = {
+      version: 1,
+      contractDigest: "e".repeat(64),
+      roleId: "supervisor",
+      providerId: "claude",
+      providerFamily: "claude",
+      model: "claude-haiku-4-5",
+      routeKind: "provider-native",
+      modelProviderId: null,
+      authMethod: "provider-native",
+      credentialConfigured: true,
+      createdAt: "2026-08-17T00:00:00.000Z",
+    };
+
+    const projected = projectAgentSnapshot(
+      normalizeAgentSnapshot(createSnapshot({ roleBinding, launchContract }), "server-1"),
+    );
+
+    expect(projected.roleBinding).toEqual(roleBinding);
+    expect(projected.launchContract).toEqual(launchContract);
+  });
+
   it("trims whitespace around the parent label", () => {
     const agent = normalizeAgentSnapshot(
       createSnapshot({ labels: { [PARENT_AGENT_ID_LABEL]: "  parent-1 \n" } }),

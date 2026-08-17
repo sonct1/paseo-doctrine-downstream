@@ -1,4 +1,6 @@
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { AssignmentEffectClass } from "@getpaseo/protocol/assignment-contract";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { WorkspaceFileTabTarget } from "@/workspace/file-open";
 
 export interface WorkspaceDraftTabSetup {
@@ -8,6 +10,9 @@ export interface WorkspaceDraftTabSetup {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown>;
+  roleId?: PaseoRoleId | null;
+  assignmentEffect?: AssignmentEffectClass;
+  beadsIssueIds?: string[];
 }
 
 export interface WorkspaceWorkingDiffTabTarget {

@@ -71,6 +71,8 @@ export function projectAgentSnapshot(agent: Agent): AgentSnapshotPayload {
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp?.toISOString() ?? null,
     archivedAt: agent.archivedAt?.toISOString() ?? null,
+    ...(agent.roleBinding ? { roleBinding: agent.roleBinding } : {}),
+    ...(agent.launchContract ? { launchContract: agent.launchContract } : {}),
   };
 }
 

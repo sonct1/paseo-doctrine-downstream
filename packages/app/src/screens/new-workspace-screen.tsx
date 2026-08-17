@@ -90,6 +90,8 @@ import type { UserComposerAttachment } from "@/attachments/types";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type { CreatePaseoWorktreeInput } from "@getpaseo/client/internal/daemon-client";
 import type { AgentProvider } from "@getpaseo/protocol/agent-types";
+import type { AssignmentEffectClass } from "@getpaseo/protocol/assignment-contract";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
 import { isEmptyWorkspaceSubmission, runCreateEmptyWorkspace } from "./new-workspace-empty";
 import {
@@ -766,6 +768,9 @@ interface WorkspaceDraftSubmissionConfig {
   model: string | null;
   thinkingOptionId: string | null;
   featureValues: Record<string, unknown> | undefined;
+  roleId: PaseoRoleId | null;
+  assignmentEffect: AssignmentEffectClass;
+  beadsIssueIds: string[];
   target: WorkspaceTabTarget;
 }
 
@@ -875,6 +880,9 @@ function buildWorkspaceDraftSetupFromComposer(input: {
     model: input.composerState.effectiveModelId || null,
     thinkingOptionId: input.composerState.effectiveThinkingOptionId || null,
     featureValues: input.composerState.featureValues ?? {},
+    roleId: input.composerState.selectedRole,
+    assignmentEffect: input.composerState.selectedAssignmentEffect,
+    beadsIssueIds: input.composerState.selectedBeadsIssueIds,
   };
 }
 
@@ -883,16 +891,15 @@ function buildWorkspaceDraftSetupForCreatedWorkspace(input: {
   workspaceDirectory: string;
   provider: AgentProvider;
   composerState: NewWorkspaceComposerState;
-}): WorkspaceDraftTabSetup | undefined {
-  if (!input.forkDraftSetup) {
-    return undefined;
-  }
+}): WorkspaceDraftTabSetup {
   return buildWorkspaceDraftSetupFromComposer({
-    cwd: remapDraftCwdToWorkspace({
-      cwd: input.forkDraftSetup.setup.cwd,
-      sourceDirectory: input.forkDraftSetup.sourceDirectory,
-      workspaceDirectory: input.workspaceDirectory,
-    }),
+    cwd: input.forkDraftSetup
+      ? remapDraftCwdToWorkspace({
+          cwd: input.forkDraftSetup.setup.cwd,
+          sourceDirectory: input.forkDraftSetup.sourceDirectory,
+          workspaceDirectory: input.workspaceDirectory,
+        })
+      : input.workspaceDirectory,
     provider: input.provider,
     composerState: input.composerState,
   });
@@ -974,6 +981,9 @@ function buildComposerConfig(input: {
     initialServerId: serverId || null,
     initialValues: buildComposerInitialValues({ workingDir, initialSetup }),
     initialFeatureValues: initialSetup?.featureValues,
+    initialRoleId: initialSetup?.roleId,
+    initialAssignmentEffect: initialSetup?.assignmentEffect,
+    initialBeadsIssueIds: initialSetup?.beadsIssueIds,
     isVisible: true,
     onlineServerIds: isConnected && serverId ? [serverId] : [],
     lockedWorkingDir: workingDir,
@@ -1008,6 +1018,9 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
       model: initialSetup.model,
       thinkingOptionId: initialSetup.thinkingOptionId,
       featureValues: initialSetup.featureValues,
+      roleId: initialSetup.roleId ?? null,
+      assignmentEffect: initialSetup.assignmentEffect ?? "read-only",
+      beadsIssueIds: initialSetup.beadsIssueIds ?? [],
       target: { kind: "draft", draftId, setup: initialSetup },
     };
   }
@@ -1018,7 +1031,18 @@ function resolveWorkspaceDraftSubmissionConfig(input: {
     model: composerState.effectiveModelId || null,
     thinkingOptionId: composerState.effectiveThinkingOptionId || null,
     featureValues: composerState.featureValues,
-    target: { kind: "draft", draftId },
+    roleId: composerState.selectedRole,
+    assignmentEffect: composerState.selectedAssignmentEffect,
+    beadsIssueIds: composerState.selectedBeadsIssueIds,
+    target: {
+      kind: "draft",
+      draftId,
+      setup: buildWorkspaceDraftSetupFromComposer({
+        cwd: workspaceDirectory,
+        provider,
+        composerState,
+      }),
+    },
   };
 }
 
@@ -1075,6 +1099,9 @@ function submitWorkspaceDraft(input: SubmitDraftInput): void {
     ...(submission.model ? { model: submission.model } : {}),
     ...(submission.thinkingOptionId ? { thinkingOptionId: submission.thinkingOptionId } : {}),
     ...(submission.featureValues ? { featureValues: submission.featureValues } : {}),
+    roleId: submission.roleId,
+    assignmentEffect: submission.assignmentEffect,
+    beadsIssueIds: submission.beadsIssueIds,
     allowEmptyText: true,
   });
   clearDraft("sent");
@@ -1586,6 +1613,7 @@ export function NewWorkspaceScreen({
   const projectPickerAnchorRef = useRef<View>(null);
   const isolationPickerAnchorRef = useRef<View>(null);
   const hostPickerAnchorRef = useRef<View | null>(null);
+  const submissionStartedRef = useRef(false);
   const isDraftHandoffActive = useIsNewWorkspaceDraftHandoffActive({ draftId, selectedServerId });
 
   // Launch target: what the composer submits to (chat agent, or a terminal
@@ -2047,6 +2075,8 @@ export function NewWorkspaceScreen({
 
   const handleSubmitNewWorkspace = useCallback(
     async (payload: MessagePayload) => {
+      if (submissionStartedRef.current) return;
+      submissionStartedRef.current = true;
       try {
         setErrorMessage(null);
         await composerState?.persistFormPreferences();
@@ -2079,6 +2109,7 @@ export function NewWorkspaceScreen({
           },
         });
       } catch (error) {
+        submissionStartedRef.current = false;
         const message = toErrorMessage(error);
         setPendingAction(null);
         setErrorMessage(message);
@@ -2101,6 +2132,8 @@ export function NewWorkspaceScreen({
   );
 
   const handleSubmitTerminalLaunch = useCallback(async () => {
+    if (submissionStartedRef.current) return;
+    submissionStartedRef.current = true;
     try {
       setErrorMessage(null);
       await updateFormPreferences({ launchTarget });
@@ -2132,6 +2165,7 @@ export function NewWorkspaceScreen({
           navigateToWorkspace({ serverId: targetServerId, workspaceId, target }),
       });
     } catch (error) {
+      submissionStartedRef.current = false;
       const message = toErrorMessage(error);
       setPendingAction(null);
       setErrorMessage(message);

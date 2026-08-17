@@ -165,6 +165,9 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.doesNotMatch(source, /npm run acp:version-drift:check/);
   assert.match(source, /npm run build:web-cli-artifact/);
   assert.match(source, /npm run test:web-cli-artifact/);
+  assert.match(source, /packages\/app\/src\/composer\/draft\/create-flow\.test\.ts/);
+  assert.match(source, /packages\/app\/src\/composer\/draft\/input-draft\.live\.test\.tsx/);
+  assert.match(source, /packages\/app\/src\/utils\/agent-snapshots\.test\.ts/);
   assert.match(source, /macos-14/);
   assert.match(source, /macos-15-intel/);
   assert.match(source, /ubuntu-22\.04/);

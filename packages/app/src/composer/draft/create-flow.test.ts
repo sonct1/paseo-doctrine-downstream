@@ -88,6 +88,39 @@ describe("useDraftAgentCreateFlow", () => {
     expect(onCreateSuccess).toHaveBeenCalledTimes(1);
   });
 
+  it("deduplicates concurrent continuation of the same prepared submission", async () => {
+    const attempt: DraftCreateAttempt = {
+      clientMessageId: "msg-duplicate",
+      text: "launch once",
+      timestamp: new Date("2026-08-17T00:00:00.000Z"),
+    };
+    const createRequest = vi.fn(async () => ({
+      agentId: "agent-once",
+      result: { id: "agent-once" },
+    }));
+    const onCreateSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useDraftAgentCreateFlow({
+        draftId: "draft-duplicate",
+        getPendingServerId: () => "server-1",
+        initialAttempt: attempt,
+        buildDraftAgent: (currentAttempt) => ({ currentAttempt }),
+        createRequest,
+        onCreateSuccess,
+      }),
+    );
+
+    await act(async () => {
+      await Promise.all([
+        result.current.continueCreateFromAttempt({ attempt, cwd: "/repo" }),
+        result.current.continueCreateFromAttempt({ attempt, cwd: "/repo" }),
+      ]);
+    });
+
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(onCreateSuccess).toHaveBeenCalledTimes(1);
+  });
+
   it("allows retrying an empty prompt when the draft still has context attachments", async () => {
     const attachment = {
       kind: "chat_history",
