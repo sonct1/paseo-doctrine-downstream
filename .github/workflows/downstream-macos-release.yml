@@ -68,6 +68,9 @@ jobs:
       - name: Check shipped source quality
         run: npm run format:check && npm run lint
 
+      - name: Build shared server dependencies
+        run: npm run build:server
+
       - name: Verify downstream role-bound workspace creation
         run: |
           npx vitest run \
@@ -75,9 +78,6 @@ jobs:
             packages/app/src/composer/draft/input-draft.live.test.tsx \
             packages/app/src/utils/agent-snapshots.test.ts \
             --bail=1
-
-      - name: Build shared server dependencies
-        run: npm run build:server
 
       - name: Typecheck downstream shipped packages
         run: |

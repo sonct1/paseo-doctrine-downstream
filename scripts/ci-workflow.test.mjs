@@ -168,6 +168,10 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /packages\/app\/src\/composer\/draft\/create-flow\.test\.ts/);
   assert.match(source, /packages\/app\/src\/composer\/draft\/input-draft\.live\.test\.tsx/);
   assert.match(source, /packages\/app\/src\/utils\/agent-snapshots\.test\.ts/);
+  assert.ok(
+    source.indexOf("Build shared server dependencies") <
+      source.indexOf("Verify downstream role-bound workspace creation"),
+  );
   assert.match(source, /macos-14/);
   assert.match(source, /macos-15-intel/);
   assert.match(source, /ubuntu-22\.04/);
