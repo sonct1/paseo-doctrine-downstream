@@ -88,27 +88,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function executablePath(command: string, environmentPath: string): string | null {
+function executablePath(command: string, environmentPath: string, platform: string): string | null {
+  const suffixes =
+    platform === "win32" && path.extname(command) === ""
+      ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+          .split(";")
+          .filter(Boolean)
+          .map((suffix) => suffix.toLowerCase())
+      : [""];
   for (const directory of environmentPath.split(path.delimiter)) {
     if (!directory) continue;
-    const candidate = path.join(directory, command);
-    try {
-      accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      continue;
+    for (const suffix of suffixes) {
+      const candidate = path.join(directory, `${command}${suffix}`);
+      try {
+        accessSync(candidate, platform === "win32" ? constants.F_OK : constants.X_OK);
+        return candidate;
+      } catch {
+        continue;
+      }
     }
   }
   return null;
 }
 
-function inspectTool(probe: ToolProbe, environmentPath: string): ToolInspection {
+function inspectTool(probe: ToolProbe, environmentPath: string, platform: string): ToolInspection {
   const command = probe.commands
-    .map((candidate) => executablePath(candidate, environmentPath))
+    .map((candidate) => executablePath(candidate, environmentPath, platform))
     .find((candidate) => candidate !== null);
   if (!command) return { id: probe.id, command: null, version: null };
   const processResult = spawnSync(command, probe.versionArgs, {
     encoding: "utf8",
+    shell: platform === "win32" && /\.(?:bat|cmd)$/iu.test(command),
     timeout: 2_000,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -359,6 +369,7 @@ function daemonReadback(paseoCommand: string | null, home: string): DaemonReadba
     ["daemon", "status", "--home", identity.paseoHome, "--json"],
     {
       encoding: "utf8",
+      shell: process.platform === "win32" && /\.(?:bat|cmd)$/iu.test(paseoCommand),
       timeout: 4_000,
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -425,7 +436,8 @@ export function inspectMachine(
     shareRoot: install.shareRoot,
   });
   const environmentPath = input.environmentPath ?? process.env.PATH ?? "";
-  const tools = TOOL_PROBES.map((probe) => inspectTool(probe, environmentPath));
+  const platform = input.platform ?? process.platform;
+  const tools = TOOL_PROBES.map((probe) => inspectTool(probe, environmentPath, platform));
   const paseoTool = tools.find((tool) => tool.id === "paseo") ?? null;
   const mutationState = {
     links: links.map(({ target, state, previousTarget }) => ({ target, state, previousTarget })),
@@ -442,7 +454,7 @@ export function inspectMachine(
   };
   const daemon = daemonReadback(paseoTool?.command ?? null, home);
   return {
-    platform: input.platform ?? process.platform,
+    platform,
     architecture: input.architecture ?? process.arch,
     home,
     productRoot: product.productRoot,

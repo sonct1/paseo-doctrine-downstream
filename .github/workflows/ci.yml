@@ -485,6 +485,41 @@ jobs:
       - name: Verify Foundation package contents
         run: npm pack --dry-run --workspace=@getpaseo/foundation-cli
 
+  foundation-cli-portability:
+    name: foundation-cli-${{ matrix.platform }}
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.outputs.full != 'false' || needs.changes.outputs.foundation_cli != 'false') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-22.04
+          - platform: windows
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Typecheck Foundation CLI
+        run: npm run typecheck --workspace=@getpaseo/foundation-cli
+
+      - name: Test Foundation CLI
+        run: npm run test --workspace=@getpaseo/foundation-cli
+
+      - name: Qualify packaged Foundation lifecycle
+        run: npm run test:package-lifecycle --workspace=@getpaseo/foundation-cli
+
   release-qualification:
     name: release-qualification
     needs: changes

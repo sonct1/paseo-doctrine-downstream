@@ -136,7 +136,7 @@ function atomicSymlink(source: string, target: string): void {
   mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.tmp`);
   unlinkIfPresent(temporary);
-  symlinkSync(source, temporary);
+  symlinkSync(source, temporary, process.platform === "win32" ? "junction" : undefined);
   renameSync(temporary, target);
 }
 
@@ -420,8 +420,8 @@ export function recoverInterruptedInstall(home: string): boolean {
 function prepareInstallApplication(planInput: InstallPlan) {
   const plan = InstallPlanSchema.parse(planInput);
   verifyPlanIdentity(plan);
-  if (process.platform !== "darwin") {
-    throw new Error(`macOS is required; detected ${process.platform}`);
+  if (!["darwin", "linux", "win32"].includes(process.platform)) {
+    throw new Error(`unsupported operating system: ${process.platform}`);
   }
   recoverInterruptedInstall(plan.home);
   const inspection = inspectMachine({ home: plan.home, productRoot: plan.productRoot });

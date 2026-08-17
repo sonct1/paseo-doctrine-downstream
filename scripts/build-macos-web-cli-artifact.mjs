@@ -24,12 +24,14 @@ const packageJson = JSON.parse(readFileSync(path.join(REPO_ROOT, "package.json")
 const VERSION = packageJson.version;
 const ARCH = process.arch;
 const PLATFORM = process.platform;
-const BUNDLE_NAME = `paseo-web-cli-${VERSION}-macos-${ARCH}`;
+const PLATFORM_NAME = { darwin: "macos", linux: "linux", win32: "windows" }[PLATFORM];
+const ARCHIVE_EXTENSION = PLATFORM === "win32" ? ".zip" : ".tar.gz";
+const BUNDLE_NAME = `paseo-web-cli-${VERSION}-${PLATFORM_NAME}-${ARCH}`;
 const STAGING_ROOT = path.join(ARTIFACTS_ROOT, ".staging", BUNDLE_NAME);
 const PACK_ROOT = path.join(ARTIFACTS_ROOT, ".staging", "packs");
 const OUTPUT_DIR = path.join(ARTIFACTS_ROOT, BUNDLE_NAME);
-const OUTPUT_TARBALL = path.join(ARTIFACTS_ROOT, `${BUNDLE_NAME}.tar.gz`);
-const OUTPUT_CHECKSUM = `${OUTPUT_TARBALL}.sha256`;
+const OUTPUT_ARCHIVE = path.join(ARTIFACTS_ROOT, `${BUNDLE_NAME}${ARCHIVE_EXTENSION}`);
+const OUTPUT_CHECKSUM = `${OUTPUT_ARCHIVE}.sha256`;
 const BEADS_CENTRAL_VERSION = "1.2.0";
 const INTERNAL_PACKAGES = [
   "@getpaseo/highlight",
@@ -60,6 +62,14 @@ function run(command, args, options = {}) {
   return options.capture ? result.stdout.trim() : "";
 }
 
+function runNpm(args, options = {}) {
+  const npmCli = process.env.npm_execpath;
+  if (npmCli && existsSync(npmCli)) {
+    return run(process.execPath, [npmCli, ...args], options);
+  }
+  return run(PLATFORM === "win32" ? "npm.cmd" : "npm", args, options);
+}
+
 function writeExecutable(target, bytes) {
   writeFileSync(target, bytes, { mode: 0o755 });
   chmodSync(target, 0o755);
@@ -70,30 +80,37 @@ function resolveBundledNodeRoot() {
   const candidates = [
     override,
     path.join(os.homedir(), ".nvm", "versions", "node", "v24.11.0"),
-    path.dirname(path.dirname(process.execPath)),
+    PLATFORM === "win32"
+      ? path.dirname(process.execPath)
+      : path.dirname(path.dirname(process.execPath)),
   ].filter(Boolean);
   for (const candidate of candidates) {
-    const node = path.join(candidate, "bin", "node");
-    const npm = path.join(candidate, "bin", "npm");
+    const node = nodeExecutable(candidate);
     const license = path.join(candidate, "LICENSE");
-    if (existsSync(node) && existsSync(npm) && existsSync(license)) return realpathSync(candidate);
+    if (existsSync(node) && existsSync(license)) return realpathSync(candidate);
   }
   fail(
-    "Could not locate a relocatable Node distribution. Set PASEO_RELEASE_NODE_ROOT to a Node installation containing bin/node, bin/npm, and LICENSE.",
+    "Could not locate a relocatable Node distribution. Set PASEO_RELEASE_NODE_ROOT to a Node installation containing the Node executable and LICENSE.",
   );
 }
 
+function nodeExecutable(nodeRoot) {
+  return path.join(nodeRoot, ...(PLATFORM === "win32" ? ["node.exe"] : ["bin", "node"]));
+}
+
 function assertReleaseInputs(nodeRoot) {
-  if (PLATFORM !== "darwin")
-    fail(`macOS artifact builds require darwin; current platform is ${PLATFORM}`);
-  if (ARCH !== "arm64" && ARCH !== "x64") fail(`Unsupported macOS architecture: ${ARCH}`);
+  if (!PLATFORM_NAME) fail(`Unsupported release platform: ${PLATFORM}`);
+  const supportedArchitectures = PLATFORM === "darwin" ? ["arm64", "x64"] : ["x64"];
+  if (!supportedArchitectures.includes(ARCH)) {
+    fail(`Unsupported ${PLATFORM_NAME} architecture: ${ARCH}`);
+  }
   const dirty = run("git", ["status", "--porcelain"], { capture: true });
   if (dirty && process.env.PASEO_RELEASE_ALLOW_DIRTY !== "1") {
     fail(
       "Refusing to build a release artifact from a dirty worktree. Set PASEO_RELEASE_ALLOW_DIRTY=1 only for a local candidate build.",
     );
   }
-  const bundledArch = run(path.join(nodeRoot, "bin", "node"), ["-p", "process.arch"], {
+  const bundledArch = run(nodeExecutable(nodeRoot), ["-p", "process.arch"], {
     capture: true,
   });
   if (bundledArch !== ARCH) {
@@ -102,10 +119,10 @@ function assertReleaseInputs(nodeRoot) {
 }
 
 function buildProduct() {
-  run("npm", ["run", "build:server:clean"]);
-  run("npm", ["run", "build:daemon-web-ui"]);
+  runNpm(["run", "build:server:clean"]);
+  runNpm(["run", "build:daemon-web-ui"]);
   run(process.execPath, ["packages/foundation-cli/prepare-assets.mjs"]);
-  run("npm", ["run", "build", "--workspace=@getpaseo/foundation-cli"]);
+  runNpm(["run", "build", "--workspace=@getpaseo/foundation-cli"]);
 }
 
 function packInternalPackages() {
@@ -115,8 +132,7 @@ function packInternalPackages() {
   for (const workspace of INTERNAL_PACKAGES) {
     // buildProduct() already built every package in INTERNAL_PACKAGES. Do not let npm pack rerun
     // prepack hooks that clean those shared outputs or rebuild the daemon web UI a second time.
-    const output = run(
-      "npm",
+    const output = runNpm(
       [
         "pack",
         "--silent",
@@ -159,13 +175,14 @@ function installProductionPayload(nodeRoot, tarballs) {
   );
   const npmEnv = {
     ...process.env,
-    PATH: `${path.join(nodeRoot, "bin")}:/usr/bin:/bin:/usr/sbin:/sbin`,
+    PATH: [path.dirname(nodeExecutable(nodeRoot)), process.env.PATH ?? ""]
+      .filter(Boolean)
+      .join(path.delimiter),
     npm_config_audit: "false",
     npm_config_fund: "false",
     npm_config_update_notifier: "false",
   };
-  run(
-    path.join(nodeRoot, "bin", "npm"),
+  runNpm(
     ["install", "--omit=dev", "--no-package-lock", "--no-save", `--prefix=${appRoot}`, ...tarballs],
     { env: npmEnv },
   );
@@ -173,9 +190,11 @@ function installProductionPayload(nodeRoot, tarballs) {
 
 function copyNodeRuntime(nodeRoot) {
   const runtimeRoot = path.join(STAGING_ROOT, "runtime");
-  mkdirSync(path.join(runtimeRoot, "bin"), { recursive: true });
-  copyFileSync(path.join(nodeRoot, "bin", "node"), path.join(runtimeRoot, "bin", "node"));
-  chmodSync(path.join(runtimeRoot, "bin", "node"), 0o755);
+  const runtimeBin = PLATFORM === "win32" ? runtimeRoot : path.join(runtimeRoot, "bin");
+  const runtimeNode = path.join(runtimeBin, PLATFORM === "win32" ? "node.exe" : "node");
+  mkdirSync(runtimeBin, { recursive: true });
+  copyFileSync(nodeExecutable(nodeRoot), runtimeNode);
+  if (PLATFORM !== "win32") chmodSync(runtimeNode, 0o755);
   for (const name of ["LICENSE", "README.md"]) {
     const source = path.join(nodeRoot, name);
     if (existsSync(source)) copyFileSync(source, path.join(runtimeRoot, `NODE-${name}`));
@@ -185,6 +204,18 @@ function copyNodeRuntime(nodeRoot) {
 function createLaunchers() {
   const binRoot = path.join(STAGING_ROOT, "bin");
   mkdirSync(binRoot, { recursive: true });
+  if (PLATFORM === "win32") {
+    for (const [name, packageName] of [
+      ["paseo", "@getpaseo/cli"],
+      ["paseo-foundation", "@getpaseo/foundation-cli"],
+    ]) {
+      writeFileSync(
+        path.join(binRoot, `${name}.cmd`),
+        `@echo off\r\nsetlocal\r\nset "ROOT=%~dp0.."\r\n"%ROOT%\\runtime\\node.exe" "%ROOT%\\app\\node_modules\\${packageName.replaceAll("/", "\\")}\\dist\\index.js" %*\r\n`,
+      );
+    }
+    return;
+  }
   writeExecutable(
     path.join(binRoot, "paseo"),
     `#!/bin/sh
@@ -487,6 +518,215 @@ fi
 `;
 }
 
+function linuxInstallerScript() {
+  return `#!/bin/sh
+set -eu
+
+VERSION=${shellQuote(VERSION)}
+PREFIX="\${PASEO_INSTALL_PREFIX:-\${XDG_DATA_HOME:-$HOME/.local/share}/paseo-web-cli}"
+BIN_DIR="\${PASEO_INSTALL_BIN_DIR:-$HOME/.local/bin}"
+SERVICE_DIR="\${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SERVICE_NAME="paseo-web-cli.service"
+LISTEN="127.0.0.1:6767"
+START=1
+INSTALL_FOUNDATION=1
+
+usage() {
+  cat <<'USAGE'
+Usage: ./install.sh [options]
+
+Install the Paseo WebUI + CLI Linux release for the current user.
+
+Options:
+  --prefix PATH          Release root (default: ~/.local/share/paseo-web-cli)
+  --bin-dir PATH         CLI symlink directory (default: ~/.local/bin)
+  --listen HOST:PORT     Daemon listen address (default: 127.0.0.1:6767)
+  --no-start             Install files without enabling the user systemd service
+  --skip-foundation      Do not install/update the bundled Foundation distribution
+  -h, --help             Show this help without changing the machine
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --prefix) PREFIX="$2"; shift 2 ;;
+    --bin-dir) BIN_DIR="$2"; shift 2 ;;
+    --listen) LISTEN="$2"; shift 2 ;;
+    --no-start) START=0; shift ;;
+    --skip-foundation) INSTALL_FOUNDATION=0; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+case "$PREFIX:$BIN_DIR" in
+  /*:/*) ;;
+  *) echo "--prefix and --bin-dir must be absolute paths" >&2; exit 2 ;;
+esac
+if [ "$PREFIX" = "/" ] || [ "$BIN_DIR" = "/" ]; then
+  echo "Refusing to install into /" >&2
+  exit 2
+fi
+if [ "$START" -eq 1 ] && ! systemctl --user show-environment >/dev/null 2>&1; then
+  echo "A working user systemd session is required; use --no-start for a files-only install." >&2
+  exit 1
+fi
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+SOURCE_ROOT="$SCRIPT_DIR"
+RELEASES_DIR="$PREFIX/releases"
+RELEASE_DIR="$RELEASES_DIR/$VERSION"
+CURRENT_LINK="$PREFIX/current"
+UNIT="$SERVICE_DIR/$SERVICE_NAME"
+
+EXISTING_PASEO=$(command -v paseo 2>/dev/null || true)
+if [ -z "$EXISTING_PASEO" ]; then
+  for candidate in "$HOME/.local/bin/paseo" "$PREFIX/current/bin/paseo" /usr/local/bin/paseo; do
+    if [ -x "$candidate" ]; then EXISTING_PASEO="$candidate"; break; fi
+  done
+fi
+if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
+  PREFLIGHT_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/paseo-downstream-preflight.XXXXXX")
+  trap 'rm -rf "$PREFLIGHT_ROOT"' EXIT INT TERM
+  if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/status.json"; then
+    echo "Refusing to replace the existing Paseo installation because daemon status could not be read." >&2
+    exit 1
+  fi
+  if grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"(running|unresponsive)"' "$PREFLIGHT_ROOT/status.json"; then
+    if ! PASEO_HOST= "$EXISTING_PASEO" ls --global --json > "$PREFLIGHT_ROOT/agents.json"; then
+      echo "Refusing to stop the existing daemon because agent state could not be read." >&2
+      exit 1
+    fi
+    if grep -Eq '"status"[[:space:]]*:[[:space:]]*"(running|starting|initializing)"' "$PREFLIGHT_ROOT/agents.json"; then
+      echo "Refusing to replace Paseo while an agent is running or starting." >&2
+      exit 1
+    fi
+    if ! PASEO_HOST= "$EXISTING_PASEO" workspace ls --json > "$PREFLIGHT_ROOT/workspaces.json"; then
+      echo "Refusing to stop the existing daemon because workspace state could not be read." >&2
+      exit 1
+    fi
+    awk -F '"' '/"workspaceId"[[:space:]]*:/ { print $4 }' "$PREFLIGHT_ROOT/workspaces.json" |
+      while IFS= read -r workspace_id; do
+        [ -n "$workspace_id" ] || continue
+        scripts_file="$PREFLIGHT_ROOT/scripts-$workspace_id.json"
+        if ! PASEO_HOST= "$EXISTING_PASEO" script ls --workspace "$workspace_id" --json > "$scripts_file"; then
+          echo "Refusing to stop the existing daemon because scripts for workspace $workspace_id could not be read." >&2
+          exit 1
+        fi
+        if grep -Eq '"lifecycle"[[:space:]]*:[[:space:]]*"(running|starting)"' "$scripts_file"; then
+          echo "Refusing to replace Paseo while workspace $workspace_id has a running script." >&2
+          exit 1
+        fi
+      done
+    systemctl --user stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+    PASEO_HOST= "$EXISTING_PASEO" daemon stop --json >/dev/null 2>&1 || true
+  fi
+  rm -rf "$PREFLIGHT_ROOT"
+  trap - EXIT INT TERM
+fi
+
+mkdir -p "$RELEASES_DIR" "$BIN_DIR" "$SERVICE_DIR"
+STAGING="$RELEASES_DIR/.install-$VERSION-$$"
+trap 'rm -rf "$STAGING"' EXIT INT TERM
+rm -rf "$STAGING"
+mkdir -p "$STAGING"
+cp -R "$SOURCE_ROOT/." "$STAGING/"
+rm -f "$STAGING/install.sh"
+rm -rf "$RELEASE_DIR"
+mv "$STAGING" "$RELEASE_DIR"
+trap - EXIT INT TERM
+ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+ln -sfn "$CURRENT_LINK/bin/paseo" "$BIN_DIR/paseo"
+ln -sfn "$CURRENT_LINK/bin/paseo-foundation" "$BIN_DIR/paseo-foundation"
+
+if [ "$INSTALL_FOUNDATION" -eq 1 ]; then
+  PLAN="$PREFIX/foundation-install-plan.json"
+  MODE="clean-empty"
+  if "$CURRENT_LINK/bin/paseo-foundation" inspect --json 2>/dev/null | grep -q '"status": "active"'; then MODE="update"; fi
+  "$CURRENT_LINK/bin/paseo-foundation" plan --mode "$MODE" --output "$PLAN"
+  "$CURRENT_LINK/bin/paseo-foundation" install --plan "$PLAN"
+fi
+
+cat > "$UNIT" <<UNIT
+[Unit]
+Description=Paseo Foundation Downstream WebUI and CLI
+After=network.target
+
+[Service]
+Type=simple
+ExecStart="$CURRENT_LINK/runtime/bin/node" "$CURRENT_LINK/app/node_modules/@getpaseo/cli/dist/index.js" daemon start --foreground --listen "$LISTEN" --web-ui --no-relay
+Restart=on-failure
+RestartSec=3
+Environment="HOME=$HOME"
+Environment="PATH=$BIN_DIR:/usr/local/bin:/usr/bin:/bin"
+Environment=PASEO_DICTATION_ENABLED=0
+Environment=PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD=0
+Environment=PASEO_VOICE_MODE_ENABLED=0
+
+[Install]
+WantedBy=default.target
+UNIT
+
+if [ "$START" -eq 1 ]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now "$SERVICE_NAME"
+  READY=0
+  for _attempt in $(seq 1 30); do
+    if PASEO_HOST= "$CURRENT_LINK/bin/paseo" daemon status --json > "$PREFIX/daemon-readback.json" 2>/dev/null &&
+       grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"running"' "$PREFIX/daemon-readback.json" &&
+       grep -Eq '"connectedDaemon"[[:space:]]*:[[:space:]]*"reachable"' "$PREFIX/daemon-readback.json"; then
+      READY=1; break
+    fi
+    sleep 1
+  done
+  rm -f "$PREFIX/daemon-readback.json"
+  if [ "$READY" -ne 1 ]; then
+    echo "Installed the release, but the downstream daemon failed authoritative startup readback." >&2
+    echo "Inspect: journalctl --user -u $SERVICE_NAME" >&2
+    exit 1
+  fi
+fi
+
+cp "$RELEASE_DIR/uninstall.sh" "$PREFIX/uninstall.sh"
+chmod 755 "$PREFIX/uninstall.sh"
+printf 'Installed Paseo WebUI + CLI %s at %s\n' "$VERSION" "$RELEASE_DIR"
+printf 'CLI: %s\nWebUI: http://%s\n' "$BIN_DIR/paseo" "$LISTEN"
+`;
+}
+
+function linuxUninstallerScript() {
+  return `#!/bin/sh
+set -eu
+PREFIX="\${PASEO_INSTALL_PREFIX:-\${XDG_DATA_HOME:-$HOME/.local/share}/paseo-web-cli}"
+BIN_DIR="\${PASEO_INSTALL_BIN_DIR:-$HOME/.local/bin}"
+SERVICE_DIR="\${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SERVICE_NAME="paseo-web-cli.service"
+PURGE_FOUNDATION=0
+case "\${1:-}" in
+  "") ;;
+  --purge-foundation) PURGE_FOUNDATION=1 ;;
+  -h|--help) echo 'Usage: uninstall.sh [--purge-foundation]'; exit 0 ;;
+  *) echo "Unknown option: $1" >&2; exit 2 ;;
+esac
+systemctl --user disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
+rm -f "$SERVICE_DIR/$SERVICE_NAME"
+systemctl --user daemon-reload >/dev/null 2>&1 || true
+if [ "$PURGE_FOUNDATION" -eq 1 ] && [ -x "$PREFIX/current/bin/paseo-foundation" ]; then
+  "$PREFIX/current/bin/paseo-foundation" uninstall
+fi
+for name in paseo paseo-foundation; do
+  target="$BIN_DIR/$name"
+  if [ -L "$target" ]; then
+    resolved=$(readlink "$target")
+    case "$resolved" in "$PREFIX"/*) rm -f "$target" ;; esac
+  fi
+done
+rm -rf "$PREFIX/releases" "$PREFIX/current" "$PREFIX/foundation-install-plan.json"
+rm -f "$PREFIX/uninstall.sh"
+printf 'Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces.\n'
+`;
+}
+
 function uninstallerScript() {
   return `#!/bin/sh
 set -eu
@@ -550,13 +790,180 @@ printf 'Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces.\\n'
 `;
 }
 
+function windowsInstallerScript() {
+  return `#Requires -Version 5.1
+[CmdletBinding()]
+param(
+  [string]$Prefix = $(if ($env:PASEO_INSTALL_PREFIX) { $env:PASEO_INSTALL_PREFIX } else { Join-Path $env:LOCALAPPDATA "PaseoWebCli" }),
+  [string]$BinDir = $(if ($env:PASEO_INSTALL_BIN_DIR) { $env:PASEO_INSTALL_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "Paseo\\bin" }),
+  [string]$Listen = "127.0.0.1:6767",
+  [string]$TaskName = "Paseo WebUI CLI",
+  [switch]$NoStart,
+  [switch]$SkipFoundation,
+  [switch]$Help
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+if ($Help) {
+  Write-Output "Usage: .\\install.ps1 [-Prefix PATH] [-BinDir PATH] [-Listen HOST:PORT] [-NoStart] [-SkipFoundation]"
+  exit 0
+}
+if (-not [IO.Path]::IsPathRooted($Prefix) -or -not [IO.Path]::IsPathRooted($BinDir)) {
+  throw "Prefix and BinDir must be absolute paths"
+}
+
+$Version = ${shellQuote(VERSION).replaceAll("'", '"')}
+$SourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ReleasesDir = Join-Path $Prefix "releases"
+$ReleaseDir = Join-Path $ReleasesDir $Version
+$Current = Join-Path $Prefix "current"
+$ExistingPaseo = Get-Command paseo -ErrorAction SilentlyContinue
+if (-not $NoStart -and $ExistingPaseo) {
+  $status = & $ExistingPaseo.Source daemon status --json | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0) { throw "Refusing replacement because daemon status could not be read." }
+  if ($status.localDaemon -in @("running", "unresponsive")) {
+    $agents = @(& $ExistingPaseo.Source ls --global --json | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) { throw "Refusing replacement because agent state could not be read." }
+    if ($agents | Where-Object { $_.status -in @("running", "starting", "initializing") }) {
+      throw "Refusing to replace Paseo while an agent is running or starting."
+    }
+    $workspaces = @(& $ExistingPaseo.Source workspace ls --json | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) { throw "Refusing replacement because workspace state could not be read." }
+    foreach ($workspace in $workspaces) {
+      $scripts = @(& $ExistingPaseo.Source script ls --workspace $workspace.workspaceId --json | ConvertFrom-Json)
+      if ($LASTEXITCODE -ne 0) { throw "Refusing replacement because workspace script state could not be read." }
+      if ($scripts | Where-Object { $_.lifecycle -in @("running", "starting") }) {
+        throw "Refusing to replace Paseo while workspace $($workspace.workspaceId) has a running script."
+      }
+    }
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    & $ExistingPaseo.Source daemon stop --json | Out-Null
+  }
+}
+
+New-Item -ItemType Directory -Force -Path $ReleasesDir, $BinDir | Out-Null
+$Staging = Join-Path $ReleasesDir ".install-$Version-$PID"
+Remove-Item -Recurse -Force $Staging -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $Staging | Out-Null
+Copy-Item -Recurse -Force (Join-Path $SourceRoot "*") $Staging
+Remove-Item -Force (Join-Path $Staging "install.ps1") -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $ReleaseDir -ErrorAction SilentlyContinue
+Move-Item $Staging $ReleaseDir
+if (Test-Path $Current) {
+  $CurrentItem = Get-Item -Force $Current
+  if (-not ($CurrentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw "Refusing to replace a non-junction current path: $Current"
+  }
+  [IO.Directory]::Delete($Current)
+}
+New-Item -ItemType Junction -Path $Current -Target $ReleaseDir | Out-Null
+
+$PaseoEntry = Join-Path $Current "app\\node_modules\\@getpaseo\\cli\\dist\\index.js"
+$FoundationEntry = Join-Path $Current "app\\node_modules\\@getpaseo\\foundation-cli\\dist\\index.js"
+$Node = Join-Path $Current "runtime\\node.exe"
+Set-Content -Encoding Ascii -Path (Join-Path $BinDir "paseo.cmd") -Value "@echo off\`r\`n\`"$Node\`" \`"$PaseoEntry\`" %*"
+Set-Content -Encoding Ascii -Path (Join-Path $BinDir "paseo-foundation.cmd") -Value "@echo off\`r\`n\`"$Node\`" \`"$FoundationEntry\`" %*"
+
+$CurrentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathParts = @($CurrentPath -split ";" | Where-Object { $_ })
+if ($BinDir -notin $PathParts) {
+  [Environment]::SetEnvironmentVariable("Path", (($PathParts + $BinDir) -join ";"), "User")
+}
+$env:Path = "$BinDir;$env:Path"
+
+$Foundation = Join-Path $BinDir "paseo-foundation.cmd"
+if (-not $SkipFoundation) {
+  $Mode = "clean-empty"
+  try {
+    $inspection = & $Foundation inspect --json | ConvertFrom-Json
+    if ($inspection.status -eq "active") { $Mode = "update" }
+  } catch {}
+  $Plan = Join-Path $Prefix "foundation-install-plan.json"
+  & $Foundation plan --mode $Mode --output $Plan
+  if ($LASTEXITCODE -ne 0) { throw "Foundation planning failed." }
+  & $Foundation install --plan $Plan
+  if ($LASTEXITCODE -ne 0) { throw "Foundation installation failed." }
+}
+
+$RunDaemon = Join-Path $Prefix "run-daemon.ps1"
+$LogDir = Join-Path $env:LOCALAPPDATA "Paseo\\Logs"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$DaemonLog = Join-Path $LogDir "daemon.log"
+$DaemonScript = @(
+  '$env:PASEO_DICTATION_ENABLED = "0"'
+  '$env:PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD = "0"'
+  '$env:PASEO_VOICE_MODE_ENABLED = "0"'
+  "& \`"$Node\`" \`"$PaseoEntry\`" daemon start --foreground --listen \`"$Listen\`" --web-ui --no-relay *>> \`"$DaemonLog\`""
+  'exit $LASTEXITCODE'
+)
+Set-Content -Encoding UTF8 -Path $RunDaemon -Value $DaemonScript
+
+if (-not $NoStart) {
+  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File \`"$RunDaemon\`""
+  $Trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\\$env:USERNAME"
+  $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Paseo Foundation Downstream WebUI and CLI" -Force | Out-Null
+  Start-ScheduledTask -TaskName $TaskName
+  $Paseo = Join-Path $BinDir "paseo.cmd"
+  $Ready = $false
+  foreach ($attempt in 1..30) {
+    Start-Sleep -Seconds 1
+    try {
+      $readback = & $Paseo daemon status --json | ConvertFrom-Json
+      if ($readback.localDaemon -eq "running" -and $readback.connectedDaemon -eq "reachable") { $Ready = $true; break }
+    } catch {}
+  }
+  if (-not $Ready) { throw "Installed the release, but the downstream daemon failed authoritative startup readback. Inspect $DaemonLog." }
+}
+
+Copy-Item -Force (Join-Path $ReleaseDir "uninstall.ps1") (Join-Path $Prefix "uninstall.ps1")
+Write-Output "Installed Paseo WebUI + CLI $Version at $ReleaseDir"
+Write-Output "CLI: $(Join-Path $BinDir 'paseo.cmd')"
+Write-Output "WebUI: http://$Listen"
+`;
+}
+
+function windowsUninstallerScript() {
+  return `#Requires -Version 5.1
+[CmdletBinding()]
+param(
+  [string]$Prefix = $(if ($env:PASEO_INSTALL_PREFIX) { $env:PASEO_INSTALL_PREFIX } else { Join-Path $env:LOCALAPPDATA "PaseoWebCli" }),
+  [string]$BinDir = $(if ($env:PASEO_INSTALL_BIN_DIR) { $env:PASEO_INSTALL_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "Paseo\\bin" }),
+  [string]$TaskName = "Paseo WebUI CLI",
+  [switch]$PurgeFoundation
+)
+$ErrorActionPreference = "Stop"
+Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+$Foundation = Join-Path $BinDir "paseo-foundation.cmd"
+if ($PurgeFoundation -and (Test-Path $Foundation)) { & $Foundation uninstall }
+Remove-Item -Force (Join-Path $BinDir "paseo.cmd"), (Join-Path $BinDir "paseo-foundation.cmd") -ErrorAction SilentlyContinue
+$Current = Join-Path $Prefix "current"
+if (Test-Path $Current) { [IO.Directory]::Delete($Current) }
+Remove-Item -Recurse -Force (Join-Path $Prefix "releases") -ErrorAction SilentlyContinue
+Remove-Item -Force (Join-Path $Prefix "foundation-install-plan.json"), (Join-Path $Prefix "run-daemon.ps1"), (Join-Path $Prefix "uninstall.ps1") -ErrorAction SilentlyContinue
+Write-Output "Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces."
+`;
+}
+
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'"'"'`)}'`;
 }
 
 function createInstallScripts() {
-  writeExecutable(path.join(STAGING_ROOT, "install.sh"), installerScript());
-  writeExecutable(path.join(STAGING_ROOT, "uninstall.sh"), uninstallerScript());
+  if (PLATFORM === "win32") {
+    writeFileSync(path.join(STAGING_ROOT, "install.ps1"), windowsInstallerScript());
+    writeFileSync(path.join(STAGING_ROOT, "uninstall.ps1"), windowsUninstallerScript());
+    return;
+  }
+  writeExecutable(
+    path.join(STAGING_ROOT, "install.sh"),
+    PLATFORM === "darwin" ? installerScript() : linuxInstallerScript(),
+  );
+  writeExecutable(
+    path.join(STAGING_ROOT, "uninstall.sh"),
+    PLATFORM === "darwin" ? uninstallerScript() : linuxUninstallerScript(),
+  );
 }
 
 function walkFiles(root, relative = "") {
@@ -576,7 +983,7 @@ function sha256(file) {
 function createManifest(nodeRoot) {
   const commit = run("git", ["rev-parse", "HEAD"], { capture: true });
   const gitDirty = Boolean(run("git", ["status", "--porcelain"], { capture: true }));
-  const nodeVersion = run(path.join(nodeRoot, "bin", "node"), ["--version"], { capture: true });
+  const nodeVersion = run(nodeExecutable(nodeRoot), ["--version"], { capture: true });
   const webUiRoot = path.join(STAGING_ROOT, "app/node_modules/@getpaseo/server/dist/server/web-ui");
   if (!statSync(webUiRoot).isDirectory())
     fail("Packaged server is missing the daemon WebUI bundle");
@@ -584,7 +991,8 @@ function createManifest(nodeRoot) {
     schemaVersion: 1,
     product: "Paseo WebUI + CLI",
     version: VERSION,
-    platform: "darwin",
+    platform: PLATFORM,
+    platformName: PLATFORM_NAME,
     arch: ARCH,
     gitCommit: commit,
     gitDirty,
@@ -617,12 +1025,26 @@ function createManifest(nodeRoot) {
 }
 
 function validateStaging(nodeRoot) {
-  run(path.join(STAGING_ROOT, "bin", "paseo"), ["--version"]);
-  run(path.join(STAGING_ROOT, "bin", "paseo-foundation"), ["--version"]);
+  const launcherSuffix = PLATFORM === "win32" ? ".cmd" : "";
+  if (PLATFORM === "win32") {
+    const stagedNode = path.join(STAGING_ROOT, "runtime", "node.exe");
+    run(stagedNode, [
+      path.join(STAGING_ROOT, "app/node_modules/@getpaseo/cli/dist/index.js"),
+      "--version",
+    ]);
+    run(stagedNode, [
+      path.join(STAGING_ROOT, "app/node_modules/@getpaseo/foundation-cli/dist/index.js"),
+      "--version",
+    ]);
+  } else {
+    run(path.join(STAGING_ROOT, "bin", `paseo${launcherSuffix}`), ["--version"]);
+    run(path.join(STAGING_ROOT, "bin", `paseo-foundation${launcherSuffix}`), ["--version"]);
+  }
   const manifest = JSON.parse(readFileSync(path.join(STAGING_ROOT, "manifest.json"), "utf8"));
   if (
     manifest.version !== VERSION ||
-    manifest.platform !== "darwin" ||
+    manifest.platform !== PLATFORM ||
+    manifest.platformName !== PLATFORM_NAME ||
     manifest.arch !== ARCH ||
     manifest.electronIncluded !== false ||
     manifest.webUiIncluded !== true ||
@@ -634,31 +1056,44 @@ function validateStaging(nodeRoot) {
   ) {
     fail("Artifact manifest validation failed");
   }
-  const bundledNodeVersion = run(path.join(STAGING_ROOT, "runtime", "bin", "node"), ["--version"], {
-    capture: true,
-  });
-  const sourceNodeVersion = run(path.join(nodeRoot, "bin", "node"), ["--version"], {
-    capture: true,
-  });
+  const stagedNode = path.join(
+    STAGING_ROOT,
+    "runtime",
+    ...(PLATFORM === "win32" ? ["node.exe"] : ["bin", "node"]),
+  );
+  const bundledNodeVersion = run(stagedNode, ["--version"], { capture: true });
+  const sourceNodeVersion = run(nodeExecutable(nodeRoot), ["--version"], { capture: true });
   if (bundledNodeVersion !== sourceNodeVersion) fail("Bundled Node validation failed");
-  if (existsSync(path.join(STAGING_ROOT, "runtime", "bin", "bd"))) {
+  if (
+    existsSync(
+      path.join(STAGING_ROOT, "runtime", ...(PLATFORM === "win32" ? ["bd.exe"] : ["bin", "bd"])),
+    )
+  ) {
     fail("Central-only artifact must not bundle a native bd binary");
   }
 }
 
 function emitArtifact() {
   rmSync(OUTPUT_DIR, { recursive: true, force: true });
-  rmSync(OUTPUT_TARBALL, { force: true });
+  rmSync(OUTPUT_ARCHIVE, { force: true });
   rmSync(OUTPUT_CHECKSUM, { force: true });
   mkdirSync(ARTIFACTS_ROOT, { recursive: true });
   cpSync(STAGING_ROOT, OUTPUT_DIR, { recursive: true });
-  run("/usr/bin/tar", ["-czf", OUTPUT_TARBALL, "-C", ARTIFACTS_ROOT, BUNDLE_NAME], {
-    env: { ...process.env, COPYFILE_DISABLE: "1" },
-  });
-  writeFileSync(OUTPUT_CHECKSUM, `${sha256(OUTPUT_TARBALL)}  ${path.basename(OUTPUT_TARBALL)}\n`);
-  const sizeMiB = (statSync(OUTPUT_TARBALL).size / 1024 / 1024).toFixed(2);
+  if (PLATFORM === "win32") {
+    run("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      `Compress-Archive -Path '${OUTPUT_DIR.replaceAll("'", "''")}' -DestinationPath '${OUTPUT_ARCHIVE.replaceAll("'", "''")}' -Force`,
+    ]);
+  } else {
+    run("tar", ["-czf", OUTPUT_ARCHIVE, "-C", ARTIFACTS_ROOT, BUNDLE_NAME], {
+      env: { ...process.env, COPYFILE_DISABLE: "1" },
+    });
+  }
+  writeFileSync(OUTPUT_CHECKSUM, `${sha256(OUTPUT_ARCHIVE)}  ${path.basename(OUTPUT_ARCHIVE)}\n`);
+  const sizeMiB = (statSync(OUTPUT_ARCHIVE).size / 1024 / 1024).toFixed(2);
   process.stdout.write(
-    `\nArtifact: ${OUTPUT_TARBALL}\nSHA-256: ${sha256(OUTPUT_TARBALL)}\nSize: ${sizeMiB} MiB\n`,
+    `\nArtifact: ${OUTPUT_ARCHIVE}\nSHA-256: ${sha256(OUTPUT_ARCHIVE)}\nSize: ${sizeMiB} MiB\n`,
   );
 }
 

@@ -13,13 +13,15 @@ Quy trình downstream:
 1. Commit code/docs của feature hoặc fix riêng; không trộn version bump vào code commit.
 2. Push `main`, chờ required CI của exact commit xanh và xử lý mọi downstream qualification drift.
 3. Commit `CHANGELOG.md`, synchronized workspace versions và lockfile bằng một release commit riêng.
-4. Chạy format, lint, typecheck, focused downstream matrix, serialized macOS artifact build/smoke,
-   Linux Docker/Nix builds và clean local-stack install/readback trên exact clean release commit.
+4. Chạy format, lint, typecheck, focused downstream matrix, host-native artifact build/install/smoke
+   trên macOS `arm64`/`x64`, Linux `x64`, Windows `x64`, Linux Docker/Nix builds và clean local-stack
+   install/readback trên exact clean release commit.
 5. Tạo annotated tag `paseo-v<package-version>`, push `main` và tag, rồi chờ
-   `Downstream macOS Release` hoàn tất cho cả `arm64` và `x64`.
+   `Downstream Portable Release` hoàn tất cho đủ bốn matrix leg.
 
-Release qualification downstream hiện target macOS và Linux. Windows jobs có thể giữ làm portability
-signal nhưng không block tag và không được dùng để claim Windows-qualified.
+Trước tag, dispatch `Downstream Portable Release` với exact commit và `publish=false`; chỉ đi tiếp khi
+cả bốn host-native build/install/smoke leg xanh. Tag release chạy lại cùng matrix với `publish=true`.
+Không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
 
 ### Local development activation invariant
 

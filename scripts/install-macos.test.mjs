@@ -18,6 +18,8 @@ import { installerScript as renderArtifactInstaller } from "./build-macos-web-cl
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.join(scriptDir, "install-macos.sh");
+const portableInstaller = path.join(scriptDir, "install.sh");
+const windowsInstaller = path.join(scriptDir, "install-windows.ps1");
 const artifactSmoke = path.join(scriptDir, "smoke-macos-web-cli-artifact.sh");
 const packageLock = path.join(scriptDir, "..", "package-lock.json");
 
@@ -80,8 +82,8 @@ if [ -n "$output" ]; then cp "$source" "$output"; else cat "$source"; fi
   return { root, fixtures, fakeBin, archive };
 }
 
-function runFixture(fixture, args = [], extraEnv = {}) {
-  return spawnSync("/bin/sh", [installer, ...args], {
+function runFixture(fixture, args = [], extraEnv = {}, script = installer) {
+  return spawnSync("/bin/sh", [script, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -155,6 +157,18 @@ test("selects the newest downstream release, verifies it, and forwards options",
   }
 });
 
+test("portable Unix installer selects and verifies the matching macOS artifact", () => {
+  const fixture = createFixture();
+  try {
+    const result = runFixture(fixture, ["--no-start"], {}, portableInstaller);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(path.join(fixture.root, "installed.txt"), "utf8"), "--no-start\n");
+    assert.match(result.stdout, /for macos arm64/);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("does not invoke the artifact installer after checksum failure", () => {
   const fixture = createFixture();
   try {
@@ -196,6 +210,16 @@ test("artifact smoke normalizes Intel uname output to the x64 artifact name", ()
   const source = readFileSync(artifactSmoke, "utf8");
   assert.match(source, /x86_64\) ARCH="x64"/);
   assert.match(source, /macos-\$ARCH/);
+});
+
+test("portable installers declare Linux and Windows host checks explicitly", () => {
+  const unixSource = readFileSync(portableInstaller, "utf8");
+  const windowsSource = readFileSync(windowsInstaller, "utf8");
+  assert.match(unixSource, /Linux\) PLATFORM_NAME="linux"/);
+  assert.match(unixSource, /sha256sum/);
+  assert.match(windowsSource, /OSArchitecture/);
+  assert.match(windowsSource, /Get-FileHash -Algorithm SHA256/);
+  assert.match(windowsSource, /Manifest\.platform -ne "win32"/);
 });
 
 test("release lock retains Lightning CSS binaries for both macOS architectures", () => {

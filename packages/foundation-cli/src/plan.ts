@@ -28,8 +28,8 @@ function blockersFor(input: {
   includeControlWorkspace: boolean;
 }): string[] {
   const blockers: string[] = [];
-  if (input.inspection.platform !== "darwin") {
-    blockers.push(`macOS is required; detected ${input.inspection.platform}`);
+  if (!["darwin", "linux", "win32"].includes(input.inspection.platform)) {
+    blockers.push(`unsupported operating system: ${input.inspection.platform}`);
   }
   for (const link of [...input.inspection.links, input.inspection.currentLink]) {
     if (!allowedState(input.mode, link.state)) {

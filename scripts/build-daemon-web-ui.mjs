@@ -12,7 +12,9 @@ const APP_DIR = path.join(REPO_ROOT, "packages", "app");
 const SOURCE_DIST = path.join(APP_DIR, "dist");
 const TARGET_DIST = path.join(REPO_ROOT, "packages", "server", "dist", "server", "web-ui");
 const COMPRESS_EXTENSIONS = new Set([".html", ".js", ".css", ".json", ".svg", ".map"]);
-const LOCK_DIR = path.join(REPO_ROOT, "packages", "server", "dist", ".web-ui-build-lock");
+// Keep the lock outside package dist trees: build:server:clean removes server/dist before invoking
+// this script, so a lock inside that directory cannot serialize two complete product builds.
+const LOCK_DIR = path.join(REPO_ROOT, "artifacts", ".web-ui-build-lock");
 
 // Two builds at once destroy each other: cleanTarget() removes the directory that the other
 // build's precompressAssets() is writing .br/.gz files into, and the loser dies with ENOENT on

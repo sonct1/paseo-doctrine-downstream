@@ -85,6 +85,10 @@ Installer tạo:
 ~/.paseo-foundation/install-transaction.json  # chỉ tồn tại khi transaction chưa commit
 ```
 
+Layout trên là canonical dưới user home cho macOS và Linux. Trên Windows, cùng các segment được resolve
+bằng `path.join` dưới `%USERPROFILE%`; `current` là directory junction nên không cần Developer Mode hoặc
+administrator privilege. Foundation CLI chỉ nhận `darwin`, `linux` và `win32`, các OS khác fail closed.
+
 Plan có `--with-control-workspace` mới tạo thêm `~/.paseo-control/`. Plan schema cũ chưa encode lựa chọn
 này bị reject trước mutation và phải được tạo lại.
 

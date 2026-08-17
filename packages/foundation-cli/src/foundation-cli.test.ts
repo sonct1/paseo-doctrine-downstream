@@ -515,7 +515,7 @@ describe("Foundation install planning", () => {
   });
 });
 
-describe.runIf(process.platform === "darwin")("Foundation install lifecycle", () => {
+describe.runIf(process.platform !== "win32")("Foundation install lifecycle", () => {
   it("installs Foundation atomically without creating a Control Workspace by default", () => {
     const home = temporaryHome();
     const plan = createInstallPlan({
@@ -523,7 +523,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     expect(plan.blockers).toEqual([]);
 
@@ -562,7 +562,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
       includeControlWorkspace: true,
     });
 
@@ -577,7 +577,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     expect(preservingUpdate.includeControlWorkspace).toBe(true);
     expect(preservingUpdate.controlHome).toBe(layout.controlHome);
@@ -588,7 +588,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
       includeControlWorkspace: false,
     });
     expect(explicitOptOut.includeControlWorkspace).toBe(false);
@@ -616,7 +616,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const applied = applyInstallPlan(plan);
     const {
@@ -649,7 +649,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
 
@@ -667,7 +667,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const { planId: _planId, ...withoutPlanId } = original;
     const foreignTarget = path.join(home, "foreign", "lead.config.toml");
@@ -691,7 +691,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const applied = applyInstallPlan(plan);
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
@@ -717,7 +717,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     mkdirSync(path.dirname(layout.transactionPath), { recursive: true });
@@ -763,7 +763,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     mkdirSync(path.dirname(layout.transactionPath), { recursive: true });
@@ -819,7 +819,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
     const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
     const codexRoot = path.join(home, ".codex");
@@ -863,7 +863,7 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
       home,
       productRoot: productRoot(),
       environmentPath: "",
-      platform: "darwin",
+      platform: process.platform,
     });
 
     const applied = applyInstallPlan(plan);
@@ -886,5 +886,30 @@ describe.runIf(process.platform === "darwin")("Foundation install lifecycle", ()
     for (const link of legacyLinks) {
       expect(path.resolve(path.dirname(link.target), readlinkSync(link.target))).toBe(link.source);
     }
+  });
+});
+
+describe.runIf(process.platform === "win32")("Foundation Windows install lifecycle", () => {
+  it("activates and removes the current release through a user junction", () => {
+    const home = temporaryHome();
+    const plan = createInstallPlan({
+      mode: "clean-empty",
+      home,
+      productRoot: productRoot(),
+      environmentPath: "",
+      platform: "win32",
+    });
+    expect(plan.blockers).toEqual([]);
+
+    const applied = applyInstallPlan(plan);
+    const layout = resolveInstallLayout({ home, distributionVersion: plan.distributionVersion });
+    expect(applied.record.status).toBe("active");
+    expect(lstatSync(layout.currentLink).isSymbolicLink()).toBe(true);
+    expect(path.resolve(path.dirname(layout.currentLink), readlinkSync(layout.currentLink))).toBe(
+      layout.releasePath,
+    );
+    expect(uninstallFoundation(home).status).toBe("uninstalled");
+    expect(existsSync(layout.currentLink)).toBe(false);
+    expect(existsSync(layout.releasePath)).toBe(true);
   });
 });
