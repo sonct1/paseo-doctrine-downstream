@@ -170,6 +170,7 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /ubuntu-22\.04/);
   assert.match(source, /windows-2025/);
   assert.match(source, /needs: \[qualification, create-release\]/);
+  assert.match(source, /needs\.qualification\.result == 'success'/);
   assert.doesNotMatch(source, /build:desktop|android:release|release:publish|npm publish/);
 });
 

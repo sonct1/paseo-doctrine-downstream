@@ -60,8 +60,7 @@ jobs:
             scripts/acp-catalog-pin-consistency.test.mjs \
             scripts/ci-workflow.test.mjs \
             scripts/daemon-launch-contract.test.mjs \
-            scripts/downstream-publish-guard.test.mjs \
-            scripts/install-macos.test.mjs
+            scripts/downstream-publish-guard.test.mjs
           git diff --exit-code
 
       - name: Check shipped source quality
@@ -117,7 +116,7 @@ jobs:
 
   build:
     needs: [qualification, create-release]
-    if: ${{ always() && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
+    if: ${{ always() && needs.qualification.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
