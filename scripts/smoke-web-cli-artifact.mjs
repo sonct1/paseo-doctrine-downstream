@@ -135,6 +135,28 @@ async function smokeTerminal() {
   }
 }
 
+function uninstallWindowsArtifact(bundle) {
+  if (process.platform !== "win32") return;
+  run(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      path.join(bundle, "uninstall.ps1"),
+      "-Prefix",
+      prefix,
+      "-BinDir",
+      binDir,
+      "-TaskName",
+      `Paseo Release Smoke ${process.pid}`,
+      "-PurgeFoundation",
+    ],
+    { timeoutMs: windowsBundleIoTimeoutMs },
+  );
+}
+
 async function main() {
   if (!platformName) fail(`unsupported smoke platform: ${process.platform}`);
   if (!existsSync(archive) || !existsSync(checksum)) fail(`missing artifact: ${archive}`);
@@ -254,26 +276,7 @@ async function main() {
     }
     closeSync(log);
   }
-  if (process.platform === "win32") {
-    run(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        path.join(bundle, "uninstall.ps1"),
-        "-Prefix",
-        prefix,
-        "-BinDir",
-        binDir,
-        "-TaskName",
-        `Paseo Release Smoke ${process.pid}`,
-        "-PurgeFoundation",
-      ],
-      { timeoutMs: windowsBundleIoTimeoutMs },
-    );
-  }
+  uninstallWindowsArtifact(bundle);
   return success;
 }
 
