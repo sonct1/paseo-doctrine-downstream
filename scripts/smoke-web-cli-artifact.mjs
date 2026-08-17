@@ -18,6 +18,7 @@ const prefix = path.join(smokeRoot, "install");
 const binDir = path.join(smokeRoot, "bin");
 const port = process.env.PASEO_RELEASE_SMOKE_PORT ?? "17677";
 const listen = `127.0.0.1:${port}`;
+const windowsBundleIoTimeoutMs = 10 * 60_000;
 const env = {
   ...process.env,
   HOME: home,
@@ -142,14 +143,18 @@ async function main() {
   }
 
   if (process.platform === "win32") {
-    run("powershell.exe", [
-      "-NoProfile",
-      "-Command",
-      `Expand-Archive -Path '${archive.replaceAll(
-        "'",
-        "''",
-      )}' -DestinationPath '${smokeRoot.replaceAll("'", "''")}' -Force`,
-    ]);
+    run(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `Expand-Archive -Path '${archive.replaceAll(
+          "'",
+          "''",
+        )}' -DestinationPath '${smokeRoot.replaceAll("'", "''")}' -Force`,
+      ],
+      { timeoutMs: windowsBundleIoTimeoutMs },
+    );
   } else {
     run("tar", ["-xzf", archive, "-C", smokeRoot]);
   }
@@ -167,20 +172,24 @@ async function main() {
   }
 
   if (process.platform === "win32") {
-    run("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      path.join(bundle, "install.ps1"),
-      "-Prefix",
-      prefix,
-      "-BinDir",
-      binDir,
-      "-Listen",
-      listen,
-      "-NoStart",
-    ]);
+    run(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(bundle, "install.ps1"),
+        "-Prefix",
+        prefix,
+        "-BinDir",
+        binDir,
+        "-Listen",
+        listen,
+        "-NoStart",
+      ],
+      { timeoutMs: windowsBundleIoTimeoutMs },
+    );
   } else {
     run(path.join(bundle, "install.sh"), [
       "--prefix",

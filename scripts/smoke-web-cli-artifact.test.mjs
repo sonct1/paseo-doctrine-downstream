@@ -13,6 +13,8 @@ test("portable artifact smoke binds every CLI probe to its isolated daemon", () 
 
 test("portable artifact smoke fails closed when an installed command hangs", () => {
   assert.match(source, /const timeout = options\.timeoutMs \?\? 120_000/);
+  assert.match(source, /const windowsBundleIoTimeoutMs = 10 \* 60_000/);
+  assert.equal(source.match(/timeoutMs: windowsBundleIoTimeoutMs/gu)?.length, 2);
   assert.match(source, /timeout,/);
   assert.match(source, /if \(result\.error\)/);
   assert.match(source, /SMOKE_COMMAND start=/);
