@@ -104,11 +104,18 @@ function assertReleaseInputs(nodeRoot) {
   if (!supportedArchitectures.includes(ARCH)) {
     fail(`Unsupported ${PLATFORM_NAME} architecture: ${ARCH}`);
   }
-  const dirty = run("git", ["status", "--porcelain"], { capture: true });
-  if (dirty && process.env.PASEO_RELEASE_ALLOW_DIRTY !== "1") {
-    const dirtyDiff = run("git", ["diff", "--no-ext-diff", "--binary"], { capture: true });
+  const status = run("git", ["status", "--porcelain"], { capture: true });
+  const unstaged = run("git", ["diff", "--no-ext-diff", "--binary"], { capture: true });
+  const staged = run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], {
+    capture: true,
+  });
+  const untracked = run("git", ["ls-files", "--others", "--exclude-standard"], {
+    capture: true,
+  });
+  const materialDirty = [unstaged, staged, untracked].filter(Boolean).join("\n");
+  if (materialDirty && process.env.PASEO_RELEASE_ALLOW_DIRTY !== "1") {
     fail(
-      `Refusing to build a release artifact from a dirty worktree:\n${dirty}\n\n${dirtyDiff}\nSet PASEO_RELEASE_ALLOW_DIRTY=1 only for a local candidate build.`,
+      `Refusing to build a release artifact from material worktree changes:\n${status}\n\n${materialDirty}\nSet PASEO_RELEASE_ALLOW_DIRTY=1 only for a local candidate build.`,
     );
   }
   const bundledArch = run(nodeExecutable(nodeRoot), ["-p", "process.arch"], {
