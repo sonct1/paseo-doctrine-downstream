@@ -157,6 +157,20 @@ function uninstallWindowsArtifact(bundle) {
   );
 }
 
+function validateArtifactManifest(manifest) {
+  if (
+    manifest.product !== "Paseo WebUI + CLI" ||
+    manifest.platform !== process.platform ||
+    manifest.arch !== process.arch ||
+    manifest.beadsBackend !== "central" ||
+    manifest.beadsCentralSidecarIncluded !== true ||
+    manifest.bundledBeadsBinary !== true ||
+    manifest.internalPackages?.["@paseo/plugin"] !== manifest.version
+  ) {
+    fail("artifact manifest does not match the smoke host");
+  }
+}
+
 async function main() {
   if (!platformName) fail(`unsupported smoke platform: ${process.platform}`);
   if (!existsSync(archive) || !existsSync(checksum)) fail(`missing artifact: ${archive}`);
@@ -183,16 +197,7 @@ async function main() {
   }
   const bundle = path.join(smokeRoot, bundleName);
   const manifest = JSON.parse(readFileSync(path.join(bundle, "manifest.json"), "utf8"));
-  if (
-    manifest.product !== "Paseo WebUI + CLI" ||
-    manifest.platform !== process.platform ||
-    manifest.arch !== process.arch ||
-    manifest.beadsBackend !== "central" ||
-    manifest.bundledBeadsBinary !== false ||
-    manifest.internalPackages?.["@paseo/plugin"] !== manifest.version
-  ) {
-    fail("artifact manifest does not match the smoke host");
-  }
+  validateArtifactManifest(manifest);
 
   if (process.platform === "win32") {
     run(
@@ -242,6 +247,19 @@ async function main() {
     ...(process.platform === "win32" ? ["bd.exe"] : ["bin", "bd"]),
   );
   if (existsSync(bundledBd)) fail("Central-only artifact unexpectedly contains a native bd binary");
+  const componentRoot = path.join(prefix, "current", "components", "beads-central");
+  const bundledSidecar = path.join(
+    componentRoot,
+    process.platform === "win32" ? "beads-central.exe" : "beads-central",
+  );
+  const componentBd = path.join(
+    componentRoot,
+    "bin",
+    process.platform === "win32" ? "bd.exe" : "bd",
+  );
+  if (!existsSync(bundledSidecar) || !existsSync(componentBd)) {
+    fail("installed artifact is missing the bundled Beads Central component");
+  }
   const cliEntry = path.join(
     prefix,
     "current",
@@ -280,29 +298,49 @@ async function main() {
   return success;
 }
 
-function cleanupSmokeRoots() {
+function isRetryableWindowsCleanupError(error) {
+  return (
+    process.platform === "win32" &&
+    error instanceof Error &&
+    "code" in error &&
+    ["EBUSY", "ENOTEMPTY", "EPERM"].includes(error.code)
+  );
+}
+
+async function removeOwnedRoot(ownedRoot) {
+  const attempts = process.platform === "win32" ? 40 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      rmSync(ownedRoot, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!isRetryableWindowsCleanupError(error) || attempt === attempts) throw error;
+      process.stdout.write(
+        `SMOKE_CLEANUP_RETRY root=${ownedRoot} attempt=${attempt} code=${error.code}\n`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+}
+
+async function cleanupSmokeRoots() {
   if (process.env.PASEO_KEEP_RELEASE_SMOKE === "1") {
     process.stdout.write(`SMOKE_ROOT=${smokeRoot}\nTERMINAL_ROOT=${terminalRoot}\n`);
     return;
   }
   for (const ownedRoot of [terminalRoot, smokeRoot]) {
-    rmSync(ownedRoot, {
-      recursive: true,
-      force: true,
-      maxRetries: process.platform === "win32" ? 20 : 0,
-      retryDelay: 250,
-    });
+    await removeOwnedRoot(ownedRoot);
   }
 }
 
 main()
-  .then((success) => {
-    cleanupSmokeRoots();
+  .then(async (success) => {
+    await cleanupSmokeRoots();
     return process.stdout.write(success);
   })
-  .catch((error) => {
+  .catch(async (error) => {
     try {
-      cleanupSmokeRoots();
+      await cleanupSmokeRoots();
     } catch (cleanupError) {
       process.stderr.write(
         `SMOKE_CLEANUP_FAILED ${

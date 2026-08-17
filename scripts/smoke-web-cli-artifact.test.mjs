@@ -26,11 +26,13 @@ test("portable artifact smoke only reports success after bounded cleanup", () =>
   assert.match(source, /path\.join\(bundle, "uninstall\.ps1"\)/);
   assert.match(source, /"-PurgeFoundation"/);
   assert.match(source, /for \(const ownedRoot of \[terminalRoot, smokeRoot\]\)/);
-  assert.match(source, /maxRetries: process\.platform === "win32" \? 20 : 0/);
-  assert.match(source, /retryDelay: 250/);
+  assert.match(source, /const attempts = process\.platform === "win32" \? 40 : 1/);
+  assert.match(source, /\["EBUSY", "ENOTEMPTY", "EPERM"\]/);
+  assert.match(source, /SMOKE_CLEANUP_RETRY/);
+  assert.match(source, /setTimeout\(resolve, 250\)/);
   assert.match(
     source,
-    /\.then\(\(success\) => \{\s+cleanupSmokeRoots\(\);\s+return process\.stdout\.write\(success\);/u,
+    /\.then\(async \(success\) => \{\s+await cleanupSmokeRoots\(\);\s+return process\.stdout\.write\(success\);/u,
   );
 });
 
