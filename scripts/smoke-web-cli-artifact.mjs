@@ -284,49 +284,54 @@ async function main() {
   return success;
 }
 
-function isRetryableWindowsCleanupError(error) {
-  return (
-    process.platform === "win32" &&
-    error instanceof Error &&
-    "code" in error &&
-    ["EBUSY", "ENOTEMPTY", "EPERM"].includes(error.code)
-  );
-}
-
-async function removeOwnedRoot(ownedRoot) {
-  const attempts = process.platform === "win32" ? 40 : 1;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      rmSync(ownedRoot, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      if (!isRetryableWindowsCleanupError(error) || attempt === attempts) throw error;
-      process.stdout.write(
-        `SMOKE_CLEANUP_RETRY root=${ownedRoot} attempt=${attempt} code=${error.code}\n`,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
+function removeOwnedRoot(ownedRoot) {
+  if (!existsSync(ownedRoot)) return;
+  if (process.platform === "win32") {
+    const target = ownedRoot.replaceAll("'", "''");
+    run(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `$target = '${target}'
+for ($attempt = 1; $attempt -le 40; $attempt++) {
+  try {
+    Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+    if (Test-Path -LiteralPath $target) { throw "cleanup target still exists: $target" }
+    exit 0
+  } catch {
+    if ($attempt -eq 40) { throw }
+    Write-Output "SMOKE_CLEANUP_RETRY root=$target attempt=$attempt error=$($_.Exception.GetType().Name)"
+    Start-Sleep -Milliseconds 250
   }
+}`,
+      ],
+      { timeoutMs: 30_000 },
+    );
+  } else {
+    rmSync(ownedRoot, { recursive: true, force: true });
+  }
+  if (existsSync(ownedRoot)) fail(`cleanup target still exists: ${ownedRoot}`);
 }
 
-async function cleanupSmokeRoots() {
+function cleanupSmokeRoots() {
   if (process.env.PASEO_KEEP_RELEASE_SMOKE === "1") {
     process.stdout.write(`SMOKE_ROOT=${smokeRoot}\nTERMINAL_ROOT=${terminalRoot}\n`);
     return;
   }
   for (const ownedRoot of [terminalRoot, smokeRoot]) {
-    await removeOwnedRoot(ownedRoot);
+    removeOwnedRoot(ownedRoot);
   }
 }
 
 main()
-  .then(async (success) => {
-    await cleanupSmokeRoots();
+  .then((success) => {
+    cleanupSmokeRoots();
     return process.stdout.write(success);
   })
-  .catch(async (error) => {
+  .catch((error) => {
     try {
-      await cleanupSmokeRoots();
+      cleanupSmokeRoots();
     } catch (cleanupError) {
       process.stderr.write(
         `SMOKE_CLEANUP_FAILED ${
