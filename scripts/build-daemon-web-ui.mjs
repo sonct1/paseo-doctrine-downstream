@@ -80,8 +80,12 @@ async function exportBrowserWebApp() {
   console.log("Exporting browser web app...");
   const npmArgs = ["run", "build:web", "--workspace=@getpaseo/app"];
   const npmExecPath = process.env.npm_execpath;
-  const command = npmExecPath ? process.execPath : process.platform === "win32" ? "npm.cmd" : "npm";
-  const args = npmExecPath ? [npmExecPath, ...npmArgs] : npmArgs;
+  let command = process.platform === "win32" ? "npm.cmd" : "npm";
+  let args = npmArgs;
+  if (npmExecPath) {
+    command = process.execPath;
+    args = [npmExecPath, ...npmArgs];
+  }
   await run(command, args, {
     cwd: REPO_ROOT,
   });
