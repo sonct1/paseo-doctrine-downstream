@@ -6172,19 +6172,17 @@ test("serializes concurrent durability flushes for one agent", async () => {
   const firstRepairStarted = deferred<void>();
   const firstRepairAllowed = deferred<void>();
   let initialFailures = true;
-  let secondRepairFailures = 0;
+  let repairAttempts = 0;
   const durableStore = new FileAgentTimelineStore(
     join(workdir, "timelines"),
     async (filePath, value) => {
       if (filePath.includes(`${sep}pending${sep}`)) {
         const rows = Reflect.get(value as object, "rows") as Array<{ seq: number }> | undefined;
         if (initialFailures && rows?.length) throw new Error("initial manifest failure");
-        if (rows?.[0]?.seq === 1) {
+        if (!initialFailures && rows?.length && ++repairAttempts === 1) {
           firstRepairStarted.resolve();
           await firstRepairAllowed.promise;
-        }
-        if (rows?.[0]?.seq === 2 && secondRepairFailures++ === 0) {
-          throw new Error("first second-row repair failure");
+          throw new Error("first coalesced repair failure");
         }
       }
       await writeJsonFileAtomic(filePath, value);

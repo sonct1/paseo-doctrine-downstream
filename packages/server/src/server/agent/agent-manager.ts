@@ -3831,8 +3831,13 @@ export class AgentManager {
     }
 
     const snapshot = await this.durableTimelineStore.getCommittedSnapshot(agentId);
+    const committed = await this.durableTimelineStore.fetchCommitted(agentId, {
+      direction: "tail",
+      limit: 0,
+    });
     const rows = snapshot.rows;
     return {
+      epoch: committed.epoch,
       rows,
       nextSeq: rows.length > 0 ? rows[rows.length - 1]!.seq + 1 : 1,
       timestamp: now.toISOString(),
@@ -4223,7 +4228,10 @@ export class AgentManager {
         this.timelineStore.getRows(agent.id),
         historyEvents.map((event) => ({ item: event.item, timestamp: event.timestamp })),
       );
-      this.timelineStore.initialize(agent.id, { rows: reconciledRows });
+      this.timelineStore.initialize(agent.id, {
+        epoch: this.timelineStore.getEpoch(agent.id),
+        rows: reconciledRows,
+      });
       if (deferredBroadcast) {
         timelineRows = reconciledRows;
       } else if (broadcast) {
