@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UserComposerAttachment } from "@/attachments/types";
 import type { DraftAgentControlsProps } from "@/composer/agent-controls";
 import type { DraftCommandConfig } from "@/hooks/use-agent-commands-query";
@@ -58,6 +58,46 @@ function requiredReadOnlyMode(roleBinding: ProviderRoleBindingSupport | undefine
     default:
       return null;
   }
+}
+
+export function resolveRolePinnedModeTransition(input: {
+  selectedMode: string;
+  requiredModeId: string | null;
+  rememberedModeId: string | undefined;
+  modeOptionIds: readonly string[];
+}): {
+  rememberModeId?: string;
+  applyModeId?: string;
+  clearRememberedMode: boolean;
+} {
+  const selectedMode = input.selectedMode.trim();
+  const requiredModeId = input.requiredModeId?.trim() ?? "";
+  const rememberedModeId = input.rememberedModeId?.trim() ?? "";
+
+  if (requiredModeId) {
+    if (selectedMode === requiredModeId) {
+      return { clearRememberedMode: false };
+    }
+    return {
+      ...(selectedMode ? { rememberModeId: selectedMode } : {}),
+      applyModeId: requiredModeId,
+      clearRememberedMode: false,
+    };
+  }
+
+  if (!rememberedModeId) {
+    return { clearRememberedMode: false };
+  }
+  if (input.modeOptionIds.length === 0) {
+    return { clearRememberedMode: false };
+  }
+  if (!input.modeOptionIds.includes(rememberedModeId)) {
+    return { clearRememberedMode: true };
+  }
+  return {
+    ...(selectedMode !== rememberedModeId ? { applyModeId: rememberedModeId } : {}),
+    clearRememberedMode: true,
+  };
 }
 
 export interface BeadsIssueGrantOption {
@@ -207,6 +247,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const [selectedAssignmentEffect, setSelectedAssignmentEffect] = useState<AssignmentEffectClass>(
     initialRoleState.assignmentEffect,
   );
+  const rolePinnedModeRestoreByProviderRef = useRef(new Map<string, string>());
   const beadsIssueGrant = useBeadsIssueGrantControl(
     selectedRole,
     composerOptions?.beadsIssueOptions,
@@ -364,6 +405,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const workingDir = lockedWorkingDir || formState.workingDir;
   const allProviderEntries = formState.allProviderEntries;
   const selectedProvider = formState.selectedProvider;
+  const setModeFromUser = formState.setModeFromUser;
   const setProviderAndModelFromUser = formState.setProviderAndModelFromUser;
   const setProviderAndModelForRole = formState.setProviderAndModelForRole;
   useEffect(() => {
@@ -380,8 +422,33 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         selectedAssignmentEffect === "read-only"
           ? requiredReadOnlyMode(selectedEntry?.roleBinding)
           : null;
-      if (selectedProvider && requiredModeId && formState.selectedMode !== requiredModeId) {
-        setProviderAndModelForRole(selectedProvider, formState.selectedModel, requiredModeId);
+      if (selectedProvider) {
+        const transition = resolveRolePinnedModeTransition({
+          selectedMode: formState.selectedMode,
+          requiredModeId,
+          rememberedModeId: rolePinnedModeRestoreByProviderRef.current.get(selectedProvider),
+          modeOptionIds: formState.modeOptions.map((mode) => mode.id),
+        });
+        if (transition.rememberModeId) {
+          rolePinnedModeRestoreByProviderRef.current.set(
+            selectedProvider,
+            transition.rememberModeId,
+          );
+        }
+        if (transition.clearRememberedMode) {
+          rolePinnedModeRestoreByProviderRef.current.delete(selectedProvider);
+        }
+        if (transition.applyModeId) {
+          if (requiredModeId) {
+            setProviderAndModelForRole(
+              selectedProvider,
+              formState.selectedModel,
+              transition.applyModeId,
+            );
+          } else {
+            setModeFromUser(transition.applyModeId);
+          }
+        }
       }
       return;
     }
@@ -406,9 +473,11 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     allProviderEntries,
     formState.selectedMode,
     formState.selectedModel,
+    formState.modeOptions,
     selectedAssignmentEffect,
     selectedProvider,
     selectedRole,
+    setModeFromUser,
     setProviderAndModelForRole,
     setProviderAndModelFromUser,
   ]);

@@ -1,10 +1,10 @@
 # Changelog
 
-## 0.4.0-paseo.22 - 2026-08-18
+## 0.4.0-paseo.23 - 2026-08-18
 
-Bản canonical này thay thế candidate `.8` đã dừng, làm gọn bề mặt orchestration theo provider được
-support, giữ quyền đã chọn xuyên suốt vòng đời agent, đưa topology lên mức project và bundle Beads
-Central thành component native trên mọi release host.
+Bản canonical này thay thế các candidate `.8` và `.22` đã dừng, làm gọn bề mặt orchestration theo
+provider được support, giữ quyền đã chọn xuyên suốt vòng đời agent, đưa topology lên mức project và
+bundle Beads Central thành component native trên mọi release host.
 
 ### Added
 
@@ -30,6 +30,8 @@ Central thành component native trên mọi release host.
 
 - Không xóa archived agent khỏi WebUI khi active-directory watcher chỉ báo agent đã chuyển sang archive;
   protocol giờ phân biệt `archived`, `filtered` và `deleted`.
+- Nhớ mode Human đã chọn theo từng provider khi lease read-only tạm pin provider vào `Plan mode` hoặc
+  `Read only`, rồi phục hồi chính xác mode đó khi quay lại `Work & coordinate`.
 - Đồng bộ CI desktop packaging với release toolchain pinned Python, Go và `uv`, để build Central binary
   thật thay vì phụ thuộc host state hoặc fixture giả.
 - Giữ symlink Python framework portable trong macOS artifacts và giữ exact vendored Central bytes trên

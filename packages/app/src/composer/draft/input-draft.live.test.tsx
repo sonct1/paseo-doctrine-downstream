@@ -178,6 +178,7 @@ vi.mock("@/hooks/use-agent-form-state", () => ({
 }));
 
 let useAgentInputDraft: typeof import("./input-draft").useAgentInputDraft;
+let resolveRolePinnedModeTransition: typeof import("./input-draft").resolveRolePinnedModeTransition;
 type DraftRecordForTest = ReturnType<typeof useDraftStore.getState>["drafts"][string];
 
 beforeAll(async () => {
@@ -202,7 +203,7 @@ beforeAll(async () => {
     configurable: true,
   });
 
-  ({ useAgentInputDraft } = await import("./input-draft"));
+  ({ useAgentInputDraft, resolveRolePinnedModeTransition } = await import("./input-draft"));
 });
 
 describe("useAgentInputDraft live contract", () => {
@@ -225,6 +226,31 @@ describe("useAgentInputDraft live contract", () => {
       drafts: {},
       createModalDraft: null,
       attachmentFocusRequestByDraftKey: {},
+    });
+  });
+
+  it("restores the Human-selected mode after a temporary read-only role pin", () => {
+    const pinned = resolveRolePinnedModeTransition({
+      selectedMode: "bypassPermissions",
+      requiredModeId: "plan",
+      rememberedModeId: undefined,
+      modeOptionIds: ["plan", "bypassPermissions"],
+    });
+    expect(pinned).toEqual({
+      rememberModeId: "bypassPermissions",
+      applyModeId: "plan",
+      clearRememberedMode: false,
+    });
+
+    const restored = resolveRolePinnedModeTransition({
+      selectedMode: "plan",
+      requiredModeId: null,
+      rememberedModeId: pinned.rememberModeId,
+      modeOptionIds: ["plan", "bypassPermissions"],
+    });
+    expect(restored).toEqual({
+      applyModeId: "bypassPermissions",
+      clearRememberedMode: true,
     });
   });
 
