@@ -1090,7 +1090,7 @@ export class Session {
       listActiveWorkspaces: () => this.listActiveWorkspaceRefs(),
       archiveWorkspaceRecord: (workspaceId) => this.archiveWorkspaceRecord(workspaceId),
       emit: (message) => this.emit(message),
-      emitAgentRemove: (agentId) => this.agentUpdates.removeAgent(agentId),
+      emitAgentRemove: (agentId) => this.agentUpdates.removeAgent(agentId, "archived"),
       emitWorkspaceUpdatesForWorkspaceIds: (workspaceIds) =>
         this.emitWorkspaceUpdatesForWorkspaceIds(workspaceIds),
       markWorkspaceArchiving: (workspaceIds, archivingAt) =>

@@ -310,6 +310,34 @@ describe("replaceFetchedAgentDirectory", () => {
     store.clearSession(serverId);
   });
 
+  it("preserves an archived detail when the agent only leaves the active directory", () => {
+    const serverId = "server-archived-removal";
+    const agentId = "archived-agent";
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, null as unknown as DaemonClient);
+    const activeAgent = {
+      ...normalizeAgentSnapshot(createAgentPayload({ id: agentId }), serverId),
+      projectPlacement: null,
+    };
+    const archivedAgent = {
+      ...activeAgent,
+      archivedAt: new Date("2026-08-18T09:35:52.809Z"),
+    };
+    store.setAgents(serverId, new Map([[agentId, activeAgent]]));
+    store.setAgentDetails(serverId, new Map([[agentId, archivedAgent]]));
+
+    applyAgentDirectoryDelta({
+      serverId,
+      delta: { kind: "remove", agentId, reason: "archived" },
+    });
+
+    const session = useSessionStore.getState().sessions[serverId];
+    expect(session?.agents.has(agentId)).toBe(false);
+    expect(session?.agentDetails.get(agentId)?.archivedAt).toEqual(archivedAgent.archivedAt);
+
+    store.clearSession(serverId);
+  });
+
   it("keeps newer metadata while accepting usage-only updates and legacy workspace ownership", () => {
     const serverId = "server-usage";
     const agentId = "usage-agent";

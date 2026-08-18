@@ -3865,6 +3865,11 @@ export const AgentUpdateMessageSchema = z.object({
     z.object({
       kind: z.literal("remove"),
       agentId: z.string(),
+      // COMPAT(agentDirectoryRemovalReason): older daemons omit this field.
+      // `archived` means the record still exists outside the active directory;
+      // `filtered` means it no longer matches this subscription; `deleted` is
+      // an authoritative hard-delete tombstone.
+      reason: z.enum(["archived", "filtered", "deleted"]).optional(),
       generation: z.string().optional(),
       seq: z.number().int().positive().optional(),
     }),

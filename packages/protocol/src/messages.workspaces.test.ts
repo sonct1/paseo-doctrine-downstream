@@ -186,6 +186,18 @@ describe("workspace message schemas", () => {
     expect(result.success).toBe(true);
   });
 
+  test("parses an archived agent-directory removal reason", () => {
+    const result = SessionOutboundMessageSchema.safeParse({
+      type: "agent_update",
+      payload: {
+        kind: "remove",
+        agentId: "agent-archived",
+        reason: "archived",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
   test("parses paginated fetch_agent_history_request and response", () => {
     const request = SessionInboundMessageSchema.parse({
       type: "fetch_agent_history_request",

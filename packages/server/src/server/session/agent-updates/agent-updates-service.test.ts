@@ -327,7 +327,7 @@ describe("forwardLiveAgent", () => {
 
     expect(h.agentUpdates()).toEqual([
       { kind: "upsert", agent: expect.objectContaining({ id: "a" }), project: makeProject() },
-      { kind: "remove", agentId: "a" },
+      { kind: "remove", agentId: "a", reason: "deleted" },
     ]);
   });
 
@@ -403,7 +403,7 @@ describe("forwardLiveAgent", () => {
 
     await h.service.forwardLiveAgent(h.managed("a"));
 
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "filtered" }]);
   });
 
   test("emits a remove when the agent does not match the filter", async () => {
@@ -414,7 +414,7 @@ describe("forwardLiveAgent", () => {
 
     await h.service.forwardLiveAgent(h.managed("a"));
 
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "filtered" }]);
   });
 
   test("with no subscription, emits no agent_update but still updates the workspace", async () => {
@@ -476,7 +476,7 @@ describe("emitStoredRecord", () => {
 
     await h.service.emitStoredRecord(h.stored("a"));
 
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "filtered" }]);
   });
 
   test("emits a remove when the record no longer matches the filter", async () => {
@@ -489,7 +489,7 @@ describe("emitStoredRecord", () => {
 
     await h.service.emitStoredRecord(h.stored("a"));
 
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "archived" }]);
   });
 
   test("returns the payload but emits nothing when there is no subscription", async () => {
@@ -600,7 +600,7 @@ describe("bootstrap buffering", () => {
     h.service.flushBootstrapped("sub", {
       snapshotUpdatedAtByAgentId: new Map([["a", Date.parse("2030-01-01T00:00:00.000Z")]]),
     });
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "deleted" }]);
   });
 
   test("does not buffer an upsert for a provider that is not visible", async () => {
@@ -663,6 +663,6 @@ describe("subscription lifecycle", () => {
 
     await h.service.removeAgent("a");
 
-    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a" }]);
+    expect(h.agentUpdates()).toEqual([{ kind: "remove", agentId: "a", reason: "deleted" }]);
   });
 });

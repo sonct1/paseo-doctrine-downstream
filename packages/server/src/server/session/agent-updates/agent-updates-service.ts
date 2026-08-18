@@ -10,6 +10,7 @@ import type { StoredAgentRecord } from "../../agent/agent-storage.js";
 import { resolveEffectiveThinkingOptionId, toAgentPayload } from "../../agent/agent-projections.js";
 
 type AgentUpdatePayload = Extract<SessionOutboundMessage, { type: "agent_update" }>["payload"];
+type AgentRemovalReason = Extract<AgentUpdatePayload, { kind: "remove" }>["reason"];
 type AgentUpdatesFilter = NonNullable<
   Extract<SessionInboundMessage, { type: "fetch_agents_request" }>["filter"]
 >;
@@ -51,7 +52,7 @@ export interface AgentUpdatesService {
   hasSubscription(): boolean;
   forwardLiveAgent(agent: ManagedAgent): Promise<void>;
   emitStoredRecord(record: StoredAgentRecord): Promise<AgentSnapshotPayload>;
-  removeAgent(agentId: string): Promise<void>;
+  removeAgent(agentId: string, reason?: Exclude<AgentRemovalReason, undefined>): Promise<void>;
   dispose(): void;
 }
 
@@ -160,6 +161,16 @@ function agentUpdateTargetId(update: AgentUpdatePayload): string {
   return update.kind === "remove" ? update.agentId : update.agent.id;
 }
 
+function filteredRemoval(
+  agent: AgentSnapshotPayload,
+): Extract<AgentUpdatePayload, { kind: "remove" }> {
+  return {
+    kind: "remove",
+    agentId: agent.id,
+    reason: agent.archivedAt ? "archived" : "filtered",
+  };
+}
+
 export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentUpdatesService {
   let subscription: AgentUpdatesSubscriptionState | null = null;
   const liveAgentUpdateTails = new Map<string, Promise<void>>();
@@ -254,10 +265,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
       ? await deps.buildProjectPlacementForWorkspaceId(payload.workspaceId)
       : null;
     if (!project) {
-      bufferOrEmit(
-        sub,
-        sequence(sub, { kind: "remove", agentId: payload.id }, null, null, payload.id),
-      );
+      bufferOrEmit(sub, sequence(sub, filteredRemoval(payload), null, null, payload.id));
       return payload;
     }
 
@@ -276,10 +284,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
               agent: payload,
               project,
             }
-          : {
-              kind: "remove",
-              agentId: payload.id,
-            },
+          : filteredRemoval(payload),
         payload,
         project,
         payload.id,
@@ -297,10 +302,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
           ? await deps.buildProjectPlacementForWorkspaceId(payload.workspaceId)
           : null;
         if (!project) {
-          bufferOrEmit(
-            sub,
-            sequence(sub, { kind: "remove", agentId: payload.id }, null, null, payload.id),
-          );
+          bufferOrEmit(sub, sequence(sub, filteredRemoval(payload), null, null, payload.id));
         } else {
           const matches = matchesAgentUpdatesFilter({
             agent: payload,
@@ -326,16 +328,7 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
           } else {
             bufferOrEmit(
               sub,
-              sequence(
-                sub,
-                {
-                  kind: "remove",
-                  agentId: payload.id,
-                },
-                payload,
-                project,
-                payload.id,
-              ),
+              sequence(sub, filteredRemoval(payload), payload, project, payload.id),
             );
           }
         }
@@ -371,12 +364,15 @@ export function createAgentUpdatesService(deps: AgentUpdatesServiceDeps): AgentU
     return enqueueAgentUpdate(payload.id, () => emitLiveAgentUpdate(payload));
   }
 
-  function removeAgent(agentId: string): Promise<void> {
+  function removeAgent(
+    agentId: string,
+    reason: Exclude<AgentRemovalReason, undefined> = "deleted",
+  ): Promise<void> {
     return enqueueAgentUpdate(agentId, () => {
       if (subscription) {
         bufferOrEmit(
           subscription,
-          sequence(subscription, { kind: "remove", agentId }, null, null, agentId),
+          sequence(subscription, { kind: "remove", agentId, reason }, null, null, agentId),
         );
       }
     });

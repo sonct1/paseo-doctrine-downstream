@@ -21,7 +21,9 @@ export function applyAgentDirectoryDelta(input: { serverId: string; delta: Agent
   stoppedRunning: boolean;
 } {
   if (input.delta.kind === "remove") {
-    removeAgentDirectoryReplica(input.serverId, input.delta.agentId);
+    removeAgentDirectoryReplica(input.serverId, input.delta.agentId, {
+      preserveArchivedDetail: input.delta.reason === "archived",
+    });
     return { agentId: input.delta.agentId, stoppedRunning: false };
   }
   return upsertAgentDirectoryReplica(input.serverId, input.delta);
@@ -98,8 +100,15 @@ export function replaceAgentPendingPermissions(serverId: string, agent: Agent): 
   useSessionStore.getState().setPendingPermissions(serverId, pendingPermissions);
 }
 
-export function removeAgentDirectoryReplica(serverId: string, agentId: string): void {
+export function removeAgentDirectoryReplica(
+  serverId: string,
+  agentId: string,
+  options: { preserveArchivedDetail?: boolean } = {},
+): void {
   const store = useSessionStore.getState();
+  const archivedDetail = store.sessions[serverId]?.agentDetails.get(agentId);
+  const preserveArchivedDetail =
+    options.preserveArchivedDetail === true && Boolean(archivedDetail?.archivedAt);
   clearArchiveAgentPending({ queryClient, serverId, agentId });
   const removeKey = <T>(current: Map<string, T>): Map<string, T> => {
     if (!current.has(agentId)) return current;
@@ -108,7 +117,9 @@ export function removeAgentDirectoryReplica(serverId: string, agentId: string): 
     return next;
   };
   store.setAgents(serverId, removeKey);
-  store.setAgentDetails(serverId, removeKey);
+  if (!preserveArchivedDetail) {
+    store.setAgentDetails(serverId, removeKey);
+  }
   store.setQueuedMessages(serverId, removeKey);
   store.setAgentTimelineCursor(serverId, removeKey);
   store.setInitializingAgents(serverId, removeKey);
