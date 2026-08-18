@@ -25,7 +25,6 @@ from the code or external sources.
 | [custom-providers.md](custom-providers.md)                    | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
 | [native-role-binding.md](native-role-binding.md)              | Native Foundation roles, immutable launch contracts, provider capability, and qualification gates                              |
 | [foundation-product.md](foundation-product.md)                | Foundation distribution, macOS installer, Control Workspace, WebUI provider credentials                                        |
-| [lead-handoff-runtime.md](lead-handoff-runtime.md)            | Lead handoff daemon mechanics — receipts vs mutations, final-release locking, restart reconciliation, process loss             |
 | [foundation-doctrine.md](foundation-doctrine.md)              | Foundation doctrine, authority model, evidence rules, topology, and product additions                                          |
 | [slp-usage.md](slp-usage.md)                                  | Operating guidance for Supervisor, Lead, and Peer                                                                              |
 | [skill-system.md](skill-system.md)                            | Paseo workflow skills, Foundation role bundles, admission, triggers, and provider projection                                   |
@@ -57,7 +56,7 @@ from the code or external sources.
 - **Integrate, don't append.** Find the doc that owns the subject and rewrite the part that is now wrong. The standard failure is finishing a task and adding a paragraph to the bottom of the closest-looking doc; ten tasks later the doc is a pile of paragraphs in discovery order. `custom-providers.md` is what that looks like.
 - **Don't document logic.** Prose that restates code drifts from the code and loses. Write down what the code can't tell you: why something is shaped the way it is, the gotcha that cost an afternoon, conventions nothing enforces, constraints that span packages or versions. If a reader could get it in two minutes by opening the file, cut it.
 - **One fact, one doc.** Every other mention is a link. If you are about to write the same paragraph in two docs, one of them is a link.
-- **Respect the layers.** `CONTRIBUTING.md` and this file name things and link out. Activity docs like `docs/qa.md` and `docs/testing.md` set the bar for a kind of work. Subject docs like `docs/unistyles.md` own one thing completely. A layer never re-explains the one below it.
+- **Respect the layers.** `CONTRIBUTING.md` and `CLAUDE.md` name things and link out. Activity docs like `docs/qa.md` and `docs/testing.md` set the bar for a kind of work. Subject docs like `docs/unistyles.md` own one thing completely. A layer never re-explains the one below it.
 - **One subject per doc.** If the subject doesn't fit in a sentence, split the doc. A section per provider, vendor, or platform is a table plus one worked example.
 - **Delete.** Obsolete sections go. Prefer a `packages/app/src/thing.ts:120` reference over a pasted block.
 - **New doc?** Add a row to the table above and link it from the docs that should send readers there.

@@ -102,8 +102,10 @@ requires an idle predecessor, closes its runtime while retaining its durable rec
 `currentWriteOwnerAgentId` to the successor. Runtime-closure failure aborts the transition without
 changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked, and
 final release does not detach, archive, or change role binding. Never reactivate a released
-predecessor identity as a later successor; create a fresh role-bound Lead identity instead. The
-daemon-side locking, durability, and process-loss mechanics are documented in
-`docs/lead-handoff-runtime.md` — the skill relies on those guarantees but does not restate them.
-If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
-the mechanism as unsupported; do not fake transition receipts with chat prose.
+predecessor identity as a later successor; create a fresh role-bound Lead identity instead. Do not
+claim recovery from a hard process loss in the daemon's unqualified pre-manifest window — report that
+window instead. When working in the Paseo repository, the daemon-side locking, durability, and
+process-loss mechanics are owned by `docs/slp-coordination-handoff.md`; the skill relies on those
+guarantees and does not restate them. If the first-class handoff tools are unavailable, stop with a
+manual frozen packet and report the mechanism as unsupported; do not fake transition receipts with
+chat prose.

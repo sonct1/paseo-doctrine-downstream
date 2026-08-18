@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0-paseo.24 - 2026-08-18
+
+### Removed
+
+- Gỡ lại agent-loop surface mà merge upstream 0.4 vô tình khôi phục: lệnh `paseo loop`, `LoopService`
+  cùng wiring bootstrap/WebSocket/Session, loop RPC methods phía client và bundled skill `paseo-loop`
+  (giờ nằm trong `LEGACY_SKILL_NAMES` để upgrade dọn bản đã cài). Wire schemas `loop/*` giữ lại theo
+  `COMPAT(agentLoops)` tới 2027-02-09 cho mixed-version peers. Entry `.23` về việc giữ `paseo loop`
+  downstream hết hiệu lực từ bản này.
+
+### Changed
+
+- `CLAUDE.md` rút từ 24,6KiB xuống ~9,7KiB: docs catalog chuyển sang `docs/README.md`, platform gating
+  sang `docs/platform-gating.md`, luật activation trùng lặp gom về một Local completion gate;
+  `scripts/agent-instructions.test.mjs` enforce byte budget 20KiB và symlink `AGENTS.md` trong CI.
+- Council `model-routing.md` bổ sung rationale correlation/high-risk/core-law trên schema canonical
+  hiện hành; legacy keys đánh dấu compatibility fallback với điều kiện gỡ.
+- Skill `paseo-handoff` giữ workflow và gates; cơ chế daemon (locks, pending intent, repair drains)
+  thuộc về `docs/slp-coordination-handoff.md`, không còn restate trong skill.
+
 ## 0.4.0-paseo.23 - 2026-08-18
 
 Bản canonical này thay thế các candidate `.8` và `.22` đã dừng, làm gọn bề mặt orchestration theo

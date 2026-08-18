@@ -19,8 +19,8 @@ This is an npm workspace monorepo:
 
 ## Docs
 
-`docs/` is the source of truth for system-level and process-level knowledge. **"The docs" always
-mean this directory — not the web.** Look here before fetching anything online. At the start of
+`docs/` is the source of truth for system-level and process-level knowledge. **"The docs",
+"check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online. At the start of
 non-trivial work, list `docs/` and skim anything relevant to the task.
 
 The full index, the doc-writing rules, and the doc voice live in [docs/README.md](docs/README.md).

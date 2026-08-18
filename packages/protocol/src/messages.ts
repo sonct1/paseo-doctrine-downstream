@@ -56,6 +56,8 @@ import {
   ScheduleRunOnceResponseSchema,
   ScheduleUpdateResponseSchema,
 } from "./schedule/rpc-schemas.js";
+// COMPAT(agentLoops): wire schemas for the removed agent-loop feature stay
+// registered for mixed-version peers; remove after 2027-02-09 with loop/rpc-schemas.ts.
 import {
   LoopRunRequestSchema,
   LoopListRequestSchema,

@@ -14,8 +14,10 @@ Human.
 | Draft-verdict Reviewer | `council.auditor` | Reviewer route |
 | High-risk draft Reviewer | `council.deepAuditor` | `council.deepVerifier`, then Reviewer route |
 
-The legacy keys are compatibility fallbacks only. Remove them when the daemon requires a preferences
-schema version that ships the canonical keys; do not add new routes under legacy names.
+The legacy keys (`council.reasoning`, `council.challengerReasoning`, `council.highRiskReasoning`) are
+compatibility fallbacks only; the other fallbacks in the column are canonical routes reused as
+defaults. Remove the legacy keys when the daemon requires a preferences schema version that ships the
+canonical keys; do not add new routes under legacy names.
 
 Each entry may contain `provider`, `mode`, and `thinking`. Map these to
 `create_agent.provider`, `settings.modeId`, and `settings.thinkingOptionId`. Omit absent settings.
@@ -40,10 +42,13 @@ Family diversity reduces shared blind spots but creates no authority and is not 
 weak provider only to manufacture diversity. The Human controls the current Lead route; Council does
 not inspect or replace it.
 
-In high-risk mode, only the drafting seat upgrades: `highRiskArchitect` replaces the Architect route,
+In high-risk mode, only the drafting seats upgrade: `highRiskArchitect` replaces the Architect route,
 and `deepAuditor` replaces the draft-verdict Reviewer route. The plain Reviewer and Verifier seats
 keep their configured cross-family routes — upgrading every seat to the same strongest model would
-collapse the family split that makes their agreement meaningful.
+collapse the family split that makes their agreement meaningful. Note the fallback chain does not
+preserve that split by itself: an unconfigured `deepVerifier` inherits the Architect route, which in
+high-risk mode resolves to the same model as the drafting seat. Configure `deepVerifier` (and
+`deepAuditor`) cross-family explicitly when high-risk work matters.
 
 Core law: cheap workers buy coverage; strong seats buy deliberation; the Lead adjudicates. Worker
 count never converts into decision weight.

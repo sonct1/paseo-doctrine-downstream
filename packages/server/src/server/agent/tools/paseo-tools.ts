@@ -2756,7 +2756,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Get agent status",
       description:
-        "Return the latest snapshot for an exact agent ID, including lifecycle state, capabilities, and pending permissions. A running agent should resolve itself from PASEO_AGENT_ID; list_agents intentionally omits internal loop workers.",
+        "Return the latest snapshot for an exact agent ID, including lifecycle state, capabilities, and pending permissions. A running agent should resolve itself from PASEO_AGENT_ID; list_agents intentionally omits internal worker agents.",
       inputSchema: {
         agentId: z.string(),
       },
