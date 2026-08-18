@@ -138,6 +138,11 @@ test("focused contracts stay inside existing required checks", () => {
   assert.match(desktop, /test:e2e:renderer/);
   assert.match(desktop, /test:e2e:browser-tabs/);
   assert.match(desktop, /npm run test --workspace=@getpaseo\/desktop/);
+  assert.match(desktop, /actions\/setup-python@v5/);
+  assert.match(desktop, /python-version: "3\.13\.15"/);
+  assert.match(desktop, /actions\/setup-go@v5/);
+  assert.match(desktop, /go-version: "1\.26\.2"/);
+  assert.match(desktop, /beads-central\.lock\.json'\)\.uvVersion/);
   assert.ok(!jobs.has("desktop-browser-bridge"));
   assert.ok(!jobs.has("playwright-desktop"));
 
