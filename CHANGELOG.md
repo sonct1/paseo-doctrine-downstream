@@ -1,10 +1,10 @@
 # Changelog
 
-## 0.4.0-paseo.8 - 2026-08-18
+## 0.4.0-paseo.22 - 2026-08-18
 
-Bản downstream này làm gọn bề mặt orchestration theo provider được support, giữ quyền đã chọn xuyên
-suốt vòng đời agent, đưa topology lên mức project và bundle Beads Central thành component native trên
-mọi release host.
+Bản canonical này thay thế candidate `.8` đã dừng, làm gọn bề mặt orchestration theo provider được
+support, giữ quyền đã chọn xuyên suốt vòng đời agent, đưa topology lên mức project và bundle Beads
+Central thành component native trên mọi release host.
 
 ### Added
 
@@ -23,6 +23,8 @@ mọi release host.
   không tự đổi hoặc biến mất sau khi agent bắt đầu chạy.
 - Provider toggles giờ cập nhật catalog/create flow thật, nên provider bị tắt không còn tiếp tục xuất
   hiện như route khả dụng.
+- Pin Foundation `0.1.0-dev.17`, đồng bộ doctrine với daemon-owned bundled Central sidecar thay vì
+  Docker hoặc service do Human vận hành riêng.
 
 ### Fixed
 
@@ -30,6 +32,8 @@ mọi release host.
   protocol giờ phân biệt `archived`, `filtered` và `deleted`.
 - Đồng bộ CI desktop packaging với release toolchain pinned Python, Go và `uv`, để build Central binary
   thật thay vì phụ thuộc host state hoặc fixture giả.
+- Giữ symlink Python framework portable trong macOS artifacts và giữ exact vendored Central bytes trên
+  Windows checkout, tránh broken sidecar hoặc checksum drift do line-ending conversion.
 
 ### Qualified
 
