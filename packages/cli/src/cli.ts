@@ -2,7 +2,6 @@ import { Command, Option } from "commander";
 import { createAgentCommand } from "./commands/agent/index.js";
 import { createDaemonCommand } from "./commands/daemon/index.js";
 import { createChatCommand } from "./commands/chat/index.js";
-import { createLoopCommand } from "./commands/loop/index.js";
 import { createPermitCommand } from "./commands/permit/index.js";
 import { createProviderCommand } from "./commands/provider/index.js";
 import { createPluginCommand } from "./commands/plugin/index.js";
@@ -181,9 +180,6 @@ export function createCli(): Command {
 
   // Workspace script commands
   program.addCommand(createScriptCommand());
-
-  // Loop commands
-  program.addCommand(createLoopCommand());
 
   // Schedule commands
   program.addCommand(createScheduleCommand());

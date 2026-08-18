@@ -98,7 +98,7 @@ export async function createSkillsSandbox(
   const saveRelease = new Promise<void>((resolve) => {
     releaseHeldSave = resolve;
   });
-  const bundledSkills = options.bundledSkills ?? ["paseo", "paseo-advisor", "paseo-loop"];
+  const bundledSkills = options.bundledSkills ?? ["paseo", "paseo-advisor", "paseo-mapper"];
   const root = await mkdtemp(path.join(os.tmpdir(), "paseo-e2e-skills-"));
   const targets: SkillTargets = {
     sourceDir: path.join(root, "bundle"),

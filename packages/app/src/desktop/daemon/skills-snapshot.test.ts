@@ -7,22 +7,22 @@ describe("parseSkillsSnapshot", () => {
       parseSkillsSnapshot({
         state: "drift",
         ops: [
-          { kind: "add", name: "paseo-loop" },
+          { kind: "add", name: "paseo-mapper" },
           { kind: "delete", name: "paseo-chat" },
         ],
-        available: ["paseo", "paseo-loop"],
+        available: ["paseo", "paseo-mapper"],
         installed: ["paseo"],
-        selection: { mode: "custom", skills: ["paseo", "paseo-loop"] },
+        selection: { mode: "custom", skills: ["paseo", "paseo-mapper"] },
       }),
     ).toEqual({
       state: "drift",
       ops: [
-        { kind: "add", name: "paseo-loop" },
+        { kind: "add", name: "paseo-mapper" },
         { kind: "delete", name: "paseo-chat" },
       ],
-      available: ["paseo", "paseo-loop"],
+      available: ["paseo", "paseo-mapper"],
       installed: ["paseo"],
-      selection: { mode: "custom", skills: ["paseo", "paseo-loop"] },
+      selection: { mode: "custom", skills: ["paseo", "paseo-mapper"] },
     });
   });
 
@@ -30,12 +30,12 @@ describe("parseSkillsSnapshot", () => {
     expect(
       parseSkillsSnapshot({
         state: "drift",
-        ops: [{ kind: "add", name: "paseo-loop" }],
-        available: ["paseo", "paseo-loop"],
-        installed: ["paseo-loop", 7],
+        ops: [{ kind: "add", name: "paseo-mapper" }],
+        available: ["paseo", "paseo-mapper"],
+        installed: ["paseo-mapper", 7],
         selection: { mode: "all" },
       }).installed,
-    ).toEqual(["paseo-loop"]);
+    ).toEqual(["paseo-mapper"]);
   });
 
   it("assumes the saved selection is installed when the host does not report it", () => {
@@ -45,10 +45,10 @@ describe("parseSkillsSnapshot", () => {
       parseSkillsSnapshot({
         state: "up-to-date",
         ops: [],
-        available: ["paseo", "paseo-advisor", "paseo-loop"],
-        selection: { mode: "custom", skills: ["paseo", "paseo-loop"] },
+        available: ["paseo", "paseo-advisor", "paseo-mapper"],
+        selection: { mode: "custom", skills: ["paseo", "paseo-mapper"] },
       }).installed,
-    ).toEqual(["paseo", "paseo-loop"]);
+    ).toEqual(["paseo", "paseo-mapper"]);
   });
 
   it("assumes every bundled skill is installed for an all selection from an older host", () => {
@@ -56,9 +56,9 @@ describe("parseSkillsSnapshot", () => {
       parseSkillsSnapshot({
         state: "up-to-date",
         ops: [],
-        available: ["paseo", "paseo-loop"],
+        available: ["paseo", "paseo-mapper"],
       }).installed,
-    ).toEqual(["paseo", "paseo-loop"]);
+    ).toEqual(["paseo", "paseo-mapper"]);
   });
 
   it("reads a snapshot with no saved selection as all skills", () => {
@@ -76,13 +76,13 @@ describe("parseSkillsSnapshot", () => {
       parseSkillsSnapshot({
         state: "up-to-date",
         ops: [],
-        available: ["paseo", 7, null, "paseo-loop"],
+        available: ["paseo", 7, null, "paseo-mapper"],
         selection: { mode: "custom", skills: ["paseo", 7] },
       }),
     ).toEqual({
       state: "up-to-date",
       ops: [],
-      available: ["paseo", "paseo-loop"],
+      available: ["paseo", "paseo-mapper"],
       installed: ["paseo"],
       selection: { mode: "custom", skills: ["paseo"] },
     });
@@ -93,12 +93,12 @@ describe("parseSkillsSnapshot", () => {
       parseSkillsSaveResult({
         state: "up-to-date",
         ops: [],
-        available: ["paseo", "paseo-loop"],
-        installed: ["paseo", "paseo-loop"],
+        available: ["paseo", "paseo-mapper"],
+        installed: ["paseo", "paseo-mapper"],
         selection: { mode: "all" },
-        confirmationRequired: { removals: ["paseo-loop", 7] },
+        confirmationRequired: { removals: ["paseo-mapper", 7] },
       }).confirmationRequired,
-    ).toEqual({ removals: ["paseo-loop"] });
+    ).toEqual({ removals: ["paseo-mapper"] });
   });
 
   it("treats a save with no confirmation request as applied", () => {

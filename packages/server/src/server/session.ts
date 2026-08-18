@@ -170,9 +170,9 @@ import {
 } from "./session/checkout/git-metadata-generator.js";
 import { ScheduleSession } from "./session/schedule/schedule-session.js";
 import {
-  ChatScheduleLoopSession,
-  type ChatScheduleLoopSessionHost,
-} from "./session/chat/chat-schedule-loop-session.js";
+  ChatScheduleSession,
+  type ChatScheduleSessionHost,
+} from "./session/chat/chat-schedule-session.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
 import { AgentConfigSession } from "./session/agent-config/agent-config-session.js";
@@ -223,7 +223,6 @@ import type { SpeechReadinessSnapshot } from "./speech/speech-runtime.js";
 import type pino from "pino";
 import { FileBackedChatService } from "./chat/chat-service.js";
 import { resolveAgentIdentifier as resolveStoredAgentIdentifier } from "./agent/identifier.js";
-import { LoopService } from "./loop-service.js";
 import { ScheduleService } from "./schedule/service.js";
 import {
   createGitHubService,
@@ -462,20 +461,18 @@ function createBeadsSession(options: {
   });
 }
 
-function createChatScheduleLoopSession(options: {
-  host: ChatScheduleLoopSessionHost;
+function createChatScheduleSession(options: {
+  host: ChatScheduleSessionHost;
   chatService: FileBackedChatService | undefined;
   scheduleService: ScheduleService;
-  loopService: LoopService | undefined;
   clientId: string;
   logger: pino.Logger;
-}): ChatScheduleLoopSession | null {
-  if (!options.chatService || !options.loopService) return null;
-  return new ChatScheduleLoopSession({
+}): ChatScheduleSession | null {
+  if (!options.chatService) return null;
+  return new ChatScheduleSession({
     host: options.host,
     chatService: options.chatService,
     scheduleService: options.scheduleService,
-    loopService: options.loopService,
     clientId: options.clientId,
     logger: options.logger,
   });
@@ -507,7 +504,6 @@ export interface SessionOptions {
   filesystem?: SessionFileSystem;
   chatService?: FileBackedChatService;
   scheduleService: ScheduleService;
-  loopService?: LoopService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
   createAgentMcpTransport?: AgentMcpTransportFactory;
@@ -755,7 +751,7 @@ export class Session {
   private readonly workspaceDirectory: WorkspaceDirectory;
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
-  private readonly chatScheduleLoopSession: ChatScheduleLoopSession | null;
+  private readonly chatScheduleSession: ChatScheduleSession | null;
   private readonly scheduleSession: ScheduleSession;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -795,7 +791,6 @@ export class Session {
       filesystem,
       chatService,
       scheduleService,
-      loopService,
       checkoutDiffManager,
       github,
       renameCurrentBranch,
@@ -938,7 +933,7 @@ export class Session {
       scheduleService,
       logger: this.sessionLogger,
     });
-    this.chatScheduleLoopSession = createChatScheduleLoopSession({
+    this.chatScheduleSession = createChatScheduleSession({
       host: {
         emit: (msg) => this.emit(msg),
         listStoredAgents: () => this.agentStorage.list(),
@@ -957,7 +952,6 @@ export class Session {
       },
       chatService,
       scheduleService,
-      loopService,
       clientId: this.clientId,
       logger: this.sessionLogger,
     });
@@ -1997,7 +1991,7 @@ export class Session {
       this.dispatchPluginDirectoryMessage(msg) ??
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
-      this.dispatchChatLoopAndScheduleMessage(msg) ??
+      this.dispatchChatAndScheduleMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
   }
@@ -2654,8 +2648,8 @@ export class Session {
     }
   }
 
-  private dispatchChatAndLoopMessage(msg: SessionInboundMessage): Promise<void> | undefined {
-    const session = this.chatScheduleLoopSession;
+  private dispatchChatMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    const session = this.chatScheduleSession;
     if (!session) return undefined;
     switch (msg.type) {
       case "chat/create":
@@ -2672,25 +2666,15 @@ export class Session {
         return session.handleChatReadRequest(msg);
       case "chat/wait":
         return session.handleChatWaitRequest(msg);
-      case "loop/run":
-        return session.handleLoopRunRequest(msg);
-      case "loop/list":
-        return session.handleLoopListRequest(msg);
-      case "loop/inspect":
-        return session.handleLoopInspectRequest(msg);
-      case "loop/logs":
-        return session.handleLoopLogsRequest(msg);
-      case "loop/stop":
-        return session.handleLoopStopRequest(msg);
+      // COMPAT(agentLoops): legacy loop/* requests from mixed-version peers fall
+      // through unhandled; their wire schemas remain in @paseo/protocol until 2027-02-09.
       default:
         return undefined;
     }
   }
 
-  private dispatchChatLoopAndScheduleMessage(
-    msg: SessionInboundMessage,
-  ): Promise<void> | undefined {
-    return this.dispatchChatAndLoopMessage(msg) ?? this.dispatchScheduleMessage(msg);
+  private dispatchChatAndScheduleMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    return this.dispatchChatMessage(msg) ?? this.dispatchScheduleMessage(msg);
   }
 
   private async dispatchMiscMessage(msg: SessionInboundMessage): Promise<void> {

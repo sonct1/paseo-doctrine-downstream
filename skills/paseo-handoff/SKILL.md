@@ -100,17 +100,10 @@ proposing an authority-changing correction.
 The first transitions are durable receipts, not lifecycle mutations. Final `predecessor_released`
 requires an idle predecessor, closes its runtime while retaining its durable record, then transfers
 `currentWriteOwnerAgentId` to the successor. Runtime-closure failure aborts the transition without
-changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked. Final
-release does not detach, archive, or change role binding, and revalidates both identities under
-stable-ordered locks. It joins an existing close, remembers any close failure until daemon restart, and
-bounds the close wait so a stuck provider cannot hold the successor lock indefinitely. Audit timeline
-reads must use durable state without resuming the released provider runtime. Timeline batches must record
-durable pending intent before row commits so restart can reconcile partial writes. Final release must
-reconcile that intent and fail closed if durability remains unresolved; timeout must abort any
-continuation before it can start a later runtime close. Treat a pre-manifest failure as a current-daemon
-release and graceful-shutdown blocker. Serialize repair drains per agent and attempt every known repair
-before reporting aggregate shutdown failure; do not claim recovery from hard process loss in that exact
-unqualified interval. Never
-reactivate a released predecessor identity as a later successor; create a fresh role-bound Lead identity
-instead. If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
+changing the Owner. Later prompt dispatch or unarchive-and-prompt for the predecessor is blocked, and
+final release does not detach, archive, or change role binding. Never reactivate a released
+predecessor identity as a later successor; create a fresh role-bound Lead identity instead. The
+daemon-side locking, durability, and process-loss mechanics are documented in
+`docs/lead-handoff-runtime.md` — the skill relies on those guarantees but does not restate them.
+If the first-class handoff tools are unavailable, stop with a manual frozen packet and report
 the mechanism as unsupported; do not fake transition receipts with chat prose.

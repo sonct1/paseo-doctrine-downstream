@@ -42,12 +42,12 @@ describe("createSkillSelectionStore", () => {
 
     const saved = await createSkillSelectionStore({ userDataPath }).set({
       mode: "custom",
-      skills: ["paseo", "paseo-loop"],
+      skills: ["paseo", "paseo-mapper"],
     });
     const reloaded = await createSkillSelectionStore({ userDataPath }).get();
 
-    expect(saved).toEqual({ mode: "custom", skills: ["paseo", "paseo-loop"] });
-    expect(reloaded).toEqual({ mode: "custom", skills: ["paseo", "paseo-loop"] });
+    expect(saved).toEqual({ mode: "custom", skills: ["paseo", "paseo-mapper"] });
+    expect(reloaded).toEqual({ mode: "custom", skills: ["paseo", "paseo-mapper"] });
     expect(await readdir(userDataPath)).toEqual(["skill-selection.json"]);
   });
 
@@ -57,13 +57,13 @@ describe("createSkillSelectionStore", () => {
 
     const saved = await store.set({
       mode: "custom",
-      skills: ["paseo-loop", "paseo", "paseo-loop", "  ", 7, null],
+      skills: ["paseo-mapper", "paseo", "paseo-mapper", "  ", 7, null],
     });
 
-    expect(saved).toEqual({ mode: "custom", skills: ["paseo", "paseo-loop"] });
+    expect(saved).toEqual({ mode: "custom", skills: ["paseo", "paseo-mapper"] });
     expect(JSON.parse(await readFile(selectionFilePath(userDataPath), "utf8"))).toEqual({
       version: 1,
-      selection: { mode: "custom", skills: ["paseo", "paseo-loop"] },
+      selection: { mode: "custom", skills: ["paseo", "paseo-mapper"] },
     });
   });
 
@@ -112,13 +112,13 @@ describe("createSkillSelectionStore", () => {
       userDataPath,
       JSON.stringify({
         version: 1,
-        selection: { mode: "custom", skills: ["paseo-loop", 3, "paseo", "paseo"] },
+        selection: { mode: "custom", skills: ["paseo-mapper", 3, "paseo", "paseo"] },
       }),
     );
 
     expect(await createSkillSelectionStore({ userDataPath }).get()).toEqual({
       mode: "custom",
-      skills: ["paseo", "paseo-loop"],
+      skills: ["paseo", "paseo-mapper"],
     });
   });
 
@@ -142,7 +142,7 @@ describe("createSkillSelectionStore", () => {
     await Promise.all([
       store.set({ mode: "custom", skills: ["paseo"] }),
       store.set({ mode: "all" }),
-      store.set({ mode: "custom", skills: ["paseo-loop"] }),
+      store.set({ mode: "custom", skills: ["paseo-mapper"] }),
     ]);
 
     expect(await readdir(userDataPath)).toEqual(["skill-selection.json"]);

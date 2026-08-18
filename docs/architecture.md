@@ -80,7 +80,6 @@ not retain non-Git directories.
 | `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                               |
 | `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                 |
 | `server/schedule/`              | Cron-based scheduled agents                                                   |
-| `server/loop-service.ts`        | Looping agent runs that retry until an exit condition                         |
 | `server/chat/`                  | Chat rooms for agent-to-agent and human-to-agent messaging                    |
 | `server/beads/`                 | Beads adapter đã pin, project isolation, idempotency và tools theo role       |
 

@@ -65,11 +65,11 @@ test.describe("Choosing installed skills", () => {
     await openSkillsIntegrations(page);
 
     await openSkillSelection(page);
-    await chooseCustomSkills(page, ["paseo", "paseo-loop"]);
+    await chooseCustomSkills(page, ["paseo", "paseo-mapper"]);
     await saveSkillSelection(page);
 
-    await expectSkillsInstalled(skills, ["paseo", "paseo-loop"]);
-    await expectSelectedSkills(page, ["paseo", "paseo-loop"]);
+    await expectSkillsInstalled(skills, ["paseo", "paseo-mapper"]);
+    await expectSelectedSkills(page, ["paseo", "paseo-mapper"]);
   });
 
   test("all skills includes every available skill", async ({ page, startSkills }) => {
@@ -97,7 +97,7 @@ test.describe("Choosing installed skills", () => {
     await saveSkillSelection(page);
 
     await openSkillSelection(page);
-    await toggleSkill(page, "paseo-loop");
+    await toggleSkill(page, "paseo-mapper");
     await cancelSkillSelection(page);
 
     await expectSkillsInstalled(skills, ["paseo"]);
@@ -182,9 +182,9 @@ test.describe("Removing an installed skill", () => {
     await startSkills({
       installed: { mode: "custom", skills: ["paseo"] },
       placeOnDisk: {
-        skill: "paseo-loop",
+        skill: "paseo-mapper",
         target: "claude",
-        files: { "SKILL.md": "# paseo-loop\n", "notes/mine.md": "my notes" },
+        files: { "SKILL.md": "# paseo-mapper\n", "notes/mine.md": "my notes" },
       },
     });
     await gotoAppShell(page);
@@ -204,7 +204,7 @@ test.describe("Removing an installed skill", () => {
     await chooseCustomSkills(page, ["paseo", "paseo-advisor"]);
     await saveSkillSelection(page);
 
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
     await expectSkillSelectionOpen(page);
     await expectSkillsInstalled(skills, skills.bundledSkills);
     await expectSavedSkillSelection(skills, { mode: "all" });
@@ -219,7 +219,7 @@ test.describe("Removing an installed skill", () => {
     await chooseCustomSkills(page, ["paseo", "paseo-advisor"]);
     await saveSkillSelection(page);
 
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
     await expectSkillsInstalled(skills, ["paseo", "paseo-advisor"]);
     await expectSelectedSkills(page, ["paseo", "paseo-advisor"]);
   });
@@ -227,7 +227,7 @@ test.describe("Removing an installed skill", () => {
   test("warns for a skill installed in only one agent directory", async ({ page, startSkills }) => {
     const skills = await startSkills({
       installed: { mode: "all" },
-      keepOnlyIn: { skill: "paseo-loop", target: "claude" },
+      keepOnlyIn: { skill: "paseo-mapper", target: "claude" },
       confirmRemoval: false,
     });
     await gotoAppShell(page);
@@ -237,9 +237,9 @@ test.describe("Removing an installed skill", () => {
     await chooseCustomSkills(page, ["paseo", "paseo-advisor"]);
     await saveSkillSelection(page);
 
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
     await expectSkillSelectionOpen(page);
-    await expectSkillPresentIn(skills, "claude", "paseo-loop");
+    await expectSkillPresentIn(skills, "claude", "paseo-mapper");
     await expectSavedSkillSelection(skills, { mode: "all" });
   });
 
@@ -247,14 +247,14 @@ test.describe("Removing an installed skill", () => {
     page,
     startSkills,
   }) => {
-    // The committed preference excludes paseo-loop, but the directory is back —
+    // The committed preference excludes paseo-mapper, but the directory is back —
     // a manual reinstall or an external sync. Saving any edit deletes it.
     const skills = await startSkills({
       installed: { mode: "custom", skills: ["paseo"] },
       placeOnDisk: {
-        skill: "paseo-loop",
+        skill: "paseo-mapper",
         target: "claude",
-        files: { "SKILL.md": "# paseo-loop\n", "notes/mine.md": "my notes" },
+        files: { "SKILL.md": "# paseo-mapper\n", "notes/mine.md": "my notes" },
       },
       confirmRemoval: false,
     });
@@ -265,9 +265,9 @@ test.describe("Removing an installed skill", () => {
     await toggleSkill(page, "paseo-advisor");
     await saveSkillSelection(page);
 
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
     await expectSkillSelectionOpen(page);
-    await expectSkillFilePresent(skills, "claude", "paseo-loop", "notes/mine.md");
+    await expectSkillFilePresent(skills, "claude", "paseo-mapper", "notes/mine.md");
     await expectSavedSkillSelection(skills, { mode: "custom", skills: ["paseo"] });
   });
 
@@ -284,13 +284,13 @@ test.describe("Removing an installed skill", () => {
     await openSkillSelection(page);
 
     // Nothing to delete when the sheet opened; the host looks again at save time.
-    await skills.placeSkillOnDisk("paseo-loop", "claude");
+    await skills.placeSkillOnDisk("paseo-mapper", "claude");
     await toggleSkill(page, "paseo-advisor");
     await saveSkillSelection(page);
 
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
     await expectSkillSelectionOpen(page);
-    await expectSkillPresentIn(skills, "claude", "paseo-loop");
+    await expectSkillPresentIn(skills, "claude", "paseo-mapper");
     await expectSavedSkillSelection(skills, { mode: "custom", skills: ["paseo"] });
   });
 
@@ -306,11 +306,11 @@ test.describe("Removing an installed skill", () => {
 
     // Another window commits a different selection. Saving picks that up, so the
     // sheet is handed a selection it did not start from while an edit is open.
-    await skills.commitSelectionExternally({ mode: "custom", skills: ["paseo", "paseo-loop"] }, [
+    await skills.commitSelectionExternally({ mode: "custom", skills: ["paseo", "paseo-mapper"] }, [
       "paseo-advisor",
     ]);
     await saveSkillSelection(page);
-    await expectRemovalWarning(page, ["paseo-loop"]);
+    await expectRemovalWarning(page, ["paseo-mapper"]);
 
     await expectSkillChoices(page, ["paseo", "paseo-advisor"]);
   });
@@ -324,10 +324,10 @@ test.describe("Removing an installed skill", () => {
     await openSkillsIntegrations(page);
 
     await openSkillSelection(page);
-    await toggleSkill(page, "paseo-loop");
+    await toggleSkill(page, "paseo-mapper");
     await saveSkillSelection(page);
 
-    await expectSkillsInstalled(skills, ["paseo", "paseo-loop"]);
+    await expectSkillsInstalled(skills, ["paseo", "paseo-mapper"]);
     await expectNoRemovalWarning(page);
   });
 });

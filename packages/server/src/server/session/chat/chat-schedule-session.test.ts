@@ -1,30 +1,25 @@
 import { describe, expect, it } from "vitest";
 import pino from "pino";
-import {
-  ChatScheduleLoopSession,
-  type ChatScheduleLoopSessionHost,
-} from "./chat-schedule-loop-session.js";
+import { ChatScheduleSession, type ChatScheduleSessionHost } from "./chat-schedule-session.js";
 import { createStub } from "../../test-utils/class-mocks.js";
 import { findByType } from "../../test-utils/session-stubs.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import type { ScheduleService } from "../../schedule/service.js";
-import type { LoopService } from "../../loop-service.js";
 
 type ChatMessageFixture = Awaited<ReturnType<FileBackedChatService["dispatchMessage"]>>;
 
 interface MakeOptions {
   chat?: { [K in keyof FileBackedChatService]?: unknown };
   schedule?: { [K in keyof ScheduleService]?: unknown };
-  loop?: { [K in keyof LoopService]?: unknown };
-  host?: Partial<ChatScheduleLoopSessionHost>;
+  host?: Partial<ChatScheduleSessionHost>;
 }
 
 function makeSubsystem(options: MakeOptions = {}) {
   const emitted: SessionOutboundMessage[] = [];
   const sentAgentMessages: Array<{ agentId: string; text: string }> = [];
   let onSend: (() => void) | null = null;
-  const host: ChatScheduleLoopSessionHost = {
+  const host: ChatScheduleSessionHost = {
     emit: (msg) => emitted.push(msg),
     listStoredAgents: async () => [],
     listLiveAgents: () => [],
@@ -35,11 +30,10 @@ function makeSubsystem(options: MakeOptions = {}) {
     },
     ...options.host,
   };
-  const subsystem = new ChatScheduleLoopSession({
+  const subsystem = new ChatScheduleSession({
     host,
     chatService: createStub<FileBackedChatService>(options.chat ?? {}),
     scheduleService: createStub<ScheduleService>(options.schedule ?? {}),
-    loopService: createStub<LoopService>(options.loop ?? {}),
     clientId: "client-1",
     logger: pino({ level: "silent" }),
   });
@@ -53,7 +47,7 @@ function makeSubsystem(options: MakeOptions = {}) {
   return { subsystem, emitted, sentAgentMessages, waitForSend };
 }
 
-describe("ChatScheduleLoopSession", () => {
+describe("ChatScheduleSession", () => {
   it("chat/post emits the stored message and does not fan out without mentions", async () => {
     const message: ChatMessageFixture = {
       id: "m1",
@@ -209,20 +203,5 @@ describe("ChatScheduleLoopSession", () => {
 
     expect(received?.target).toEqual({ type: "agent", agentId: "agent-9" });
     expect(findByType(emitted, "schedule/create/response")?.payload.error).toBeNull();
-  });
-
-  it("loop/run emits the loop summary from the loop service", async () => {
-    const loop = { id: "loop-1", status: "running" };
-    const { subsystem, emitted } = makeSubsystem({ loop: { runLoop: async () => loop } });
-
-    await subsystem.handleLoopRunRequest({
-      type: "loop/run",
-      requestId: "l1",
-      prompt: "p",
-      cwd: "/tmp/loop",
-    });
-
-    const res = findByType(emitted, "loop/run/response");
-    expect(res?.payload.loop).toEqual(loop);
   });
 });

@@ -550,14 +550,6 @@ type BeadsIssueClosePayload = Extract<
   SessionOutboundMessage,
   { type: "beads.issue.close.response" }
 >["payload"];
-type LoopRunPayload = Extract<SessionOutboundMessage, { type: "loop/run/response" }>["payload"];
-type LoopListPayload = Extract<SessionOutboundMessage, { type: "loop/list/response" }>["payload"];
-type LoopInspectPayload = Extract<
-  SessionOutboundMessage,
-  { type: "loop/inspect/response" }
->["payload"];
-type LoopLogsPayload = Extract<SessionOutboundMessage, { type: "loop/logs/response" }>["payload"];
-type LoopStopPayload = Extract<SessionOutboundMessage, { type: "loop/stop/response" }>["payload"];
 type ScheduleCreatePayload = Extract<
   SessionOutboundMessage,
   { type: "schedule/create/response" }
@@ -793,37 +785,6 @@ export type CloseBeadsIssueOptions = Omit<
   Extract<SessionInboundMessage, { type: "beads.issue.close.request" }>,
   "type" | "requestId"
 > & { requestId?: string };
-export interface RunLoopOptions {
-  prompt: string;
-  cwd: string;
-  provider?: string;
-  model?: string;
-  modeId?: string;
-  verifierProvider?: string;
-  verifierModel?: string;
-  verifierModeId?: string;
-  verifyPrompt?: string | null;
-  verifyChecks?: string[];
-  archive?: boolean;
-  name?: string | null;
-  sleepMs?: number;
-  maxIterations?: number;
-  maxTimeMs?: number;
-  requestId?: string;
-}
-export interface InspectLoopOptions {
-  id: string;
-  requestId?: string;
-}
-export interface LoopLogsOptions {
-  id: string;
-  afterSeq?: number;
-  requestId?: string;
-}
-export interface StopLoopOptions {
-  id: string;
-  requestId?: string;
-}
 export interface CreateScheduleOptions {
   prompt: string;
   name?: string | null;
@@ -5707,81 +5668,6 @@ export class DaemonClient {
     });
   }
 
-  async loopRun(options: RunLoopOptions): Promise<LoopRunPayload> {
-    return this.sendCorrelatedSessionRequest({
-      requestId: options.requestId,
-      message: {
-        type: "loop/run",
-        prompt: options.prompt,
-        cwd: options.cwd,
-        ...(options.provider ? { provider: options.provider } : {}),
-        ...(options.model ? { model: options.model } : {}),
-        ...(options.modeId ? { modeId: options.modeId } : {}),
-        ...(options.verifierProvider ? { verifierProvider: options.verifierProvider } : {}),
-        ...(options.verifierModel ? { verifierModel: options.verifierModel } : {}),
-        ...(options.verifierModeId ? { verifierModeId: options.verifierModeId } : {}),
-        ...(options.verifyPrompt ? { verifyPrompt: options.verifyPrompt } : {}),
-        ...(options.verifyChecks && options.verifyChecks.length > 0
-          ? { verifyChecks: options.verifyChecks }
-          : {}),
-        ...(options.archive !== undefined ? { archive: options.archive } : {}),
-        ...(options.name ? { name: options.name } : {}),
-        ...(typeof options.sleepMs === "number" ? { sleepMs: options.sleepMs } : {}),
-        ...(typeof options.maxIterations === "number"
-          ? { maxIterations: options.maxIterations }
-          : {}),
-        ...(typeof options.maxTimeMs === "number" ? { maxTimeMs: options.maxTimeMs } : {}),
-      },
-      responseType: "loop/run/response",
-    });
-  }
-
-  async loopList(requestId?: string): Promise<LoopListPayload> {
-    return this.sendCorrelatedSessionRequest({
-      requestId,
-      message: {
-        type: "loop/list",
-      },
-      responseType: "loop/list/response",
-    });
-  }
-
-  async loopInspect(options: string | InspectLoopOptions): Promise<LoopInspectPayload> {
-    const normalized = typeof options === "string" ? { id: options } : options;
-    return this.sendCorrelatedSessionRequest({
-      requestId: normalized.requestId,
-      message: {
-        type: "loop/inspect",
-        id: normalized.id,
-      },
-      responseType: "loop/inspect/response",
-    });
-  }
-
-  async loopLogs(options: string | LoopLogsOptions, afterSeq?: number): Promise<LoopLogsPayload> {
-    const normalized = typeof options === "string" ? { id: options, afterSeq } : options;
-    return this.sendCorrelatedSessionRequest({
-      requestId: normalized.requestId,
-      message: {
-        type: "loop/logs",
-        id: normalized.id,
-        ...(typeof normalized.afterSeq === "number" ? { afterSeq: normalized.afterSeq } : {}),
-      },
-      responseType: "loop/logs/response",
-    });
-  }
-
-  async loopStop(options: string | StopLoopOptions): Promise<LoopStopPayload> {
-    const normalized = typeof options === "string" ? { id: options } : options;
-    return this.sendCorrelatedSessionRequest({
-      requestId: normalized.requestId,
-      message: {
-        type: "loop/stop",
-        id: normalized.id,
-      },
-      responseType: "loop/stop/response",
-    });
-  }
   onTerminalStreamEvent(handler: (event: TerminalStreamEvent) => void): () => void {
     return this.terminalStreams.onEvent(handler);
   }

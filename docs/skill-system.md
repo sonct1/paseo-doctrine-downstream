@@ -15,7 +15,6 @@ Các package dưới [`skills/`](../skills/) phục vụ client hoặc coding ag
 | `paseo-committee` | Dùng hai advisor cho hard planning/root-cause question                    |
 | `council`         | Lead chạy sealed evidence review và tự ra binding verdict, không vote     |
 | `paseo-handoff`   | Chuẩn bị briefing và launch receiving agent; không transfer SLP authority |
-| `paseo-loop`      | Chạy bounded worker/verifier loop tới exit condition                      |
 
 Đây là product capabilities. Việc một package được install hoặc visible không cho agent quyền tạo
 workspace, launch agent, mutate repository hoặc accept engineering. Current role, exact lease và exposed

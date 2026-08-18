@@ -1,6 +1,6 @@
 {
   "name": "@getpaseo/foundation-cli",
-  "version": "0.4.0-paseo.23",
+  "version": "0.4.0-paseo.24",
   "private": true,
   "description": "Install and diagnose the Paseo Foundation distribution",
   "bin": {

@@ -183,56 +183,6 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-
-test("loopRun forwards archive to the daemon", async () => {
-  const logger = createMockLogger();
-  const mock = createMockTransport();
-  const client = new DaemonClient({
-    url: "ws://test",
-    clientId: "clsk_unit_test",
-    logger,
-    reconnect: { enabled: false },
-    transportFactory: () => mock.transport,
-  });
-  clients.push(client);
-
-  const connectPromise = client.connect();
-  mock.triggerOpen();
-  await connectPromise;
-
-  const runPromise = client.loopRun({
-    prompt: "Return any response",
-    cwd: "/tmp/loop-project",
-    archive: true,
-    requestId: "loop-run-archive",
-  });
-
-  expect(parseSentFrame(mock.sent[0])).toEqual({
-    type: "loop/run",
-    requestId: "loop-run-archive",
-    prompt: "Return any response",
-    cwd: "/tmp/loop-project",
-    archive: true,
-  });
-
-  mock.triggerMessage(
-    wrapSessionMessage({
-      type: "loop/run/response",
-      payload: {
-        requestId: "loop-run-archive",
-        loop: null,
-        error: null,
-      },
-    }),
-  );
-
-  await expect(runPromise).resolves.toEqual({
-    requestId: "loop-run-archive",
-    loop: null,
-    error: null,
-  });
-});
-
 test("traces WebSocket frames, message types, and JSON parse duration", async () => {
   const mock = createMockTransport();
   const recorder = createTraceRecorder();

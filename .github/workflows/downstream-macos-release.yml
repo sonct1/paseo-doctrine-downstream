@@ -58,6 +58,7 @@ jobs:
           npm run acp:pin-consistency:check
           node --test \
             scripts/acp-catalog-pin-consistency.test.mjs \
+            scripts/agent-instructions.test.mjs \
             scripts/beads-central-bundle.test.mjs \
             scripts/build-daemon-web-ui.test.mjs \
             scripts/ci-workflow.test.mjs \

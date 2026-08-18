@@ -158,7 +158,6 @@ import {
 } from "./workspace-registry.js";
 import { FileBackedChatService } from "./chat/chat-service.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
-import { LoopService } from "./loop-service.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
@@ -1222,15 +1221,6 @@ export async function createPaseoDaemon(
   };
   const createAgent = (input: Parameters<typeof createAgentCommand>[1]) =>
     createAgentCommand(createAgentCommandDependencies, input);
-  const loopService = new LoopService({
-    paseoHome: config.paseoHome,
-    logger,
-    agentManager,
-    createAgent,
-    ensureWorkspaceForCreate: ensureWorkspaceForCreateAndBroadcastExternal,
-  });
-  await loopService.initialize();
-  logger.info({ elapsed: elapsed() }, "Loop service initialized");
   const archiveWorkspaceByIdExternal = (workspaceId: string, requestId: string) =>
     archiveByScope(
       {
@@ -1777,7 +1767,6 @@ export async function createPaseoDaemon(
               pluginRuntime,
               beadsService,
               chatService,
-              loopService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

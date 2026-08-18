@@ -4,16 +4,15 @@ import type { StoredAgentRecord } from "../../agent/agent-storage.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import { ChatServiceError, type FileBackedChatService } from "../../chat/chat-service.js";
 import { postChatMessageWithMentions } from "../../chat/post.js";
-import type { LoopService } from "../../loop-service.js";
 import type { ScheduleService } from "../../schedule/service.js";
 
 /**
- * The collaborators a chat command reaches that are NOT part of the chat/schedule/loop
+ * The collaborators a chat command reaches that are NOT part of the chat/schedule
  * domain: the agent roster reads and the agent-message send used only by chat/post
  * mention fanout. The Session shell owns the agent lifecycle; this subsystem orchestrates
  * a notification through it but does not own it.
  */
-export interface ChatScheduleLoopSessionHost {
+export interface ChatScheduleSessionHost {
   emit(msg: SessionOutboundMessage): void;
   listStoredAgents(): Promise<StoredAgentRecord[]>;
   listLiveAgents(): ManagedAgent[];
@@ -23,37 +22,36 @@ export interface ChatScheduleLoopSessionHost {
   sendAgentMessage(agentId: string, text: string): Promise<void>;
 }
 
-export interface ChatScheduleLoopSessionOptions {
-  host: ChatScheduleLoopSessionHost;
+export interface ChatScheduleSessionOptions {
+  host: ChatScheduleSessionHost;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
-  loopService: LoopService;
   clientId: string;
   logger: pino.Logger;
 }
 
 /**
- * A client's chat, schedule, and loop request surface. The three families are the
+ * A client's chat and schedule request surface. The two families are the
  * least-coupled in the session: each is a stateless request/response over its own
- * service (chat rooms, cron routines, autonomous loops), with no shared observer,
+ * service (chat rooms, cron routines), with no shared observer,
  * git, or voice state and no subscriptions to tear down. They live in one subsystem
  * because they are dispatched together — schedule/* was historically reached through
- * the chat dispatcher's fall-through arm. The three rpc-error emitters stay separate:
+ * the chat dispatcher's fall-through arm. The rpc-error emitters stay separate:
  * they differ by default code, and only the chat one reads ChatServiceError.code.
+ * COMPAT(agentLoops): the loop/* request family was removed with the agent-loop
+ * feature; legacy wire schemas remain in @paseo/protocol until 2027-02-09.
  */
-export class ChatScheduleLoopSession {
-  private readonly host: ChatScheduleLoopSessionHost;
+export class ChatScheduleSession {
+  private readonly host: ChatScheduleSessionHost;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
-  private readonly loopService: LoopService;
   private readonly clientId: string;
   private readonly logger: pino.Logger;
 
-  constructor(options: ChatScheduleLoopSessionOptions) {
+  constructor(options: ChatScheduleSessionOptions) {
     this.host = options.host;
     this.chatService = options.chatService;
     this.scheduleService = options.scheduleService;
-    this.loopService = options.loopService;
     this.clientId = options.clientId;
     this.logger = options.logger;
   }
@@ -448,138 +446,6 @@ export class ChatScheduleLoopSession {
       });
     } catch (error) {
       this.emitScheduleRpcError(request, error);
-    }
-  }
-
-  private emitLoopRpcError(
-    request: Extract<
-      SessionInboundMessage,
-      {
-        type: "loop/run" | "loop/list" | "loop/inspect" | "loop/logs" | "loop/stop";
-      }
-    >,
-    error: unknown,
-  ): void {
-    const message = error instanceof Error ? error.message : String(error);
-    this.logger.error({ err: error, requestType: request.type }, "Loop request failed");
-    this.host.emit({
-      type: "rpc_error",
-      payload: {
-        requestId: request.requestId,
-        requestType: request.type,
-        error: message,
-        code: "loop_request_failed",
-      },
-    });
-  }
-
-  async handleLoopRunRequest(
-    request: Extract<SessionInboundMessage, { type: "loop/run" }>,
-  ): Promise<void> {
-    try {
-      const loop = await this.loopService.runLoop({
-        prompt: request.prompt,
-        cwd: request.cwd,
-        provider: request.provider,
-        model: request.model,
-        modeId: request.modeId,
-        workerProvider: request.workerProvider,
-        workerModel: request.workerModel,
-        verifierProvider: request.verifierProvider,
-        verifierModel: request.verifierModel,
-        verifierModeId: request.verifierModeId,
-        verifyPrompt: request.verifyPrompt,
-        verifyChecks: request.verifyChecks,
-        archive: request.archive,
-        name: request.name,
-        sleepMs: request.sleepMs,
-        maxIterations: request.maxIterations,
-        maxTimeMs: request.maxTimeMs,
-      });
-      this.host.emit({
-        type: "loop/run/response",
-        payload: {
-          requestId: request.requestId,
-          loop,
-          error: null,
-        },
-      });
-    } catch (error) {
-      this.emitLoopRpcError(request, error);
-    }
-  }
-
-  async handleLoopListRequest(
-    request: Extract<SessionInboundMessage, { type: "loop/list" }>,
-  ): Promise<void> {
-    try {
-      const loops = await this.loopService.listLoops();
-      this.host.emit({
-        type: "loop/list/response",
-        payload: {
-          requestId: request.requestId,
-          loops,
-          error: null,
-        },
-      });
-    } catch (error) {
-      this.emitLoopRpcError(request, error);
-    }
-  }
-
-  async handleLoopInspectRequest(
-    request: Extract<SessionInboundMessage, { type: "loop/inspect" }>,
-  ): Promise<void> {
-    try {
-      const loop = await this.loopService.inspectLoop(request.id);
-      this.host.emit({
-        type: "loop/inspect/response",
-        payload: {
-          requestId: request.requestId,
-          loop,
-          error: null,
-        },
-      });
-    } catch (error) {
-      this.emitLoopRpcError(request, error);
-    }
-  }
-
-  async handleLoopLogsRequest(
-    request: Extract<SessionInboundMessage, { type: "loop/logs" }>,
-  ): Promise<void> {
-    try {
-      const result = await this.loopService.getLoopLogs(request.id, request.afterSeq ?? 0);
-      this.host.emit({
-        type: "loop/logs/response",
-        payload: {
-          requestId: request.requestId,
-          loop: result.loop,
-          entries: result.entries,
-          nextCursor: result.nextCursor,
-          error: null,
-        },
-      });
-    } catch (error) {
-      this.emitLoopRpcError(request, error);
-    }
-  }
-
-  async handleLoopStopRequest(
-    request: Extract<SessionInboundMessage, { type: "loop/stop" }>,
-  ): Promise<void> {
-    try {
-      const loop = await this.loopService.stopLoop(request.id);
-      this.host.emit({
-        type: "loop/stop/response",
-        payload: {
-          requestId: request.requestId,
-          loop,
-          error: null,
-        },
-      });
-    } catch (error) {
-      this.emitLoopRpcError(request, error);
     }
   }
 }

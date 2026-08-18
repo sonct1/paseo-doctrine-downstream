@@ -100,7 +100,6 @@ import { BeadsCentralService } from "./beads/beads-central-service.js";
 import type { BeadsService } from "./beads/beads-service.js";
 import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import type { FileBackedChatService } from "./chat/chat-service.js";
-import type { LoopService } from "./loop-service.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
 import {
@@ -574,7 +573,6 @@ export class VoiceAssistantWebSocketServer {
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService | null;
-  private readonly loopService: LoopService | null;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -674,7 +672,6 @@ export class VoiceAssistantWebSocketServer {
     pluginRuntime?: SessionOptions["pluginRuntime"],
     beadsService?: BeadsService,
     chatService?: FileBackedChatService,
-    loopService?: LoopService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -691,7 +688,6 @@ export class VoiceAssistantWebSocketServer {
     this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     this.chatService = chatService ?? null;
-    this.loopService = loopService ?? null;
     this.beadsService = resolveBeadsService(
       beadsService,
       logger,
@@ -1464,7 +1460,6 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       beadsService: this.beadsService,
       chatService: this.chatService ?? undefined,
-      loopService: this.loopService ?? undefined,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
