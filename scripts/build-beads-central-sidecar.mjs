@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -327,6 +328,32 @@ function extractBeadsLicense(archive, target) {
   writeFileSync(target, result.stdout);
 }
 
+function assertPortableSymlinks(root, current = root) {
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const entryPath = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      assertPortableSymlinks(root, entryPath);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+
+    let resolved;
+    try {
+      resolved = realpathSync(entryPath);
+    } catch {
+      fail(`PyInstaller output contains a broken symlink: ${entryPath}`);
+    }
+    const relativeTarget = path.relative(root, resolved);
+    if (
+      relativeTarget === ".." ||
+      relativeTarget.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeTarget)
+    ) {
+      fail(`PyInstaller output contains a non-portable external symlink: ${entryPath}`);
+    }
+  }
+}
+
 function assemble(
   output,
   centralRoot,
@@ -340,7 +367,11 @@ function assemble(
 ) {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(path.dirname(output), { recursive: true });
-  cpSync(pythonBundle, output, { recursive: true });
+  // PyInstaller's macOS framework build uses relative links inside the bundle.
+  // Node resolves copied links against the temporary source unless verbatim copy
+  // is requested, leaving `_internal/Python` pointed at a directory we delete.
+  cpSync(pythonBundle, output, { recursive: true, verbatimSymlinks: true });
+  assertPortableSymlinks(output);
   const binRoot = path.join(output, "bin");
   const licensesRoot = path.join(output, "licenses");
   mkdirSync(binRoot, { recursive: true });

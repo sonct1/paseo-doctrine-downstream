@@ -13,6 +13,7 @@ const buildSource = readFileSync(
   "utf8",
 );
 const smokeSource = readFileSync(new URL("scripts/smoke-web-cli-artifact.mjs", repoRoot), "utf8");
+const attributesSource = readFileSync(new URL(".gitattributes", repoRoot), "utf8");
 const centralSourceFiles = [
   "LICENSE",
   "README.md",
@@ -62,6 +63,7 @@ test("vendored Beads Central source matches the release lock", () => {
   );
   assert.equal(existsSync(new URL("uv.lock", sourceRoot)), true);
   assert.match(lock.beadsSourceUrl, /^https:\/\/github\.com\/steveyegge\/beads\//u);
+  assert.match(attributesSource, /^components\/beads-central-src\/\*\* -text$/mu);
 });
 
 test("host-native builder can provision real Central and bd from a clean checkout", () => {
@@ -72,6 +74,8 @@ test("host-native builder can provision real Central and bd from a clean checkou
   assert.match(buildSource, /process\.platform === "win32" \? "bd\.exe" : "bd"/);
   assert.doesNotMatch(buildSource, /prebuilt Windows bd binary is required/i);
   assert.match(buildSource, /"--locked",\s*"--project"/u);
+  assert.match(buildSource, /verbatimSymlinks: true/);
+  assert.match(buildSource, /assertPortableSymlinks\(output\)/);
 });
 
 test("portable smoke requires and starts the real installed Central component", () => {
