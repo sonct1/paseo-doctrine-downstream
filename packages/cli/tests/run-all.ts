@@ -14,6 +14,7 @@ import { mkdtemp, readdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join, dirname, delimiter } from "path";
 import { fileURLToPath } from "url";
+import { createTestBeadsCentralEnv } from "./helpers/test-daemon.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..", "..", "..");
@@ -196,6 +197,7 @@ async function runSingleTest(testFile: string): Promise<TestOutcome> {
   const testName = testFile.replace(/\.test\.ts$/, "");
   const startedAt = Date.now();
   const npmCache = await mkdtemp(join(tmpdir(), "paseo-cli-test-npm-cache-"));
+  const beadsCentralEnv = await createTestBeadsCentralEnv();
 
   try {
     return await new Promise<TestOutcome>((resolve) => {
@@ -207,6 +209,7 @@ async function runSingleTest(testFile: string): Promise<TestOutcome> {
           PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: testEnvDefaults.PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD,
           PASEO_DICTATION_ENABLED: testEnvDefaults.PASEO_DICTATION_ENABLED,
           PASEO_VOICE_MODE_ENABLED: testEnvDefaults.PASEO_VOICE_MODE_ENABLED,
+          ...beadsCentralEnv,
         },
         stdio: ["ignore", "pipe", "pipe"],
       });

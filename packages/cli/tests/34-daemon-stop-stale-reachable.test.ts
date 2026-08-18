@@ -12,6 +12,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { $ } from "zx";
+import { createTestBeadsCentralEnv } from "./helpers/test-daemon.ts";
 import { getAvailablePort } from "./helpers/network.ts";
 
 $.verbose = false;
@@ -101,6 +102,7 @@ function findUnusedPid(): number {
 console.log("=== Daemon Stop (stale pid, reachable worker regression) ===\n");
 
 const port = await getAvailablePort();
+const beadsCentralEnv = await createTestBeadsCentralEnv([port]);
 const paseoHome = await mkdtemp(join(tmpdir(), "paseo-stop-stale-reachable-"));
 const cliRoot = join(import.meta.dirname, "..");
 const host = `127.0.0.1:${port}`;
@@ -138,6 +140,7 @@ try {
         PASEO_HOME: paseoHome,
         PASEO_LISTEN: host,
         PASEO_RELAY_ENABLED: "false",
+        ...beadsCentralEnv,
         CI: "true",
       },
       stdio: ["ignore", "pipe", "pipe"],

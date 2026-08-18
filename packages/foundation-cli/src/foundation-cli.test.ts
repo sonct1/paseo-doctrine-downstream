@@ -46,6 +46,14 @@ function productRoot(): string {
   return resolveProductLayout().productRoot;
 }
 
+function writeFakePaseoStatus(commandPath: string, status: string): void {
+  const contents =
+    process.platform === "win32"
+      ? `@echo off\r\nif "%~1"=="daemon" (echo ${status}) else (echo paseo fake)\r\n`
+      : `#!/bin/sh\nif [ "$1" = "daemon" ]; then printf '%s\\n' '${status}'; else echo 'paseo fake'; fi\n`;
+  writeFileSync(commandPath, contents, { mode: 0o755 });
+}
+
 function resignPlan(plan: Omit<InstallPlan, "planId">): InstallPlan {
   return {
     ...plan,
@@ -132,7 +140,7 @@ describe("Foundation host inspection", () => {
     const home = temporaryHome();
     const paseoHome = path.join(home, ".paseo");
     const fakeBin = path.join(home, "fake-bin");
-    const paseo = path.join(fakeBin, "paseo");
+    const paseo = path.join(fakeBin, process.platform === "win32" ? "paseo.cmd" : "paseo");
     const listen = "127.0.0.1:19767";
     const serverId = "server-test-exact";
     const status = JSON.stringify({
@@ -159,17 +167,13 @@ describe("Foundation host inspection", () => {
       path.join(paseoHome, "paseo.pid"),
       `${JSON.stringify({ pid: process.pid, listen })}\n`,
     );
-    writeFileSync(
-      paseo,
-      `#!/bin/sh\nif [ "$1" = "daemon" ]; then printf '%s\\n' '${status}'; else echo 'paseo fake'; fi\n`,
-      { mode: 0o755 },
-    );
+    writeFakePaseoStatus(paseo, status);
 
     const inspection = inspectMachine({
       home,
       productRoot: productRoot(),
       environmentPath: fakeBin,
-      platform: "darwin",
+      platform: process.platform,
     });
 
     expect(inspection.paseoDaemonReachable).toBe(true);
@@ -192,16 +196,12 @@ describe("Foundation host inspection", () => {
       ...(JSON.parse(status) as Record<string, unknown>),
       connectedServerId: "different-live-daemon",
     });
-    writeFileSync(
-      paseo,
-      `#!/bin/sh\nif [ "$1" = "daemon" ]; then printf '%s\\n' '${mismatchedStatus}'; else echo 'paseo fake'; fi\n`,
-      { mode: 0o755 },
-    );
+    writeFakePaseoStatus(paseo, mismatchedStatus);
     const mismatch = inspectMachine({
       home,
       productRoot: productRoot(),
       environmentPath: fakeBin,
-      platform: "darwin",
+      platform: process.platform,
     });
     expect(mismatch.paseoDaemonReachable).toBe(false);
     expect(mismatch.paseoDaemonEvidence).toContain(

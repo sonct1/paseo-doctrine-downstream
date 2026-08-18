@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
@@ -27,7 +28,10 @@ const mocks = vi.hoisted(() => ({
   logError: vi.fn(),
   appLogPath: "/tmp/paseo-desktop-daemon-manager-test-main.log",
   getElectronLogFile: vi.fn(),
+  resourcesPath: "/tmp/paseo-desktop-daemon-manager-test-resources",
 }));
+
+const originalResourcesPathDescriptor = Object.getOwnPropertyDescriptor(process, "resourcesPath");
 
 vi.mock("electron", () => ({
   app: {
@@ -111,6 +115,10 @@ function scheduleFailedStartup(child: MockChildProcess): void {
 
 describe("daemon-manager commands", () => {
   beforeEach(() => {
+    Object.defineProperty(process, "resourcesPath", {
+      configurable: true,
+      value: mocks.resourcesPath,
+    });
     mocks.settings = DEFAULT_DESKTOP_SETTINGS;
     mocks.runExternalCliJsonCommand.mockReset();
     mocks.runExternalCliTextCommand.mockReset();
@@ -126,6 +134,11 @@ describe("daemon-manager commands", () => {
   });
 
   afterEach(() => {
+    if (originalResourcesPathDescriptor) {
+      Object.defineProperty(process, "resourcesPath", originalResourcesPathDescriptor);
+    } else {
+      Reflect.deleteProperty(process, "resourcesPath");
+    }
     rmSync(mocks.paseoHome, { recursive: true, force: true });
     rmSync(mocks.appLogPath, { force: true });
   });
@@ -455,6 +468,17 @@ describe("daemon-manager commands", () => {
         envOverlay: expect.objectContaining({
           PASEO_CLI: getBundledCliShimPath(),
           PASEO_WEB_UI_ENABLED: "false",
+          PASEO_BEADS_CENTRAL_SIDECAR: path.join(
+            mocks.resourcesPath,
+            "beads-central",
+            process.platform === "win32" ? "beads-central.exe" : "beads-central",
+          ),
+          PASEO_BEADS_CENTRAL_BD_BIN: path.join(
+            mocks.resourcesPath,
+            "beads-central",
+            "bin",
+            process.platform === "win32" ? "bd.exe" : "bd",
+          ),
         }),
       }),
     );

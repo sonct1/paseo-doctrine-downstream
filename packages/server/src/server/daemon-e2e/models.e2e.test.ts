@@ -12,7 +12,6 @@ function isBinaryInstalled(binary: string): boolean {
 }
 
 const hasCodex = isBinaryInstalled("codex");
-const hasOpenCode = isBinaryInstalled("opencode");
 
 describe("daemon E2E", () => {
   describe("listProviderModels", () => {
@@ -70,29 +69,17 @@ describe("daemon E2E", () => {
       }
     }, 180000);
 
-    test.runIf(hasOpenCode)(
-      "returns model list for OpenCode provider",
-      async () => {
-        const ctx = await createDaemonTestContext();
-        try {
-          const result = await ctx.client.listProviderModels("opencode");
+    test("returns a disabled error for the OpenCode compatibility provider", async () => {
+      const ctx = await createDaemonTestContext();
+      try {
+        const result = await ctx.client.listProviderModels("opencode");
 
-          expect(result.provider).toBe("opencode");
-          expect(result.error).toBeNull();
-          expect(result.fetchedAt).toBeTruthy();
-
-          expect(result.models).toBeTruthy();
-          expect(result.models.length).toBeGreaterThan(0);
-
-          const model = result.models[0];
-          expect(model.provider).toBe("opencode");
-          expect(model.id).toBeTruthy();
-          expect(model.label).toBeTruthy();
-        } finally {
-          await ctx.cleanup();
-        }
-      },
-      60000,
-    );
+        expect(result.provider).toBe("opencode");
+        expect(result.error).toBe("Provider opencode is disabled");
+        expect(result.models).toBeUndefined();
+      } finally {
+        await ctx.cleanup();
+      }
+    });
   });
 });

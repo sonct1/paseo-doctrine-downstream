@@ -45,12 +45,35 @@ const TEST_DAEMON_ENV_DEFAULTS: Record<string, string> = {
 };
 const TEST_DAEMON_HOST = "127.0.0.1";
 const TSX_ENTRY = fileURLToPath(import.meta.resolve("tsx/cli"));
+const TEST_BEADS_CENTRAL_SIDECAR = join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "test-beads-central-sidecar.mjs",
+);
 
 const DEFAULT_OUTPUT_CAPTURE_LIMIT = 256 * 1024;
 const TEST_OUTPUT_CAPTURE_LIMIT = Number.parseInt(
   process.env.PASEO_TEST_OUTPUT_CAPTURE_BYTES ?? `${DEFAULT_OUTPUT_CAPTURE_LIMIT}`,
   10,
 );
+
+export async function createTestBeadsCentralEnv(
+  excludedPorts: readonly number[] = [],
+): Promise<Record<string, string>> {
+  const excluded = new Set(excludedPorts);
+  let port = await getAvailablePort();
+  while (excluded.has(port)) port = await getAvailablePort();
+  return {
+    PASEO_BEADS_CENTRAL_SIDECAR: TEST_BEADS_CENTRAL_SIDECAR,
+    PASEO_BEADS_CENTRAL_BD_BIN: process.execPath,
+    PASEO_RELEASE_SMOKE: "1",
+    PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: `http://${TEST_DAEMON_HOST}:${port}`,
+  };
+}
 
 interface OutputCapture {
   value: string;
@@ -227,6 +250,7 @@ export async function startTestDaemon(options?: {
   env?: NodeJS.ProcessEnv;
 }): Promise<TestDaemonContext> {
   const port = options?.port ?? (await getAvailablePort());
+  const beadsCentralEnv = await createTestBeadsCentralEnv([port]);
   const { paseoHome, workDir } =
     options?.paseoHome && options?.workDir
       ? { paseoHome: options.paseoHome, workDir: options.workDir }
@@ -249,6 +273,7 @@ export async function startTestDaemon(options?: {
         ...TEST_DAEMON_ENV_DEFAULTS,
         PASEO_HOME: paseoHome,
         PASEO_LISTEN: `${TEST_DAEMON_HOST}:${port}`,
+        ...beadsCentralEnv,
         // Force no TTY to prevent QR code output
         CI: "true",
         ...options?.env,

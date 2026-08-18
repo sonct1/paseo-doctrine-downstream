@@ -84,7 +84,6 @@ function isBinaryInstalled(binary: string): boolean {
 }
 
 const hasCodex = isBinaryInstalled("codex");
-const hasOpenCode = isBinaryInstalled("opencode");
 
 let ctx: DaemonTestContext;
 let messages: SessionOutboundMessage[] = [];
@@ -104,11 +103,8 @@ afterEach(async () => {
   await ctx.cleanup();
 }, 60000);
 
-describe.each(["claude", "codex", "opencode"] as const)("live model switching (%s)", (provider) => {
-  const shouldRun =
-    provider === "claude" ||
-    (provider === "codex" && hasCodex) ||
-    (provider === "opencode" && hasOpenCode);
+describe.each(["claude", "codex"] as const)("live model switching (%s)", (provider) => {
+  const shouldRun = provider === "claude" || (provider === "codex" && hasCodex);
 
   test.runIf(shouldRun)(
     "updates agent model without restarting",
@@ -217,42 +213,4 @@ test.runIf(hasCodex)(
     }
   },
   120000,
-);
-
-test.runIf(hasOpenCode)(
-  "live thinking switching works for OpenCode",
-  async () => {
-    const cwd = tmpCwd();
-    try {
-      const modelList = await ctx.client.listProviderModels("opencode");
-      if (!modelList.models || modelList.models.length === 0) {
-        throw new Error("No OpenCode models returned");
-      }
-
-      const { model: modelWithThinkingOptions, thinkingOptionId } = pickThinkingSwitchOption(
-        "OpenCode",
-        modelList.models,
-      );
-
-      const agent = await ctx.client.createAgent({
-        provider: "opencode",
-        cwd,
-        title: "OpenCode Preferences Switch",
-        model: modelWithThinkingOptions.id,
-      });
-
-      const startIndex = messages.length;
-      await ctx.client.setAgentThinkingOption(agent.id, thinkingOptionId);
-      const updatedThinking = await waitForAgentUpdate(
-        messages,
-        startIndex,
-        (a) => a.id === agent.id && a.thinkingOptionId === thinkingOptionId,
-        { timeoutMs: 20000 },
-      );
-      expect(updatedThinking.thinkingOptionId).toBe(thinkingOptionId);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-  },
-  180000,
 );

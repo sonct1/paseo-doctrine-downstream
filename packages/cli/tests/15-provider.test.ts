@@ -14,7 +14,7 @@
  * - provider ls --quiet outputs provider names only
  * - provider models claude lists claude models
  * - provider models codex lists codex models
- * - provider models opencode lists opencode models
+ * - provider models opencode fails because the compatibility route is disabled
  * - provider models unknown fails with error
  * - provider models --json outputs valid JSON
  * - provider diagnostic shows the daemon's provider diagnostic
@@ -237,15 +237,17 @@ try {
       "should include opencode",
     );
     const rows = data as ProviderListRow[];
-    for (const provider of ["claude", "codex", "opencode"] as const) {
+    for (const provider of ["claude", "codex", "gemini-antigravity"] as const) {
       const row = rows.find((p) => p.provider === provider);
       assert(row, `should include ${provider}`);
       assert.strictEqual(row.enabled, "Enabled", `${provider} should report Enabled`);
     }
 
-    const omp = rows.find((p) => p.provider === "omp");
-    assert(omp, "should include omp");
-    assert.strictEqual(omp.enabled, "Disabled", "omp should report Disabled by default");
+    for (const provider of ["copilot", "opencode", "pi", "omp"] as const) {
+      const row = rows.find((p) => p.provider === provider);
+      assert(row, `should include ${provider}`);
+      assert.strictEqual(row.enabled, "Disabled", `${provider} should report Disabled`);
+    }
     console.log("✓ provider ls --json outputs valid JSON\n");
   }
 
@@ -262,6 +264,17 @@ try {
             providers: {
               claude: {
                 enabled: false,
+              },
+              devin: {
+                extends: "acp",
+                label: "Devin CLI",
+                command: ["devin", "acp"],
+                enabled: true,
+              },
+              "custom-codex": {
+                extends: "codex",
+                label: "Custom Codex",
+                enabled: true,
               },
             },
           },
@@ -280,9 +293,19 @@ try {
       assert(claude, "disabled claude provider should stay in provider ls");
       assert.strictEqual(claude.enabled, "Disabled", "disabled provider should report Disabled");
 
-      const opencode = data.find((p) => p.provider === "opencode");
-      assert(opencode, "enabled opencode provider should stay in provider ls");
-      assert.strictEqual(opencode.enabled, "Enabled", "enabled provider should report Enabled");
+      const codex = data.find((p) => p.provider === "codex");
+      assert(codex, "enabled codex provider should stay in provider ls");
+      assert.strictEqual(codex.enabled, "Enabled", "enabled provider should report Enabled");
+
+      const customCodex = data.find((p) => p.provider === "custom-codex");
+      assert(customCodex, "custom Codex provider should stay in provider ls");
+      assert.strictEqual(customCodex.enabled, "Enabled", "custom Codex should report Enabled");
+
+      for (const provider of ["opencode", "devin"] as const) {
+        const row = data.find((p) => p.provider === provider);
+        assert(row, `${provider} should stay visible for compatibility diagnostics`);
+        assert.strictEqual(row.enabled, "Disabled", `${provider} must remain disabled`);
+      }
 
       const modelsResult = await runPaseoCli(disabledCtx, ["provider", "models", "claude"]);
       assert.notStrictEqual(
@@ -348,25 +371,19 @@ try {
     console.log("✓ provider models codex includes concrete codex model IDs\n");
   }
 
-  // Test 8: provider models opencode returns namespaced model IDs
+  // Test 8: provider models opencode fails because the compatibility route is disabled
   {
-    console.log("Test 8: provider models opencode returns namespaced model IDs");
-    const data = await runProviderModelsJson("opencode");
-    assert(data.length >= 1, "opencode model list should not be empty");
-    const ids = data.map((m) => m.id);
+    console.log("Test 8: provider models opencode fails because the route is disabled");
+    const result = await ctx.paseo(["provider", "models", "opencode"]);
     assert(
-      data.every((m) => m.id.includes("/")),
-      "opencode model IDs should be provider-namespaced",
+      result.exitCode !== 0,
+      "provider models opencode should fail for an unsupported provider",
     );
     assert(
-      ids.some((id) => id.startsWith("opencode/")),
-      "opencode output should include at least one first-party opencode model",
+      `${result.stdout}\n${result.stderr}`.includes("Provider opencode is disabled"),
+      "provider models should surface the daemon disabled error",
     );
-    assert(
-      data.every((m) => m.model && m.id && m.description !== undefined),
-      "every opencode model should have model, id, and description fields",
-    );
-    console.log("✓ provider models opencode returns namespaced model IDs\n");
+    console.log("✓ provider models opencode fails because the route is disabled\n");
   }
 
   // Test 9: provider models unknown fails with error

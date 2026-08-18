@@ -108,6 +108,14 @@ export async function startIsolatedHostDaemon(
   const primaryPort = Number(process.env.E2E_DAEMON_PORT ?? 0);
   let port = await getAvailablePort();
   while (port === 6767 || port === primaryPort) port = await getAvailablePort();
+  let beadsCentralPort = await getAvailablePort();
+  while (beadsCentralPort === port || beadsCentralPort === 6769) {
+    beadsCentralPort = await getAvailablePort();
+  }
+  const beadsCentralSidecar = path.resolve(
+    __dirname,
+    "../../../../../scripts/test-beads-central-sidecar.mjs",
+  );
 
   const metroPort = process.env.E2E_METRO_PORT;
   if (!metroPort) throw new Error("E2E_METRO_PORT is required to start an isolated host daemon");
@@ -174,6 +182,10 @@ export async function startIsolatedHostDaemon(
         PASEO_LISTEN: `127.0.0.1:${port}`,
         PASEO_CORS_ORIGINS: `http://localhost:${metroPort}`,
         PASEO_RELAY_ENABLED: options.mutableRelay ? undefined : "0",
+        PASEO_BEADS_CENTRAL_SIDECAR: beadsCentralSidecar,
+        PASEO_BEADS_CENTRAL_BD_BIN: process.execPath,
+        PASEO_RELEASE_SMOKE: "1",
+        PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: `http://127.0.0.1:${beadsCentralPort}`,
         PASEO_NODE_ENV: "development",
         NODE_ENV: "development",
       }),
