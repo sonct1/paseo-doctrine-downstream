@@ -176,6 +176,11 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /macos-15-intel/);
   assert.match(source, /ubuntu-22\.04/);
   assert.match(source, /windows-2025/);
+  assert.match(source, /actions\/setup-python@v5/);
+  assert.match(source, /python-version: "3\.13\.15"/);
+  assert.match(source, /actions\/setup-go@v5/);
+  assert.match(source, /go-version: "1\.26\.2"/);
+  assert.match(source, /beads-central\.lock\.json'\)\.uvVersion/);
   assert.match(source, /needs: \[qualification, create-release\]/);
   assert.match(source, /needs\.qualification\.result == 'success'/);
   assert.doesNotMatch(source, /build:desktop|android:release|release:publish|npm publish/);

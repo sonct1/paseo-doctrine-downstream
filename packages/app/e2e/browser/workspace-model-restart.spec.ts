@@ -249,8 +249,17 @@ async function startRestartDaemon(input: {
   if (port === 6767 || String(port) === process.env.E2E_DAEMON_PORT) {
     return startRestartDaemon(input);
   }
+  let beadsCentralPort = await getAvailablePort();
+  while (
+    beadsCentralPort === 6769 ||
+    beadsCentralPort === port ||
+    String(beadsCentralPort) === process.env.E2E_DAEMON_PORT
+  ) {
+    beadsCentralPort = await getAvailablePort();
+  }
 
   const serverDir = path.resolve(__dirname, "../../../server");
+  const repositoryRoot = path.resolve(__dirname, "../../../..");
   const tsxBin = execSync("which tsx").toString().trim();
   const child = spawn(tsxBin, ["scripts/supervisor-entrypoint.ts", "--dev"], {
     cwd: serverDir,
@@ -263,6 +272,14 @@ async function startRestartDaemon(input: {
       PASEO_RELAY_ENABLED: "0",
       PASEO_NODE_ENV: "development",
       NODE_ENV: "development",
+      PASEO_BEADS_CENTRAL_SIDECAR: path.join(
+        repositoryRoot,
+        "scripts",
+        "test-beads-central-sidecar.mjs",
+      ),
+      PASEO_BEADS_CENTRAL_BD_BIN: process.execPath,
+      PASEO_RELEASE_SMOKE: "1",
+      PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: `http://127.0.0.1:${beadsCentralPort}`,
     }),
     stdio: ["ignore", "ignore", "pipe"],
     detached: false,

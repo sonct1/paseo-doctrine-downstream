@@ -30,6 +30,12 @@ function runCli(binPath, args) {
   return run(process.execPath, [binPath, ...args]);
 }
 
+function runNpm(args) {
+  const npmExecPath = process.env.npm_execpath;
+  assert.ok(npmExecPath, "npm_execpath is required for the packaged lifecycle smoke");
+  return run(process.execPath, [npmExecPath, ...args]);
+}
+
 try {
   const packRoot = path.join(temporaryRoot, "pack");
   const prefix = path.join(temporaryRoot, "prefix");
@@ -39,7 +45,7 @@ try {
   mkdirSync(home, { recursive: true });
 
   const packed = JSON.parse(
-    run("npm", [
+    runNpm([
       "pack",
       "--silent",
       "--json",
@@ -51,7 +57,7 @@ try {
   const tarball = path.join(packRoot, packed[0].filename);
   assert.equal(existsSync(tarball), true);
 
-  run("npm", [
+  runNpm([
     "install",
     "--ignore-scripts",
     "--no-package-lock",

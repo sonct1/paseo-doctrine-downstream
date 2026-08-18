@@ -191,7 +191,8 @@ function TopologyPanel() {
           <View style={styles.legend}>
             <Text style={styles.legendTitle}>Project topology · {projectName}</Text>
             <Text style={styles.legendMeta}>
-              {nodes.length} agents · {edges.length} relationships
+              {nodes.length} agents · {edges.length} relationship
+              {edges.length === 1 ? "" : "s"}
             </Text>
             <Text style={styles.legendMeta}>
               {grantedIssueCount} assigned issue

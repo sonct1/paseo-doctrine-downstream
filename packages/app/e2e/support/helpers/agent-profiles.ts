@@ -97,27 +97,21 @@ export interface SeededProviderModel {
 /**
  * Registers a second provider that reports a fixed catalog. The E2E daemon has
  * exactly one provider with models (`mock`), so nothing cross-provider can be
- * proven without one more.
- *
- * `extends: "mock"` is rejected — the config validator only accepts the six
- * shipped providers plus `acp`. Extending `claude` with a replacement `models`
- * list is what avoids running anything: replacement models skip catalog
- * discovery, and Claude's static modes mean the provider never spawns. The
- * command only has to resolve for the availability probe, hence `node`.
- * Providers with dynamic catalogs can pass a small RPC fixture as `command`.
+ * proven without one more. Product policy only exposes custom providers derived
+ * from Codex, so the default fixture follows that same supported route.
  */
 export async function seedModelProvider(input: {
   id: string;
   label: string;
   models: SeededProviderModel[];
-  extends?: "claude" | "pi";
+  extends?: "codex" | "pi";
   command?: string[];
 }): Promise<HostSeed> {
   const client = await connectAgentProfilesClient();
   await client.patchDaemonConfig({
     providers: {
       [input.id]: {
-        extends: input.extends ?? "claude",
+        extends: input.extends ?? "codex",
         label: input.label,
         description: `${input.label} test provider`,
         enabled: true,

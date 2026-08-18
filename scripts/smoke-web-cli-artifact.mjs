@@ -19,6 +19,18 @@ const prefix = path.join(smokeRoot, "install");
 const binDir = path.join(smokeRoot, "bin");
 const port = process.env.PASEO_RELEASE_SMOKE_PORT ?? "17677";
 const listen = `127.0.0.1:${port}`;
+const beadsCentralPort = process.env.PASEO_RELEASE_SMOKE_BEADS_PORT ?? "17679";
+const beadsCentralEndpoint = `http://127.0.0.1:${beadsCentralPort}`;
+const installedBeadsCentralRoot = path.join(prefix, "current", "components", "beads-central");
+const installedBeadsCentralSidecar = path.join(
+  installedBeadsCentralRoot,
+  process.platform === "win32" ? "beads-central.exe" : "beads-central",
+);
+const installedBd = path.join(
+  installedBeadsCentralRoot,
+  "bin",
+  process.platform === "win32" ? "bd.exe" : "bd",
+);
 const windowsBundleIoTimeoutMs = 10 * 60_000;
 const env = {
   ...process.env,
@@ -32,6 +44,10 @@ const env = {
   PASEO_DICTATION_ENABLED: "0",
   PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0",
   PASEO_VOICE_MODE_ENABLED: "0",
+  PASEO_BEADS_CENTRAL_SIDECAR: installedBeadsCentralSidecar,
+  PASEO_BEADS_CENTRAL_BD_BIN: installedBd,
+  PASEO_RELEASE_SMOKE: "1",
+  PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: beadsCentralEndpoint,
 };
 
 function fail(message) {
@@ -93,6 +109,19 @@ async function waitForHealth() {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   fail("daemon health endpoint did not become ready");
+}
+
+async function waitForBeadsCentral() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const response = await fetch(`${beadsCentralEndpoint}/health/ready`);
+      if (response.ok) return await response.json();
+    } catch {
+      // The daemon-owned native sidecar is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  fail("bundled Beads Central sidecar did not become ready");
 }
 
 async function waitForExit(child, timeoutMs = 5_000) {
@@ -166,11 +195,44 @@ function validateArtifactManifest(manifest) {
     manifest.platform !== process.platform ||
     manifest.arch !== process.arch ||
     manifest.beadsBackend !== "central" ||
-    manifest.bundledBeadsBinary !== false ||
+    manifest.bundledBeadsBinary !== true ||
     manifest.internalPackages?.["@paseo/plugin"] !== manifest.version
   ) {
     fail("artifact manifest does not match the smoke host");
   }
+}
+
+function validateInstalledBeadsComponent() {
+  const legacyRuntimeBd = path.join(
+    prefix,
+    "current",
+    "runtime",
+    ...(process.platform === "win32" ? ["bd.exe"] : ["bin", "bd"]),
+  );
+  if (existsSync(legacyRuntimeBd)) {
+    fail("Artifact unexpectedly contains a legacy runtime bd binary");
+  }
+  if (!existsSync(installedBeadsCentralSidecar) || !existsSync(installedBd)) {
+    fail("Installed artifact is missing the native Beads Central component");
+  }
+  const componentManifest = JSON.parse(
+    readFileSync(path.join(installedBeadsCentralRoot, "component-manifest.json"), "utf8"),
+  );
+  if (
+    componentManifest.component !== "beads-central" ||
+    componentManifest.platform !== process.platform ||
+    componentManifest.arch !== process.arch ||
+    componentManifest.sidecarBinarySha256 !== sha256(installedBeadsCentralSidecar) ||
+    componentManifest.beadsBinarySha256 !== sha256(installedBd)
+  ) {
+    fail("Installed Beads Central component manifest does not match its native binaries");
+  }
+  run(installedBeadsCentralSidecar, ["--help"], { capture: true });
+  const bdVersion = run(installedBd, ["version"], { capture: true }).trim();
+  if (!bdVersion.startsWith(`bd version ${componentManifest.beadsVersion}`)) {
+    fail(`Installed bd version does not match component manifest: ${bdVersion}`);
+  }
+  return componentManifest;
 }
 
 async function main() {
@@ -242,13 +304,7 @@ async function main() {
     "runtime",
     ...(process.platform === "win32" ? ["node.exe"] : ["bin", "node"]),
   );
-  const bundledBd = path.join(
-    prefix,
-    "current",
-    "runtime",
-    ...(process.platform === "win32" ? ["bd.exe"] : ["bin", "bd"]),
-  );
-  if (existsSync(bundledBd)) fail("Central-only artifact unexpectedly contains a native bd binary");
+  const componentManifest = validateInstalledBeadsComponent();
   const cliEntry = path.join(
     prefix,
     "current",
@@ -268,6 +324,13 @@ async function main() {
   let success;
   try {
     const health = await waitForHealth();
+    const beadsReady = await waitForBeadsCentral();
+    if (
+      beadsReady.central !== componentManifest.version ||
+      !String(beadsReady.bd).includes(componentManifest.beadsVersion)
+    ) {
+      fail(`Bundled Beads readiness mismatch: ${JSON.stringify(beadsReady)}`);
+    }
     const index = await (await fetch(`http://${listen}/`)).text();
     if (!index.includes("<title>Paseo</title>")) fail("WebUI title was not served");
     await smokeTerminal();
@@ -275,7 +338,7 @@ async function main() {
     await waitForExit(daemon);
     success = `SMOKE_OK platform=${process.platform} arch=${
       process.arch
-    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok health=${health.trim()}\n`;
+    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok beads_central=${beadsReady.central} bd=${componentManifest.beadsVersion} health=${health.trim()}\n`;
   } finally {
     if (daemon.exitCode === null) {
       daemon.kill();

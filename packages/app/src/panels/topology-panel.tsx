@@ -102,7 +102,8 @@ function TopologyPanel() {
       <View style={styles.summaryRow}>
         <Text style={styles.summaryTitle}>Project topology · {projectName}</Text>
         <Text style={styles.summaryMeta}>
-          {topology.nodes.length} agents · {topology.edges.length} relationships
+          {topology.nodes.length} agents · {topology.edges.length} relationship
+          {topology.edges.length === 1 ? "" : "s"}
         </Text>
         <Text style={styles.summaryMeta}>
           {grantedIssueCount} assigned issue{grantedIssueCount === 1 ? "" : "s"}

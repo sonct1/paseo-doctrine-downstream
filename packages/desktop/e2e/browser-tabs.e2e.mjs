@@ -807,6 +807,10 @@ async function main() {
     reservePort(),
     reservePort(),
   ]);
+  let beadsCentralPort = await reservePort();
+  while ([daemonPort, expoPort, cdpPort, 6769].includes(beadsCentralPort)) {
+    beadsCentralPort = await reservePort();
+  }
   const listen = `127.0.0.1:${daemonPort}`;
   seedPaseoHome(paseoHome, listen, workspaceRoot);
   const target = await startTargetPage();
@@ -831,7 +835,21 @@ async function main() {
       "daemon",
       process.execPath,
       ["--import", "tsx", path.join(rootDir, "packages/server/scripts/dev-runner.ts")],
-      { cwd: rootDir, env: { ...commonEnv, PASEO_NODE_ENV: "development" } },
+      {
+        cwd: rootDir,
+        env: {
+          ...commonEnv,
+          PASEO_NODE_ENV: "development",
+          PASEO_BEADS_CENTRAL_SIDECAR: path.join(
+            rootDir,
+            "scripts",
+            "test-beads-central-sidecar.mjs",
+          ),
+          PASEO_BEADS_CENTRAL_BD_BIN: process.execPath,
+          PASEO_RELEASE_SMOKE: "1",
+          PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: `http://127.0.0.1:${beadsCentralPort}`,
+        },
+      },
       artifactDir,
     );
     children.push(daemon.child);

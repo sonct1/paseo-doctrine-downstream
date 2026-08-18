@@ -1,10 +1,7 @@
-import { test } from "../support/fixtures";
+import { expect, test } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
-import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
 import {
-  expectProviderInstalledInSettings,
-  installAcpCatalogProvider,
   openAddProviderArea,
   openSettingsHost,
   openSettingsHostSection,
@@ -15,29 +12,16 @@ const ACP_PROVIDER = {
   name: "Hermes",
 };
 
-interface ProviderCatalogDaemonClient {
-  connect(): Promise<void>;
-  close(): Promise<void>;
-  patchDaemonConfig(config: { removeProviders?: string[] }): Promise<unknown>;
-}
-
 test.describe("ACP provider catalog", () => {
-  test("adds a catalog provider from settings", async ({ page }) => {
-    const client = await connectDaemonClient<ProviderCatalogDaemonClient>({
-      clientIdPrefix: "provider-catalog-e2e",
-    });
-    try {
-      await gotoAppShell(page);
-      await openSettings(page);
-      await openSettingsHost(page, getServerId());
-      await openSettingsHostSection(page, getServerId(), "providers");
-      await openAddProviderArea(page);
+  test("does not offer unsupported catalog providers", async ({ page }) => {
+    await gotoAppShell(page);
+    await openSettings(page);
+    await openSettingsHost(page, getServerId());
+    await openSettingsHostSection(page, getServerId(), "providers");
+    await openAddProviderArea(page);
 
-      await installAcpCatalogProvider(page, ACP_PROVIDER);
-      await expectProviderInstalledInSettings(page, ACP_PROVIDER.name);
-    } finally {
-      await client.patchDaemonConfig({ removeProviders: [ACP_PROVIDER.id] }).catch(() => undefined);
-      await client.close().catch(() => undefined);
-    }
+    await page.getByRole("textbox", { name: "Search providers" }).fill(ACP_PROVIDER.name);
+    await expect(page.getByText(ACP_PROVIDER.name, { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId(`install-provider-${ACP_PROVIDER.id}`)).toHaveCount(0);
   });
 });

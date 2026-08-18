@@ -2,7 +2,12 @@
   "schemaVersion": 1,
   "version": "1.2.0",
   "sourceCommit": "eec3cf62463e6f6b76c629f71e0c477ff28955e2",
+  "centralSourceSha256": "b5a2038eb3ac2f799b5485f72d5d3fe106505c60174ac5e3c3d2812284c10357",
   "beadsVersion": "1.1.2",
+  "beadsSourceUrl": "https://github.com/steveyegge/beads/archive/refs/tags/v1.1.2.tar.gz",
   "beadsSourceSha256": "03ad2d43a97c75248ecfae28cad6789af506861c18568399c6e1432b02c1fe48",
+  "goVersion": "1.26.2",
+  "pythonVersion": "3.13.15",
+  "uvVersion": "0.12.0",
   "pyinstallerVersion": "6.21.0"
 }

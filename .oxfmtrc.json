@@ -15,6 +15,7 @@
     "*.lock",
     "**/*.gen.ts",
     "**/*.gen.tsx",
+    "components/beads-central-src/**",
     "foundation/dist/**",
     "skills/council/**"
   ]

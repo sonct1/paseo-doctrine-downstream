@@ -5,21 +5,22 @@ import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { getServerId } from "../support/helpers/server-id";
 import {
   expectProviderInstalledInSettings,
-  installAcpCatalogProvider,
-  openAddProviderArea,
   openSettingsHost,
   openSettingsHostSection,
 } from "../support/helpers/settings";
 
 const CUSTOM_PROVIDER = {
-  id: "junie",
-  name: "Junie",
+  id: "codex-removal-e2e",
+  name: "Codex removal E2E",
 } as const;
 
 interface ProviderRemovalDaemonClient {
   connect(): Promise<void>;
   close(): Promise<void>;
-  patchDaemonConfig(config: { removeProviders?: string[] }): Promise<unknown>;
+  patchDaemonConfig(config: {
+    providers?: Record<string, Record<string, unknown>>;
+    removeProviders?: string[];
+  }): Promise<unknown>;
   getProvidersSnapshot(): Promise<{
     entries: Array<{ provider: string; source?: "builtin" | "custom" }>;
   }>;
@@ -27,6 +28,26 @@ interface ProviderRemovalDaemonClient {
 
 async function removeCustomProvider(client: ProviderRemovalDaemonClient): Promise<void> {
   await client.patchDaemonConfig({ removeProviders: [CUSTOM_PROVIDER.id] });
+}
+
+async function installCustomCodexProvider(client: ProviderRemovalDaemonClient): Promise<void> {
+  await client.patchDaemonConfig({
+    providers: {
+      [CUSTOM_PROVIDER.id]: {
+        extends: "codex",
+        label: CUSTOM_PROVIDER.name,
+        enabled: true,
+        command: [process.execPath],
+        models: [
+          {
+            id: "codex-removal-model",
+            label: "Codex removal model",
+            description: "Provider-removal E2E fixture",
+          },
+        ],
+      },
+    },
+  });
 }
 
 async function expectProviderSource(
@@ -75,8 +96,7 @@ test.describe("provider removal", () => {
       await expect(page.getByTestId("provider-configure-tools-claude")).toBeVisible();
       await expect(page.getByTestId("provider-remove-claude")).toHaveCount(0);
       await page.keyboard.press("Escape");
-      await openAddProviderArea(page);
-      await installAcpCatalogProvider(page, CUSTOM_PROVIDER);
+      await installCustomCodexProvider(client);
       await expectProviderInstalledInSettings(page, CUSTOM_PROVIDER.name);
       await expectProviderSource(client, "custom");
 

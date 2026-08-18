@@ -150,7 +150,8 @@ export function HostTopologyScreen({ serverId }: { serverId: string }) {
         <View style={styles.summary}>
           <Text style={styles.summaryTitle}>All projects</Text>
           <Text style={styles.summaryMeta}>
-            {topology.nodes.length} active agents · {topology.edges.length} exact relationships
+            {topology.nodes.length} active agents · {topology.edges.length} exact relationship
+            {topology.edges.length === 1 ? "" : "s"}
           </Text>
           {topology.counts.unbound > 0 ? (
             <Text style={styles.warning}>

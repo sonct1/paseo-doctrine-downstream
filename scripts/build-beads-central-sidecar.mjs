@@ -21,15 +21,32 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
 const LOCK_PATH = path.join(REPO_ROOT, "components", "beads-central.lock.json");
+const VENDORED_CENTRAL_ROOT = path.join(REPO_ROOT, "components", "beads-central-src");
 const ENTRYPOINT = path.join(REPO_ROOT, "scripts", "beads-central-sidecar-entry.py");
 const LOCK = JSON.parse(readFileSync(LOCK_PATH, "utf8"));
-const MATERIAL_SOURCE_PATHS = [
-  "beads_central",
-  "pyproject.toml",
-  "constraints.txt",
+const CENTRAL_SOURCE_FILES = [
   "LICENSE",
+  "README.md",
+  "beads_central/__init__.py",
+  "beads_central/auth.py",
+  "beads_central/beads.py",
+  "beads_central/body_limit.py",
+  "beads_central/control_store.py",
+  "beads_central/instance_lock.py",
+  "beads_central/main.py",
+  "beads_central/mcp.py",
+  "beads_central/models.py",
+  "beads_central/projects.py",
+  "beads_central/service.py",
+  "beads_central/settings.py",
+  "constraints.txt",
+  "pyproject.toml",
   "third_party/BEADS_SOURCE_SHA256.txt",
   "third_party/NOTICE.md",
+  "uv.lock",
+];
+const MATERIAL_SOURCE_PATHS = [
+  ...CENTRAL_SOURCE_FILES,
   "third_party/source-archives/beads-1.1.2.tar.gz",
 ];
 
@@ -44,6 +61,9 @@ function run(command, args, options = {}) {
     env: options.env ?? process.env,
     stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
   });
+  if (result.error) {
+    fail(`${command} ${args.join(" ")} failed: ${result.error.message}`);
+  }
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout ?? ""}${result.stderr ?? ""}` : "";
     fail(`${command} ${args.join(" ")} failed with exit ${String(result.status)}${detail}`);
@@ -53,6 +73,17 @@ function run(command, args, options = {}) {
 
 function sha256(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function centralSourceSha256(centralRoot) {
+  const hash = createHash("sha256");
+  for (const relativePath of [...CENTRAL_SOURCE_FILES].sort()) {
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(readFileSync(path.join(centralRoot, relativePath)));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 function parseArgs(argv) {
@@ -76,7 +107,7 @@ function parseArgs(argv) {
 
 function resolveCentralRoot() {
   const configured = process.env.PASEO_BEADS_CENTRAL_SOURCE_ROOT?.trim();
-  const candidate = configured || path.resolve(REPO_ROOT, "../beads-central");
+  const candidate = configured || VENDORED_CENTRAL_ROOT;
   if (!existsSync(candidate)) {
     fail(
       `Canonical Beads Central source is missing: ${candidate}. Set PASEO_BEADS_CENTRAL_SOURCE_ROOT.`,
@@ -86,6 +117,26 @@ function resolveCentralRoot() {
 }
 
 function verifyCentralSource(centralRoot) {
+  for (const relativePath of CENTRAL_SOURCE_FILES) {
+    const sourcePath = path.join(centralRoot, relativePath);
+    if (!existsSync(sourcePath)) fail(`Beads Central source path is missing: ${sourcePath}`);
+  }
+  const sourceSha = centralSourceSha256(centralRoot);
+  if (sourceSha !== LOCK.centralSourceSha256) {
+    fail(
+      `Beads Central source checksum mismatch: expected ${LOCK.centralSourceSha256}, received ${sourceSha}`,
+    );
+  }
+  if (centralRoot === realpathSync(VENDORED_CENTRAL_ROOT)) {
+    const sourceCommitPath = path.join(centralRoot, "SOURCE_COMMIT");
+    const sourceCommit = readFileSync(sourceCommitPath, "utf8").trim();
+    if (sourceCommit !== LOCK.sourceCommit) {
+      fail(
+        `Vendored Beads Central source mismatch: expected ${LOCK.sourceCommit}, received ${sourceCommit}`,
+      );
+    }
+    return;
+  }
   const commit = run("git", ["rev-parse", "HEAD"], { cwd: centralRoot, capture: true });
   if (commit !== LOCK.sourceCommit) {
     fail(`Beads Central source commit mismatch: expected ${LOCK.sourceCommit}, received ${commit}`);
@@ -101,12 +152,9 @@ function verifyCentralSource(centralRoot) {
   if (materialStatus) {
     fail("Beads Central material source paths are dirty; commit or revert them before packaging");
   }
-  const archive = path.join(
-    centralRoot,
-    "third_party",
-    "source-archives",
-    `beads-${LOCK.beadsVersion}.tar.gz`,
-  );
+}
+
+function verifyBeadsArchive(archive) {
   const archiveSha = sha256(archive);
   if (archiveSha !== LOCK.beadsSourceSha256) {
     fail(
@@ -116,38 +164,104 @@ function verifyCentralSource(centralRoot) {
   return archive;
 }
 
-function resolveBdBinary(centralRoot, temporaryRoot) {
+async function resolveBeadsArchive(centralRoot, temporaryRoot) {
+  const bundledArchive = path.join(
+    centralRoot,
+    "third_party",
+    "source-archives",
+    `beads-${LOCK.beadsVersion}.tar.gz`,
+  );
+  if (existsSync(bundledArchive)) return verifyBeadsArchive(bundledArchive);
+  if (typeof LOCK.beadsSourceUrl !== "string" || !LOCK.beadsSourceUrl.startsWith("https://")) {
+    fail("Pinned Beads source URL must be HTTPS");
+  }
+  const response = await fetch(LOCK.beadsSourceUrl, { redirect: "follow" });
+  if (!response.ok) {
+    fail(`Could not download pinned Beads source: HTTP ${response.status}`);
+  }
+  const archive = path.join(temporaryRoot, `beads-${LOCK.beadsVersion}.tar.gz`);
+  writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
+  return verifyBeadsArchive(archive);
+}
+
+function resolveBdBinary(centralRoot, archive, temporaryRoot) {
   const configured = process.env.PASEO_BEADS_BD_BIN?.trim();
   const prebuilt =
     configured || path.join(centralRoot, "dist", process.platform === "win32" ? "bd.exe" : "bd");
-  if (existsSync(prebuilt)) return realpathSync(prebuilt);
+  if (existsSync(prebuilt)) return { binary: realpathSync(prebuilt), goRuntime: "prebuilt" };
   const output = path.join(temporaryRoot, process.platform === "win32" ? "bd.exe" : "bd");
-  if (process.platform === "win32") {
-    fail("A prebuilt Windows bd binary is required via PASEO_BEADS_BD_BIN");
+  const sourceRoot = path.join(temporaryRoot, "beads-source");
+  mkdirSync(sourceRoot, { recursive: true });
+  run("tar", ["-xf", archive, "-C", sourceRoot]);
+  const extractedRoot = path.join(sourceRoot, `beads-${LOCK.beadsVersion}`);
+  if (!existsSync(path.join(extractedRoot, "go.mod"))) {
+    fail(`Extracted Beads source is missing go.mod: ${extractedRoot}`);
   }
-  run("bash", [path.join(centralRoot, "scripts", "build_bd_from_bundled_source.sh"), output], {
-    cwd: centralRoot,
-  });
-  return output;
+  const goRuntime = resolveGoRuntime();
+  run(
+    "go",
+    [
+      "build",
+      "-trimpath",
+      "-ldflags",
+      `-s -w -X main.Build=v${LOCK.beadsVersion}-bundled`,
+      "-o",
+      output,
+      "./cmd/bd",
+    ],
+    {
+      cwd: extractedRoot,
+      env: {
+        ...process.env,
+        CGO_ENABLED: "1",
+        GOFLAGS: "-tags=gms_pure_go",
+        GOTOOLCHAIN: "local",
+      },
+    },
+  );
+  if (!existsSync(output)) {
+    fail(`Go build did not produce the bundled Beads binary: ${output}`);
+  }
+  return { binary: output, goRuntime };
 }
 
-function verifyBdBinary(bdBinary) {
-  const version = run(bdBinary, ["version"], { capture: true });
-  if (!version.startsWith(`bd version ${LOCK.beadsVersion}`)) {
-    fail(`Bundled bd version mismatch: ${version}`);
+function resolveUvRuntime() {
+  const uv = process.env.PASEO_UV_BIN?.trim() || "uv";
+  const version = run(uv, ["--version"], { capture: true });
+  if (!version.startsWith(`uv ${LOCK.uvVersion}`)) {
+    fail(`uv version mismatch: expected ${LOCK.uvVersion}, received ${version}`);
+  }
+  return { uv, version };
+}
+
+function resolveGoRuntime() {
+  const version = run("go", ["version"], { capture: true });
+  const compatibleSeries = LOCK.goVersion.split(".").slice(0, 2).join(".");
+  if (!version.includes(`go${compatibleSeries}.`)) {
+    fail(`Go version mismatch: expected ${compatibleSeries}.x, received ${version}`);
   }
   return version;
 }
 
-function buildPythonSidecar(centralRoot, temporaryRoot) {
+function resolvePythonRuntime() {
+  const python = process.env.PASEO_PYTHON_BIN?.trim() || "python";
+  const version = run(python, ["--version"], { capture: true });
+  const compatibleSeries = LOCK.pythonVersion.split(".").slice(0, 2).join(".");
+  if (!version.startsWith(`Python ${compatibleSeries}.`)) {
+    fail(`Python version mismatch: expected ${compatibleSeries}.x, received ${version}`);
+  }
+  return { python, version };
+}
+
+function buildPythonSidecar(centralRoot, temporaryRoot, uv, python) {
   const distRoot = path.join(temporaryRoot, "dist");
   const workRoot = path.join(temporaryRoot, "work");
   const specRoot = path.join(temporaryRoot, "spec");
-  const uv = process.env.PASEO_UV_BIN?.trim() || "uv";
   run(
     uv,
     [
       "run",
+      "--locked",
       "--project",
       centralRoot,
       "--with",
@@ -176,7 +290,15 @@ function buildPythonSidecar(centralRoot, temporaryRoot) {
       "yaml",
       ENTRYPOINT,
     ],
-    { cwd: REPO_ROOT },
+    {
+      cwd: REPO_ROOT,
+      env: {
+        ...process.env,
+        UV_PROJECT_ENVIRONMENT: path.join(temporaryRoot, "venv"),
+        UV_PYTHON: python,
+        UV_NO_MANAGED_PYTHON: "1",
+      },
+    },
   );
   const bundleRoot = path.join(distRoot, "beads-central");
   const executable = path.join(
@@ -185,6 +307,14 @@ function buildPythonSidecar(centralRoot, temporaryRoot) {
   );
   if (!existsSync(executable)) fail(`PyInstaller output is missing: ${executable}`);
   return bundleRoot;
+}
+
+function verifyBdBinary(bdBinary) {
+  const version = run(bdBinary, ["version"], { capture: true });
+  if (!version.startsWith(`bd version ${LOCK.beadsVersion}`)) {
+    fail(`Bundled bd version mismatch: ${version}`);
+  }
+  return version;
 }
 
 function extractBeadsLicense(archive, target) {
@@ -197,7 +327,17 @@ function extractBeadsLicense(archive, target) {
   writeFileSync(target, result.stdout);
 }
 
-function assemble(output, centralRoot, archive, pythonBundle, bdBinary, bdVersion) {
+function assemble(
+  output,
+  centralRoot,
+  archive,
+  pythonBundle,
+  bdBinary,
+  bdVersion,
+  goRuntime,
+  uvRuntime,
+  pythonRuntime,
+) {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(path.dirname(output), { recursive: true });
   cpSync(pythonBundle, output, { recursive: true });
@@ -222,11 +362,18 @@ function assemble(output, centralRoot, archive, pythonBundle, bdBinary, bdVersio
     component: "beads-central",
     version: LOCK.version,
     sourceCommit: LOCK.sourceCommit,
+    centralSourceSha256: LOCK.centralSourceSha256,
     platform: process.platform,
     arch: process.arch,
     pyinstallerVersion: LOCK.pyinstallerVersion,
+    uvRuntime,
+    goRuntime,
+    pythonRuntime,
     beadsVersion: LOCK.beadsVersion,
     beadsSourceSha256: LOCK.beadsSourceSha256,
+    sidecarBinarySha256: sha256(
+      path.join(output, process.platform === "win32" ? "beads-central.exe" : "beads-central"),
+    ),
     beadsBinarySha256: sha256(bundledBd),
     beadsRuntime: bdVersion,
   };
@@ -236,20 +383,33 @@ function assemble(output, centralRoot, archive, pythonBundle, bdBinary, bdVersio
   );
 }
 
-function main() {
+async function main() {
   const { output } = parseArgs(process.argv.slice(2));
   const centralRoot = resolveCentralRoot();
-  const archive = verifyCentralSource(centralRoot);
+  verifyCentralSource(centralRoot);
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "paseo-beads-sidecar-build."));
   try {
-    const bdBinary = resolveBdBinary(centralRoot, temporaryRoot);
+    const archive = await resolveBeadsArchive(centralRoot, temporaryRoot);
+    const { uv, version: uvRuntime } = resolveUvRuntime();
+    const { python, version: pythonRuntime } = resolvePythonRuntime();
+    const { binary: bdBinary, goRuntime } = resolveBdBinary(centralRoot, archive, temporaryRoot);
     const bdVersion = verifyBdBinary(bdBinary);
-    const pythonBundle = buildPythonSidecar(centralRoot, temporaryRoot);
-    assemble(output, centralRoot, archive, pythonBundle, bdBinary, bdVersion);
+    const pythonBundle = buildPythonSidecar(centralRoot, temporaryRoot, uv, python);
+    assemble(
+      output,
+      centralRoot,
+      archive,
+      pythonBundle,
+      bdBinary,
+      bdVersion,
+      goRuntime,
+      uvRuntime,
+      pythonRuntime,
+    );
     process.stdout.write(`Bundled Beads Central ${LOCK.version} sidecar at ${output}\n`);
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
   }
 }
 
-main();
+await main();

@@ -1,0 +1,1 @@
+03ad2d43a97c75248ecfae28cad6789af506861c18568399c6e1432b02c1fe48  beads-1.1.2.tar.gz (user supplied source archive)

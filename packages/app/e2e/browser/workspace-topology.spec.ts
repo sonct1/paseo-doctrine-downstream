@@ -69,14 +69,14 @@ test.describe("workspace topology", () => {
       await expect(page.getByTestId("workspace-header-issues")).toBeVisible();
       await page.getByTestId("workspace-header-topology").click();
 
-      const topology = page.getByTestId("workspace-topology-panel");
+      const topology = page.getByTestId("project-topology-panel");
       await expect(topology).toBeVisible({ timeout: 30_000 });
-      await expect(topology.getByText("3 agents · 2 relationships", { exact: true })).toBeVisible();
+      await expect(topology.getByText("3 agents · 1 relationship", { exact: true })).toBeVisible();
       await expect(topology.getByLabel(/Open Topology Lead, lead,/u)).toBeVisible();
       await expect(topology.getByLabel(/Open Topology Peer, peer,/u)).toBeVisible();
       await expect(topology.getByLabel(/Open Topology Supervisor, supervisor,/u)).toBeVisible();
       await expect(topology.getByText("delegates", { exact: true })).toBeVisible();
-      await expect(topology.getByText("observes · inferred", { exact: true })).toBeVisible();
+      await expect(topology.getByText("supervises", { exact: true })).toHaveCount(0);
       await expect(topology.getByText("1 assigned issue", { exact: true })).toBeVisible();
       await expect(topology.getByText("ps-topology-e2e", { exact: true })).toBeVisible();
 

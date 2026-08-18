@@ -3,7 +3,6 @@ import path from "node:path";
 import type { FormPreferences } from "@/create-agent-preferences/preferences";
 import {
   applyProfileFromPicker,
-  drillIntoProvider,
   openModelPicker,
   seedAgentProfiles,
   seedModelProvider,
@@ -28,6 +27,7 @@ interface CreateAgentRequestMessage {
   type: "create_agent_request";
   config?: {
     provider?: unknown;
+    model?: unknown;
     modeId?: unknown;
     featureValues?: unknown;
   };
@@ -91,32 +91,11 @@ async function seedPoisonedModelessPreference(page: Page): Promise<void> {
   );
 }
 
-async function readProviderModePreference(page: Page, provider: string): Promise<unknown> {
-  return page.evaluate(
-    ({ preferencesKey, providerId }) => {
-      const raw = localStorage.getItem(preferencesKey);
-      if (!raw) return null;
-      const preferences = JSON.parse(raw) as FormPreferences;
-      return preferences.providerPreferences?.[providerId]?.mode ?? null;
-    },
-    { preferencesKey: CREATE_AGENT_PREFERENCES_KEY, providerId: provider },
-  );
-}
-
-test.describe("Agent profiles repair modeless provider preferences", () => {
+test.describe("Agent profiles respect supported provider policy", () => {
   test.describe.configure({ timeout: 240_000 });
 
-  test("applying a profile heals a stale mode before returning to Pi", async ({ page }) => {
+  test("a stale preference cannot expose an unsupported Pi provider", async ({ page }) => {
     const workspace = await seedWorkspace({ repoPrefix: "profile-modeless-preferences-" });
-    const profiles = await seedAgentProfiles([
-      {
-        id: "agent_profile_modeless_repair",
-        name: "Approval work",
-        provider: "mock",
-        model: "one-minute-stream",
-        modeId: "approval-test",
-      },
-    ]);
     const provider = await seedModelProvider({
       id: MODELESS_PROVIDER,
       label: "Pi profile test",
@@ -131,7 +110,6 @@ test.describe("Agent profiles repair modeless provider preferences", () => {
       ],
     });
     await seedPoisonedModelessPreference(page);
-    const createAgentRecorder = await recordAndBlockCreateAgentRequest(page);
 
     try {
       await gotoAppShell(page);
@@ -141,46 +119,26 @@ test.describe("Agent profiles repair modeless provider preferences", () => {
         projectKey: workspace.projectKey,
         projectDisplayName: workspace.projectDisplayName,
       });
-
       await openModelPicker(page);
-      await applyProfileFromPicker(page, "Approval work");
-
-      await expect
-        .poll(() => readProviderModePreference(page, MODELESS_PROVIDER), { timeout: 10_000 })
-        .toBeNull();
-      await expect
-        .poll(() => readProviderModePreference(page, "mock"), { timeout: 10_000 })
-        .toBe("approval-test");
-
-      await openModelPicker(page);
-      await drillIntoProvider(page, MODELESS_PROVIDER);
-      await page.getByRole("button", { name: /Pi profile model/ }).click();
-
-      await submitNewWorkspacePrompt(page, "Create a Pi agent after repairing preferences.");
-      const createAgentRequest = await createAgentRecorder.waitForRequest();
-      expect(createAgentRequest).toMatchObject({
-        config: { provider: MODELESS_PROVIDER },
-      });
-      expect(createAgentRequest.config).not.toHaveProperty("modeId");
+      await expect(page.getByTestId(`model-provider-${MODELESS_PROVIDER}`)).toHaveCount(0);
+      await expect(page.getByText("Pi profile model", { exact: true })).toHaveCount(0);
     } finally {
       await workspace.cleanup();
       await provider.restore();
-      await profiles.restore();
     }
   });
 
-  test("cross-provider profile features survive immediate workspace creation", async ({ page }) => {
+  test("a custom Codex profile survives immediate workspace creation", async ({ page }) => {
     const workspace = await seedWorkspace({ repoPrefix: "profile-feature-transition-" });
     const featureProviderId = "profile-feature-e2e";
-    const featureModelId = "claude-opus-5";
+    const featureModelId = "gpt-5.4-mini";
     const profiles = await seedAgentProfiles([
       {
         id: "agent_profile_feature_transition",
         name: "Fast profile",
         provider: featureProviderId,
         model: featureModelId,
-        modeId: "bypassPermissions",
-        featureValues: { fast_mode: true },
+        modeId: "full-access",
       },
     ]);
     const provider = await seedModelProvider({
@@ -213,7 +171,8 @@ test.describe("Agent profiles repair modeless provider preferences", () => {
       expect(createAgentRequest).toMatchObject({
         config: {
           provider: featureProviderId,
-          featureValues: { fast_mode: true },
+          model: featureModelId,
+          modeId: "full-access",
         },
       });
     } finally {

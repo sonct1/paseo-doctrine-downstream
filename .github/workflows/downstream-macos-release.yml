@@ -58,6 +58,7 @@ jobs:
           npm run acp:pin-consistency:check
           node --test \
             scripts/acp-catalog-pin-consistency.test.mjs \
+            scripts/beads-central-bundle.test.mjs \
             scripts/build-daemon-web-ui.test.mjs \
             scripts/ci-workflow.test.mjs \
             scripts/daemon-launch-contract.test.mjs \
@@ -159,6 +160,21 @@ jobs:
         with:
           node-version: "24.11.0"
           cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.15"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.2"
+          cache: false
+
+      - name: Install pinned Beads Central build toolchain
+        shell: bash
+        run: |
+          uv_version=$(node -p "require('./components/beads-central.lock.json').uvVersion")
+          python -m pip install "uv==$uv_version"
 
       - name: Validate host architecture
         shell: bash

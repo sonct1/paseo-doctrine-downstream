@@ -11,6 +11,10 @@ test("portable artifact smoke binds every CLI probe to its isolated daemon", () 
   assert.match(source, /PASEO_DICTATION_ENABLED: "0"/);
   assert.match(source, /PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD: "0"/);
   assert.match(source, /PASEO_VOICE_MODE_ENABLED: "0"/);
+  assert.match(source, /PASEO_BEADS_CENTRAL_SIDECAR: installedBeadsCentralSidecar/);
+  assert.match(source, /PASEO_BEADS_CENTRAL_BD_BIN: installedBd/);
+  assert.match(source, /await waitForBeadsCentral\(\)/);
+  assert.match(source, /manifest\.bundledBeadsBinary !== true/);
   assert.match(source, /await waitForExit\(daemon\)/);
 });
 
