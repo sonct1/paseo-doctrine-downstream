@@ -2264,7 +2264,7 @@ export const en = {
         unavailable: "Connect to this host to manage orchestration",
         enableTools: {
           title: "Enable Paseo tools",
-          hint: "Agents will be able to manage worktrees, agents and schedules",
+          hint: "Role-bound agents always receive their required scoped tools. Turn this on for unbound agents too.",
           accessibilityLabel: "Inject Paseo tools",
         },
         systemPrompt: {

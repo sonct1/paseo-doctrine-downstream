@@ -18,7 +18,7 @@ import {
   ProviderSnapshotManager,
   resolveSnapshotCwd,
 } from "./provider-snapshot-manager.js";
-import { OpenCodeAgentClient } from "./providers/opencode-agent.js";
+import { ACPAgentClient } from "./providers/acp-agent.js";
 
 const TEST_CAPABILITIES = {
   supportsStreaming: false,
@@ -1449,8 +1449,12 @@ describe("ProviderSnapshotManager public surface", () => {
     }
   });
 
-  test("treats an OpenCode parent with auto accept as unattended when resolving an explicit child mode", async () => {
-    const openCode = new OpenCodeAgentClient(createTestLogger());
+  test("treats a Cursor parent with auto accept as unattended when resolving an explicit child mode", async () => {
+    const cursor = new ACPAgentClient({
+      provider: "cursor",
+      logger: createTestLogger(),
+      defaultCommand: ["cursor-agent", "acp"],
+    });
     const modes: AgentMode[] = [
       { id: "build", label: "Build" },
       { id: "base", label: "Base" },
@@ -1462,29 +1466,36 @@ describe("ProviderSnapshotManager public surface", () => {
         claude: { enabled: false },
         codex: { enabled: false },
         copilot: { enabled: false },
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+          enabled: true,
+        },
+        opencode: { enabled: false },
         pi: { enabled: false },
       },
       extraClients: {
-        opencode: createExtraClient("opencode", {
+        cursor: createExtraClient("cursor", {
           async isAvailable() {
             return true;
           },
           async fetchCatalog() {
             return { models: [] as AgentModelDefinition[], modes };
           },
-          resolveCreateConfig: openCode.resolveCreateConfig.bind(openCode),
-          isCreateConfigUnattended: openCode.isCreateConfigUnattended.bind(openCode),
+          resolveCreateConfig: cursor.resolveCreateConfig.bind(cursor),
+          isCreateConfigUnattended: cursor.isCreateConfigUnattended.bind(cursor),
         }),
       },
     });
     try {
       const parent = {
         id: "parent-agent",
-        provider: "opencode",
+        provider: "cursor",
         currentModeId: "orchestrator",
         availableModes: modes,
         config: {
-          provider: "opencode",
+          provider: "cursor",
           cwd: "/tmp/project",
           featureValues: { auto_accept: true },
         },
@@ -1492,7 +1503,7 @@ describe("ProviderSnapshotManager public surface", () => {
 
       const resolved = await manager.resolveCreateConfig({
         cwd: "/tmp/project",
-        provider: "opencode",
+        provider: "cursor",
         requestedMode: "base",
         featureValues: undefined,
         parent,
@@ -1519,16 +1530,16 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
       },
     });
     try {
-      expect(manager.hasProvider("zai-claude")).toBe(false);
+      expect(manager.hasProvider("codex-proxy")).toBe(false);
 
       const state = manager.applyMutableProviderConfig({
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
+        "codex-proxy": { extends: "codex", label: "Codex proxy", enabled: true },
       });
 
-      expect(manager.hasProvider("zai-claude")).toBe(true);
-      expect(state.providerDefinitions["zai-claude"]).toMatchObject({ enabled: true });
-      expect(manager.listRegisteredProviderIds()).toContain("zai-claude");
-      expect(manager.getSnapshot().find((entry) => entry.provider === "zai-claude")?.source).toBe(
+      expect(manager.hasProvider("codex-proxy")).toBe(true);
+      expect(state.providerDefinitions["codex-proxy"]).toMatchObject({ enabled: true });
+      expect(manager.listRegisteredProviderIds()).toContain("codex-proxy");
+      expect(manager.getSnapshot().find((entry) => entry.provider === "codex-proxy")?.source).toBe(
         "custom",
       );
     } finally {
@@ -1540,20 +1551,20 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),
       providerOverrides: {
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
+        "codex-proxy": { extends: "codex", label: "Codex proxy", enabled: true },
       },
     });
     try {
-      expect(manager.hasProvider("zai-claude")).toBe(true);
+      expect(manager.hasProvider("codex-proxy")).toBe(true);
 
-      const state = manager.applyMutableProviderConfig({}, { removeProviders: ["zai-claude"] });
+      const state = manager.applyMutableProviderConfig({}, { removeProviders: ["codex-proxy"] });
 
-      expect(manager.hasProvider("zai-claude")).toBe(false);
-      expect(state.providerDefinitions["zai-claude"]).toBeUndefined();
-      expect(manager.getSnapshot().some((entry) => entry.provider === "zai-claude")).toBe(false);
+      expect(manager.hasProvider("codex-proxy")).toBe(false);
+      expect(state.providerDefinitions["codex-proxy"]).toBeUndefined();
+      expect(manager.getSnapshot().some((entry) => entry.provider === "codex-proxy")).toBe(false);
 
       manager.applyMutableProviderConfig({ codex: { enabled: false } });
-      expect(manager.hasProvider("zai-claude")).toBe(false);
+      expect(manager.hasProvider("codex-proxy")).toBe(false);
     } finally {
       manager.destroy();
     }
@@ -1609,7 +1620,7 @@ describe("ProviderSnapshotManager applyMutableProviderConfig", () => {
 
       listener.mockClear();
       manager.applyMutableProviderConfig({
-        "zai-claude": { extends: "claude", label: "ZAI", enabled: true },
+        "codex-proxy": { extends: "codex", label: "Codex proxy", enabled: true },
       });
 
       const cwds = listener.mock.calls.map((call) => call[1]).sort();

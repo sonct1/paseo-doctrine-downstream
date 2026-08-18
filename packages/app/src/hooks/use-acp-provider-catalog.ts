@@ -4,8 +4,10 @@ import { ACP_PROVIDER_CATALOG, type AcpProviderCatalogEntry } from "@/data/acp-p
 
 export type AcpProviderCatalogItem = AcpProviderCatalogEntry;
 
+const SUPPORTED_ACP_PROVIDER_IDS = new Set(["cursor"]);
+
 export function getAcpProviderCatalog(): AcpProviderCatalogItem[] {
-  return ACP_PROVIDER_CATALOG;
+  return ACP_PROVIDER_CATALOG.filter((entry) => SUPPORTED_ACP_PROVIDER_IDS.has(entry.id));
 }
 
 export function buildAcpProviderConfigPatch(
@@ -26,7 +28,7 @@ export function buildAcpProviderConfigPatch(
 }
 
 export function useAcpProviderCatalog() {
-  const [entries] = useState<AcpProviderCatalogItem[]>(ACP_PROVIDER_CATALOG);
+  const [entries] = useState<AcpProviderCatalogItem[]>(getAcpProviderCatalog);
 
   const refetch = useCallback(async () => entries, [entries]);
 

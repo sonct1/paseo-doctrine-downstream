@@ -5,8 +5,8 @@ import { getServerId } from "../support/helpers/server-id";
 
 test.describe("Beads Central issue surface", () => {
   test.skip(
-    !process.env.PASEO_BEADS_CENTRAL_URL || !process.env.PASEO_BEADS_CENTRAL_TOKEN,
-    "Requires an explicitly pinned Beads Central endpoint and credential for the isolated daemon.",
+    !process.env.PASEO_BEADS_CENTRAL_SIDECAR || !process.env.PASEO_BEADS_CENTRAL_BD_BIN,
+    "Requires the bundled Beads Central sidecar component for the isolated daemon.",
   );
 
   test("creates, reads, closes, and isolates project issue graphs", async ({
@@ -16,7 +16,7 @@ test.describe("Beads Central issue surface", () => {
     test.setTimeout(120_000);
     const daemonConfig = await e2eWorkerClient.getDaemonConfig();
     expect(daemonConfig.config.beadsCentral).toEqual({
-      endpoint: process.env.PASEO_BEADS_CENTRAL_URL,
+      endpoint: "http://127.0.0.1:8080",
       credentialRef: "beads-central",
     });
     const first = await seedWorkspace({ repoPrefix: "beads-ui-one-" });
@@ -30,22 +30,7 @@ test.describe("Beads Central issue surface", () => {
         timeout: 30_000,
       });
       await expect(page.getByText("No issues yet", { exact: true })).toBeVisible();
-      await page.getByTestId("beads-central-configure-button").click();
-      const connectionSheet = page.getByTestId("beads-central-connection-sheet");
-      await expect(connectionSheet).toBeVisible();
-      await expect(
-        connectionSheet.getByText("There is no native backend or fallback.", {
-          exact: false,
-        }),
-      ).toBeVisible();
-      await expect(
-        connectionSheet.getByTestId("beads-central-endpoint").getByRole("textbox"),
-      ).not.toHaveValue("");
-      await expect(
-        connectionSheet.getByTestId("beads-central-credential-ref").getByRole("textbox"),
-      ).toHaveValue("beads-central");
-      await connectionSheet.getByRole("button", { name: "Cancel" }).click();
-      await expect(connectionSheet).toHaveCount(0);
+      await expect(page.getByTestId("beads-central-configure-button")).toHaveCount(0);
       await page.getByTestId("issues-create-button").first().click();
       await page.getByTestId("issue-create-title").fill("Qualify Beads Central in Paseo");
       await page
@@ -165,16 +150,7 @@ test.describe("Beads Central issue surface", () => {
         path: testInfo.outputPath("beads-issue-compact.png"),
         animations: "disabled",
       });
-      await page.getByTestId("beads-central-configure-button").click();
-      await expect(connectionSheet).toBeVisible();
-      const compactSave = page.getByRole("button", { name: "Save and retry" });
-      await compactSave.scrollIntoViewIfNeeded();
-      await expect(compactSave).toBeVisible();
-      await page.screenshot({
-        path: testInfo.outputPath("beads-central-connection-compact.png"),
-        animations: "disabled",
-      });
-      await page.getByRole("button", { name: "Cancel" }).click();
+      await expect(page.getByTestId("beads-central-configure-button")).toHaveCount(0);
     } finally {
       await Promise.all([first.cleanup(), second.cleanup()]);
     }

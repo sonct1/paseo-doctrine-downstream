@@ -114,6 +114,22 @@ function getPaseoHome(): string {
   return resolvePaseoHome(process.env);
 }
 
+function bundledBeadsCentralEnv(): NodeJS.ProcessEnv {
+  if (!app.isPackaged) return {};
+  const componentRoot = path.join(process.resourcesPath, "beads-central");
+  return {
+    PASEO_BEADS_CENTRAL_SIDECAR: path.join(
+      componentRoot,
+      process.platform === "win32" ? "beads-central.exe" : "beads-central",
+    ),
+    PASEO_BEADS_CENTRAL_BD_BIN: path.join(
+      componentRoot,
+      "bin",
+      process.platform === "win32" ? "bd.exe" : "bd",
+    ),
+  };
+}
+
 function logFilePath(): string {
   return path.join(getPaseoHome(), DAEMON_LOG_FILENAME);
 }
@@ -398,6 +414,7 @@ async function startDaemon(): Promise<DesktopDaemonStatus> {
       PASEO_DESKTOP_MANAGED: "1",
       PASEO_CLI: getBundledCliShimPath(),
       PASEO_WEB_UI_ENABLED: "false",
+      ...bundledBeadsCentralEnv(),
     },
     stdio: ["ignore", "ignore", "ignore"],
   });

@@ -19,6 +19,7 @@ function row(
     subtitle: null,
     status: overrides.status ?? "idle",
     requiresAttention: overrides.requiresAttention ?? false,
+    pendingPermissionCount: overrides.pendingPermissionCount ?? 0,
     createdAt: overrides.createdAt ?? new Date("2026-04-20T00:00:00.000Z"),
   };
 }
@@ -72,6 +73,15 @@ describe("formatHeaderLabel", () => {
 
   it("uses singular 'subagent' for a single row that requires attention upstream", () => {
     expect(formatHeaderLabel([row({ id: "a", requiresAttention: true })])).toBe("1 subagent");
+  });
+
+  it("aggregates child permission requests in the parent header", () => {
+    expect(
+      formatHeaderLabel([
+        row({ id: "a", status: "running", pendingPermissionCount: 1 }),
+        row({ id: "b", pendingPermissionCount: 2 }),
+      ]),
+    ).toBe("2 subagents · 1 running · 3 approvals");
   });
 });
 
@@ -175,11 +185,19 @@ describe("buildSubagentRowPresentationData", () => {
     );
   });
 
-  it("ignores requiresAttention on the source row when computing the bucket", () => {
+  it("ignores non-permission attention on the source row when computing the bucket", () => {
     expect(
       buildSubagentRowPresentationData(row({ id: "a", status: "idle", requiresAttention: true }))
         .statusBucket,
     ).toBe("done");
+  });
+
+  it("surfaces pending child permission requests as parent-visible attention", () => {
+    const presentation = buildSubagentRowPresentationData(
+      row({ id: "a", status: "running", pendingPermissionCount: 2 }),
+    );
+    expect(presentation.statusBucket).toBe("needs_input");
+    expect(presentation.subtitle).toBe("2 approvals needed");
   });
 });
 

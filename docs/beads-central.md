@@ -4,6 +4,23 @@ Paseo dùng Beads Central `1.2.0` làm durable issue/work graph duy nhất. Khô
 backend switch hoặc fallback sang global `bd`. Paseo vẫn là delegation/lifecycle plane; repository,
 Git và test/review evidence vẫn là engineering truth; Human/Lead giữ acceptance theo exact lease.
 
+## Runtime ownership
+
+Beads Central là bundled sidecar component của Paseo Product, không phải service Docker do người dùng
+phải deploy riêng. Artifact CLI/WebUI và Desktop chứa executable Central `1.2.0` cùng `bd 1.1.2` đã
+pin; source checkout `beads-central` chỉ là canonical build input.
+
+Daemon worker sở hữu toàn bộ lifecycle:
+
+- start sidecar trên `127.0.0.1:6769` và chờ `/health/ready` trước khi mở Paseo daemon;
+- fail closed khi thiếu bundle, sai version, sai `bd`, hoặc port đang bị một Central cũ chiếm;
+- dừng sidecar khi daemon stop, bootstrap fail, supervisor mất, hoặc process shutdown;
+- shutdown daemon với exit lỗi nếu sidecar chết ngoài dự kiến sau readiness.
+
+Data của component nằm dưới `$PASEO_HOME/beads-central/`; credential nội bộ nằm trong private Paseo
+credential store. Sidecar chỉ nhận một environment allowlist tối thiểu cùng exact Central settings,
+không inherit provider/API secrets của daemon. Docker image/container không nằm trong runtime contract.
+
 ## Stable project binding
 
 Mỗi Product project persist đúng một nullable-then-immutable `workGraphId`. Lần dùng đầu tiên, daemon
@@ -17,17 +34,16 @@ writer và serialize mutation theo project.
 
 ## Authentication và authority
 
-Daemon lấy endpoint từ `daemon.beadsCentral.endpoint` và secret từ credential reference (default
-`beads-central`) hoặc `PASEO_BEADS_CENTRAL_TOKEN`. Model không chọn endpoint, credential, graph hay
-actor. Product dùng service admin token và delegate daemon-authenticated actor bằng
+Daemon pin endpoint nội bộ `http://127.0.0.1:6769` và credential reference `beads-central`. Khi chưa
+có credential, daemon tự sinh secret đủ mạnh và persist trước khi start sidecar;
+`PASEO_BEADS_CENTRAL_TOKEN` chỉ là launch-time override có chủ đích. Model không chọn endpoint,
+credential, graph hay actor. Product dùng service admin token và delegate daemon-authenticated actor bằng
 `X-Paseo-Actor`; Central chỉ nhận delegation từ wildcard admin principal và audit cả actor lẫn service
 principal.
 
-Human cấu hình endpoint, credential reference và private service token bằng nút **Central** trên
-Issues screen. Token được gửi thẳng tới private host credential store, không được trả lại WebUI hoặc
-persist trong mutable daemon config. `PASEO_BEADS_CENTRAL_URL`,
-`PASEO_BEADS_CENTRAL_CREDENTIAL_REF` và `PASEO_BEADS_CENTRAL_TOKEN` là launch-time overrides cho
-deployment automation; normal Human flow không cần sửa file/env thủ công.
+Normal Human flow không có bước cấu hình endpoint/token và Issues UI không trình bày Central như một
+external connection. Các field endpoint/credential cũ trong persisted config được giữ để đọc schema
+cũ nhưng không override bundled runtime.
 
 Provider subprocess không được inherit bất kỳ `PASEO_BEADS_CENTRAL_*` key hoặc
 `BEADS_CENTRAL_TOKENS_JSON` nào, kể cả provider env override. Central service token chỉ tồn tại ở daemon;

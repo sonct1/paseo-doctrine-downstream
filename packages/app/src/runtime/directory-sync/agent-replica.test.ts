@@ -108,4 +108,22 @@ describe("AgentDirectoryReplica", () => {
     ).toEqual(directoryPlacement);
     store.clearSession(serverId);
   });
+
+  it("preserves immutable role receipts when a compact timeline payload omits them", () => {
+    const serverId = "agent-replica-role-receipts";
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, null as unknown as DaemonClient);
+    const replica = new AgentDirectoryReplica(serverId, () => undefined);
+    const roleBinding = { roleId: "lead" } as AgentSnapshotPayload["roleBinding"];
+    const launchContract = { roleId: "lead" } as AgentSnapshotPayload["launchContract"];
+    replica.commitSnapshot([entry({ ...payload("directory"), roleBinding, launchContract })], []);
+
+    const token = replica.captureTimeline("agent");
+    expect(replica.submitTimelineAgent(token, payload("timeline"))).toBe(true);
+
+    const agent = useSessionStore.getState().sessions[serverId]?.agents.get("agent");
+    expect(agent?.roleBinding).toBe(roleBinding);
+    expect(agent?.launchContract).toBe(launchContract);
+    store.clearSession(serverId);
+  });
 });

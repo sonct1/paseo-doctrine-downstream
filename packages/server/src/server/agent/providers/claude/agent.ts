@@ -2062,6 +2062,8 @@ class ClaudeAgentSession implements AgentSession {
   private activeForegroundInput: AsyncMessageInput<SDKUserMessage> | null = null;
   private claudeSessionId: string | null;
   private persistence: AgentPersistenceHandle | null;
+  /** Human-selected mode. Provider-owned transient Plan transitions must not overwrite it. */
+  private requestedMode: PermissionMode;
   private currentMode: PermissionMode;
   private planResumeMode: PermissionMode | null = null;
   private availableModes: AgentMode[] = DEFAULT_MODES;
@@ -2159,7 +2161,8 @@ class ClaudeAgentSession implements AgentSession {
       );
     }
 
-    this.currentMode = isPermissionMode(config.modeId) ? config.modeId : "default";
+    this.requestedMode = isPermissionMode(config.modeId) ? config.modeId : "default";
+    this.currentMode = this.requestedMode;
     if (this.currentMode !== "plan") {
       this.planResumeMode = this.currentMode;
     }
@@ -2399,9 +2402,20 @@ class ClaudeAgentSession implements AgentSession {
 
     const normalized = isPermissionMode(modeId) ? modeId : "default";
     assertClaudeAutoModeEligible(normalized, this.buildSdkEnv());
+    await this.applyPermissionMode(normalized, { rememberRequest: true });
+  }
+
+  private async applyPermissionMode(
+    normalized: PermissionMode,
+    options: { rememberRequest: boolean },
+  ): Promise<void> {
     const previousMode = this.currentMode;
     const activeQuery = await this.ensureQuery();
     await activeQuery.setPermissionMode(normalized);
+    if (options.rememberRequest) {
+      this.requestedMode = normalized;
+      this.config.modeId = normalized;
+    }
     if (normalized === "plan") {
       if (previousMode !== "plan") {
         this.planResumeMode = previousMode;
@@ -2410,6 +2424,23 @@ class ClaudeAgentSession implements AgentSession {
       this.planResumeMode = normalized;
     }
     this.currentMode = normalized;
+    this.cachedRuntimeInfo = null;
+  }
+
+  private resolvePlanApprovalMode(selectedActionId: string | undefined): {
+    targetMode: PermissionMode;
+    rememberRequest: boolean;
+  } {
+    if (selectedActionId === "implement_resume" && this.planResumeMode) {
+      return {
+        targetMode: this.planResumeMode,
+        rememberRequest: this.requestedMode === "plan",
+      };
+    }
+    if (this.requestedMode === "plan") {
+      return { targetMode: "acceptEdits", rememberRequest: true };
+    }
+    return { targetMode: this.requestedMode, rememberRequest: false };
   }
 
   async setModel(modelId: string | null): Promise<void> {
@@ -2514,12 +2545,10 @@ class ClaudeAgentSession implements AgentSession {
     if (response.behavior === "allow") {
       if (pending.request.kind === "plan") {
         const selectedActionId = response.selectedActionId;
-        const shouldResumePriorMode =
-          selectedActionId === "implement_resume" && this.planResumeMode === "bypassPermissions";
-        const targetMode: PermissionMode = shouldResumePriorMode
-          ? "bypassPermissions"
-          : "acceptEdits";
-        await this.setMode(targetMode);
+        const modeTransition = this.resolvePlanApprovalMode(selectedActionId);
+        await this.applyPermissionMode(modeTransition.targetMode, {
+          rememberRequest: modeTransition.rememberRequest,
+        });
         this.pushToolCall(
           mapClaudeCompletedToolCall({
             name: "plan_approval",
@@ -4465,6 +4494,7 @@ class ClaudeAgentSession implements AgentSession {
     if (this.currentMode !== "plan") {
       this.planResumeMode = this.currentMode;
     }
+    this.cachedRuntimeInfo = null;
     this.persistence = null;
     if (message.model) {
       const normalizedRuntimeModel = normalizeClaudeRuntimeModelId(message.model);
@@ -4518,6 +4548,25 @@ class ClaudeAgentSession implements AgentSession {
     const requestId = `permission-${randomUUID()}`;
     const kind = resolvePermissionKind(toolName, input);
     const requestInput = normalizeClaudeAskUserQuestionRequestInput(toolName, input);
+    if (kind === "plan" && this.requestedMode === "bypassPermissions") {
+      await this.applyPermissionMode("bypassPermissions", { rememberRequest: false });
+      this.pushToolCall(
+        mapClaudeCompletedToolCall({
+          name: "plan_approval",
+          callId: requestId,
+          input: requestInput,
+          output: {
+            approved: true,
+            actionId: "auto_resume",
+            modeId: "bypassPermissions",
+          },
+        }),
+      );
+      return {
+        behavior: "allow",
+        updatedInput: requestInput,
+      };
+    }
     const metadata: AgentMetadata = {};
     if (options.toolUseID) {
       metadata.toolUseId = options.toolUseID;

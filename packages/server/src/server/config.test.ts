@@ -27,14 +27,26 @@ describe("server config", () => {
     expect(standaloneConfig.desktopManaged).toBe(false);
   });
 
-  test("resolves Central-only defaults and launch overrides", async () => {
+  test("pins the bundled Central component instead of accepting an external route", async () => {
     const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-central-"));
     roots.push(paseoHome);
 
     expect(loadConfig(paseoHome, { env: {} }).beadsCentral).toEqual({
-      endpoint: "http://127.0.0.1:8080",
+      endpoint: "http://127.0.0.1:6769",
       credentialRef: "beads-central",
     });
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        daemon: {
+          beadsCentral: {
+            endpoint: "https://persisted-central.example.internal",
+            credentialRef: "persisted-central",
+          },
+        },
+      }),
+    );
     expect(
       loadConfig(paseoHome, {
         env: {
@@ -43,8 +55,35 @@ describe("server config", () => {
         },
       }).beadsCentral,
     ).toEqual({
-      endpoint: "https://central.example.internal/paseo",
-      credentialRef: "central-production",
+      endpoint: "http://127.0.0.1:6769",
+      credentialRef: "beads-central",
+    });
+  });
+
+  test("allows an isolated Central endpoint only for release smoke", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-central-smoke-"));
+    roots.push(paseoHome);
+
+    expect(
+      loadConfig(paseoHome, {
+        env: {
+          PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: "http://127.0.0.1:17679",
+        },
+      }).beadsCentral,
+    ).toEqual({
+      endpoint: "http://127.0.0.1:6769",
+      credentialRef: "beads-central",
+    });
+    expect(
+      loadConfig(paseoHome, {
+        env: {
+          PASEO_RELEASE_SMOKE: "1",
+          PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT: " http://127.0.0.1:17679 ",
+        },
+      }).beadsCentral,
+    ).toEqual({
+      endpoint: "http://127.0.0.1:17679",
+      credentialRef: "beads-central",
     });
   });
 

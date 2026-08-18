@@ -7,22 +7,25 @@ import { useIssuesQuery } from "@/issues/data";
 import { usePaneContext } from "@/panels/pane-context";
 import type { PanelDescriptor } from "@/panels/panel-registry";
 import { useSessionStore } from "@/stores/session-store";
-import { useWorkspace } from "@/stores/session-store-hooks";
-import { buildWorkspaceTopology } from "@/panels/topology-model";
+import { useProjectWorkspaceIds, useWorkspace } from "@/stores/session-store-hooks";
+import { buildProjectTopology } from "@/panels/topology-model";
 
 export function useTopologyPanelDescriptor(
   _target: { kind: "topology" },
   context: { serverId: string; workspaceId: string },
 ): PanelDescriptor {
+  const workspace = useWorkspace(context.serverId, context.workspaceId);
+  const projectId = workspace?.projectId ?? "";
+  const projectWorkspaceIds = useProjectWorkspaceIds(context.serverId, projectId);
   const count = useSessionStore((state) => {
     const agents = state.sessions[context.serverId]?.agents;
     if (!agents) return 0;
-    return buildWorkspaceTopology(agents, context.workspaceId).nodes.length;
+    return buildProjectTopology(agents, projectWorkspaceIds).nodes.length;
   });
   return {
-    label: "Topology",
+    label: "Project topology",
     subtitle: `${count} agent${count === 1 ? "" : "s"}`,
-    tooltip: "Workspace topology",
+    tooltip: workspace ? `${workspace.projectDisplayName} topology` : "Project topology",
     titleState: "ready",
     icon: Network,
     statusBucket: null,
@@ -34,6 +37,7 @@ export function useTopologyPanelState() {
   const workspace = useWorkspace(serverId, workspaceId);
   const supportsIssues = useHostFeature(serverId, "beadsIssues");
   const projectId = workspace?.projectId ?? "";
+  const projectWorkspaceIds = useProjectWorkspaceIds(serverId, projectId);
   const issuesQuery = useIssuesQuery(
     serverId,
     projectId,
@@ -47,8 +51,8 @@ export function useTopologyPanelState() {
     })),
   );
   const topology = useMemo(
-    () => buildWorkspaceTopology(session.agents, workspaceId),
-    [session.agents, workspaceId],
+    () => buildProjectTopology(session.agents, projectWorkspaceIds),
+    [projectWorkspaceIds, session.agents],
   );
   const issueById = useMemo(
     () =>
@@ -68,6 +72,7 @@ export function useTopologyPanelState() {
   return {
     ...session,
     topology,
+    projectName: workspace?.projectDisplayName ?? "Project",
     openAgent,
     issueById,
     grantedIssueCount,

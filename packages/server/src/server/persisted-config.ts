@@ -13,11 +13,13 @@ import {
   BeadsCentralEndpointSchema,
   FoundationCredentialRefSchema,
   AgentProfileSchema,
+  PeerDelegationRunModeSchema,
   PluginIdSchema,
   PluginSourceSchema,
   TerminalProfileSchema,
 } from "@getpaseo/protocol/messages";
 import { PaseoServicePortAllocationSchema } from "@getpaseo/protocol/paseo-config-schema";
+import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
 import { RoleProfilePreferencesMapSchema } from "@getpaseo/protocol/role-profile";
 
 export const LogLevelSchema = z.enum(["trace", "debug", "info", "warn", "error", "fatal"]);
@@ -282,6 +284,16 @@ export const PersistedConfigSchema = z
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
         roleProfiles: RoleProfilePreferencesMapSchema.optional(),
+        peerDelegation: z
+          .object({
+            enabled: z.boolean(),
+            runMode: PeerDelegationRunModeSchema.default("unattended"),
+            allowedModels: z.array(
+              z.object({ provider: AgentProviderSchema, model: z.string().trim().min(1) }).strict(),
+            ),
+          })
+          .strict()
+          .optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z

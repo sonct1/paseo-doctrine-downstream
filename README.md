@@ -165,9 +165,10 @@ and the `inspect`, `plan`, `install`, `doctor`, and `rollback` commands.
 
 ## Beads Central
 
-Paseo dùng external Beads Central `1.2.0` làm durable issue graph duy nhất. Daemon persist một stable
-`workGraphId` cho mỗi project, pin actor từ role-bound session và enforce Lead/Peer/Supervisor authority
-trước khi gọi Central. Artifact không bundle native `bd` và không có backend switch/fallback.
+Paseo bundle Beads Central `1.2.0` cùng `bd 1.1.2` như một sidecar component của Product. Daemon sở hữu
+startup/readiness/shutdown của component, persist một stable `workGraphId` cho mỗi project, pin actor từ
+role-bound session và enforce Lead/Peer/Supervisor authority trước khi gọi Central. Không cần Docker,
+external deployment hoặc backend switch/fallback.
 
 Xem [Beads Central issue graph](docs/beads-central.md) để biết binding, authority, WebUI và agent-tool
 boundaries.

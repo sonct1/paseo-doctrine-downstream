@@ -200,12 +200,6 @@ function parseModels(stdout: string, provider: AgentProvider): AgentModelDefinit
         id,
         label: label || id,
         isDefault: index === 0,
-        thinkingOptions: [
-          { id: "low", label: "Low" },
-          { id: "medium", label: "Medium", isDefault: true },
-          { id: "high", label: "High" },
-        ],
-        defaultThinkingOptionId: "medium",
       } satisfies AgentModelDefinition;
     });
 }
@@ -231,6 +225,7 @@ class AntigravityNativeAgentSession implements AgentSession {
   private conversationId: string | null;
   private closed = false;
   private currentModeId: string;
+  private assistantText = "";
 
   constructor(
     readonly provider: AgentProvider,
@@ -269,6 +264,7 @@ class AntigravityNativeAgentSession implements AgentSession {
     if (this.activeProcess) throw new Error("Antigravity session already has an active turn");
     const turnId = randomUUID();
     this.pendingOutcome = null;
+    this.assistantText = "";
     const args = [
       "--agent",
       this.profile.name,
@@ -281,7 +277,6 @@ class AntigravityNativeAgentSession implements AgentSession {
     ];
     if (this.conversationId) args.push("--conversation", this.conversationId);
     if (this.config.model) args.push("--model", this.config.model);
-    if (this.config.thinkingOptionId) args.push("--effort", this.config.thinkingOptionId);
     if (this.currentModeId === FULL_ACCESS_MODE) {
       args.push("--dangerously-skip-permissions");
     } else {
@@ -311,14 +306,23 @@ class AntigravityNativeAgentSession implements AgentSession {
       const pendingOutcome = this.pendingOutcome?.turnId === turnId ? this.pendingOutcome : null;
       this.pendingOutcome = null;
       if (spawnError || code !== 0) {
-        const diagnostic = stderr.trim();
+        const diagnostic =
+          stderr.trim() ||
+          [
+            "Native AGY exited without writing stderr.",
+            `Executable: ${this.executable}`,
+            `Exit: ${signal ? `signal ${signal}` : `code ${code ?? "unknown"}`}`,
+            `Model: ${this.config.model ?? "provider default"}`,
+            `Mode: ${this.currentModeId}`,
+            "Check `agy models`, local authentication, and the selected model route.",
+          ].join("\n");
         this.emit({
           type: "turn_failed",
           provider: this.provider,
           error:
             spawnError?.message ??
             `Antigravity exited with ${signal ? `signal ${signal}` : `code ${code}`}`,
-          ...(diagnostic ? { diagnostic } : {}),
+          diagnostic,
           turnId,
         });
       } else if (pendingOutcome?.type === "completed") {
@@ -358,6 +362,9 @@ class AntigravityNativeAgentSession implements AgentSession {
     if (event.event === "step_update" && event.step_update?.step_type === "agent_response") {
       const text = event.step_update.text_delta;
       if (text) {
+        this.assistantText = text.startsWith(this.assistantText)
+          ? text
+          : `${this.assistantText}${text}`;
         this.emit({
           type: "timeline",
           provider: this.provider,
@@ -368,6 +375,16 @@ class AntigravityNativeAgentSession implements AgentSession {
     }
     if (event.event === "result") {
       if (event.result?.status === "SUCCESS") {
+        const response = event.result.response;
+        if (response && response !== this.assistantText) {
+          this.assistantText = response;
+          this.emit({
+            type: "timeline",
+            provider: this.provider,
+            turnId,
+            item: { type: "assistant_message", text: response },
+          });
+        }
         this.pendingOutcome = {
           type: "completed",
           usage: toUsage(event.result.usage),
@@ -399,7 +416,7 @@ class AntigravityNativeAgentSession implements AgentSession {
       provider: this.provider,
       sessionId: this.conversationId,
       model: this.config.model ?? null,
-      thinkingOptionId: this.config.thinkingOptionId ?? null,
+      thinkingOptionId: null,
       modeId: this.currentModeId,
     };
   }
@@ -474,6 +491,10 @@ export class AntigravityNativeAgentClient implements AgentClient {
 
   get provider(): AgentProvider {
     return this.providerId;
+  }
+
+  async listFeatures(): Promise<[]> {
+    return [];
   }
 
   async createSession(

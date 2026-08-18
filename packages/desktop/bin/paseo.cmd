@@ -11,6 +11,8 @@ if not exist "%APP_EXECUTABLE%" (
 
 set "ELECTRON_RUN_AS_NODE=1"
 set "PASEO_NODE_ENV=production"
+set "PASEO_BEADS_CENTRAL_SIDECAR=%RESOURCES_DIR%\beads-central\beads-central.exe"
+set "PASEO_BEADS_CENTRAL_BD_BIN=%RESOURCES_DIR%\beads-central\bin\bd.exe"
 rem PASEO_DESKTOP_MANAGED marks daemons started through this bundled CLI as
 rem desktop-managed, so the desktop app restarts them when it upgrades.
 set "PASEO_DESKTOP_MANAGED=1"

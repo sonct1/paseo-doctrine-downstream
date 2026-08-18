@@ -33,6 +33,8 @@ extraResources:
     to: skills
   - from: assets/editor-targets
     to: editor-target-icons
+  - from: ../../artifacts/desktop-components/beads-central
+    to: beads-central
 publish:
   provider: github
   owner: getpaseo

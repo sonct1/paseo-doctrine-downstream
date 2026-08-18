@@ -45,6 +45,28 @@ describe("useChatOutline", () => {
     runtime.on.mockClear();
   });
 
+  it("does not request a server timeline for a local draft agent", async () => {
+    const viewportRef = createRef<StreamViewportHandle>();
+    const { result } = renderHook(() =>
+      useChatOutline({
+        agentId: "draft_msg_123",
+        serverId: "server-1",
+        timelineEpoch: null,
+        tail: [],
+        head: [],
+        enabled: true,
+        viewportRef,
+        onJumpError: vi.fn(),
+      }),
+    );
+
+    await act(async () => undefined);
+
+    expect(runtime.listAgentTimelinePrompts).not.toHaveBeenCalled();
+    expect(runtime.on).not.toHaveBeenCalled();
+    expect(result.current.prompts).toEqual([]);
+  });
+
   it("drops a late prompt index after the authoritative timeline epoch changes", async () => {
     const first = deferred<{ epoch: string; prompts: [] }>();
     const second = deferred<{

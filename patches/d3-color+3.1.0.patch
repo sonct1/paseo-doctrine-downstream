@@ -1,0 +1,16 @@
+diff --git a/node_modules/d3-color/src/define.js b/node_modules/d3-color/src/define.js
+index 5a1db9a..b973dd9 100644
+--- a/node_modules/d3-color/src/define.js
++++ b/node_modules/d3-color/src/define.js
+@@ -1,6 +1,10 @@
+ export default function(constructor, factory, prototype) {
+   constructor.prototype = factory.prototype = prototype;
+-  prototype.constructor = constructor;
++  Object.defineProperty(prototype, "constructor", {
++    value: constructor,
++    writable: true,
++    configurable: true
++  });
+ }
+
+ export function extend(parent, definition) {

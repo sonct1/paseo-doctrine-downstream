@@ -3602,6 +3602,7 @@ function mapPermissionRequest(
     })),
     metadata: {
       toolCallId: params.toolCall.toolCallId,
+      ...(snapshot.transportShadow ? { transportShadow: snapshot.transportShadow } : {}),
       rawRequest: params,
       options: params.options,
     },

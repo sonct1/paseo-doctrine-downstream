@@ -31,6 +31,7 @@ import { encodeImages } from "@/utils/encode-images";
 import type { WorkspaceFileOpenRequest } from "@/workspace/file-open";
 import { shouldAutoFocusWorkspaceDraftComposer } from "@/screens/workspace/workspace-draft-pane-focus";
 import {
+  claimDraftAutoSubmit,
   shouldAllowEmptyDraftText,
   validateDraftSubmission,
 } from "@/composer/draft/workspace-tab-core";
@@ -725,14 +726,13 @@ export function WorkspaceDraftAgentTab({
       return;
     }
     const submitKey = `${serverId}:${workspaceId}:${draftId}`;
-    if (autoSubmitKeyRef.current === submitKey) {
+    if (!claimDraftAutoSubmit(autoSubmitKeyRef, submitKey)) {
       return;
     }
     const submission = consumePendingAutoSubmit({ serverId, workspaceId, draftId });
     if (!submission) {
       return;
     }
-    autoSubmitKeyRef.current = submitKey;
     replaceDraftText("");
     setDraftAttachments([]);
     const preparedAttempt =
@@ -752,7 +752,6 @@ export function WorkspaceDraftAgentTab({
     void createPromise.catch(() => {
       replaceDraftText(submission.text);
       setDraftAttachments(composerWorkspaceAttachment.userAttachmentsOnly(submission.attachments));
-      autoSubmitKeyRef.current = null;
     });
   }, [
     continueCreateFromAttempt,

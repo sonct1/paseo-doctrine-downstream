@@ -189,6 +189,43 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.roleProfiles?.peer).toBeUndefined();
   });
 
+  test("persists the daemon-enforced Peer delegation model policy", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-peer-policy-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    store.patch({
+      peerDelegation: {
+        enabled: true,
+        runMode: "guarded",
+        allowedModels: [
+          { provider: "claude", model: "claude-opus-4-1" },
+          { provider: "codex", model: "gpt-5.4" },
+        ],
+      },
+    });
+
+    expect(store.get().peerDelegation).toEqual({
+      enabled: true,
+      runMode: "guarded",
+      allowedModels: [
+        { provider: "claude", model: "claude-opus-4-1" },
+        { provider: "codex", model: "gpt-5.4" },
+      ],
+    });
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegation).toEqual(
+      store.get().peerDelegation,
+    );
+  });
+
   test("materializes only a credential file path in provider runtime env", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

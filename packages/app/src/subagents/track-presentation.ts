@@ -25,7 +25,12 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
   const title = resolveRowLabel(row.title);
   const label = description ?? title;
   const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
-  const subtitle = providerSubtitle ?? (description ? title : null);
+  const permissionCount = row.kind === "paseo" ? row.pendingPermissionCount : 0;
+  const permissionSubtitle =
+    permissionCount > 0
+      ? `${permissionCount} ${permissionCount === 1 ? "approval" : "approvals"} needed`
+      : null;
+  const subtitle = permissionSubtitle ?? providerSubtitle ?? (description ? title : null);
   const status = presentationStatus(row);
   return {
     key: `${row.kind}_subagent_${row.id}`,
@@ -35,22 +40,33 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     titleState: label ? "ready" : "loading",
     statusBucket: deriveSidebarStateBucket({
       status,
-      requiresAttention: false,
+      pendingPermissionCount: permissionCount,
+      requiresAttention: permissionCount > 0,
+      attentionReason: permissionCount > 0 ? "permission" : null,
     }),
   };
 }
 
 export function formatHeaderLabel(rows: readonly SubagentRow[]): string {
   let runningCount = 0;
+  let pendingPermissionCount = 0;
   for (const row of rows) {
     if (row.status === "running") {
       runningCount += 1;
+    }
+    if (row.kind === "paseo") {
+      pendingPermissionCount += row.pendingPermissionCount;
     }
   }
 
   const parts = [`${rows.length} ${rows.length === 1 ? "subagent" : "subagents"}`];
   if (runningCount > 0) {
     parts.push(`${runningCount} running`);
+  }
+  if (pendingPermissionCount > 0) {
+    parts.push(
+      `${pendingPermissionCount} ${pendingPermissionCount === 1 ? "approval" : "approvals"}`,
+    );
   }
   return parts.join(" · ");
 }

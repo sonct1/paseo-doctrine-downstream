@@ -14,7 +14,7 @@ export type AssignmentEffectClass = z.infer<typeof AssignmentEffectClassSchema>;
 export const PASEO_ASSIGNMENT_EFFECTS_BY_ROLE = {
   lead: ["read-only", "mutating", "delegation", "bootstrap", "recovery"],
   peer: ["read-only", "mutating"],
-  supervisor: ["read-only", "bootstrap", "recovery"],
+  supervisor: ["read-only", "delegation", "bootstrap", "recovery"],
 } as const satisfies Record<"lead" | "peer" | "supervisor", readonly AssignmentEffectClass[]>;
 
 export const PASEO_BEADS_EXTERNAL_EFFECT_SCOPE =

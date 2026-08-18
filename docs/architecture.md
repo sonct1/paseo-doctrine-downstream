@@ -17,18 +17,19 @@ Your code never leaves your machine. Paseo is local-first.
        │     via relay)    │                  │
        └───────────┬───────┴──────────────────┘
                    │
-            ┌──────▼──────┐
-            │   Daemon    │
-            │  (Node.js)  │
-            └──────┬──────┘
+            ┌──────▼──────────────┐
+            │   Daemon (Node.js)  │
+            │ owns Central sidecar│
+            └──────┬───────┬──────┘
+                   │       └──────> Beads Central 1.2.0 + bd 1.1.2
                    │
       ┌────────────┼────────────┬────────────┬────────────┐
       │            │            │            │            │
-┌─────▼─────┐ ┌───▼────┐ ┌──────▼─────┐ ┌────▼─────┐ ┌────▼────┐
-│  Claude   │ │ Codex  │ │  Copilot   │ │ OpenCode │ │   Pi    │
-│  Agent    │ │ Agent  │ │   Agent    │ │  Agent   │ │ Agent   │
-│  SDK      │ │ Server │ │    ACP     │ │          │ │         │
-└───────────┘ └────────┘ └────────────┘ └──────────┘ └─────────┘
+┌─────▼─────┐ ┌───▼────┐ ┌─────▼──────┐ ┌────▼───────┐ ┌─────▼─────┐
+│  Claude   │ │ Codex  │ │  Cursor    │ │Antigravity │ │  Custom   │
+│  Agent    │ │ Agent  │ │   Agent    │ │   Agent    │ │  Codex    │
+│  SDK      │ │ Server │ │    ACP     │ │   native   │ │ provider  │
+└───────────┘ └────────┘ └────────────┘ └────────────┘ └───────────┘
 ```
 
 ## Components at a glance
@@ -38,7 +39,7 @@ Your code never leaves your machine. Paseo is local-first.
 - **CLI:** Terminal interface for agent workflows that can also start and manage the daemon.
 - **Desktop app:** Electron wrapper around the web app that bundles and auto-manages its own daemon.
 - **Relay:** Optional encrypted bridge for remote access without opening ports directly.
-- **Beads Central client:** Daemon-mediated, stable-project issue graph cho durable work state; Central là external single backend, còn Paseo giữ role policy/lifecycle và engineering acceptance. Xem [beads-central.md](beads-central.md).
+- **Beads Central component:** bundled sidecar do daemon start/health-check/stop; cung cấp stable-project issue graph cho durable work state, còn Paseo giữ role policy/lifecycle và engineering acceptance. Không cần Docker hoặc external Central deployment. Xem [beads-central.md](beads-central.md).
 
 ## Packages
 
@@ -52,6 +53,7 @@ The heart of Paseo. A Node.js process that:
 - Provides agent-to-agent tools through a transport-neutral tool catalog, with MCP as one adapter
 - Optionally connects outbound to a relay for remote access
 - Optionally serves the browser web client from the same HTTP server (self-hosting guide: [public-docs/web-ui.md](../public-docs/web-ui.md))
+- Owns the bundled Beads Central sidecar lifecycle and fails closed if that required component is unavailable
 
 All paths are under `packages/server/src/`.
 
@@ -355,18 +357,21 @@ One deliberate non-violation: `AgentFileExplorerState.directories`/`files` cache
 
 Each provider implements the `AgentClient` interface in `agent/agent-sdk-types.ts`. Provider implementations live in `agent/providers/`.
 
-The built-in, user-facing providers are Claude Code, Codex, Copilot, OpenCode, Pi, and OMP. Additional adapters exist in the same directory for ACP-compatible agents and internal use:
+The shipped downstream runtime exposes Claude Code, Codex, Cursor, Antigravity, and user-defined
+providers derived from Codex. Copilot, OpenCode, Pi, OMP, Devin, and other compatibility adapters may
+remain in source for upstream parity and tests, but the daemon filters them out of the user-facing
+provider registry and they cannot be enabled through Provider Settings.
 
-| Provider           | Wraps                                | Session format                                     |
-| ------------------ | ------------------------------------ | -------------------------------------------------- |
-| Claude (`claude/`) | Anthropic Agent SDK                  | `~/.claude/projects/{cwd}/{session-id}.jsonl`      |
-| Codex              | Codex AppServer (`codex-app-server`) | `~/.codex/sessions/{date}/rollout-{ts}-{id}.jsonl` |
-| Copilot            | GitHub Copilot via ACP               | Provider-managed                                   |
-| OpenCode           | OpenCode server / CLI                | Provider-managed                                   |
-| Cursor             | ACP wrapper (`acp-agent`)            | Provider-managed                                   |
-| Generic ACP        | ACP wrapper                          | Provider-managed                                   |
-| Pi                 | Local Pi RPC process                 | Provider-managed                                   |
-| Mock load test     | In-process fake                      | In-memory                                          |
+Provider implementations and compatibility adapters live in the same directory:
+
+| Provider             | Wraps                                | Shipped state          | Session format                                     |
+| -------------------- | ------------------------------------ | ---------------------- | -------------------------------------------------- |
+| Claude (`claude/`)   | Anthropic Agent SDK                  | Supported              | `~/.claude/projects/{cwd}/{session-id}.jsonl`      |
+| Codex                | Codex AppServer (`codex-app-server`) | Supported              | `~/.codex/sessions/{date}/rollout-{ts}-{id}.jsonl` |
+| Cursor               | ACP wrapper (`acp-agent`)            | Supported              | Provider-managed                                   |
+| Antigravity          | Native Antigravity CLI               | Supported              | Provider-managed                                   |
+| Codex-derived custom | OpenAI-compatible Codex adapter      | Supported when defined | Provider-managed                                   |
+| Other adapters       | ACP, OpenCode, Pi, OMP, or fixtures  | Source-only/disabled   | Provider-specific                                  |
 
 All providers:
 

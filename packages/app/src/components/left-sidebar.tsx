@@ -6,6 +6,7 @@ import {
   History,
   Home,
   MessagesSquare,
+  Network,
   Plus,
   Scale,
   Search,
@@ -71,6 +72,7 @@ import {
   buildOpenProjectRoute,
   buildHostCouncilsRoute,
   buildHostRoomsRoute,
+  buildHostTopologyRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
@@ -122,6 +124,7 @@ interface SidebarLabels {
   schedules: string;
   rooms: string;
   councils: string;
+  topology: string;
   closeSidebar: string;
 }
 
@@ -133,6 +136,7 @@ interface MobileSidebarProps extends SidebarSharedProps {
   handleViewSchedulesNavigate: () => void;
   handleViewRoomsNavigate: () => void;
   handleViewCouncilsNavigate: () => void;
+  handleViewTopologyNavigate: () => void;
 }
 
 interface DesktopSidebarProps extends SidebarSharedProps {
@@ -142,6 +146,7 @@ interface DesktopSidebarProps extends SidebarSharedProps {
   handleViewSchedules: () => void;
   handleViewRooms: () => void;
   handleViewCouncils: () => void;
+  handleViewTopology: () => void;
 }
 
 export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boolean }) {
@@ -252,6 +257,12 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
     }
   }, [coordinationServerId]);
 
+  const handleViewTopologyNavigate = useCallback(() => {
+    if (coordinationServerId) {
+      router.push(buildHostTopologyRoute(coordinationServerId));
+    }
+  }, [coordinationServerId]);
+
   const newWorkspaceKeys = useShortcutKeys("new-workspace");
   const labels = useMemo(
     (): SidebarLabels => ({
@@ -265,6 +276,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
       schedules: t("sidebar.sections.schedules"),
       rooms: "Rooms",
       councils: "Councils",
+      topology: "Project topology",
       closeSidebar: t("sidebar.actions.closeSidebar"),
     }),
     [t],
@@ -305,6 +317,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
           handleViewSchedulesNavigate={handleViewSchedulesNavigate}
           handleViewRoomsNavigate={handleViewRoomsNavigate}
           handleViewCouncilsNavigate={handleViewCouncilsNavigate}
+          handleViewTopologyNavigate={handleViewTopologyNavigate}
         />
       </RetainedPanelActivity>
     );
@@ -325,6 +338,7 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
         handleViewSchedules={handleViewSchedulesNavigate}
         handleViewRooms={handleViewRoomsNavigate}
         handleViewCouncils={handleViewCouncilsNavigate}
+        handleViewTopology={handleViewTopologyNavigate}
       />
     </RetainedPanelActivity>
   );
@@ -655,6 +669,7 @@ function MobileSidebar({
   handleViewSchedulesNavigate,
   handleViewRoomsNavigate,
   handleViewCouncilsNavigate,
+  handleViewTopologyNavigate,
 }: MobileSidebarProps) {
   const pathname = usePathname();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
@@ -662,6 +677,7 @@ function MobileSidebar({
   const isSchedulesActive = pathname.includes("/schedules");
   const isRoomsActive = pathname.includes("/rooms");
   const isCouncilsActive = pathname.includes("/councils");
+  const isTopologyActive = pathname.includes("/topology");
   const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
   const dragGestureHostPresented = useIsMobilePanelPresented("agent-list");
 
@@ -684,6 +700,11 @@ function MobileSidebar({
     closeSidebar();
     handleViewCouncilsNavigate();
   }, [closeSidebar, handleViewCouncilsNavigate]);
+
+  const handleViewTopology = useCallback(() => {
+    closeSidebar();
+    handleViewTopologyNavigate();
+  }, [closeSidebar, handleViewTopologyNavigate]);
 
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
@@ -720,6 +741,14 @@ function MobileSidebar({
             onPress={handleViewMore}
             isActive={isSessionsActive}
             testID="sidebar-sessions"
+            variant="compact"
+          />
+          <SidebarHeaderRow
+            icon={Network}
+            label={labels.topology}
+            onPress={handleViewTopology}
+            isActive={isTopologyActive}
+            testID="sidebar-topology"
             variant="compact"
           />
           <SidebarHeaderRow
@@ -831,6 +860,7 @@ function DesktopSidebar({
   handleViewSchedules,
   handleViewRooms,
   handleViewCouncils,
+  handleViewTopology,
 }: DesktopSidebarProps) {
   const ownsTopLeft = useOwnsWindowChromeCorner("top-left");
   const pathname = usePathname();
@@ -839,6 +869,7 @@ function DesktopSidebar({
   const isSchedulesActive = pathname.includes("/schedules");
   const isRoomsActive = pathname.includes("/rooms");
   const isCouncilsActive = pathname.includes("/councils");
+  const isTopologyActive = pathname.includes("/topology");
   const sidebarWidth = usePanelStore((state) => state.sidebarWidth);
   const setSidebarWidth = usePanelStore((state) => state.setSidebarWidth);
   const { width: viewportWidth } = useWindowDimensions();
@@ -959,6 +990,14 @@ function DesktopSidebar({
               onPress={handleViewMore}
               isActive={isSessionsActive}
               testID="sidebar-sessions"
+              variant="compact"
+            />
+            <SidebarHeaderRow
+              icon={Network}
+              label={labels.topology}
+              onPress={handleViewTopology}
+              isActive={isTopologyActive}
+              testID="sidebar-topology"
               variant="compact"
             />
             <SidebarHeaderRow

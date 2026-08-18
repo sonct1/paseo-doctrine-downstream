@@ -3,7 +3,7 @@ import { ACP_PROVIDER_CATALOG } from "@/data/acp-provider-catalog";
 import { buildAcpProviderConfigPatch, getAcpProviderCatalog } from "./use-acp-provider-catalog";
 
 function findProvider(id: string) {
-  const entry = getAcpProviderCatalog().find((provider) => provider.id === id);
+  const entry = ACP_PROVIDER_CATALOG.find((provider) => provider.id === id);
   if (!entry) {
     throw new Error(`Missing ACP provider catalog entry: ${id}`);
   }
@@ -11,6 +11,10 @@ function findProvider(id: string) {
 }
 
 describe("ACP provider catalog", () => {
+  it("offers only Cursor on the currently supported product surface", () => {
+    expect(getAcpProviderCatalog().map((entry) => entry.id)).toEqual(["cursor"]);
+  });
+
   it("vendors provider entries with unique ids and concrete commands", () => {
     const ids = new Set<string>();
 

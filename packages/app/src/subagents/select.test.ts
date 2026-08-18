@@ -244,6 +244,7 @@ describe("selectSubagentsForParent", () => {
         title: "Review child",
         status: "running",
         requiresAttention: true,
+        pendingPermissions: [],
         createdAt,
         model: "should-not-leak",
         cwd: "/private/project",
@@ -269,6 +270,7 @@ describe("selectSubagentsForParent", () => {
         subtitle: null,
         status: "running",
         requiresAttention: true,
+        pendingPermissionCount: 0,
         createdAt,
       },
     ]);
@@ -277,6 +279,7 @@ describe("selectSubagentsForParent", () => {
       "description",
       "id",
       "kind",
+      "pendingPermissionCount",
       "provider",
       "requiresAttention",
       "status",

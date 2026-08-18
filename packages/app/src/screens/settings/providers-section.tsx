@@ -44,9 +44,44 @@ import {
   type FoundationProviderConnectionQualification,
 } from "@/providers/use-foundation-provider-connection-status";
 import { ChevronRight, MoreHorizontal, Settings2, Trash2 } from "lucide-react-native";
+import { isPaseoSupportedProvider } from "@getpaseo/protocol/provider-config";
+import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
 type ProviderDefinition = ReturnType<typeof buildProviderDefinitions>[number];
 type ProviderEntry = NonNullable<ReturnType<typeof useProvidersSnapshot>["entries"]>[number];
+
+function buildSupportedProviderDefinitions(
+  entries: ProviderEntry[] | undefined,
+  providers: MutableDaemonConfig["providers"] | undefined,
+): ProviderDefinition[] {
+  return buildProviderDefinitions(entries).filter((definition) =>
+    isPaseoSupportedProvider(definition.id, providers?.[definition.id]),
+  );
+}
+
+function requiresProviderConnectionQualification(
+  entry: ProviderEntry,
+  providers: MutableDaemonConfig["providers"] | undefined,
+): boolean {
+  return entry.source === "custom" && providers?.[entry.provider]?.extends === "codex";
+}
+
+function resolveProviderEnabledValue(
+  providerId: string,
+  entryEnabled: boolean | undefined,
+  optimisticEnabled: Record<string, boolean>,
+): boolean {
+  return optimisticEnabled[providerId] ?? entryEnabled ?? true;
+}
+
+function shouldShowProviderList(input: {
+  hasServer: boolean;
+  isConnected: boolean;
+  isLoading: boolean;
+  providerCount: number;
+}): boolean {
+  return input.hasServer && input.isConnected && !input.isLoading && input.providerCount > 0;
+}
 
 type StatusTone = "success" | "warning" | "danger" | "muted" | "loading";
 
@@ -113,6 +148,7 @@ interface ProviderRowProps {
   enabled: boolean;
   isToggling: boolean;
   isRemoving: boolean;
+  toggleError: string | null;
   canRemove: boolean;
   isFirst: boolean;
   canConfigureTools: boolean;
@@ -233,6 +269,7 @@ function ProviderRow({
   enabled,
   isToggling,
   isRemoving,
+  toggleError,
   canRemove,
   isFirst,
   canConfigureTools,
@@ -321,6 +358,15 @@ function ProviderRow({
                   {providerError}
                 </Text>
               ) : null}
+              {toggleError ? (
+                <Text
+                  style={styles.errorText}
+                  numberOfLines={3}
+                  testID={`provider-toggle-error-${def.id}`}
+                >
+                  {toggleError}
+                </Text>
+              ) : null}
             </View>
           </View>
           <View style={styles.trailingControls}>
@@ -329,6 +375,7 @@ function ProviderRow({
               onValueChange={handleToggleValueChange}
               disabled={isToggling || isRemoving}
               accessibilityLabel={t("settings.providers.enableProvider", { name: def.label })}
+              testID={`provider-enabled-${def.id}`}
             />
             {canConfigureTools || canRemove ? (
               <View style={styles.menuSlot}>
@@ -445,6 +492,8 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const { config, patchConfig } = useDaemonConfig(serverId);
   const openProviderSettings = useProviderSettingsStore((state) => state.open);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
+  const [optimisticEnabled, setOptimisticEnabled] = useState<Record<string, boolean>>({});
+  const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
   const removingProviderIdRef = useRef<string | null>(null);
   const [installingProviderId, setInstallingProviderId] = useState<string | null>(null);
@@ -452,8 +501,17 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const [toolPolicyVisible, setToolPolicyVisible] = useState(false);
   const [foundationProviderSheetOpen, setFoundationProviderSheetOpen] = useState(false);
 
-  const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
+  const providerDefinitions = useMemo(
+    () => buildSupportedProviderDefinitions(entries, config?.providers),
+    [config?.providers, entries],
+  );
   const hasServer = serverId.length > 0;
+  const showProviderList = shouldShowProviderList({
+    hasServer,
+    isConnected,
+    isLoading,
+    providerCount: providerDefinitions.length,
+  });
 
   const handleOpenProviderSettings = useCallback(
     (providerId: string) => {
@@ -465,18 +523,32 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const handleToggleEnabled = useCallback(
     async (providerId: string, enabled: boolean) => {
       setPendingProviderId(providerId);
+      setOptimisticEnabled((current) => ({ ...current, [providerId]: enabled }));
+      setToggleErrors((current) => {
+        const next = { ...current };
+        delete next[providerId];
+        return next;
+      });
       try {
         await patchConfig({ providers: { [providerId]: { enabled } } });
+        await refresh([providerId]);
       } catch (error) {
-        Alert.alert(
-          t("settings.providers.updateErrorTitle"),
-          error instanceof Error ? error.message : String(error),
-        );
+        setToggleErrors((current) => ({
+          ...current,
+          [providerId]: `${t("settings.providers.updateErrorTitle")}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        }));
       } finally {
+        setOptimisticEnabled((current) => {
+          const next = { ...current };
+          delete next[providerId];
+          return next;
+        });
         setPendingProviderId((current) => (current === providerId ? null : current));
       }
     },
-    [patchConfig, t],
+    [patchConfig, refresh, t],
   );
 
   const handleOpenToolPolicy = useCallback((providerId: string) => {
@@ -571,7 +643,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
             <Text style={styles.emptyText}>{t("settings.providers.loading")}</Text>
           </View>
         ) : null}
-        {hasServer && isConnected && !isLoading && providerDefinitions.length > 0 ? (
+        {showProviderList ? (
           <View style={settingsStyles.card}>
             {providerDefinitions.map((def, index) => {
               const entry = entries?.find((candidate) => candidate.provider === def.id);
@@ -581,9 +653,10 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   key={def.id}
                   def={def}
                   entry={entry}
-                  enabled={entry.enabled ?? true}
+                  enabled={resolveProviderEnabledValue(def.id, entry.enabled, optimisticEnabled)}
                   isToggling={pendingProviderId === def.id}
                   isRemoving={removingProviderId === def.id}
+                  toggleError={toggleErrors[def.id] ?? null}
                   canRemove={supportsProviderRemoval && entry.source === "custom"}
                   isFirst={index === 0}
                   canConfigureTools={supportsPaseoToolPolicies}
@@ -594,9 +667,10 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                     null
                   }
                   supportsConnectionQualification={supportsConnectionQualification}
-                  requiresConnectionQualification={
-                    entry.source === "custom" && config?.providers?.[def.id]?.extends === "codex"
-                  }
+                  requiresConnectionQualification={requiresProviderConnectionQualification(
+                    entry,
+                    config?.providers,
+                  )}
                   onPress={handleOpenProviderSettings}
                   onToggleEnabled={handleToggleEnabled}
                   onConfigureTools={handleOpenToolPolicy}

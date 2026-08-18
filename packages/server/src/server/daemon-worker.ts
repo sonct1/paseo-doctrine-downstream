@@ -6,6 +6,8 @@ import { resolvePaseoHome } from "./paseo-home.js";
 import { createRootLogger } from "./logger.js";
 import type { DaemonLifecycleIntent } from "./bootstrap.js";
 import { getProcessDiagnostics } from "./process-diagnostics.js";
+import { FoundationCredentialStore } from "./foundation-credential-store.js";
+import { BeadsCentralSidecar } from "./beads/beads-central-sidecar.js";
 
 process.title = "Paseo Daemon";
 
@@ -134,6 +136,7 @@ function applyCliFlagOverrides(config: ReturnType<typeof loadConfig>): void {
 async function main() {
   const { paseoHome, logger, config } = bootstrapFromEnvironment();
   let daemon: Awaited<ReturnType<typeof createPaseoDaemon>> | null = null;
+  let beadsCentralSidecar: BeadsCentralSidecar | null = null;
   let shutdownPromise: Promise<number> | null = null;
   let exitHookInstalled = false;
 
@@ -170,17 +173,31 @@ async function main() {
             "Forcing shutdown - HTTP server didn't close in time",
           );
           process.exit(1);
-        }, 10000);
+        }, 20000);
 
         try {
-          if (!daemon) {
-            logger.error("Shutdown requested before daemon initialization completed");
-            clearTimeout(forceExit);
-            return 1;
+          const shutdownErrors: unknown[] = [];
+          if (daemon) {
+            try {
+              await daemon.stop();
+            } catch (error) {
+              shutdownErrors.push(error);
+            }
+          } else {
+            shutdownErrors.push(
+              new Error("Shutdown requested before daemon initialization completed"),
+            );
           }
-          await daemon.stop();
+          try {
+            await beadsCentralSidecar?.stop();
+          } catch (error) {
+            shutdownErrors.push(error);
+          }
+          if (shutdownErrors.length > 0) {
+            throw new AggregateError(shutdownErrors, "Paseo worker shutdown completed with errors");
+          }
           clearTimeout(forceExit);
-          logger.info("Server closed");
+          logger.info("Server and bundled Beads Central sidecar closed");
           return options?.successExitCode ?? 0;
         } catch (err) {
           clearTimeout(forceExit);
@@ -209,6 +226,22 @@ async function main() {
       logger.error({ err, message }, "Failed to send lifecycle IPC message to supervisor");
       return false;
     }
+  };
+
+  const sendSupervisorLifecycleMessageAndWait = async (
+    message: SupervisorLifecycleMessage,
+  ): Promise<boolean> => {
+    if (typeof process.send !== "function") return false;
+    return await new Promise<boolean>((resolve) => {
+      process.send?.(message, (error) => {
+        if (error) {
+          logger.error({ err: error, message }, "Failed to send lifecycle IPC message");
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      });
+    });
   };
 
   const handleLifecycleIntent = (intent: DaemonLifecycleIntent) => {
@@ -266,9 +299,15 @@ async function main() {
       });
 
       // The supervisor owns the worker's stdout/stderr pipes. Once it is gone,
-      // logging during graceful shutdown can block on the broken pipe and leave
-      // the daemon orphaned, so supervisor loss is a hard process boundary.
-      process.exit(0);
+      // logging during graceful shutdown can block on the broken pipe. The
+      // bundled issue component still belongs to this worker, so terminate it
+      // before crossing the hard process boundary.
+      const exit = () => process.exit(0);
+      if (beadsCentralSidecar) {
+        void beadsCentralSidecar.stop().then(exit, exit);
+      } else {
+        exit();
+      }
     };
 
     process.on("message", (message: unknown) => {
@@ -305,6 +344,34 @@ async function main() {
 
   installSupervisorLivenessGuard();
 
+  const beadsCentralConfig = config.beadsCentral ?? {
+    endpoint: "http://127.0.0.1:6769",
+    credentialRef: "beads-central",
+  };
+  beadsCentralSidecar = new BeadsCentralSidecar({
+    paseoHome,
+    config: beadsCentralConfig,
+    credentialStore: new FoundationCredentialStore(paseoHome),
+    logger,
+    onUnexpectedExit: ({ code, signal }) => {
+      beginShutdown("beads central sidecar exit", {
+        reason: `beads_central_sidecar_exit:${String(code)}:${String(signal)}`,
+        successExitCode: 1,
+      });
+    },
+  });
+  try {
+    await beadsCentralSidecar.start();
+  } catch (err) {
+    logger.fatal({ err }, "Bundled Beads Central sidecar failed to start");
+    await sendSupervisorLifecycleMessageAndWait({
+      type: "paseo:shutdown",
+      reason: "bundled_beads_central_startup_failed",
+    });
+    await beadsCentralSidecar.stop().catch(() => undefined);
+    throw err;
+  }
+
   try {
     daemon = await createPaseoDaemon(
       {
@@ -315,6 +382,7 @@ async function main() {
     );
   } catch (err) {
     logger.fatal({ err }, "Daemon bootstrap failed");
+    await beadsCentralSidecar.stop().catch(() => undefined);
     throw err;
   }
 
@@ -331,20 +399,29 @@ async function main() {
     sendSupervisorLifecycleMessage({ type: "paseo:ready", listen });
   } catch (err) {
     logger.fatal({ err }, "Daemon failed to start listening");
+    await beadsCentralSidecar.stop().catch(() => undefined);
     throw err;
   }
 
   process.on("SIGTERM", () => beginShutdown("SIGTERM"));
   process.on("SIGINT", () => beginShutdown("SIGINT"));
 
+  const exitAfterFatalError = () => {
+    if (beadsCentralSidecar) {
+      void beadsCentralSidecar.stop().then(exitAfterPinoFlush, exitAfterPinoFlush);
+    } else {
+      exitAfterPinoFlush();
+    }
+  };
+
   process.on("uncaughtException", (err) => {
     logger.fatal({ err }, "Uncaught exception — daemon crashing");
-    exitAfterPinoFlush();
+    exitAfterFatalError();
   });
 
   process.on("unhandledRejection", (reason) => {
     logger.fatal({ err: reason }, "Unhandled promise rejection — daemon crashing");
-    exitAfterPinoFlush();
+    exitAfterFatalError();
   });
 }
 

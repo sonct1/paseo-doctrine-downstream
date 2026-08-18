@@ -55,6 +55,7 @@ import type {
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import { formatRoleBindingReceiptDescription } from "@/workspace-protocol/role-binding-receipt";
+import { assignmentAuthorityLabel } from "@/workspace-protocol/assignment-authority";
 import {
   getFeatureHighlightColor,
   getFeatureTooltip,
@@ -223,6 +224,12 @@ function useBoundRoleControls(agent: AgentControlsSlice) {
     () =>
       PASEO_ROLE_SUMMARIES.filter((role) => role.id === roleId).map((role) =>
         Object.assign({}, role, {
+          label: agent?.roleBinding?.assignment
+            ? `${role.label} · ${assignmentAuthorityLabel(
+                role.id,
+                agent.roleBinding.assignment.effectClass,
+              )}`
+            : role.label,
           description: agent?.roleBinding
             ? formatRoleBindingReceiptDescription(role.description, agent.roleBinding)
             : role.description,

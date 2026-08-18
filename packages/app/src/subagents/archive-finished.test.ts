@@ -12,6 +12,7 @@ function paseo(id: string, status: PaseoSubagentRow["status"] = "idle"): PaseoSu
     subtitle: null,
     status,
     requiresAttention: false,
+    pendingPermissionCount: 0,
     createdAt: new Date(),
   };
 }

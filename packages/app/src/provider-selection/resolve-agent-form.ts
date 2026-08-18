@@ -88,6 +88,14 @@ export type AgentFormAction =
       providerPrefs?: ProviderPrefs | undefined;
     }
   | {
+      type: "SET_PROVIDER_AND_MODEL_FOR_ROLE";
+      provider: AgentProvider;
+      modelId: string;
+      requiredModeId: string;
+      providerDef: AgentProviderDefinition | undefined;
+      providerModels: AgentModelDefinition[] | null;
+    }
+  | {
       type: "APPLY_PROFILE_FROM_USER";
       provider: AgentProvider;
       modelId: string;
@@ -668,6 +676,33 @@ export function resolveAgentForm(
           thinkingOptionId: nextThinkingOptionId,
         },
         userModified: { ...state.userModified, provider: true, model: true },
+      };
+    }
+
+    case "SET_PROVIDER_AND_MODEL_FOR_ROLE": {
+      const normalizedModelId = resolveCanonicalModelId(action.providerModels, action.modelId);
+      const nextModelId = normalizedModelId || resolveDefaultModelId(action.providerModels);
+      const nextThinkingOptionId = pickNextThinkingOptionForProvider({
+        providerModels: action.providerModels,
+        providerPrefs: undefined,
+        modelId: nextModelId,
+      });
+      return {
+        ...state,
+        form: {
+          ...state.form,
+          provider: action.provider,
+          model: nextModelId,
+          modeId: action.requiredModeId,
+          thinkingOptionId: nextThinkingOptionId,
+        },
+        userModified: {
+          ...state.userModified,
+          provider: true,
+          model: true,
+          modeId: true,
+          thinkingOptionId: true,
+        },
       };
     }
 

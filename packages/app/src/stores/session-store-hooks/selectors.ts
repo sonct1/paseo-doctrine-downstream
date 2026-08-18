@@ -117,6 +117,20 @@ export function selectWorkspaceDirectory(
   return selectWorkspace(state, serverId, workspaceId)?.workspaceDirectory || null;
 }
 
+export function selectProjectWorkspaceIds(
+  state: SessionsSnapshot,
+  serverId: string | null,
+  projectId: string | null,
+): string[] {
+  if (!serverId || !projectId) return [];
+  const workspaces = state.sessions[serverId]?.workspaces;
+  if (!workspaces) return [];
+  return [...workspaces.values()]
+    .filter((workspace) => workspace.projectId === projectId)
+    .map((workspace) => workspace.id)
+    .sort();
+}
+
 export function selectWorkspaceExists(
   state: SessionsSnapshot,
   serverId: string | null,

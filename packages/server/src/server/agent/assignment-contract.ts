@@ -214,14 +214,21 @@ export function buildAssignmentInstruction(contract: PersistedAssignmentContract
     envelope.mutationBoundary.mode === "no-write"
       ? "Technical capability boundary: Paseo pins this session to a provider-enforced no-write mode. Do not request or attempt a mode change or permission escalation; launch must fail closed when the provider cannot enforce no-write."
       : "Technical capability boundary: runtime capability does not expand the exact bounded-write scope or external-effect lease above.";
+  const supervisorDelegationBoundary =
+    receipt.roleId === "supervisor" && envelope.effectClass === "delegation"
+      ? "Human-issued topology lease: you may create and prompt only your own direct role-bound Lead children through Paseo. Those Leads own their project engineering and may delegate only to their own Peers; do not bypass a Lead to direct its Peers."
+      : null;
   return [
     `Assignment Contract: sha256=${receipt.assignmentDigest}; disposition=${envelope.disposition}; effect=${envelope.effectClass}.`,
     `Objective: ${envelope.objective}`,
     `Mutation boundary: ${writeScope}. External effects: ${externalScope}.`,
     technicalCapabilityBoundary,
+    supervisorDelegationBoundary,
     `Beads issue grants: ${beadsIssueGrants}.`,
     trackerCheckpoint,
     `Evidence: ${envelope.evidence}`,
     `Handback/stop: ${envelope.handbackAndStop}`,
-  ].join("\n");
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 }

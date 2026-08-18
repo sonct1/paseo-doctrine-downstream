@@ -19,6 +19,8 @@ done
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd)
 RESOURCES_DIR=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
+export PASEO_BEADS_CENTRAL_SIDECAR="${RESOURCES_DIR}/beads-central/beads-central"
+export PASEO_BEADS_CENTRAL_BD_BIN="${RESOURCES_DIR}/beads-central/bin/bd"
 
 MACOS_DIR="${RESOURCES_DIR}/../MacOS"
 MACOS_HELPER_EXECUTABLE="${RESOURCES_DIR}/../Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper"

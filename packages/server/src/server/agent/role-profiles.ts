@@ -66,6 +66,8 @@ export const ROLE_TOOL_CEILINGS = {
   supervisor: [
     "list_workspaces",
     "list_workspace_scripts",
+    "create_agent",
+    "send_agent_prompt",
     "get_agent_status",
     "list_agents",
     "get_agent_activity",

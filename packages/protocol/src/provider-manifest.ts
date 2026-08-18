@@ -255,6 +255,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "copilot",
     label: "Copilot",
     description: "GitHub Copilot via Agent Client Protocol with dynamic modes and session support",
+    enabledByDefault: false,
     defaultModeId: "https://agentclientprotocol.com/protocol/session-modes#agent",
     modes: COPILOT_MODES,
   },
@@ -262,6 +263,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "opencode",
     label: "OpenCode",
     description: "Open-source coding assistant with multi-provider model support",
+    enabledByDefault: false,
     // No static default: OpenCode users can rename or delete any agent,
     // including "build". Leaving this unset means the daemon and OpenCode
     // itself decide (see normalizeOpenCodeModeId in opencode-agent.ts).
@@ -276,6 +278,7 @@ export const AGENT_PROVIDER_DEFINITIONS: AgentProviderDefinition[] = [
     id: "pi",
     label: "Pi",
     description: "Minimal terminal-based coding agent with multi-provider LLM support",
+    enabledByDefault: false,
     defaultModeId: null,
     modes: [],
   },

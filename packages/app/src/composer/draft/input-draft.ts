@@ -27,18 +27,38 @@ import {
   isProviderRoleBindingSupportedForRole,
   PASEO_ROLE_SUMMARIES,
   type PaseoRoleId,
+  type ProviderRoleBindingSupport,
 } from "@getpaseo/protocol/role-binding";
 import {
   isAssignmentEffectAllowedForRole,
-  PASEO_ASSIGNMENT_EFFECT_SUMMARIES,
   type AssignmentEffectClass,
 } from "@getpaseo/protocol/assignment-contract";
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
 import { AfterPaintPublication } from "@/composer/after-paint-publication";
 import { isWeb } from "@/constants/platform";
+import {
+  defaultAssignmentEffectForRole,
+  ordinaryAssignmentAuthorityOptionsForRole,
+} from "@/workspace-protocol/assignment-authority";
 
 const ASSIGNMENT_EFFECT_FEATURE_ID = "foundation_assignment_effect";
 const BEADS_ISSUE_GRANT_FEATURE_ID = "foundation_beads_issue_grant";
+
+function requiredReadOnlyMode(roleBinding: ProviderRoleBindingSupport | undefined): string | null {
+  if (roleBinding?.status !== "supported") return null;
+  switch (roleBinding.injectionMethod) {
+    case "codex-developer-instructions":
+    case "mock-launch-context":
+      return "read-only";
+    case "claude-system-prompt":
+    case "cursor-project-rule-capsule":
+    case "cursor-always-apply-plugin":
+    case "antigravity-custom-agent":
+      return "plan";
+    default:
+      return null;
+  }
+}
 
 export interface BeadsIssueGrantOption {
   id: string;
@@ -72,8 +92,10 @@ function resolveInitialRoleState(composerOptions: AgentInputDraftComposerOptions
   assignmentEffect: AssignmentEffectClass;
   beadsIssueIds: readonly string[] | undefined;
 } {
-  const initialEffect = composerOptions?.initialAssignmentEffect ?? "read-only";
   const initialRole = composerOptions?.initialRoleId;
+  const initialEffect =
+    composerOptions?.initialAssignmentEffect ??
+    (initialRole ? defaultAssignmentEffectForRole(initialRole) : "read-only");
   return {
     roleId: initialRole ?? null,
     assignmentEffect:
@@ -343,6 +365,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const allProviderEntries = formState.allProviderEntries;
   const selectedProvider = formState.selectedProvider;
   const setProviderAndModelFromUser = formState.setProviderAndModelFromUser;
+  const setProviderAndModelForRole = formState.setProviderAndModelForRole;
   useEffect(() => {
     if (!selectedRole) {
       return;
@@ -353,6 +376,13 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     }
     const selectedEntry = entries.find((entry) => entry.provider === selectedProvider);
     if (isProviderRoleBindingSupportedForRole(selectedEntry?.roleBinding, selectedRole)) {
+      const requiredModeId =
+        selectedAssignmentEffect === "read-only"
+          ? requiredReadOnlyMode(selectedEntry?.roleBinding)
+          : null;
+      if (selectedProvider && requiredModeId && formState.selectedMode !== requiredModeId) {
+        setProviderAndModelForRole(selectedProvider, formState.selectedModel, requiredModeId);
+      }
       return;
     }
     const compatible = entries.find(
@@ -362,9 +392,26 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
         isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole),
     );
     if (compatible) {
-      setProviderAndModelFromUser(compatible.provider, "");
+      const requiredModeId =
+        selectedAssignmentEffect === "read-only"
+          ? requiredReadOnlyMode(compatible.roleBinding)
+          : null;
+      if (requiredModeId) {
+        setProviderAndModelForRole(compatible.provider, "", requiredModeId);
+      } else {
+        setProviderAndModelFromUser(compatible.provider, "");
+      }
     }
-  }, [allProviderEntries, selectedProvider, selectedRole, setProviderAndModelFromUser]);
+  }, [
+    allProviderEntries,
+    formState.selectedMode,
+    formState.selectedModel,
+    selectedAssignmentEffect,
+    selectedProvider,
+    selectedRole,
+    setProviderAndModelForRole,
+    setProviderAndModelFromUser,
+  ]);
 
   const {
     features: draftFeatures,
@@ -387,12 +434,9 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
             type: "select",
             id: ASSIGNMENT_EFFECT_FEATURE_ID,
             label: "Assignment authority",
-            description:
-              "Explicit mutation/delegation class for the immutable assignment contract.",
+            description: "What this role may do for this assignment. Fixed after launch.",
             value: selectedAssignmentEffect,
-            options: PASEO_ASSIGNMENT_EFFECT_SUMMARIES.filter((option) =>
-              isAssignmentEffectAllowedForRole(selectedRole, option.id),
-            ),
+            options: [...ordinaryAssignmentAuthorityOptionsForRole(selectedRole)],
           }
         : null,
     [selectedAssignmentEffect, selectedRole],
@@ -400,16 +444,20 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
   const setRoleAndNormalizeEffect = useCallback(
     (roleId: PaseoRoleId) => {
       setSelectedRole(roleId);
-      if (!isAssignmentEffectAllowedForRole(roleId, selectedAssignmentEffect)) {
-        setSelectedAssignmentEffect("read-only");
+      if (roleId !== selectedRole) {
+        setSelectedAssignmentEffect(defaultAssignmentEffectForRole(roleId));
       }
     },
-    [selectedAssignmentEffect],
+    [selectedRole],
   );
   const setAgentControlFeature = useCallback(
     (featureId: string, value: unknown) => {
       if (featureId === ASSIGNMENT_EFFECT_FEATURE_ID) {
-        const selected = PASEO_ASSIGNMENT_EFFECT_SUMMARIES.find((option) => option.id === value);
+        const selected = selectedRole
+          ? ordinaryAssignmentAuthorityOptionsForRole(selectedRole).find(
+              (option) => option.id === value,
+            )
+          : undefined;
         if (
           selectedRole &&
           selected &&

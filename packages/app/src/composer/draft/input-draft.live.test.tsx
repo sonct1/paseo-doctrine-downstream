@@ -302,7 +302,7 @@ describe("useAgentInputDraft live contract", () => {
     ).toEqual(["codex", "gemini-antigravity"]);
     expect(getLatest().composerState?.agentControls.features).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "foundation_assignment_effect", value: "read-only" }),
+        expect.objectContaining({ id: "foundation_assignment_effect", value: "mutating" }),
         expect.objectContaining({
           id: "foundation_beads_issue_grant",
           value: null,
@@ -337,18 +337,18 @@ describe("useAgentInputDraft live contract", () => {
         "bootstrap",
       );
     });
-    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("bootstrap");
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("mutating");
     await act(async () => {
       getLatest().composerState?.setRoleFromUser("peer");
     });
-    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("read-only");
+    expect(getLatest().composerState?.selectedAssignmentEffect).toBe("mutating");
     expect(getLatest().composerState?.agentControls.features).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "foundation_assignment_effect",
           options: [
-            expect.objectContaining({ id: "read-only" }),
             expect.objectContaining({ id: "mutating" }),
+            expect.objectContaining({ id: "read-only" }),
           ],
         }),
       ]),

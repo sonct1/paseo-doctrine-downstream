@@ -5,6 +5,15 @@ export interface WorkspaceDraftAutoSubmitConfig {
   model: string | null;
 }
 
+export function claimDraftAutoSubmit(
+  claim: { current: string | null },
+  submitKey: string,
+): boolean {
+  if (claim.current === submitKey) return false;
+  claim.current = submitKey;
+  return true;
+}
+
 export function shouldAllowEmptyDraftText(input: {
   allowsEmptyAutoSubmit: boolean;
   attachments: readonly unknown[];

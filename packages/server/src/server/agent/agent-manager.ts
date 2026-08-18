@@ -757,11 +757,13 @@ function shouldDetachFromArchivedParent(
   parent: StoredAgentRecord,
   child: StoredAgentRecord,
 ): boolean {
+  const isSupervisedLead =
+    parent.roleBinding?.roleId === "supervisor" && child.roleBinding?.roleId === "lead";
   const isCrossWorkspace =
     parent.workspaceId !== undefined &&
     child.workspaceId !== undefined &&
     parent.workspaceId !== child.workspaceId;
-  return isCrossWorkspace || hasOpenAgentTab(child.labels);
+  return isSupervisedLead || isCrossWorkspace || hasOpenAgentTab(child.labels);
 }
 
 function detachedAgentLabelPatch(labels: Record<string, string>): AgentLabelPatch {
@@ -1993,8 +1995,9 @@ export class AgentManager {
 
   // Children created via the MCP `create_agent` tool carry the parent-agent-id
   // label pointing back at the caller. Archiving the parent cascades to those
-  // children so subagent fleets don't outlive their orchestrator. Detached
-  // handoff agents omit this label, so they stand outside the cascade.
+  // children so subagent fleets don't outlive their orchestrator. Durable Leads
+  // survive a Supervisor lifecycle and are detached, as are cross-workspace or
+  // explicitly opened children. Detached handoff agents omit this label.
   private async cascadeArchiveChildren(parentAgentId: string): Promise<void> {
     const registry = this.registry;
     if (!registry) {
@@ -3145,7 +3148,15 @@ export class AgentManager {
     response: AgentPermissionResponse,
   ): Promise<AgentPermissionResult | void> {
     const agent = this.requireAgent(agentId);
-    assertRoleAssignmentPermissionResponseAllowed(agent.roleBinding, response);
+    const pendingRequest =
+      agent.pendingPermissions.get(requestId) ??
+      agent.session.getPendingPermissions().find((request) => request.id === requestId);
+    assertRoleAssignmentPermissionResponseAllowed(agent.roleBinding, response, pendingRequest, {
+      // Cursor redacts MCP tool identity as `MCP: tool`. Consent remains bounded only when the
+      // agent has no caller-configured MCP server, leaving Paseo's role-scoped runtime server as
+      // the sole ACP MCP surface; that server independently enforces the role tool ceiling.
+      onlyRuntimePaseoMcp: Object.keys(agent.config.mcpServers ?? {}).length === 0,
+    });
     agent.inFlightPermissionResponses.add(requestId);
 
     try {
@@ -5383,10 +5394,7 @@ export class AgentManager {
       withRuntimePaseoMcpServer({
         config: storedConfig,
         agentId,
-        mcpBaseUrl:
-          this.paseoToolsEnabled && isPaseoToolPolicyEnabled(paseoToolPolicy)
-            ? this.mcpBaseUrl
-            : null,
+        mcpBaseUrl: isPaseoToolPolicyEnabled(paseoToolPolicy) ? this.mcpBaseUrl : null,
         mcpAuthToken: this.mcpAuthToken,
         mcpRuntimeId: this.mcpRuntimeId,
         preapprovedTools: resolveRuntimePaseoPreapprovedTools({
@@ -5413,7 +5421,7 @@ export class AgentManager {
     roleBinding: PersistedRoleBinding | undefined,
     client: AgentClient,
   ): ProviderPaseoToolsPolicy | undefined {
-    if (!this.paseoToolsEnabled && !client.capabilities.supportsNativePaseoTools) {
+    if (!roleBinding && !this.paseoToolsEnabled && !client.capabilities.supportsNativePaseoTools) {
       return { enabled: false };
     }
     return applyRolePaseoToolPolicy(

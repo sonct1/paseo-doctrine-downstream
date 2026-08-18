@@ -5,7 +5,11 @@ import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "../agent-manager.js";
-import { AgentProfileSchema } from "@getpaseo/protocol/messages";
+import {
+  AgentProfileSchema,
+  type PeerDelegationModelRoute,
+  type PeerDelegationRunMode,
+} from "@getpaseo/protocol/messages";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -23,7 +27,7 @@ import {
 } from "../agent-projections.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
-import type { AgentStorage } from "../agent-storage.js";
+import type { AgentStorage, StoredAgentRecord } from "../agent-storage.js";
 import { ensureAgentLoaded, hasPendingAgentInitialization } from "../agent-loading.js";
 import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
 import {
@@ -32,7 +36,11 @@ import {
   requireActiveWorkspaceForArchive,
   type ArchiveDependencies,
 } from "../../workspace-archive-service.js";
-import { createAgentCommand, type CreateAgentFromMcpInput } from "../create-agent/create.js";
+import {
+  createAgentCommand,
+  formatProviderModel,
+  type CreateAgentFromMcpInput,
+} from "../create-agent/create.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
@@ -101,7 +109,11 @@ import type {
   PaseoToolResult,
 } from "./types.js";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
-import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
+import {
+  isPaseoSupportedProvider,
+  type ProviderPaseoToolsPolicy,
+} from "@getpaseo/protocol/provider-config";
+import { getUnattendedModeId } from "@getpaseo/protocol/provider-manifest";
 import { toRoleBindingReceipt } from "../role-binding.js";
 import { toLaunchContractReceipt } from "../launch-contract.js";
 import {
@@ -186,6 +198,74 @@ export interface PaseoToolHostDependencies {
   enableVoiceTools?: boolean;
   voiceOnly?: boolean;
   logger: Logger;
+}
+
+function formatPeerRouteList(routes: readonly PeerDelegationModelRoute[]): string[] {
+  return routes.map((route) => formatProviderModel(route.provider, route.model));
+}
+
+function resolvePeerPolicyProviderRoute(
+  requestedProvider: string,
+  allowedRoutes: readonly PeerDelegationModelRoute[] | undefined,
+): string {
+  if (allowedRoutes?.length === 0) {
+    throw new Error(
+      "Lead-to-Peer creation is disabled by the Human-configured Peer delegation model policy",
+    );
+  }
+  if (requestedProvider || allowedRoutes === undefined) return requestedProvider;
+  if (allowedRoutes.length === 1) {
+    const onlyRoute = allowedRoutes[0];
+    return formatProviderModel(onlyRoute.provider, onlyRoute.model);
+  }
+  throw new Error(
+    `Select an exact Human-approved Peer provider/model route: ${formatPeerRouteList(allowedRoutes).join(", ")}`,
+  );
+}
+
+function assertPeerPolicyAllowsRoute(
+  providerRoute: string,
+  provider: string,
+  model: string | undefined,
+  allowedRoutes: readonly PeerDelegationModelRoute[] | undefined,
+): void {
+  if (
+    allowedRoutes === undefined ||
+    allowedRoutes.some((route) => route.provider === provider && route.model === model)
+  ) {
+    return;
+  }
+  throw new Error(
+    `Peer route '${providerRoute}' is not allowed by the Human-configured policy. Allowed routes: ${formatPeerRouteList(allowedRoutes).join(", ") || "none"}`,
+  );
+}
+
+function resolvePeerPolicyMode(input: {
+  provider: string;
+  modes: readonly AgentMode[];
+  defaultModeId: string | null | undefined;
+  runMode: PeerDelegationRunMode;
+}): string {
+  const { provider, modes, defaultModeId, runMode } = input;
+  if (runMode === "unattended") {
+    const unattendedMode = modes.find((mode) => mode.isUnattended === true);
+    if (unattendedMode) return unattendedMode.id;
+    const manifestUnattendedModeId = getUnattendedModeId(provider);
+    if (manifestUnattendedModeId && modes.some((mode) => mode.id === manifestUnattendedModeId)) {
+      return manifestUnattendedModeId;
+    }
+    throw new Error(
+      `Provider '${provider}' has no qualified unattended mode for Human-approved Peer delegation`,
+    );
+  }
+
+  const defaultMode = modes.find((mode) => mode.id === defaultModeId);
+  if (defaultMode && defaultMode.isUnattended !== true) return defaultMode.id;
+  const guardedMode =
+    modes.find((mode) => mode.isUnattended !== true && mode.colorTier !== "planning") ??
+    modes.find((mode) => mode.isUnattended !== true);
+  if (guardedMode) return guardedMode.id;
+  throw new Error(`Provider '${provider}' has no guarded mode for Human-approved Peer delegation`);
 }
 
 function registerConfiguredBeadsTools(
@@ -279,6 +359,84 @@ type AgentScopedRoleTopologyAction =
   | { kind: "create_agent"; requestedRole: PaseoRoleId | undefined }
   | { kind: "send_agent_prompt"; targetAgentId: string };
 
+function hasSupervisorDelegationLease(caller: StoredAgentRecord): boolean {
+  return (
+    caller.roleBinding?.roleId === "supervisor" &&
+    caller.roleBinding.assignmentContract?.envelope.effectClass === "delegation"
+  );
+}
+
+function hasLeadDelegationAuthority(caller: StoredAgentRecord): boolean {
+  if (caller.roleBinding?.roleId !== "lead") return false;
+  const effectClass = caller.roleBinding.assignmentContract?.envelope.effectClass;
+  return effectClass === "mutating" || effectClass === "delegation";
+}
+
+function assertRoleBoundCreateAuthorized(
+  caller: StoredAgentRecord,
+  requestedRole: PaseoRoleId | undefined,
+): void {
+  const callerRole = caller.roleBinding?.roleId;
+  if (callerRole === "lead") {
+    if (requestedRole === "peer" && hasLeadDelegationAuthority(caller)) return;
+    if (requestedRole === "peer") {
+      throw new Error(
+        "A role-bound Lead needs Work & coordinate or Coordinate only authority to create a Peer",
+      );
+    }
+    throw new Error("A role-bound Lead may create only a role-bound Peer");
+  }
+  if (callerRole === "supervisor") {
+    if (hasSupervisorDelegationLease(caller) && requestedRole === "lead") return;
+    throw new Error(
+      "A role-bound Supervisor may create only a role-bound Lead under a Human-issued delegation assignment",
+    );
+  }
+  throw new Error(`Role-bound ${callerRole} agents cannot use create_agent`);
+}
+
+async function assertRoleBoundPromptAuthorized(input: {
+  agentStorage: AgentStorage;
+  caller: StoredAgentRecord;
+  callerAgentId: string;
+  targetAgentId: string;
+}): Promise<void> {
+  const target = await input.agentStorage.get(input.targetAgentId);
+  if (!target) {
+    throw new Error(`Target agent ${input.targetAgentId} is unavailable in durable storage`);
+  }
+  const callerRole = input.caller.roleBinding?.roleId;
+  const isDirectChild = getParentAgentIdFromLabels(target.labels) === input.callerAgentId;
+  if (callerRole === "lead") {
+    if (
+      hasLeadDelegationAuthority(input.caller) &&
+      target.roleBinding?.roleId === "peer" &&
+      isDirectChild
+    ) {
+      return;
+    }
+    if (!hasLeadDelegationAuthority(input.caller)) {
+      throw new Error(
+        "A role-bound Lead needs Work & coordinate or Coordinate only authority to prompt a Peer",
+      );
+    }
+    throw new Error("A role-bound Lead may prompt only its own direct Peer child");
+  }
+  if (callerRole === "supervisor") {
+    if (
+      hasSupervisorDelegationLease(input.caller) &&
+      target.roleBinding?.roleId === "lead" &&
+      isDirectChild
+    ) {
+      return;
+    }
+    throw new Error(
+      "A role-bound Supervisor may prompt only its own direct Lead child under a Human-issued delegation assignment",
+    );
+  }
+  throw new Error(`Role-bound ${callerRole} agents cannot use send_agent_prompt`);
+}
+
 async function assertAgentScopedRoleTopologyAuthorized(params: {
   agentStorage: AgentStorage;
   callerAgentId: string | undefined;
@@ -296,26 +454,16 @@ async function assertAgentScopedRoleTopologyAuthorized(params: {
   if (!callerRole) {
     return;
   }
-  if (callerRole !== "lead") {
-    throw new Error(`Role-bound ${callerRole} agents cannot use ${params.action.kind}`);
-  }
-
   if (params.action.kind === "create_agent") {
-    if (params.action.requestedRole !== "peer") {
-      throw new Error("A role-bound Lead may create only a role-bound Peer");
-    }
+    assertRoleBoundCreateAuthorized(caller, params.action.requestedRole);
     return;
   }
-
-  const target = await params.agentStorage.get(params.action.targetAgentId);
-  if (!target) {
-    throw new Error(
-      `Target agent ${params.action.targetAgentId} is unavailable in durable storage`,
-    );
-  }
-  if (getParentAgentIdFromLabels(target.labels) !== params.callerAgentId) {
-    throw new Error("A role-bound Lead may prompt only its own direct child");
-  }
+  await assertRoleBoundPromptAuthorized({
+    agentStorage: params.agentStorage,
+    caller,
+    callerAgentId: params.callerAgentId,
+    targetAgentId: params.action.targetAgentId,
+  });
 }
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -825,6 +973,121 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return { providerOptions: callerAgent.config.providerOptions };
   };
 
+  const resolvePeerDelegationAllowedRoutes = () => {
+    const callerAgent = resolveCallerAgent();
+    if (callerAgent?.roleBinding?.roleId !== "lead") return undefined;
+    if (!daemonConfigStore) return undefined;
+    const config = daemonConfigStore.get();
+    const policy = config.peerDelegation;
+    if (!policy?.enabled) return [];
+    return policy.allowedModels.filter((route) =>
+      isPaseoSupportedProvider(route.provider, config.providers?.[route.provider]),
+    );
+  };
+
+  const resolvePeerDelegationRunMode = (): PeerDelegationRunMode | undefined => {
+    const callerAgent = resolveCallerAgent();
+    if (callerAgent?.roleBinding?.roleId !== "lead" || !daemonConfigStore) return undefined;
+    const policy = daemonConfigStore.get().peerDelegation;
+    return policy?.enabled ? policy.runMode : undefined;
+  };
+
+  const assertRequestedProviderModelAvailable = async (input: {
+    provider: AgentProvider;
+    model: string | undefined;
+    requestedRole?: PaseoRoleId;
+  }): Promise<void> => {
+    if (!callerAgentId || !input.requestedRole) return;
+    const models = await providerSnapshotManager.listModels({
+      provider: input.provider,
+      wait: true,
+    });
+    if (models.length === 0 || models.some((model) => model.id === input.model)) return;
+    throw new Error(
+      `Model '${input.model}' is not available for provider '${input.provider}'; call list_models and retry with an exact returned route, or omit provider to inherit the caller route`,
+    );
+  };
+
+  const resolvePeerModeEnforcement = async (input: {
+    provider: AgentProvider;
+    requestedRole?: PaseoRoleId;
+    requestedMode?: string;
+    requestedCwd?: string;
+  }): Promise<{ enforcedMode?: string; unattended?: boolean }> => {
+    const runMode = input.requestedRole === "peer" ? resolvePeerDelegationRunMode() : undefined;
+    if (!runMode) return {};
+    const providerEntry = await providerSnapshotManager.getProvider({
+      provider: input.provider,
+      cwd: input.requestedCwd,
+      wait: true,
+    });
+    const enforcedMode = resolvePeerPolicyMode({
+      provider: input.provider,
+      modes: providerEntry.modes ?? [],
+      defaultModeId: providerEntry.defaultModeId,
+      runMode,
+    });
+    if (input.requestedMode !== undefined && input.requestedMode !== enforcedMode) {
+      throw new Error(
+        `Peer mode '${input.requestedMode}' conflicts with the Human-configured '${runMode}' policy; use '${enforcedMode}' or omit settings.modeId`,
+      );
+    }
+    return { enforcedMode, unattended: runMode === "unattended" };
+  };
+
+  const resolveCreateAgentProviderRoute = async (input: {
+    requestedProvider?: string;
+    requestedRole?: PaseoRoleId;
+    requestedMode?: string;
+    requestedCwd?: string;
+  }): Promise<{
+    providerRoute: string;
+    provider: AgentProvider;
+    enforcedMode?: string;
+    unattended?: boolean;
+  }> => {
+    const requestedProvider = input.requestedProvider?.trim();
+    const callerAgent = resolveCallerAgent();
+    const inheritedModel = callerAgent?.config?.model ?? callerAgent?.runtimeInfo?.model;
+    const allowedPeerRoutes =
+      input.requestedRole === "peer" ? resolvePeerDelegationAllowedRoutes() : undefined;
+    let providerRoute = resolvePeerPolicyProviderRoute(requestedProvider ?? "", allowedPeerRoutes);
+    if (!providerRoute && callerAgent && inheritedModel) {
+      providerRoute = formatProviderModel(callerAgent.provider, inheritedModel);
+    }
+    if (!providerRoute) {
+      throw new Error(
+        callerAgent
+          ? "create_agent could not inherit a model from the caller; call list_models and provide an exact provider/model route"
+          : "provider is required",
+      );
+    }
+
+    const resolved = resolveRequiredProviderModel(providerRoute);
+    assertPeerPolicyAllowsRoute(
+      providerRoute,
+      resolved.provider,
+      resolved.model,
+      allowedPeerRoutes,
+    );
+    await assertRequestedProviderModelAvailable({
+      provider: resolved.provider,
+      model: resolved.model,
+      requestedRole: input.requestedRole,
+    });
+    const modeEnforcement = await resolvePeerModeEnforcement({
+      provider: resolved.provider,
+      requestedRole: input.requestedRole,
+      requestedMode: input.requestedMode,
+      requestedCwd: input.requestedCwd,
+    });
+    return {
+      providerRoute,
+      provider: resolved.provider,
+      ...modeEnforcement,
+    };
+  };
+
   const resolveScopedCwd = (requestedCwd?: string, opts?: { required?: boolean }): string => {
     const callerAgent = resolveCallerAgent();
     if (callerAgent) {
@@ -1153,6 +1416,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       .strict()
       .describe("Create a new workspace for the agent."),
   ]);
+  const createAgentProviderField = ProviderModelInputSchema.describe(
+    "Required provider/model pair, for example codex/gpt-5.4.",
+  );
   const commonCreateAgentFields = {
     title: z
       .string()
@@ -1160,9 +1426,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       .min(1, "Title is required")
       .max(60, "Title must be 60 characters or fewer")
       .describe("Short descriptive title (<= 60 chars) summarizing the agent's focus."),
-    provider: ProviderModelInputSchema.describe(
-      "Required provider/model pair, for example codex/gpt-5.4.",
-    ),
     role: PaseoRoleIdSchema.optional().describe(
       "Paseo Foundation role to bind through the provider-native durable instruction channel.",
     ),
@@ -1190,6 +1453,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const canonicalCreateAgentFields = {
     ...commonCreateAgentFields,
+    provider: createAgentProviderField,
     workspaceId: z
       .string()
       .min(1)
@@ -1200,6 +1464,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const agentToAgentInputSchema = {
     ...canonicalCreateAgentFields,
+    provider: createAgentProviderField
+      .optional()
+      .describe(
+        "Optional provider/model override. Omit it to inherit the caller's exact validated provider/model route; never infer a provider from a model name.",
+      ),
+    cwd: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Directory for the child workspace. It must be the caller cwd or a descendant; omit it to use the caller workspace.",
+      ),
     notifyOnFinish: z
       .boolean()
       .optional()
@@ -1227,11 +1504,15 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const legacyAgentToAgentInputSchema = {
     ...commonCreateAgentFields,
+    provider: createAgentProviderField
+      .optional()
+      .describe("Optional provider/model override; omit it to inherit the caller route."),
     ...legacyCreateAgentPlacementFields,
     notifyOnFinish: agentToAgentInputSchema.notifyOnFinish,
   };
   const legacyTopLevelCreateAgentInputSchema = {
     ...commonCreateAgentFields,
+    provider: createAgentProviderField,
     relationship: legacyCreateAgentPlacementFields.relationship.optional(),
     workspace: legacyCreateAgentPlacementFields.workspace.optional(),
     background: canonicalTopLevelInputSchema.background,
@@ -1683,7 +1964,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt; choose role=lead|peer|supervisor for a Foundation role-first launch. Do not guess; call list_providers and list_models first if uncertain.",
+        "Create an agent. Agent-scoped creation creates your subagent: omit provider to inherit your exact validated provider/model route, and set cwd to route a child into a descendant project workspace. Top-level creation without workspaceId creates a new local workspace and requires provider/model (for example codex/gpt-5.4). An initial prompt is required; choose role=lead|peer|supervisor for a Foundation role-first launch. Never infer a provider from a model name; call list_providers and list_models before an explicit override.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -1714,7 +1995,17 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         requestedBackground = resolvedArgs.parsedArgs.background;
         notifyOnFinish = resolvedArgs.parsedArgs.notifyOnFinish ?? false;
       }
-      const selectedProvider = resolveRequiredProviderModel(parsedArgs.provider).provider;
+      const {
+        providerRoute,
+        provider: selectedProvider,
+        enforcedMode,
+        unattended,
+      } = await resolveCreateAgentProviderRoute({
+        requestedProvider: parsedArgs.provider,
+        requestedRole: parsedArgs.role,
+        requestedMode: parsedArgs.settings?.modeId,
+        requestedCwd: resolvedArgs.cwd,
+      });
       const inheritedConfig = resolveInheritedProviderConfig(selectedProvider);
       const {
         snapshot,
@@ -1736,7 +2027,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         },
         {
           kind: "mcp",
-          provider: parsedArgs.provider,
+          provider: providerRoute,
           roleId: parsedArgs.role,
           executionProfileId,
           assignment: parsedArgs.assignment,
@@ -1748,7 +2039,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           thinking: parsedArgs.settings?.thinkingOptionId,
           features: parsedArgs.settings?.features,
           labels: parsedArgs.labels,
-          mode: parsedArgs.settings?.modeId,
+          mode: enforcedMode ?? parsedArgs.settings?.modeId,
+          unattended,
           background: requestedBackground,
           notifyOnFinish,
           detached: resolvedArgs.detached,
@@ -1867,9 +2159,11 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         callerAgentId,
         action: { kind: "create_agent", requestedRole: parsed.role },
       });
-      const { cwd, workspaceId } = await resolveCanonicalCreateAgentWorkspace(parsed.workspaceId, {
-        prompt: parsed.initialPrompt,
-      });
+      const { cwd, workspaceId } = await resolveCanonicalCreateAgentWorkspace(
+        parsed.workspaceId,
+        { prompt: parsed.initialPrompt },
+        parsed.cwd,
+      );
       return {
         kind: "agent-scoped",
         parsedArgs: parsed,
@@ -1926,7 +2220,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     return [
       "relationship",
       "workspace",
-      "cwd",
+      ...(!callerAgentId ? ["cwd"] : []),
       "worktreeName",
       "branchName",
       "baseBranch",
@@ -1938,16 +2232,32 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   async function resolveCanonicalCreateAgentWorkspace(
     workspaceId?: string,
     firstAgentContext?: FirstAgentContext,
+    requestedCwd?: string,
   ): Promise<{
     cwd: string | undefined;
     workspaceId: string;
   }> {
+    if (workspaceId && requestedCwd) {
+      throw new Error("Specify at most one of workspaceId or cwd");
+    }
     if (workspaceId) {
       const resolved = await resolveCreateAgentWorkspace(
         { kind: "existing", workspaceId },
         undefined,
       );
+      assertRoleBoundChildCwdWithinCallerRoot(resolved.cwd);
       return { cwd: resolved.cwd, workspaceId };
+    }
+    if (requestedCwd) {
+      if (!options.ensureWorkspaceForCreate) {
+        throw new Error("Workspace creation is not configured");
+      }
+      const cwd = resolveScopedCwd(requestedCwd, { required: true });
+      assertRoleBoundChildCwdWithinCallerRoot(cwd);
+      return {
+        cwd,
+        workspaceId: await options.ensureWorkspaceForCreate(cwd, firstAgentContext),
+      };
     }
     if (!callerAgentId) {
       if (!options.ensureWorkspaceForCreate) {
@@ -1964,6 +2274,17 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       throw new Error(`Caller agent ${callerAgentId} has no current workspace`);
     }
     return { cwd: undefined, workspaceId: caller.workspaceId };
+  }
+
+  function assertRoleBoundChildCwdWithinCallerRoot(cwd: string | undefined): void {
+    if (!callerAgentId || !cwd) return;
+    const caller = resolveCallerAgent();
+    if (!caller?.roleBinding) return;
+    if (!isSameOrDescendantPath(caller.cwd, cwd)) {
+      throw new Error(
+        `Child workspace '${cwd}' is outside the role-bound caller cwd '${caller.cwd}'`,
+      );
+    }
   }
 
   function normalizeTopLevelCreateAgentArgs(
@@ -3382,7 +3703,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "list_models",
     {
       title: "List models",
-      description: "List models for an agent provider.",
+      description:
+        "List models for an agent provider. For a role-bound Lead, this returns only Human-approved Peer delegation models.",
       inputSchema: {
         provider: AgentProviderEnum,
       },
@@ -3392,10 +3714,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ provider }) => {
-      const models = await providerSnapshotManager.listModels({
+      const discoveredModels = await providerSnapshotManager.listModels({
         provider,
         wait: true,
       });
+      const allowedPeerRoutes = resolvePeerDelegationAllowedRoutes();
+      const models =
+        allowedPeerRoutes === undefined
+          ? discoveredModels
+          : discoveredModels.filter((model) =>
+              allowedPeerRoutes.some(
+                (route) => route.provider === provider && route.model === model.id,
+              ),
+            );
       return {
         content: [],
         structuredContent: ensureValidJson({

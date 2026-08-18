@@ -312,6 +312,18 @@ esac
         `<string>${fixture.prefix}/current/app/node_modules/@getpaseo/cli/dist/index.js</string>`,
       ),
     );
+    assert.match(
+      plist,
+      new RegExp(
+        `<key>PASEO_BEADS_CENTRAL_SIDECAR</key><string>${fixture.prefix}/current/components/beads-central/beads-central</string>`,
+      ),
+    );
+    assert.match(
+      plist,
+      new RegExp(
+        `<key>PASEO_BEADS_CENTRAL_BD_BIN</key><string>${fixture.prefix}/current/components/beads-central/bin/bd</string>`,
+      ),
+    );
     assert.doesNotMatch(plist, /PASEO_BEADS_BINARY/u);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });

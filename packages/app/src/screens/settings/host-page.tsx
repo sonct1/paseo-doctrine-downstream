@@ -73,6 +73,7 @@ import { BrowserToolsOptInCard } from "./browser-tools-card";
 import { hasDaemonReconnectedAfter, type DaemonConnectionMarker } from "./daemon-reconnect";
 import { restartDaemonFromSettings } from "./daemon-restart";
 import { RoleProfilesCard } from "./role-profiles-card";
+import { PeerDelegationModelsCard } from "./peer-delegation-models-card";
 
 const ThemedArrowUp = withUnistyles(ArrowUp);
 const ThemedArrowDown = withUnistyles(ArrowDown);
@@ -282,6 +283,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
       {isConnected ? (
         <SettingsSection title={t("settings.hostSections.agents")}>
           <RoleProfilesCard serverId={serverId} />
+          <PeerDelegationModelsCard serverId={serverId} />
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />

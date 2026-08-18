@@ -1348,7 +1348,7 @@ function WorkspaceHeaderTitleBar({
             style={styles.compactHeaderActionButton}
             accessible
             accessibilityRole="button"
-            accessibilityLabel="Open workspace topology"
+            accessibilityLabel="Open project topology"
           >
             {({ hovered, pressed }) => (
               <ThemedNetwork

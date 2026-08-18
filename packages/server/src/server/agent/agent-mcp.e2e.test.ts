@@ -141,19 +141,31 @@ function requireAgentId(result: McpToolResult): string {
   return agentId;
 }
 
-function roleAssignment(role: "lead" | "peer" | "supervisor"): AssignmentEnvelope {
+function roleAssignment(
+  role: "lead" | "peer" | "supervisor",
+  cwd = "/tmp/paseo-role-assignment",
+): AssignmentEnvelope {
   const disposition = {
     lead: "lead-direct",
     peer: "peer-execution",
     supervisor: "supervision",
   } as const;
+  const effectClass = role === "lead" ? "mutating" : "read-only";
   return {
     version: 1,
     disposition: disposition[role],
     objective: `Exercise the ${role} MCP topology contract.`,
-    effectClass: "read-only",
-    mutationBoundary: { mode: "no-write" },
-    externalEffectBoundary: { mode: "denied" },
+    effectClass,
+    mutationBoundary:
+      effectClass === "mutating" ? { mode: "bounded-write", scope: cwd } : { mode: "no-write" },
+    externalEffectBoundary:
+      effectClass === "mutating"
+        ? {
+            mode: "bounded",
+            scope:
+              "Beads Central issue/work graph for this assignment only; no other external effects",
+          }
+        : { mode: "denied" },
     ...(role === "peer" ? { resourceGrants: { beadsIssueIds: ["test-peer-issue"] } } : {}),
     evidence: "Return the daemon-issued role and topology receipts.",
     handbackAndStop: "Stop after the topology assertion or a material blocker.",
@@ -196,7 +208,21 @@ class RecordingAgentClient implements AgentClient {
   async fetchCatalog(
     ...args: Parameters<AgentClient["fetchCatalog"]>
   ): ReturnType<AgentClient["fetchCatalog"]> {
-    return this.inner.fetchCatalog(...args);
+    return this.inner.fetchCatalog(...args).then((catalog) => {
+      if (this.provider !== "claude") return catalog;
+      return {
+        ...catalog,
+        models: [
+          ...catalog.models,
+          {
+            provider: "claude" as const,
+            id: "claude-test-model",
+            label: "Claude Test Model",
+            isDefault: false,
+          },
+        ],
+      };
+    });
   }
 
   async isAvailable(): Promise<boolean> {
@@ -297,6 +323,11 @@ describe("agent MCP end-to-end (offline)", () => {
       corsAllowedOrigins: [],
       hostnames: true,
       mcpEnabled: true,
+      peerDelegation: {
+        enabled: true,
+        runMode: "unattended",
+        allowedModels: [{ provider: "claude", model: "claude-test-model" }],
+      },
       staticDir,
       mcpDebug: false,
       agentClients: createMcpRecordingAgentClients(recorder),
@@ -324,7 +355,7 @@ describe("agent MCP end-to-end (offline)", () => {
               title,
               provider: "claude/claude-test-model",
               role,
-              assignment: roleAssignment(role),
+              assignment: roleAssignment(role, agentCwd),
               initialPrompt: "Reply done and stop",
               background: false,
             },
@@ -441,7 +472,7 @@ describe("agent MCP end-to-end (offline)", () => {
               initialPrompt: "Must not launch",
             },
           }),
-        "Tool create_agent not found",
+        "A role-bound Supervisor may create only a role-bound Lead under a Human-issued delegation assignment",
       );
       expect((await daemon.agentStorage.list()).length).toBe(supervisorRecordCountBefore);
       expect(recorder.recordedLaunches).toHaveLength(supervisorLaunchCountBefore);
@@ -467,7 +498,7 @@ describe("agent MCP end-to-end (offline)", () => {
               sessionMode: "bypassPermissions",
             },
           }),
-        "A role-bound Lead may prompt only its own direct child",
+        "A role-bound Lead may prompt only its own direct Peer child",
       );
       expect(await daemon.agentStorage.get(peerTwoId)).toEqual(peerTwoBefore);
     } finally {
@@ -753,6 +784,65 @@ describe("agent MCP end-to-end (offline)", () => {
         maxRetries: 5,
         retryDelay: 20,
       });
+      await rm(staticDir, { recursive: true, force: true });
+      await rm(agentCwd, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test("role-bound agents receive scoped Paseo tools when unbound injection is disabled", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-home-role-bound-"));
+    const staticDir = await mkdtemp(path.join(os.tmpdir(), "paseo-static-role-bound-"));
+    const agentCwd = await mkdtemp(path.join(os.tmpdir(), "paseo-agent-cwd-role-bound-"));
+    const port = await getAvailablePort();
+    const recorder: LaunchRecorder = { recordedLaunches: [] };
+    const daemon = await createPaseoDaemon(
+      {
+        listen: `127.0.0.1:${port}`,
+        paseoHome,
+        corsAllowedOrigins: [],
+        hostnames: true,
+        mcpEnabled: true,
+        mcpInjectIntoAgents: false,
+        staticDir,
+        mcpDebug: false,
+        agentClients: createMcpRecordingAgentClients(recorder),
+        agentStoragePath: path.join(paseoHome, "agents"),
+      },
+      pino({ level: "silent" }),
+    );
+    await daemon.start();
+    await writeFile(
+      path.join(agentCwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(agentCwd),
+    );
+
+    let agentId: string | null = null;
+    try {
+      const roleAgent = await daemon.agentManager.createAgent(
+        {
+          provider: "claude",
+          model: "claude-test-model",
+          cwd: agentCwd,
+        },
+        undefined,
+        {
+          workspaceId: "workspace-role-bound-tools-disabled-global",
+          roleId: "lead",
+          assignment: roleAssignment("lead", agentCwd),
+        },
+      );
+      agentId = roleAgent.id;
+      const roleLaunch = recorder.recordedLaunches.at(-1);
+      expect(roleLaunch?.mcpServers?.paseo).toMatchObject({
+        type: "http",
+        url: expect.stringContaining(`callerAgentId=${roleAgent.id}`),
+      });
+    } finally {
+      if (agentId) {
+        await daemon.agentManager.closeAgent(agentId).catch(() => undefined);
+      }
+      await daemon.stop();
+      await rm(paseoHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
       await rm(staticDir, { recursive: true, force: true });
       await rm(agentCwd, { recursive: true, force: true });
     }

@@ -17,12 +17,28 @@ describe("role binding receipt description", () => {
         path: "/repo/WORKSPACE_PROTOCOL.md",
         digest: "c".repeat(64),
       },
+      assignment: {
+        version: 1,
+        assignmentDigest: "d".repeat(64),
+        roleId: "lead",
+        disposition: "lead-direct",
+        assigner: { kind: "human-session" },
+        workspaceId: "workspace-1",
+        cwd: "/repo",
+        effectClass: "mutating",
+        mutationBoundary: { mode: "bounded-write", scope: "/repo" },
+        externalEffectBoundary: { mode: "denied" },
+        createdAt: "2026-08-08T00:00:00.000Z",
+      },
       createdAt: "2026-08-08T00:00:00.000Z",
     });
 
     expect(description).toContain("Contract: 3.3.0-mandatory-protocol-webui");
     expect(description).toContain(`Binding: sha256:${"b".repeat(64)}`);
     expect(description).toContain(`Protocol: bound · full · sha256:${"c".repeat(64)}`);
+    expect(description).toContain("Assignment: Work & coordinate · immutable");
+    expect(description).toContain("Mutation: bounded-write · /repo");
+    expect(description).toContain("Assigned by: Human session");
     expect(description).not.toContain("Role: Lead");
   });
 });

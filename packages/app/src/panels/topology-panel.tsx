@@ -75,7 +75,7 @@ function TopologyNodeRow({
 }
 
 function TopologyPanel() {
-  const { topology, hydrated, openAgent, issueById, grantedIssueCount, issuesError } =
+  const { topology, hydrated, openAgent, issueById, grantedIssueCount, issuesError, projectName } =
     useTopologyPanelState();
   if (!hydrated) {
     return (
@@ -100,7 +100,7 @@ function TopologyPanel() {
       testID="workspace-topology-panel"
     >
       <View style={styles.summaryRow}>
-        <Text style={styles.summaryTitle}>Workspace topology</Text>
+        <Text style={styles.summaryTitle}>Project topology · {projectName}</Text>
         <Text style={styles.summaryMeta}>
           {topology.nodes.length} agents · {topology.edges.length} relationships
         </Text>

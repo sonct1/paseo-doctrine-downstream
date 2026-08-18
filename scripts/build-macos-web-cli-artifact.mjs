@@ -209,6 +209,15 @@ function copyNodeRuntime(nodeRoot) {
   }
 }
 
+function buildBeadsCentralComponent() {
+  const output = path.join(STAGING_ROOT, "components", "beads-central");
+  run(process.execPath, [
+    path.join(REPO_ROOT, "scripts", "build-beads-central-sidecar.mjs"),
+    "--output",
+    output,
+  ]);
+}
+
 function createLaunchers() {
   const binRoot = path.join(STAGING_ROOT, "bin");
   mkdirSync(binRoot, { recursive: true });
@@ -219,7 +228,7 @@ function createLaunchers() {
     ]) {
       writeFileSync(
         path.join(binRoot, `${name}.cmd`),
-        `@echo off\r\nsetlocal\r\nset "ROOT=%~dp0.."\r\n"%ROOT%\\runtime\\node.exe" "%ROOT%\\app\\node_modules\\${packageName.replaceAll("/", "\\")}\\dist\\index.js" %*\r\n`,
+        `@echo off\r\nsetlocal\r\nset "ROOT=%~dp0.."\r\nset "PASEO_BEADS_CENTRAL_SIDECAR=%ROOT%\\components\\beads-central\\beads-central.exe"\r\nset "PASEO_BEADS_CENTRAL_BD_BIN=%ROOT%\\components\\beads-central\\bin\\bd.exe"\r\n"%ROOT%\\runtime\\node.exe" "%ROOT%\\app\\node_modules\\${packageName.replaceAll("/", "\\")}\\dist\\index.js" %*\r\n`,
       );
     }
     return;
@@ -239,6 +248,8 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd -P)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
+export PASEO_BEADS_CENTRAL_SIDECAR="$ROOT/components/beads-central/beads-central"
+export PASEO_BEADS_CENTRAL_BD_BIN="$ROOT/components/beads-central/bin/bd"
 exec "$ROOT/runtime/bin/node" "$ROOT/app/node_modules/@getpaseo/cli/dist/index.js" "$@"
 `,
   );
@@ -257,6 +268,8 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SOURCE")" && pwd -P)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
+export PASEO_BEADS_CENTRAL_SIDECAR="$ROOT/components/beads-central/beads-central"
+export PASEO_BEADS_CENTRAL_BD_BIN="$ROOT/components/beads-central/bin/bd"
 exec "$ROOT/runtime/bin/node" "$ROOT/app/node_modules/@getpaseo/foundation-cli/dist/index.js" "$@"
 `,
   );
@@ -447,6 +460,8 @@ fi
 DAEMON_ENTRY="$CURRENT_LINK/app/node_modules/@getpaseo/cli/dist/index.js"
 DAEMON_NODE_XML=$(escape_xml "$DAEMON_NODE")
 DAEMON_ENTRY_XML=$(escape_xml "$DAEMON_ENTRY")
+BEADS_CENTRAL_SIDECAR_XML=$(escape_xml "$CURRENT_LINK/components/beads-central/beads-central")
+BEADS_CENTRAL_BD_XML=$(escape_xml "$CURRENT_LINK/components/beads-central/bin/bd")
 LISTEN_XML=$(escape_xml "$LISTEN")
 PATH_XML=$(escape_xml "$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
 LOG_DIR="$HOME/Library/Logs/Paseo"
@@ -466,6 +481,8 @@ cat > "$PLIST" <<PLIST
   <key>EnvironmentVariables</key><dict>
     <key>HOME</key><string>$(escape_xml "$HOME")</string>
     <key>PATH</key><string>$PATH_XML</string>
+    <key>PASEO_BEADS_CENTRAL_SIDECAR</key><string>$BEADS_CENTRAL_SIDECAR_XML</string>
+    <key>PASEO_BEADS_CENTRAL_BD_BIN</key><string>$BEADS_CENTRAL_BD_XML</string>
     <key>PASEO_DICTATION_ENABLED</key><string>0</string>
     <key>PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD</key><string>0</string>
     <key>PASEO_VOICE_MODE_ENABLED</key><string>0</string>
@@ -1012,7 +1029,8 @@ function createManifest(nodeRoot) {
     beadsBackend: "central",
     beadsCentralClientIncluded: true,
     beadsCentralRequiredVersion: BEADS_CENTRAL_VERSION,
-    bundledBeadsBinary: false,
+    beadsCentralSidecarIncluded: true,
+    bundledBeadsBinary: true,
     internalPackages: Object.fromEntries(
       INTERNAL_PACKAGES.map((name) => [
         name,
@@ -1032,6 +1050,25 @@ function createManifest(nodeRoot) {
   writeFileSync(path.join(STAGING_ROOT, "SHA256SUMS"), `${checksums}\n`);
 }
 
+function validateArtifactManifest(manifest) {
+  if (
+    manifest.version !== VERSION ||
+    manifest.platform !== PLATFORM ||
+    manifest.platformName !== PLATFORM_NAME ||
+    manifest.arch !== ARCH ||
+    manifest.electronIncluded !== false ||
+    manifest.webUiIncluded !== true ||
+    manifest.cliIncluded !== true ||
+    manifest.beadsBackend !== "central" ||
+    manifest.beadsCentralClientIncluded !== true ||
+    manifest.beadsCentralRequiredVersion !== BEADS_CENTRAL_VERSION ||
+    manifest.beadsCentralSidecarIncluded !== true ||
+    manifest.bundledBeadsBinary !== true
+  ) {
+    fail("Artifact manifest validation failed");
+  }
+}
+
 function validateStaging(nodeRoot) {
   const launcherSuffix = PLATFORM === "win32" ? ".cmd" : "";
   if (PLATFORM === "win32") {
@@ -1049,21 +1086,7 @@ function validateStaging(nodeRoot) {
     run(path.join(STAGING_ROOT, "bin", `paseo-foundation${launcherSuffix}`), ["--version"]);
   }
   const manifest = JSON.parse(readFileSync(path.join(STAGING_ROOT, "manifest.json"), "utf8"));
-  if (
-    manifest.version !== VERSION ||
-    manifest.platform !== PLATFORM ||
-    manifest.platformName !== PLATFORM_NAME ||
-    manifest.arch !== ARCH ||
-    manifest.electronIncluded !== false ||
-    manifest.webUiIncluded !== true ||
-    manifest.cliIncluded !== true ||
-    manifest.beadsBackend !== "central" ||
-    manifest.beadsCentralClientIncluded !== true ||
-    manifest.beadsCentralRequiredVersion !== BEADS_CENTRAL_VERSION ||
-    manifest.bundledBeadsBinary !== false
-  ) {
-    fail("Artifact manifest validation failed");
-  }
+  validateArtifactManifest(manifest);
   const stagedNode = path.join(
     STAGING_ROOT,
     "runtime",
@@ -1072,12 +1095,14 @@ function validateStaging(nodeRoot) {
   const bundledNodeVersion = run(stagedNode, ["--version"], { capture: true });
   const sourceNodeVersion = run(nodeExecutable(nodeRoot), ["--version"], { capture: true });
   if (bundledNodeVersion !== sourceNodeVersion) fail("Bundled Node validation failed");
-  if (
-    existsSync(
-      path.join(STAGING_ROOT, "runtime", ...(PLATFORM === "win32" ? ["bd.exe"] : ["bin", "bd"])),
-    )
-  ) {
-    fail("Central-only artifact must not bundle a native bd binary");
+  const componentRoot = path.join(STAGING_ROOT, "components", "beads-central");
+  const sidecarExecutable = path.join(
+    componentRoot,
+    PLATFORM === "win32" ? "beads-central.exe" : "beads-central",
+  );
+  const beadsExecutable = path.join(componentRoot, "bin", PLATFORM === "win32" ? "bd.exe" : "bd");
+  if (!existsSync(sidecarExecutable) || !existsSync(beadsExecutable)) {
+    fail("Artifact is missing the bundled Beads Central sidecar component");
   }
 }
 
@@ -1157,6 +1182,7 @@ function main() {
     const tarballs = packInternalPackages();
     installProductionPayload(nodeRoot, tarballs);
     copyNodeRuntime(nodeRoot);
+    buildBeadsCentralComponent();
     createLaunchers();
     createInstallScripts();
     createManifest(nodeRoot);

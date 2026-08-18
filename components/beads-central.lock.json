@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "version": "1.2.0",
+  "sourceCommit": "eec3cf62463e6f6b76c629f71e0c477ff28955e2",
+  "beadsVersion": "1.1.2",
+  "beadsSourceSha256": "03ad2d43a97c75248ecfae28cad6789af506861c18568399c6e1432b02c1fe48",
+  "pyinstallerVersion": "6.21.0"
+}

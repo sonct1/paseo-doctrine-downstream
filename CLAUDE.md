@@ -2,7 +2,8 @@
 
 Paseo is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
 
-**Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, and Pi.
+**Supported agents:** Claude Code, Codex, Cursor, Antigravity, and Codex-derived custom providers.
+Compatibility adapters for other providers remain source-only and are disabled in the shipped runtime.
 
 ## Repository map
 
@@ -193,3 +194,15 @@ The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is
 ## Debugging
 
 Find the complete daemon logs and traces in the $PASEO_HOME/daemon.log
+
+## Local completion gate
+
+For every runtime-facing change, source edits and tests are not completion. Before handback:
+
+1. Bump to a unique local version; never rebuild over the same version.
+2. Run the focused tests, typecheck, and lint required by the changed scope.
+3. When no agent or workspace script is active, run `./scripts/local-stack.sh --apply` to build, install, and restart the local stack.
+4. Read back the installed CLI and daemon versions, source fingerprint, daemon health, WebUI at `http://127.0.0.1:6767`, and the Beads Central endpoint.
+5. Run a fresh live canary for the changed behavior. Source bytes, static checks, and an artifact build do not replace live evidence.
+
+If the idle gate, build, install, restart, or readback cannot complete safely, report `BLOCKED` with the exact reason instead of claiming the change is active locally. Preserve dirty-worktree changes outside the current task.

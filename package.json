@@ -64,7 +64,7 @@
     "build:macos-web-cli-artifact": "node scripts/build-macos-web-cli-artifact.mjs",
     "build:web-cli-artifact": "node scripts/build-macos-web-cli-artifact.mjs",
     "test:install-macos": "node --test scripts/install-macos.test.mjs",
-    "test:macos-web-cli-artifact": "scripts/smoke-macos-web-cli-artifact.sh",
+    "test:macos-web-cli-artifact": "node --test scripts/d3-color-hardened-intrinsics.test.mjs && scripts/smoke-macos-web-cli-artifact.sh",
     "test:web-cli-artifact": "node scripts/smoke-web-cli-artifact.mjs",
     "build:app-deps": "npm run build:highlight && npm run build:client && npm run build:plugin && npm run build --workspace=@getpaseo/expo-two-way-audio",
     "build:app-deps:clean": "npm run build:highlight:clean && npm run build:client:clean && npm run build:plugin:clean && npm run build --workspace=@getpaseo/expo-two-way-audio",

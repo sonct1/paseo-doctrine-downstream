@@ -2,7 +2,13 @@ $ErrorActionPreference = "Stop"
 
 # Ensure node_modules/.bin is in PATH
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$env:PATH = "$ScriptDir\..\node_modules\.bin;$env:PATH"
+$RootDir = (Resolve-Path "$ScriptDir\..").Path
+$env:PATH = "$RootDir\node_modules\.bin;$env:PATH"
+
+$BeadsComponentDir = "$RootDir\artifacts\dev-components\beads-central"
+node "$RootDir\scripts\build-beads-central-sidecar.mjs" --output $BeadsComponentDir
+$env:PASEO_BEADS_CENTRAL_SIDECAR = "$BeadsComponentDir\beads-central.exe"
+$env:PASEO_BEADS_CENTRAL_BD_BIN = "$BeadsComponentDir\bin\bd.exe"
 
 # Derive PASEO_HOME: stable name for worktrees, temporary dir otherwise
 if (-not $env:PASEO_HOME) {

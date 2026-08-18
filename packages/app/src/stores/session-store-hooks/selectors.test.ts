@@ -9,6 +9,7 @@ import {
   selectHydratedWorkspaceServerIds,
   selectWorkspaceDirectoryServerIds,
   selectProjectOrder,
+  selectProjectWorkspaceIds,
   selectRecommendedProjectPaths,
   selectWorkspace,
   selectWorkspaceDirectory,
@@ -308,6 +309,21 @@ describe("selectWorkspaceDirectory", () => {
     expect(
       selectWorkspaceDirectory(useSessionStore.getState(), SERVER_ID, "missing-id"),
     ).toBeNull();
+  });
+});
+
+describe("selectProjectWorkspaceIds", () => {
+  it("returns every workspace in the project and excludes sibling projects", () => {
+    initializeWorkspaces([
+      createWorkspace({ id: "worktree-b", projectId: "project-a" }),
+      createWorkspace({ id: "main", projectId: "project-a" }),
+      createWorkspace({ id: "other", projectId: "project-b" }),
+    ]);
+
+    expect(selectProjectWorkspaceIds(useSessionStore.getState(), SERVER_ID, "project-a")).toEqual([
+      "main",
+      "worktree-b",
+    ]);
   });
 });
 

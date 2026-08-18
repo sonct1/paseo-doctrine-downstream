@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   assignmentExternalEffectBoundaryFor,
+  isAssignmentEffectAllowedForRole,
   PASEO_BEADS_EXTERNAL_EFFECT_SCOPE,
 } from "./assignment-contract.js";
 
@@ -27,5 +28,9 @@ describe("assignment external-effect defaults", () => {
     expect(assignmentExternalEffectBoundaryFor("supervisor", "recovery")).toEqual({
       mode: "denied",
     });
+    expect(assignmentExternalEffectBoundaryFor("supervisor", "delegation")).toEqual({
+      mode: "denied",
+    });
+    expect(isAssignmentEffectAllowedForRole("supervisor", "delegation")).toBe(true);
   });
 });

@@ -15,7 +15,8 @@
   },
   "main": "dist/main.js",
   "scripts": {
-    "build": "npm --prefix ../.. run build:server:clean && npm run build:main && electron-builder --config electron-builder.yml",
+    "build": "npm --prefix ../.. run build:server:clean && npm run build:main && npm run build:beads-central-sidecar && electron-builder --config electron-builder.yml",
+    "build:beads-central-sidecar": "node ../../scripts/build-beads-central-sidecar.mjs --output ../../artifacts/desktop-components/beads-central",
     "build:main": "tsc -p tsconfig.json",
     "capture-harness": "./capture-harness/run.sh",
     "dev": "./scripts/dev.sh",

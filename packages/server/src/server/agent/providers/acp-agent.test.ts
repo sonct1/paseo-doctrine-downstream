@@ -18,6 +18,7 @@ import {
 import {
   ACPAgentClient,
   ACPAgentSession,
+  type ACPToolSnapshot,
   type SpawnedACPProcess,
   type SessionStateResponse,
   buildACPClientCapabilities,
@@ -179,6 +180,7 @@ function createSessionWithConfig(
     modeId?: string | null;
     model?: string | null;
     featureValues?: Record<string, unknown>;
+    toolSnapshotTransformer?: (snapshot: ACPToolSnapshot) => ACPToolSnapshot;
   } = {},
   logger: ReturnType<typeof createTestLogger> = createTestLogger(),
 ): ACPAgentSession {
@@ -203,6 +205,7 @@ function createSessionWithConfig(
         supportsReasoningStream: true,
         supportsToolInvocations: true,
       },
+      toolSnapshotTransformer: config.toolSnapshotTransformer,
     },
   );
 }
@@ -1186,6 +1189,44 @@ describe("ACPAgentSession Zed parity", () => {
       throw new Error("Expected permission request");
     }
 
+    await session.respondToPermission(requested.request.id, { behavior: "allow" });
+    await expect(permission).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "allow-once" },
+    });
+  });
+
+  test("carries the provider-classified transport shadow into permission metadata", async () => {
+    const session = createSessionWithConfig({
+      provider: "cursor",
+      toolSnapshotTransformer: (snapshot) => ({
+        ...snapshot,
+        transportShadow: "cursor-opaque-mcp",
+      }),
+    });
+    const events: AgentStreamEvent[] = [];
+    asInternals<ACPSessionInternals>(session).sessionId = "session-1";
+    session.subscribe((event) => events.push(event));
+
+    const permission = session.requestPermission({
+      sessionId: "session-1",
+      toolCall: {
+        toolCallId: "opaque-mcp-1",
+        title: "MCP: tool",
+        kind: "other",
+        status: "pending",
+      },
+      options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }],
+    } satisfies RequestPermissionRequest);
+    await Promise.resolve();
+
+    const requested = events.find((event) => event.type === "permission_requested");
+    expect(requested).toMatchObject({
+      type: "permission_requested",
+      request: { metadata: { transportShadow: "cursor-opaque-mcp" } },
+    });
+    if (requested?.type !== "permission_requested") {
+      throw new Error("Expected permission request");
+    }
     await session.respondToPermission(requested.request.id, { behavior: "allow" });
     await expect(permission).resolves.toEqual({
       outcome: { outcome: "selected", optionId: "allow-once" },

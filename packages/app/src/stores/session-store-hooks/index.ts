@@ -9,6 +9,7 @@ import {
   selectWorkspaceDirectoryServerIds,
   selectHasWorkspaces,
   selectProjectOrder,
+  selectProjectWorkspaceIds,
   selectRecommendedProjectPaths,
   selectWorkspace,
   selectWorkspaceDirectory,
@@ -96,6 +97,17 @@ export function useWorkspaceDirectory(
     useSessionStore,
     (state) => selectWorkspaceDirectory(state, serverId, workspaceId),
     workspaceEqualityFns.identity,
+  );
+}
+
+export function useProjectWorkspaceIds(
+  serverId: string | null,
+  projectId: string | null,
+): string[] {
+  return useStoreWithEqualityFn(
+    useSessionStore,
+    (state) => selectProjectWorkspaceIds(state, serverId, projectId),
+    workspaceEqualityFns.deep,
   );
 }
 

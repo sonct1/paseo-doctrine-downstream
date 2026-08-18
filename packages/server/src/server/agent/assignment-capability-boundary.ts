@@ -1,7 +1,12 @@
 import type { RoleBindingInjectionMethod } from "@getpaseo/protocol/role-binding";
 
-import type { AgentPermissionResponse, AgentSessionConfig } from "./agent-sdk-types.js";
+import type {
+  AgentPermissionRequest,
+  AgentPermissionResponse,
+  AgentSessionConfig,
+} from "./agent-sdk-types.js";
 import type { PersistedRoleBinding } from "./role-binding.js";
+import { ROLE_TOOL_CEILINGS } from "./role-profiles.js";
 
 export const ASSIGNMENT_CAPABILITY_BOUNDARY_ERROR = "assignment_capability_boundary_required";
 
@@ -71,8 +76,34 @@ export function assertRoleAssignmentModeAllowed(
 export function assertRoleAssignmentPermissionResponseAllowed(
   roleBinding: PersistedRoleBinding | undefined,
   response: AgentPermissionResponse,
+  request?: AgentPermissionRequest,
+  context: { onlyRuntimePaseoMcp?: boolean } = {},
 ): void {
-  if (requiresTechnicalNoWrite(roleBinding) && response.behavior === "allow") {
+  const isExactCursorPaseoToolConsent = (() => {
+    if (
+      roleBinding?.injectionMethod !== "cursor-project-rule-capsule" &&
+      roleBinding?.injectionMethod !== "cursor-always-apply-plugin"
+    ) {
+      return false;
+    }
+    if (request?.kind !== "tool") return false;
+    return ROLE_TOOL_CEILINGS[roleBinding.roleId].some((toolName) => {
+      const exactTransportName = `paseo-${toolName}`;
+      return request.name === exactTransportName || request.title === exactTransportName;
+    });
+  })();
+  const isRoleScopedOpaqueCursorPaseoConsent =
+    (roleBinding?.injectionMethod === "cursor-project-rule-capsule" ||
+      roleBinding?.injectionMethod === "cursor-always-apply-plugin") &&
+    request?.kind === "tool" &&
+    request.metadata?.transportShadow === "cursor-opaque-mcp" &&
+    context.onlyRuntimePaseoMcp === true;
+  if (
+    requiresTechnicalNoWrite(roleBinding) &&
+    response.behavior === "allow" &&
+    !isExactCursorPaseoToolConsent &&
+    !isRoleScopedOpaqueCursorPaseoConsent
+  ) {
     throw new Error(
       `${ASSIGNMENT_CAPABILITY_BOUNDARY_ERROR}: no-write ${roleBinding?.roleId ?? "role"} assignment cannot approve a permission escalation`,
     );

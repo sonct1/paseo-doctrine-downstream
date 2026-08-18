@@ -173,3 +173,18 @@ export type ProviderOverrides = z.infer<typeof ProviderOverridesSchema>;
 export type AgentProviderRuntimeSettingsMap = Partial<
   Record<AgentProvider, ProviderRuntimeSettings>
 >;
+
+const PASEO_SUPPORTED_PROVIDER_IDS = new Set(["claude", "codex", "cursor", "gemini-antigravity"]);
+
+/**
+ * Product support policy. Paseo currently exposes the native Claude, Codex,
+ * Cursor and Antigravity routes, plus user-defined routes derived from Codex.
+ * Other adapters remain in source for compatibility and development fixtures,
+ * but cannot be enabled in the shipped runtime.
+ */
+export function isPaseoSupportedProvider(
+  providerId: string,
+  override?: Pick<ProviderOverride, "extends">,
+): boolean {
+  return PASEO_SUPPORTED_PROVIDER_IDS.has(providerId) || override?.extends === "codex";
+}

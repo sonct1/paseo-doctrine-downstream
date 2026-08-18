@@ -6,6 +6,11 @@ $AppDir = (Resolve-Path "$DesktopDir\..\app").Path
 $RootDir = (Resolve-Path "$DesktopDir\..\..").Path
 $env:PATH = "$RootDir\node_modules\.bin;$env:PATH"
 
+$BeadsComponentDir = "$RootDir\artifacts\desktop-components\beads-central"
+node "$RootDir\scripts\build-beads-central-sidecar.mjs" --output $BeadsComponentDir
+$env:PASEO_BEADS_CENTRAL_SIDECAR = "$BeadsComponentDir\beads-central.exe"
+$env:PASEO_BEADS_CENTRAL_BD_BIN = "$BeadsComponentDir\bin\bd.exe"
+
 # Build the Electron main process
 npm run build:main
 

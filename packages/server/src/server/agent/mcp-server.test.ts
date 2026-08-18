@@ -58,6 +58,11 @@ import type { BrowserToolsBroker, BrowserToolsExecuteInput } from "../browser-to
 import type { BrowserToolsResponsePayload } from "../browser-tools/errors.js";
 import { readPaseoWorktreeMetadata } from "../../utils/worktree-metadata.js";
 import { createWorkspaceProvisioningService } from "../session/workspace-provisioning/workspace-provisioning-service.js";
+import { materializeAssignmentContract } from "./assignment-contract.js";
+import {
+  assignmentExternalEffectBoundaryFor,
+  type AssignmentEffectClass,
+} from "@getpaseo/protocol/assignment-contract";
 
 const REPO_CWD = resolvePath("/tmp/repo");
 const TARGET_CWD = resolvePath("/tmp/target");
@@ -492,7 +497,10 @@ function createActiveStoredRecord(overrides: Partial<StoredAgentRecord> = {}): S
   return createStoredRecord({ archivedAt: null, ...overrides });
 }
 
-function createTestRoleBinding(roleId: PaseoRoleId): NonNullable<StoredAgentRecord["roleBinding"]> {
+function createTestRoleBinding(
+  roleId: PaseoRoleId,
+  requestedEffectClass?: AssignmentEffectClass,
+): NonNullable<StoredAgentRecord["roleBinding"]> {
   let readership: "full" | "assignment-only" | "governance-only";
   if (roleId === "lead") {
     readership = "full";
@@ -501,6 +509,32 @@ function createTestRoleBinding(roleId: PaseoRoleId): NonNullable<StoredAgentReco
   } else {
     readership = "governance-only";
   }
+  let disposition: "lead-direct" | "peer-execution" | "supervision" = "lead-direct";
+  if (roleId === "peer") disposition = "peer-execution";
+  if (roleId === "supervisor") disposition = "supervision";
+  const effectClass = requestedEffectClass ?? (roleId === "lead" ? "mutating" : undefined);
+  const assignmentContract = effectClass
+    ? materializeAssignmentContract({
+        roleId,
+        assigner: { kind: "human-session" },
+        workspaceId: "wks_bound",
+        cwd: "/tmp/test",
+        envelope: {
+          version: 1,
+          disposition,
+          objective: "Coordinate the exact Human-authorized child topology",
+          effectClass,
+          mutationBoundary:
+            effectClass === "mutating"
+              ? { mode: "bounded-write", scope: "/tmp/test" }
+              : { mode: "no-write" },
+          externalEffectBoundary: assignmentExternalEffectBoundaryFor(roleId, effectClass),
+          evidence: "Return exact child launch receipts.",
+          handbackAndStop: "Stop when the bounded topology is established.",
+        },
+        createdAt: new Date("2026-08-09T00:00:00.000Z"),
+      })
+    : undefined;
   return {
     roleId,
     definitionVersion: "test-role-contract",
@@ -516,12 +550,29 @@ function createTestRoleBinding(roleId: PaseoRoleId): NonNullable<StoredAgentReco
     },
     createdAt: "2026-08-09T00:00:00.000Z",
     instructions: `Test ${roleId} instructions`,
+    ...(assignmentContract ? { assignmentContract } : {}),
   };
 }
 
 function mockStoredAgentRecords(get: AgentStorageSpies["get"], records: StoredAgentRecord[]): void {
   const recordsById = new Map(records.map((record) => [record.id, record]));
   get.mockImplementation(async (agentId: string) => recordsById.get(agentId) ?? null);
+}
+
+function expectedCreateTopologyError(roleId: PaseoRoleId): string {
+  if (roleId === "lead") return "A role-bound Lead may create only a role-bound Peer";
+  if (roleId === "supervisor") {
+    return "A role-bound Supervisor may create only a role-bound Lead under a Human-issued delegation assignment";
+  }
+  return `Role-bound ${roleId} agents cannot use create_agent`;
+}
+
+function expectedPromptTopologyError(roleId: PaseoRoleId): string {
+  if (roleId === "lead") return "A role-bound Lead may prompt only its own direct Peer child";
+  if (roleId === "supervisor") {
+    return "A role-bound Supervisor may prompt only its own direct Lead child under a Human-issued delegation assignment";
+  }
+  return `Role-bound ${roleId} agents cannot use send_agent_prompt`;
 }
 
 function createManagedAgent(overrides: Partial<ManagedAgent> = {}): ManagedAgent {
@@ -1346,6 +1397,264 @@ describe("create_agent MCP tool", () => {
     );
   });
 
+  it("rejects a Lead Peer route outside the Human-configured model policy before creation", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: {
+        get: () =>
+          ({
+            peerDelegation: {
+              enabled: true,
+              runMode: "unattended",
+              allowedModels: [{ provider: "codex", model: "gpt-5.4" }],
+            },
+          }) as never,
+      },
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await expect(
+      registeredTool(server, "create_agent").handler({
+        title: "Disallowed Peer",
+        provider: "opencode/gpt-4",
+        role: "peer",
+        initialPrompt: "Do bounded work",
+      }),
+    ).rejects.toThrow("is not allowed by the Human-configured policy");
+    expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("blocks Lead-to-Peer creation when Human delegation is switched off", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: {
+        get: () =>
+          ({
+            providers: {},
+            peerDelegation: {
+              enabled: false,
+              runMode: "unattended",
+              allowedModels: [{ provider: "codex", model: "gpt-5.4" }],
+            },
+          }) as never,
+      },
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await expect(
+      registeredTool(server, "create_agent").handler({
+        title: "Blocked Peer",
+        provider: "codex/gpt-5.4",
+        role: "peer",
+        initialPrompt: "Do bounded work",
+      }),
+    ).rejects.toThrow("Lead-to-Peer creation is disabled");
+    expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("selects the only Human-approved Peer route when a Lead omits provider", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      provider: "claude",
+      config: { model: "claude-haiku-4-5" },
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({ id: "peer-agent", roleBinding: createTestRoleBinding("peer") }),
+    );
+    const manager = createOpenCodeManager();
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: manager.manager,
+      daemonConfigStore: {
+        get: () =>
+          ({
+            peerDelegation: {
+              enabled: true,
+              runMode: "guarded",
+              allowedModels: [{ provider: "codex", model: "gpt-5.4" }],
+            },
+          }) as never,
+      },
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await registeredTool(server, "create_agent").handler({
+      title: "Approved Peer",
+      role: "peer",
+      initialPrompt: "Do bounded work",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "codex", model: "gpt-5.4", modeId: "default" }),
+      undefined,
+      expect.objectContaining({ roleId: "peer" }),
+    );
+  });
+
+  it("allows a delegation-bound Supervisor to create a role-bound Lead", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const projectCwd = join(existingCwd, "project-a");
+    const caller = createManagedAgent({
+      id: "supervisor-agent",
+      provider: "claude",
+      config: { model: "claude-haiku-4-5" },
+      cwd: existingCwd,
+      workspaceId: "wks_control",
+      roleBinding: createTestRoleBinding("supervisor", "delegation"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({
+        id: "lead-agent",
+        provider: "claude",
+        config: { model: "claude-haiku-4-5" },
+        cwd: projectCwd,
+        workspaceId: "wks_project_a",
+        roleBinding: createTestRoleBinding("lead"),
+      }),
+    );
+    const ensureWorkspace = vi.fn(async () => "wks_project_a");
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      ensureWorkspaceForCreate: ensureWorkspace,
+      logger,
+    });
+
+    await registeredTool(server, "create_agent").handler({
+      title: "Project Lead",
+      role: "lead",
+      cwd: projectCwd,
+      initialPrompt: "Own the bounded project",
+    });
+
+    expect(ensureWorkspace).toHaveBeenCalledWith(projectCwd, {
+      prompt: "Own the bounded project",
+    });
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "claude", model: "claude-haiku-4-5" }),
+      undefined,
+      expect.objectContaining({
+        labels: expect.objectContaining({ [PARENT_AGENT_ID_LABEL]: caller.id }),
+        workspaceId: "wks_project_a",
+        roleId: "lead",
+      }),
+    );
+  });
+
+  it("rejects an unavailable explicit role-child model before creating an agent", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "supervisor-agent",
+      provider: "claude",
+      config: { model: "claude-haiku-4-5" },
+      cwd: existingCwd,
+      workspaceId: "wks_control",
+      roleBinding: createTestRoleBinding("supervisor", "delegation"),
+    });
+    spies.agentManager.getAgent.mockReturnValue(caller);
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const providerSnapshot = createOpenCodeManager();
+    providerSnapshot.stub.listModels.mockResolvedValue([
+      { provider: "codex", id: "gpt-5.4", label: "GPT-5.4" },
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: providerSnapshot.manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await expect(
+      registeredTool(server, "create_agent").handler({
+        title: "Invalid route",
+        provider: "codex/claude-haiku-4-5",
+        role: "lead",
+        initialPrompt: "Must not create a ghost agent",
+      }),
+    ).rejects.toThrow("is not available for provider 'codex'");
+    expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+  });
+
   it("lets only a role-bound Lead select a Council execution specialization", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const lead = createManagedAgent({
@@ -1464,6 +1773,7 @@ describe("create_agent MCP tool", () => {
     { callerRole: "lead" as const, requestedRole: undefined },
     { callerRole: "peer" as const, requestedRole: "peer" as const },
     { callerRole: "supervisor" as const, requestedRole: "peer" as const },
+    { callerRole: "supervisor" as const, requestedRole: "lead" as const },
   ])(
     "rejects role-bound $callerRole create_agent role=$requestedRole before partial mutation",
     async ({ callerRole, requestedRole }) => {
@@ -1505,9 +1815,7 @@ describe("create_agent MCP tool", () => {
       };
 
       await expect(registeredTool(server, "create_agent").handler(request)).rejects.toThrow(
-        callerRole === "lead"
-          ? "A role-bound Lead may create only a role-bound Peer"
-          : `Role-bound ${callerRole} agents cannot use create_agent`,
+        expectedCreateTopologyError(callerRole),
       );
 
       expect(ensureWorkspace).not.toHaveBeenCalled();
@@ -1522,6 +1830,46 @@ describe("create_agent MCP tool", () => {
       expect(spies.agentManager.subscribe).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects Peer creation when a Lead has Inspect only authority", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "read-only-lead",
+      cwd: existingCwd,
+      workspaceId: "wks_bound",
+      roleBinding: createTestRoleBinding("lead", "read-only"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await expect(
+      registeredTool(server, "create_agent").handler({
+        title: "Denied Peer",
+        provider: "codex/gpt-5.4",
+        role: "peer",
+        initialPrompt: "Must not launch",
+      }),
+    ).rejects.toThrow(
+      "A role-bound Lead needs Work & coordinate or Coordinate only authority to create a Peer",
+    );
+    expect(spies.agentManager.createAgent).not.toHaveBeenCalled();
+  });
 
   it("preserves legacy unbound agent-scoped create_agent behavior", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
@@ -4179,6 +4527,56 @@ describe("send_agent_prompt MCP tool", () => {
     expect(spies.agentManager.subscribe).toHaveBeenCalledTimes(1);
   });
 
+  it("allows a delegation-bound Supervisor to prompt its own direct Lead", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "supervisor-agent",
+      cwd: existingCwd,
+      workspaceId: "wks_control",
+      roleBinding: createTestRoleBinding("supervisor", "delegation"),
+    });
+    const child = createManagedAgent({
+      id: "lead-child",
+      cwd: existingCwd,
+      workspaceId: "wks_project",
+      labels: { [PARENT_AGENT_ID_LABEL]: caller.id },
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+      createActiveStoredRecord({
+        id: child.id,
+        cwd: child.cwd,
+        workspaceId: child.workspaceId,
+        labels: child.labels,
+        roleBinding: child.roleBinding,
+      }),
+    ]);
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    await invokeToolWithParsedInput(registeredTool(server, "send_agent_prompt"), {
+      agentId: child.id,
+      prompt: "Report project status and blockers",
+    });
+
+    expect(spies.agentManager.streamAgent).toHaveBeenCalledWith(
+      child.id,
+      "Report project status and blockers",
+      undefined,
+    );
+  });
+
   it.each([
     { callerRole: "peer" as const, targetParentId: "peer-agent" },
     { callerRole: "supervisor" as const, targetParentId: "supervisor-agent" },
@@ -4233,11 +4631,7 @@ describe("send_agent_prompt MCP tool", () => {
           prompt: "Must not be delivered",
           sessionMode: "full-access",
         }),
-      ).rejects.toThrow(
-        callerRole === "lead"
-          ? "A role-bound Lead may prompt only its own direct child"
-          : `Role-bound ${callerRole} agents cannot use send_agent_prompt`,
-      );
+      ).rejects.toThrow(expectedPromptTopologyError(callerRole));
 
       expect(spies.agentManager.unarchiveSnapshot).not.toHaveBeenCalled();
       expect(spies.agentManager.notifyAgentState).not.toHaveBeenCalled();

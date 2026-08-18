@@ -5,7 +5,11 @@ import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import { asInternals } from "../../../test-utils/class-mocks.js";
 import { ClaudeAgentClient, readEventIdentifiers } from "./agent.js";
 import { streamSession } from "../test-utils/session-stream-adapter.js";
-import type { AgentStreamEvent, AgentTimelineItem } from "../../agent-sdk-types.js";
+import type {
+  AgentSessionConfig,
+  AgentStreamEvent,
+  AgentTimelineItem,
+} from "../../agent-sdk-types.js";
 
 interface QueryMock {
   next: ReturnType<typeof vi.fn>;
@@ -64,7 +68,7 @@ function createBaseQueryMock(nextImpl: QueryMock["next"]): QueryMock {
   };
 }
 
-async function createSession() {
+async function createSession(overrides: Partial<AgentSessionConfig> = {}) {
   const client = new ClaudeAgentClient({
     logger: createTestLogger(),
     queryFactory: sdkQueryFactory,
@@ -73,6 +77,7 @@ async function createSession() {
   return client.createSession({
     provider: "claude",
     cwd: process.cwd(),
+    ...overrides,
   });
 }
 
@@ -1104,6 +1109,44 @@ test("plan approval exposes a resume-bypass action and can return to bypassPermi
       behavior: "allow",
       updatedInput: { plan: "- Implement the approved plan" },
     });
+    expect(queryMock.setPermissionMode).toHaveBeenLastCalledWith("bypassPermissions");
+    expect(await session.getCurrentMode()).toBe("bypassPermissions");
+  } finally {
+    await session.close();
+  }
+});
+
+test("auto-resumes transient Plan without prompting when Bypass is sticky", async () => {
+  const queryMock = createBaseQueryMock(vi.fn(async () => ({ done: true, value: undefined })));
+  sdkQueryFactory.mockImplementation(() => queryMock);
+
+  const session = await createSession({ modeId: "bypassPermissions" });
+  const events: AgentStreamEvent[] = [];
+  session.subscribe((event) => events.push(event));
+
+  try {
+    const internal = asInternals<{
+      currentMode: "plan" | "bypassPermissions";
+      handlePermissionRequest: (
+        toolName: string,
+        input: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ) => Promise<unknown>;
+    }>(session);
+    internal.currentMode = "plan";
+
+    await expect(
+      internal.handlePermissionRequest(
+        "ExitPlanMode",
+        { plan: "- Implement without another approval" },
+        {},
+      ),
+    ).resolves.toMatchObject({
+      behavior: "allow",
+      updatedInput: { plan: "- Implement without another approval" },
+    });
+
+    expect(events.some((event) => event.type === "permission_requested")).toBe(false);
     expect(queryMock.setPermissionMode).toHaveBeenLastCalledWith("bypassPermissions");
     expect(await session.getCurrentMode()).toBe("bypassPermissions");
   } finally {

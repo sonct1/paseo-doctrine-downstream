@@ -20,7 +20,11 @@ export function attachMutableProviderConfigOwner(options: {
       options.providerSnapshotManager.getAgentManagerProviderState();
     const staged = options.providerSnapshotManager.stageMutableProviderConfig(config.providers, {
       removeProviders: details.removedProviders,
-      replace: true,
+      // The client-visible mutable config deliberately omits launch-only fields such as an
+      // ACP command. Merge mutable values onto the startup overrides so toggling one provider
+      // cannot make an unrelated custom provider invalid. Explicit removals still delete the
+      // complete provider definition.
+      replace: false,
     });
     try {
       options.updateProviderRegistry(staged.agentManagerState);

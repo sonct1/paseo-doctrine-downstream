@@ -681,14 +681,48 @@ test("OMP is a disabled built-in backed by the real OMP adapter", async () => {
   await session.close();
 });
 
-test("OMP can be enabled without custom provider boilerplate", () => {
+test("unsupported built-ins remain disabled even when legacy config enables them", () => {
   const registry = buildProviderRegistry(logger, {
     providerOverrides: {
       omp: { enabled: true },
     },
   });
 
-  expect(registry.omp.enabled).toBe(true);
+  expect(registry.omp.enabled).toBe(false);
+});
+
+test("exposes only supported native providers plus custom Codex routes", () => {
+  const registry = buildProviderRegistry(logger, {
+    providerOverrides: {
+      cursor: {
+        extends: "acp",
+        label: "Cursor",
+        command: ["cursor-agent", "acp"],
+      },
+      devin: {
+        extends: "acp",
+        label: "Devin CLI",
+        command: ["devin", "acp"],
+      },
+      "codex-proxy": {
+        extends: "codex",
+        label: "Codex proxy",
+      },
+      zai: {
+        extends: "claude",
+        label: "ZAI",
+      },
+    },
+  });
+
+  expect(registry.claude.enabled).toBe(true);
+  expect(registry.codex.enabled).toBe(true);
+  expect(registry["gemini-antigravity"].enabled).toBe(true);
+  expect(registry.cursor.enabled).toBe(true);
+  expect(registry["codex-proxy"].enabled).toBe(true);
+  expect(registry.devin.enabled).toBe(false);
+  expect(registry.zai.enabled).toBe(false);
+  expect(registry.opencode.enabled).toBe(false);
 });
 
 test("new provider extending claude appears in registry", () => {

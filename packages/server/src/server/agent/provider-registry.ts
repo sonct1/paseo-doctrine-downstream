@@ -60,6 +60,7 @@ import {
   getAgentProviderDefinition,
   type AgentProviderDefinition,
 } from "@getpaseo/protocol/provider-manifest";
+import { isPaseoSupportedProvider } from "@getpaseo/protocol/provider-config";
 
 function isNonEmptyStringArray(value: string[]): value is [string, ...string[]] {
   return value.length > 0;
@@ -811,6 +812,21 @@ function createResolvedProviderClient(
   );
 }
 
+function resolveProviderEnabled(input: {
+  providerId: string;
+  override?: ProviderOverride;
+  enabledByDefault?: boolean;
+  developmentProvider?: boolean;
+}): boolean {
+  if (
+    input.developmentProvider !== true &&
+    !isPaseoSupportedProvider(input.providerId, input.override)
+  ) {
+    return false;
+  }
+  return input.override?.enabled ?? input.enabledByDefault ?? true;
+}
+
 function buildResolvedBuiltinProviders(
   providerOverrides: Record<string, ProviderOverride>,
   runtimeSettings: AgentProviderRuntimeSettingsMap | undefined,
@@ -828,6 +844,9 @@ function buildResolvedBuiltinProviders(
 
   for (const definition of definitions) {
     const override = providerOverrides[definition.id];
+    const isDevelopmentProvider = DEV_AGENT_PROVIDER_DEFINITIONS.some(
+      (candidate) => candidate.id === definition.id,
+    );
     const factory = getProviderClientFactory(definition.id);
     const mergedRuntimeSettings = mergeRuntimeSettings(
       runtimeSettings?.[definition.id],
@@ -841,7 +860,12 @@ function buildResolvedBuiltinProviders(
       additionalModels: override?.additionalModels ?? [],
       profileModelsAreAdditive: false,
       forceStaticModels: false,
-      enabled: override?.enabled ?? definition.enabledByDefault ?? true,
+      enabled: resolveProviderEnabled({
+        providerId: definition.id,
+        override,
+        enabledByDefault: definition.enabledByDefault,
+        developmentProvider: isDevelopmentProvider,
+      }),
       derivedFromProviderId: null,
       providerParams: override?.params,
       createBaseClient: (logger) =>
@@ -894,7 +918,7 @@ function addDerivedProviders(
         additionalModels: override.additionalModels ?? [],
         profileModelsAreAdditive: false,
         forceStaticModels: false,
-        enabled: override.enabled !== false,
+        enabled: resolveProviderEnabled({ providerId, override }),
         derivedFromProviderId: null,
         providerParams: override.params,
         createBaseClient: (logger) => createDerivedAcpClient(logger, command, override, providerId),
@@ -932,7 +956,7 @@ function addDerivedProviders(
       additionalModels: override.additionalModels ?? [],
       profileModelsAreAdditive: false,
       forceStaticModels: isCustomCodexRoute,
-      enabled: override.enabled !== false,
+      enabled: resolveProviderEnabled({ providerId, override }),
       derivedFromProviderId: baseProviderId,
       providerParams,
       createBaseClient: (logger) =>

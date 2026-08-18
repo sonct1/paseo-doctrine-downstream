@@ -190,6 +190,26 @@ const MutableMetadataGenerationConfigSchema = z
   })
   .passthrough();
 
+export const PeerDelegationModelRouteSchema = z
+  .object({
+    provider: AgentProviderSchema,
+    model: z.string().trim().min(1),
+  })
+  .strict();
+
+export type PeerDelegationModelRoute = z.infer<typeof PeerDelegationModelRouteSchema>;
+
+export const PeerDelegationRunModeSchema = z.enum(["guarded", "unattended"]);
+export type PeerDelegationRunMode = z.infer<typeof PeerDelegationRunModeSchema>;
+
+const MutablePeerDelegationConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    allowedModels: z.array(PeerDelegationModelRouteSchema),
+    runMode: PeerDelegationRunModeSchema.default("unattended"),
+  })
+  .strict();
+
 export const TerminalProfileSchema = z
   .object({
     id: z.string(),
@@ -256,7 +276,7 @@ export const BeadsCentralEndpointSchema = z.url().superRefine((value, context) =
 });
 const MutableBeadsCentralConfigSchema = z
   .object({
-    endpoint: BeadsCentralEndpointSchema.default("http://127.0.0.1:8080"),
+    endpoint: BeadsCentralEndpointSchema.default("http://127.0.0.1:6769"),
     credentialRef: FoundationCredentialRefSchema.default("beads-central"),
   })
   .passthrough();
@@ -303,12 +323,15 @@ export const MutableDaemonConfigSchema = z
     catalogRefreshTimeoutMs: z.number().int().positive().optional(),
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
     beadsCentral: MutableBeadsCentralConfigSchema.default({
-      endpoint: "http://127.0.0.1:8080",
+      endpoint: "http://127.0.0.1:6769",
       credentialRef: "beads-central",
     }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     // COMPAT(roleProfiles): optional so current clients can still read older daemons.
     roleProfiles: RoleProfilePreferencesMapSchema.optional(),
+    // COMPAT(peerDelegation): absent/disabled or an empty allowlist denies new
+    // Lead-to-Peer creation. Enabled routes are exact provider/model grants.
+    peerDelegation: MutablePeerDelegationConfigSchema.optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
@@ -332,6 +355,7 @@ export const MutableDaemonConfigPatchSchema = z
     removeProviders: z.array(z.string().min(1)).optional(),
     roleProfiles: RoleProfilePreferencesMapSchema.optional(),
     resetRoleProfiles: z.array(PaseoRoleIdSchema).optional(),
+    peerDelegation: MutablePeerDelegationConfigSchema.partial().optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),

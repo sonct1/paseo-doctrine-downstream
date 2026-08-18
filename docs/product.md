@@ -72,14 +72,14 @@ Anyone who builds software:
 ## Current upstream state (May 2026) and candidate additions
 
 - Desktop (Electron), mobile (iOS/Android), web, CLI
-- Built-in providers: Claude Code (Agent SDK), Codex (app-server), GitHub Copilot (ACP), OpenCode, Pi, OMP
+- Current downstream provider support: Claude Code, Codex, Cursor, Antigravity, and Codex-derived custom providers. Other upstream adapters remain source-only and disabled.
 - One-click ACP provider catalog: CodeWhale, Cursor, Hermes, Qwen Coder, Kimi Code, and others — plus custom ACP providers
 - Voice mode: dictate prompts or talk through problems hands-free
 - MCP server exposes the daemon to other agents (workspaces, create/detach agent, schedules, heartbeats, terminals, workspace renaming)
 - Scheduled agents (cron-style triggers) via app, CLI, and MCP
 - Candidate branch, not production-qualified: Project Settings can inspect, preview, bootstrap, correct, and save a repository-owned `WORKSPACE_PROTOCOL.md` without asking the user to run a command.
 - Candidate branch, not production-qualified: role-bound agent creation verifies that protocol in WebUI and again in the daemon before launch; recovery opens the exact active project or worktree target in Project Settings.
-- Candidate branch, chưa production-qualified: Beads Central cung cấp durable issue graph bắt buộc cho mỗi stable project binding; WebUI và role tools đi qua daemon policy, không tiếp quản Paseo delegation hoặc acceptance.
+- Candidate branch, chưa production-qualified: bundled Beads Central sidecar cung cấp durable issue graph bắt buộc cho mỗi stable project binding; daemon sở hữu lifecycle, WebUI và role tools đi qua daemon policy, không tiếp quản Paseo delegation hoặc acceptance.
 - Frequent releases (multiple per week)
 - Community contributions across packaging, providers, and bug fixes
 - Key UX: split panes, keybinding customization, workspace model, in-app browser

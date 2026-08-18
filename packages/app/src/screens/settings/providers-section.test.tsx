@@ -12,6 +12,7 @@ const {
   snapshotState,
   configState,
   patchConfigMock,
+  refreshSnapshotMock,
   openProviderSettingsMock,
   connectionStatusMock,
   hostRuntimeClientMock,
@@ -47,6 +48,7 @@ const {
     config: null as MutableDaemonConfig | null,
   },
   patchConfigMock: vi.fn(async () => undefined),
+  refreshSnapshotMock: vi.fn(async () => {}),
   openProviderSettingsMock: vi.fn(),
   connectionStatusMock: vi.fn(async () => ({
     provider: "codex-proxy",
@@ -75,8 +77,8 @@ vi.mock("react-native", () => ({
   Platform: { OS: "web" },
   View: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
     React.createElement("div", { "data-testid": testID }, children),
-  Text: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("span", null, children),
+  Text: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
+    React.createElement("span", { "data-testid": testID }, children),
   Pressable: ({
     children,
     onPress,
@@ -335,7 +337,7 @@ vi.mock("@/hooks/use-providers-snapshot", () => ({
     isRefreshing: snapshotState.isRefreshing,
     error: null,
     supportsSnapshot: true,
-    refresh: vi.fn(async () => {}),
+    refresh: refreshSnapshotMock,
     refetchIfStale: vi.fn(),
   }),
 }));
@@ -437,6 +439,8 @@ describe("ProvidersSection", () => {
     hostFeatureState.providerConnectionQualification = true;
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
+    refreshSnapshotMock.mockReset();
+    refreshSnapshotMock.mockResolvedValue(undefined);
     openProviderSettingsMock.mockReset();
     connectionStatusMock.mockReset();
     connectionStatusMock.mockResolvedValue({
@@ -493,6 +497,46 @@ describe("ProvidersSection", () => {
     expect(indexOfText(codexNodes, "Codex")).toBeGreaterThanOrEqual(0);
     expect(indexOfText(codexNodes, "codex")).toBe(-1);
     expect(indexOfText(codexNodes, "Disabled")).toBeGreaterThanOrEqual(0);
+  });
+
+  it("shows only supported providers and custom Codex routes", () => {
+    const opencodeEntry: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: "opencode",
+      label: "OpenCode",
+    };
+    const devinEntry: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: "devin",
+      label: "Devin CLI",
+      source: "custom",
+    };
+    const cursorEntry: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: "cursor",
+      label: "Cursor",
+      source: "custom",
+    };
+    const customCodexEntry: ProviderSnapshotEntry = {
+      ...claudeEntry,
+      provider: "codex-proxy",
+      label: "Codex proxy",
+      source: "custom",
+    };
+    snapshotState.entries = [claudeEntry, opencodeEntry, devinEntry, cursorEntry, customCodexEntry];
+    configState.config = makeConfig({
+      devin: { extends: "acp" },
+      cursor: { extends: "acp" },
+      "codex-proxy": { extends: "codex" },
+    });
+
+    render();
+
+    expect(findRow("Claude provider details")).toBeTruthy();
+    expect(findRow("Cursor provider details")).toBeTruthy();
+    expect(findRow("Codex proxy provider details")).toBeTruthy();
+    expect(container?.textContent).not.toContain("OpenCode");
+    expect(container?.textContent).not.toContain("Devin CLI");
   });
 
   it("composes the row as chevron, icon, label, status, model count, then switch", () => {
@@ -619,6 +663,46 @@ describe("ProvidersSection", () => {
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { claude: { enabled: false } },
     });
+    expect(refreshSnapshotMock).toHaveBeenCalledWith(["claude"]);
+  });
+
+  it("renders the requested switch value optimistically while the daemon persists it", async () => {
+    let resolvePatch: (() => void) | undefined;
+    patchConfigMock.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolvePatch = () => resolve(undefined);
+        }),
+    );
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+    const switchEl =
+      findRow("Claude provider details").querySelector<HTMLElement>('[role="switch"]');
+
+    act(() => switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
+    expect(switchEl?.getAttribute("aria-checked")).toBe("false");
+
+    await act(async () => resolvePatch?.());
+  });
+
+  it("restores the snapshot value and shows an inline error when persistence fails", async () => {
+    patchConfigMock.mockRejectedValue(new Error("daemon rejected provider update"));
+    snapshotState.entries = [claudeEntry];
+    configState.config = makeConfig();
+
+    render();
+    const switchEl =
+      findRow("Claude provider details").querySelector<HTMLElement>('[role="switch"]');
+    await act(async () => {
+      switchEl?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(switchEl?.getAttribute("aria-checked")).toBe("true");
+    expect(
+      container?.querySelector('[data-testid="provider-toggle-error-claude"]')?.textContent,
+    ).toContain("daemon rejected provider update");
   });
 
   it("opens the Paseo tool policy from the provider actions menu", () => {

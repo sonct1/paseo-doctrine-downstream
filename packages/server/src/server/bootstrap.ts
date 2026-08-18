@@ -429,6 +429,7 @@ export interface PaseoDaemonConfig {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   roleProfiles?: RoleProfilePreferencesMap;
+  peerDelegation?: MutableDaemonConfig["peerDelegation"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   pluginsEnabled?: boolean;
@@ -576,6 +577,11 @@ function resolveOptionalMutableDaemonConfig(
       : {}),
     ...(config.terminalProfiles !== undefined ? { terminalProfiles: config.terminalProfiles } : {}),
     ...(config.agentProfiles !== undefined ? { agentProfiles: config.agentProfiles } : {}),
+    peerDelegation: config.peerDelegation ?? {
+      enabled: false,
+      allowedModels: [],
+      runMode: "unattended",
+    },
   };
 }
 
@@ -600,11 +606,12 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     app: { baseUrl: config.appBaseUrl ?? "https://app.paseo.sh" },
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     beadsCentral: config.beadsCentral ?? {
-      endpoint: "http://127.0.0.1:8080",
+      endpoint: "http://127.0.0.1:6769",
       credentialRef: "beads-central",
     },
     providers,
     roleProfiles: config.roleProfiles ?? {},
+    ...(config.peerDelegation !== undefined ? { peerDelegation: config.peerDelegation } : {}),
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
     },
@@ -904,7 +911,11 @@ export async function createPaseoDaemon(
   );
   const beadsService = new BeadsCentralService({
     logger,
-    getConfig: () => daemonConfigStore.get().beadsCentral,
+    getConfig: () =>
+      config.beadsCentral ?? {
+        endpoint: "http://127.0.0.1:6769",
+        credentialRef: "beads-central",
+      },
     credentialStore: new FoundationCredentialStore(config.paseoHome),
     projectRegistry,
   });
@@ -1652,18 +1663,17 @@ export async function createPaseoDaemon(
           const logAndResolve = async () => {
             boundListenTarget = resolveBoundListenTarget(listenTarget, httpServer);
             const mcpBaseUrl = createAgentMcpBaseUrl(boundListenTarget);
-            agentMcpBaseUrl =
-              !mcpEnabled || config.mcpInjectIntoAgents === false ? null : mcpBaseUrl;
+            agentMcpBaseUrl = mcpEnabled ? mcpBaseUrl : null;
             agentManager.setMcpBaseUrl(agentMcpBaseUrl);
             agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
               mcpEnabled = value !== false;
               const inject = daemonConfigStore.get().mcp.injectIntoAgents !== false;
-              agentManager.setMcpBaseUrl(mcpEnabled && inject ? mcpBaseUrl : null);
+              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
               agentManager.setPaseoToolsEnabled(mcpEnabled && inject);
             });
             daemonConfigStore.onFieldChange("mcp.injectIntoAgents", (value) => {
-              agentManager.setMcpBaseUrl(mcpEnabled && value ? mcpBaseUrl : null);
+              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
               agentManager.setPaseoToolsEnabled(mcpEnabled && value !== false);
             });
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {

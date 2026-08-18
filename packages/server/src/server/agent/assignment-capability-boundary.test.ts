@@ -94,3 +94,66 @@ test("no-write assignment rejects mode and permission escalation", () => {
     assertRoleAssignmentPermissionResponseAllowed(binding, { behavior: "deny" }),
   ).not.toThrow();
 });
+
+test("no-write Cursor assignment permits exact role-ceiling Paseo MCP transport consent", () => {
+  const binding = {
+    ...roleBinding({ injectionMethod: "cursor-project-rule-capsule" }),
+    roleId: "supervisor",
+  } as PersistedRoleBinding;
+
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(
+      binding,
+      { behavior: "allow" },
+      {
+        id: "permission-1",
+        provider: "cursor",
+        name: "paseo-beads_status",
+        kind: "tool",
+        title: "paseo-beads_status",
+        actions: [],
+      },
+    ),
+  ).not.toThrow();
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(
+      binding,
+      { behavior: "allow" },
+      {
+        id: "permission-2",
+        provider: "cursor",
+        name: "run_terminal_command",
+        kind: "tool",
+        title: "Run terminal command",
+        actions: [],
+      },
+    ),
+  ).toThrow("cannot approve a permission escalation");
+});
+
+test("no-write Cursor assignment permits opaque MCP consent only for the role-scoped Paseo server", () => {
+  const binding = {
+    ...roleBinding({ injectionMethod: "cursor-project-rule-capsule" }),
+    roleId: "supervisor",
+  } as PersistedRoleBinding;
+  const request = {
+    id: "permission-opaque-mcp",
+    provider: "cursor",
+    name: "other",
+    kind: "tool" as const,
+    title: "MCP: tool",
+    actions: [],
+    metadata: { transportShadow: "cursor-opaque-mcp" },
+  };
+
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(binding, { behavior: "allow" }, request, {
+      onlyRuntimePaseoMcp: true,
+    }),
+  ).not.toThrow();
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(binding, { behavior: "allow" }, request, {
+      onlyRuntimePaseoMcp: false,
+    }),
+  ).toThrow("cannot approve a permission escalation");
+});

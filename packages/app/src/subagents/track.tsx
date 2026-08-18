@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { Archive, ChevronDown, ChevronRight, Unlink } from "lucide-react-native";
@@ -61,7 +61,19 @@ export function SubagentsTrack({
   onDetachSubagent,
 }: SubagentsTrackProps): ReactElement | null {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const pendingPermissionCount = useMemo(
+    () =>
+      rows.reduce(
+        (count, row) => count + (row.kind === "paseo" ? row.pendingPermissionCount : 0),
+        0,
+      ),
+    [rows],
+  );
+  const [expanded, setExpanded] = useState(pendingPermissionCount > 0);
+
+  useEffect(() => {
+    if (pendingPermissionCount > 0) setExpanded(true);
+  }, [pendingPermissionCount]);
 
   const toggleExpanded = useCallback(() => {
     setExpanded((current) => !current);

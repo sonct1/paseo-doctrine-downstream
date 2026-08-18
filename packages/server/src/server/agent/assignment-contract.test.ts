@@ -83,6 +83,10 @@ describe("immutable assignment contract", () => {
       roleId: "supervisor",
       envelope: envelope({ disposition: "supervision" }),
     });
+    const delegatingSupervisor = materialize({
+      roleId: "supervisor",
+      envelope: envelope({ disposition: "supervision", effectClass: "delegation" }),
+    });
 
     expect(buildAssignmentInstruction(peer)).toContain("Claim before owned mutation");
     expect(buildAssignmentInstruction(peer)).toContain("never close");
@@ -92,6 +96,9 @@ describe("immutable assignment contract", () => {
     );
     expect(buildAssignmentInstruction(supervisor)).toContain("Remain read-only");
     expect(buildAssignmentInstruction(supervisor)).toContain("material handoff");
+    expect(buildAssignmentInstruction(delegatingSupervisor)).toContain(
+      "create and prompt only your own direct role-bound Lead children",
+    );
   });
 
   test("requires an issue grant only for a mutating Peer", () => {

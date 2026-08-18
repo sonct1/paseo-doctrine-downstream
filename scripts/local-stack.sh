@@ -194,11 +194,51 @@ bundle="$PRODUCT_ROOT/artifacts/paseo-web-cli-$version-macos-$(node -e 'console.
 
 # Idle readback: never swap the daemon out from under live work.
 if [ -x "$PASEO_BIN" ]; then
-  busy="$("$PASEO_BIN" agent ls --global --json 2>/dev/null |
+  daemon_state="$("$PASEO_BIN" daemon status --json 2>/dev/null |
+    node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(typeof x.localDaemon!=='string')throw new Error('local daemon state is missing');console.log(x.localDaemon)})"
+  )" || fail "cannot determine local daemon state — not restarting"
+
+  if [ "$daemon_state" = "stopped" ]; then
+    say "  daemon is stopped — no live-work idle gate required"
+  elif [ "$daemon_state" != "running" ]; then
+    fail "local daemon state is $daemon_state — resolve the stale or unresponsive owner before restarting"
+  else
+  busy_agents="$("$PASEO_BIN" agent ls --global --json 2>/dev/null |
     node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
-      let a=[];try{a=JSON.parse(s);a=Array.isArray(a)?a:(a.agents??[])}catch{}
-      console.log(a.filter(x=>['running','starting'].includes(String(x.status??''))).length)})" || echo 0)"
-  [ "${busy:-0}" = "0" ] || fail "$busy agent(s) running or starting — not restarting; retry when idle"
+      const parsed=JSON.parse(s);const agents=Array.isArray(parsed)?parsed:parsed.agents;
+      if(!Array.isArray(agents))throw new Error('agent inventory is not an array');
+      console.log(agents.filter(x=>['running','starting'].includes(String(x.status??''))).length)})"
+  )" || fail "cannot determine active agent state — not restarting"
+  [ "$busy_agents" = "0" ] ||
+    fail "$busy_agents agent(s) running or starting — not restarting; retry when idle"
+
+  busy_scripts="$(node - "$PASEO_BIN" <<'NODE'
+const { execFileSync } = require("node:child_process");
+const paseo = process.argv[2];
+const readJson = (args) => JSON.parse(execFileSync(paseo, args, { encoding: "utf8" }));
+const parsedWorkspaces = readJson(["workspace", "ls", "--json"]);
+const workspaces = Array.isArray(parsedWorkspaces)
+  ? parsedWorkspaces
+  : parsedWorkspaces.workspaces;
+if (!Array.isArray(workspaces)) throw new Error("workspace inventory is not an array");
+let active = 0;
+for (const workspace of workspaces) {
+  if (typeof workspace.workspaceId !== "string") throw new Error("workspace ID is missing");
+  const parsedScripts = readJson([
+    "script", "ls", "--workspace", workspace.workspaceId, "--json",
+  ]);
+  const scripts = Array.isArray(parsedScripts) ? parsedScripts : parsedScripts.scripts;
+  if (!Array.isArray(scripts)) throw new Error("script inventory is not an array");
+  active += scripts.filter((script) =>
+    ["running", "starting"].includes(String(script.lifecycle ?? script.status ?? "")),
+  ).length;
+}
+console.log(active);
+NODE
+  )" || fail "cannot determine active workspace script state — not restarting"
+  [ "$busy_scripts" = "0" ] ||
+    fail "$busy_scripts workspace script(s) running or starting — not restarting; retry when idle"
+  fi
 fi
 
 say "  installing $version"

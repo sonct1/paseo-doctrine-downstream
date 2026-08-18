@@ -97,6 +97,76 @@ afterEach(() => {
 });
 
 describe("mutable provider config owner", () => {
+  test("preserves launch-only Cursor ACP fields while toggling providers", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-provider-config-owner-"));
+    tempDirs.push(paseoHome);
+    const persisted: PersistedConfig = {
+      version: 1,
+      agents: {
+        providers: {
+          ...CONTROLLED_PROVIDERS,
+          cursor: {
+            extends: "acp",
+            label: "Cursor",
+            command: ["cursor-agent", "acp"],
+            enabled: true,
+          },
+        },
+      },
+    };
+    writeFileSync(
+      path.join(paseoHome, "config.json"),
+      `${JSON.stringify(persisted, null, 2)}\n`,
+      "utf-8",
+    );
+    const store = new DaemonConfigStore(
+      paseoHome,
+      mutableConfig({
+        version: 1,
+        agents: {
+          providers: {
+            ...CONTROLLED_PROVIDERS,
+            cursor: { extends: "acp", label: "Cursor", enabled: true },
+          },
+        },
+      }),
+      undefined,
+      { startupPersisted: persisted },
+    );
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      providerOverrides: {
+        ...CONTROLLED_PROVIDERS,
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["cursor-agent", "acp"],
+          enabled: true,
+        },
+      },
+    });
+    let agentManagerState = manager.getAgentManagerProviderState();
+    const unsubscribe = attachMutableProviderConfigOwner({
+      store,
+      providerSnapshotManager: manager,
+      updateProviderRegistry: (state) => {
+        agentManagerState = state;
+      },
+    });
+
+    try {
+      expect(() => store.patch({ providers: { opencode: { enabled: false } } })).not.toThrow();
+      expect(agentManagerState.providerDefinitions.opencode).toMatchObject({ enabled: false });
+      expect(agentManagerState.providerDefinitions.cursor).toMatchObject({ enabled: true });
+
+      expect(() => store.patch({ providers: { cursor: { enabled: false } } })).not.toThrow();
+      expect(agentManagerState.providerDefinitions.cursor).toMatchObject({ enabled: false });
+    } finally {
+      unsubscribe();
+      manager.destroy();
+    }
+  });
+
   test("publishes provider changes after commit and emits nothing on rollback", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-provider-config-owner-"));
     tempDirs.push(paseoHome);

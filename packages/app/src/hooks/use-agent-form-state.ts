@@ -81,6 +81,11 @@ export interface UseAgentFormStateResult {
   refreshProviderModels: (provider?: AgentProvider) => void;
   refetchProviderModelsIfStale: () => void;
   setProviderAndModelFromUser: (provider: AgentProvider, modelId: string) => void;
+  setProviderAndModelForRole: (
+    provider: AgentProvider,
+    modelId: string,
+    requiredModeId: string,
+  ) => void;
   applyProfileFromUser: (profile: MaterializedAgentProfile) => void;
   clearProviderSelectionFromUser: () => void;
   workingDirIsEmpty: boolean;
@@ -452,6 +457,21 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
     [allProviderModels, selectableProviderDefinitionMap, updateCurrentPreferences],
   );
 
+  const setProviderAndModelForRole = useCallback(
+    (provider: AgentProvider, modelId: string, requiredModeId: string) => {
+      if (!selectableProviderDefinitionMap.has(provider)) return;
+      dispatch({
+        type: "SET_PROVIDER_AND_MODEL_FOR_ROLE",
+        provider,
+        modelId,
+        requiredModeId,
+        providerDef: selectableProviderDefinitionMap.get(provider),
+        providerModels: allProviderModels.get(provider) ?? null,
+      });
+    },
+    [allProviderModels, selectableProviderDefinitionMap],
+  );
+
   const clearProviderSelectionFromUser = useCallback(() => {
     dispatch({ type: "CLEAR_PROVIDER_SELECTION_FROM_USER" });
   }, []);
@@ -659,6 +679,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      setProviderAndModelForRole,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,
@@ -694,6 +715,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions = {}): UseAg
       refreshProviderModels,
       refetchProviderModelsIfStale,
       setProviderAndModelFromUser,
+      setProviderAndModelForRole,
       applyProfileFromUser,
       clearProviderSelectionFromUser,
       workingDirIsEmpty,

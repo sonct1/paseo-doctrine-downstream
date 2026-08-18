@@ -54,6 +54,11 @@ export class AgentDirectoryReplica {
     const normalized: Agent = {
       ...timelineAgent,
       projectPlacement: timelineAgent.projectPlacement ?? existing?.projectPlacement,
+      // Timeline payloads from persisted provider history can be intentionally
+      // compact. Immutable Foundation receipts come from the authoritative
+      // directory snapshot and must survive those incremental refreshes.
+      roleBinding: timelineAgent.roleBinding ?? existing?.roleBinding,
+      launchContract: timelineAgent.launchContract ?? existing?.launchContract,
     };
     const accepted = upsertAgentReplica(this.serverId, normalized);
     replaceAgentPendingPermissions(this.serverId, accepted);

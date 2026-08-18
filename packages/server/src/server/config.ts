@@ -511,19 +511,15 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
-function resolveBeadsCentralConfig(
-  env: NodeJS.ProcessEnv,
-  persisted: ReturnType<typeof loadPersistedConfig>,
-): { endpoint: string; credentialRef: string } {
+function resolveBeadsCentralConfig(env: NodeJS.ProcessEnv): {
+  endpoint: string;
+  credentialRef: string;
+} {
+  const isolatedSmokeEndpoint =
+    env.PASEO_RELEASE_SMOKE === "1" ? env.PASEO_BEADS_CENTRAL_SMOKE_ENDPOINT?.trim() : undefined;
   return {
-    endpoint:
-      env.PASEO_BEADS_CENTRAL_URL?.trim() ||
-      persisted.daemon?.beadsCentral?.endpoint ||
-      "http://127.0.0.1:8080",
-    credentialRef:
-      env.PASEO_BEADS_CENTRAL_CREDENTIAL_REF?.trim() ||
-      persisted.daemon?.beadsCentral?.credentialRef ||
-      "beads-central",
+    endpoint: isolatedSmokeEndpoint || "http://127.0.0.1:6769",
+    credentialRef: "beads-central",
   };
 }
 
@@ -549,10 +545,11 @@ function resolveStaticLoadConfigSettings(
     mcpInjectIntoAgents:
       cli?.mcpInjectIntoAgents ?? persisted.daemon?.mcp?.injectIntoAgents ?? false,
     browserToolsEnabled: resolveBrowserToolsEnabled(persisted),
-    beadsCentral: resolveBeadsCentralConfig(env, persisted),
+    beadsCentral: resolveBeadsCentralConfig(env),
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     roleProfiles: resolveRoleProfiles(persisted),
+    peerDelegation: persisted.daemon?.peerDelegation,
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -590,6 +587,7 @@ export function resolveConfigFromPersisted(
     autoArchiveAfterMerge,
     appendSystemPrompt,
     roleProfiles,
+    peerDelegation,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -637,6 +635,7 @@ export function resolveConfigFromPersisted(
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
     roleProfiles,
+    peerDelegation,
     terminalProfiles,
     agentProfiles,
     pluginsEnabled: persisted.pluginsEnabled ?? false,

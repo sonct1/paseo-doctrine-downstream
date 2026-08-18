@@ -1039,6 +1039,31 @@ describe("resolveAgentForm", () => {
     });
   });
 
+  describe("SET_PROVIDER_AND_MODEL_FOR_ROLE", () => {
+    it("atomically applies the role-safe mode and drops stale provider preferences", () => {
+      const state = makeState({
+        provider: "claude",
+        modeId: "bypassPermissions",
+        thinkingOptionId: "high",
+      });
+      const next = resolveAgentForm(state, {
+        type: "SET_PROVIDER_AND_MODEL_FOR_ROLE",
+        provider: "codex",
+        modelId: "",
+        requiredModeId: "read-only",
+        providerDef: TEST_CODEX_DEFINITION,
+        providerModels: CODEX_MODELS,
+      });
+
+      expect(next.form).toMatchObject({
+        provider: "codex",
+        model: "gpt-5.3-codex",
+        modeId: "read-only",
+      });
+      expect(next.form.thinkingOptionId).not.toBe("high");
+    });
+  });
+
   describe("SET_MODE_FROM_USER", () => {
     it("updates modeId and marks it modified", () => {
       const state = makeState({ provider: "codex", modeId: "auto" });

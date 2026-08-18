@@ -420,6 +420,12 @@ export function buildHostSessionsRoute(serverId: string) {
   return `${base}/sessions` as const;
 }
 
+export function buildHostTopologyRoute(serverId: string) {
+  const base = buildHostRootRoute(serverId);
+  if (base === "/") return "/" as const;
+  return `${base}/topology` as const;
+}
+
 export function buildHostRoomsRoute(serverId: string) {
   const base = buildHostRootRoute(serverId);
   if (base === "/") {

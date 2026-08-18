@@ -30,6 +30,7 @@ interface SupportedMutableConfigPatch {
   appendSystemPrompt?: string;
   roleProfiles?: MutableDaemonConfigPatch["roleProfiles"];
   resetRoleProfiles?: MutableDaemonConfigPatch["resetRoleProfiles"];
+  peerDelegation?: MutableDaemonConfigPatch["peerDelegation"];
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   pluginsEnabled?: boolean;
@@ -210,6 +211,7 @@ const RELOADABLE_PATHS = [
   "daemon.enableTerminalAgentHooks",
   "daemon.appendSystemPrompt",
   "daemon.roleProfiles",
+  "daemon.peerDelegation",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -280,13 +282,17 @@ function compactOwnedPaths(paths: readonly string[], owners: readonly string[]):
 
 function pickFoundationPatchFields(
   patch: MutableDaemonConfigPatch,
-): Pick<SupportedMutableConfigPatch, "beadsCentral" | "roleProfiles" | "resetRoleProfiles"> {
+): Pick<
+  SupportedMutableConfigPatch,
+  "beadsCentral" | "roleProfiles" | "resetRoleProfiles" | "peerDelegation"
+> {
   return {
     ...(patch.beadsCentral !== undefined ? { beadsCentral: patch.beadsCentral } : {}),
     ...(patch.roleProfiles !== undefined ? { roleProfiles: patch.roleProfiles } : {}),
     ...(patch.resetRoleProfiles !== undefined
       ? { resetRoleProfiles: patch.resetRoleProfiles }
       : {}),
+    ...(patch.peerDelegation !== undefined ? { peerDelegation: patch.peerDelegation } : {}),
   };
 }
 
@@ -707,7 +713,23 @@ function mergeMutableDaemonPatch(
   if (patch.roleProfiles !== undefined) {
     next.roleProfiles = validateRoleProfilePreferencesMap(patch.roleProfiles);
   }
+  Object.assign(next, mergePeerDelegationPatch(next.peerDelegation, patch.peerDelegation));
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function mergePeerDelegationPatch(
+  current: NonNullable<PersistedConfig["daemon"]>["peerDelegation"],
+  patch: SupportedMutableConfigPatch["peerDelegation"],
+): Pick<NonNullable<PersistedConfig["daemon"]>, "peerDelegation"> | Record<string, never> {
+  if (patch === undefined) return {};
+  return {
+    peerDelegation: {
+      enabled: current?.enabled ?? false,
+      allowedModels: current?.allowedModels ?? [],
+      runMode: current?.runMode ?? "unattended",
+      ...patch,
+    },
+  };
 }

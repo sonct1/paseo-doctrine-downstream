@@ -3963,6 +3963,18 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
       this.lastConfig = config;
       return new TestAgentSession(config);
     }
+
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      return {
+        providerId: input.config.provider,
+        providerFamily: "codex",
+        model: input.config.model ?? "gpt-5.4",
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai",
+        authMethod: "codex-native" as const,
+      };
+    }
   }
 
   const enabledClient = new McpClient();
@@ -4005,6 +4017,25 @@ test("keeps the global Paseo-tools gate outside provider policy and MCP injectio
   expect(catalogFactory).not.toHaveBeenCalled();
   expect(disabledManager.getPaseoToolPolicy(disabledAgent.id)).toEqual({
     enabled: false,
+  });
+
+  const roleBoundAgent = await disabledManager.createAgent(
+    { provider: "codex", cwd: workdir },
+    "00000000-0000-4000-8000-000000000112",
+    {
+      workspaceId: "workspace-role-bound-tools",
+      roleId: "lead",
+      assignment: leadAssignment(),
+    },
+  );
+
+  expect(disabledClient.lastConfig?.mcpServers?.paseo).toMatchObject({
+    type: "http",
+    url: expect.stringContaining(`callerAgentId=${roleBoundAgent.id}`),
+  });
+  expect(disabledManager.getPaseoToolPolicy(roleBoundAgent.id)).toMatchObject({
+    enabled: true,
+    allowedTools: expect.arrayContaining(["create_agent", "beads_status"]),
   });
 
   rmSync(workdir, { recursive: true, force: true });
