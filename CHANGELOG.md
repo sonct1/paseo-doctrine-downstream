@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.4.0-paseo.8 - 2026-08-18
+
+Bản downstream này làm gọn bề mặt orchestration theo provider được support, giữ quyền đã chọn xuyên
+suốt vòng đời agent, đưa topology lên mức project và bundle Beads Central thành component native trên
+mọi release host.
+
+### Added
+
+- Thêm project topology theo trục X, hợp nhất agent từ mọi workspace trong project và giữ exact
+  delegation binding khi Lead tạo Peer thay vì gắn nhãn `UNBOUND` theo suy đoán.
+- Thêm peer-model policy end-to-end: Lead chỉ được route Peer tới provider/model Human đã chọn từ
+  catalog Provider Settings; daemon fail closed khi route nằm ngoài allowlist.
+- Bundle host-native Beads Central `1.2.0` và `bd` `1.1.2` trong WebUI + CLI + Foundation artifacts
+  cho macOS arm64/x64, Linux x64 và Windows x64, kèm checksum, readiness và installed-artifact smoke.
+
+### Changed
+
+- Chỉ hiển thị và cho launch Claude, Codex, Cursor, Antigravity cùng custom Codex; ẩn hoặc fail closed
+  OpenCode, Devin CLI và các provider chưa được support khỏi settings, catalog và create flow.
+- Giữ mode Human đã chọn, gồm `Bypass`, trong launch contract và continuation; assignment authority
+  không tự đổi hoặc biến mất sau khi agent bắt đầu chạy.
+- Provider toggles giờ cập nhật catalog/create flow thật, nên provider bị tắt không còn tiếp tục xuất
+  hiện như route khả dụng.
+
+### Fixed
+
+- Không xóa archived agent khỏi WebUI khi active-directory watcher chỉ báo agent đã chuyển sang archive;
+  protocol giờ phân biệt `archived`, `filtered` và `deleted`.
+- Đồng bộ CI desktop packaging với release toolchain pinned Python, Go và `uv`, để build Central binary
+  thật thay vì phụ thuộc host state hoặc fixture giả.
+
+### Qualified
+
+- Qualify focused unit/typecheck/format/lint, project topology, provider/model policy, role/mode
+  persistence, archived-agent restore và browser journeys trên source commit.
+- Qualify native Central/`bd`, CLI, Foundation, daemon và WebUI từ installed portable artifact; release
+  chỉ publish sau native macOS arm64/x64, Linux x64 và Windows x64 smoke cùng full GitHub CI.
+
 ## 0.4.0-paseo.7 - 2026-08-17
 
 Bản downstream này sửa đường tạo workspace role-bound trên WebUI và bổ sung release gate trực tiếp cho
