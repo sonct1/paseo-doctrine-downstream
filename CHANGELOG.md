@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.4.0-paseo.30 - 2026-08-21
+
+Bản này đưa Peer routing theo subrole/profile vào Product, thêm Council/Room native và giữ exact
+assignment/launch receipts xuyên suốt Topology sau khi agent đã idle.
+
+### Added
+
+- Thêm 16 Peer Agent Profile theo bốn subrole `Scout`, `Engineer`, `Reviewer`, `Architect` và bốn
+  provider `Claude`, `Codex`, `Cursor`, `Antigravity`; Lead route theo provider priority, còn generic
+  Peer dùng `Engineer` làm fallback mặc định.
+- Thêm Lead tools `start_council` và `record_council_seat`, Council seat receipts cùng Room evidence
+  native thay vì mô phỏng bằng Peer hoặc text.
+
+### Changed
+
+- Agent Settings dùng profile routing, runtime mode, default subrole và provider priority thay cho các
+  model enable switch trùng lặp; priority mặc định là Claude → Codex → Cursor → Antigravity.
+- Claude Peer no-write chạy guarded default workflow với technical allowlist/denylist chính xác, giữ
+  các Paseo MCP tools đã preapprove trong unattended mà không mở quyền mutation.
+
+### Fixed
+
+- Giữ `RoleBinding` và `LaunchContract` qua agent directory delta/fetch để Topology vẫn hiện đúng
+  Lead → Peer profile/subrole/provider sau khi agent kết thúc.
+- Cho phép no-write Peer trả lời câu hỏi mà không tạo permission escalation; loại bỏ approval deadlock
+  trong Council orchestration.
+
+### Qualified
+
+- Browser E2E trên WebUI local với role-bound workspace, Lead, bốn Peer subrole, generic Engineer
+  fallback, provider selection, Council, Room và final Topology receipts.
+- Focused unit tests, format, lint, typecheck và full downstream CI đa nền tảng trên exact feature
+  commit trước release qualification.
+
 ## 0.4.0-paseo.24 - 2026-08-18
 
 ### Removed
