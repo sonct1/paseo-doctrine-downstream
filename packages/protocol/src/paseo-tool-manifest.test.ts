@@ -32,6 +32,8 @@ const EXPECTED_TOOL_IDS = [
   "capture_terminal",
   "send_terminal_keys",
   "create_room",
+  "start_council",
+  "record_council_seat",
   "read_room",
   "post_room",
   "beads_status",
@@ -108,6 +110,14 @@ describe("Paseo tool manifest", () => {
       label: "Create room",
       group: "Rooms",
     });
+    expect(PASEO_TOOL_MANIFEST.find((entry) => entry.id === "start_council")).toMatchObject({
+      label: "Start council",
+      group: "Rooms",
+    });
+    expect(PASEO_TOOL_MANIFEST.find((entry) => entry.id === "record_council_seat")).toMatchObject({
+      label: "Record council seat",
+      group: "Rooms",
+    });
     expect(PASEO_TOOL_MANIFEST.find((entry) => entry.id === "beads_status")).toMatchObject({
       label: "Inspect Beads Central",
       group: "Issues",
@@ -124,6 +134,6 @@ describe("Paseo tool manifest", () => {
     }
 
     expect(PASEO_TOOL_MANIFEST.filter((entry) => entry.browser)).toHaveLength(22);
-    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(56);
+    expect(PASEO_TOOL_MANIFEST.filter((entry) => !entry.browser)).toHaveLength(58);
   });
 });
