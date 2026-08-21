@@ -73,9 +73,10 @@ describe("E1 role-overlay counterfactual", () => {
     expect(binding.instructions).toContain("Mandatory Beads Central checkpoint");
     expect(binding.instructions).not.toContain("<paseo-role-skill");
     expect(legacyInlineBytes - currentInstructionBytes).toBeGreaterThan(3_000);
-    expect(leadTools.length).toBeLessThan(31);
-    expect(leadTools).toHaveLength(30);
+    expect(leadTools.length).toBeLessThan(33);
+    expect(leadTools).toHaveLength(32);
     expect(leadTools).toContain("list_profiles");
+    expect(leadTools).toEqual(expect.arrayContaining(["start_council", "record_council_seat"]));
     expect(leadTools.some((tool) => forbiddenToolIds.has(tool))).toBe(false);
 
     const roleBundle = JSON.parse(

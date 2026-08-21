@@ -11966,9 +11966,15 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(client.launchConfigs[0]?.mcpServers?.paseo).toBeUndefined();
     expect(manager.getPaseoToolPolicy(created.id)).toMatchObject({
       enabled: true,
-      allowedTools: expect.arrayContaining(["create_agent", "beads_status", "list_profiles"]),
+      allowedTools: expect.arrayContaining([
+        "create_agent",
+        "beads_status",
+        "list_profiles",
+        "start_council",
+        "record_council_seat",
+      ]),
     });
-    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(30);
+    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(32);
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.config.modeId).toBe("read-only");
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
@@ -12021,6 +12027,7 @@ test("role-bound create persists immutable binding and passes only launch instru
       roleId: "lead",
       instructions: exactInstructions,
       allowedSkills: created.roleBinding?.roleProfile?.allowedSkills,
+      noWrite: true,
     });
     expect(client.launchContexts[1]?.providerLaunchBinding).toEqual(
       client.launchContexts[0]?.providerLaunchBinding,
@@ -12207,6 +12214,7 @@ test("Council specialization persists exact bytes through create and resume", as
       instructions: exactInstructions,
       executionProfile: { id: "solution-architect" },
       allowedSkills: created.roleBinding?.roleProfile?.allowedSkills,
+      noWrite: true,
     });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
@@ -12280,9 +12288,11 @@ test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", a
       expect.arrayContaining([
         { kind: "mcp", server: "paseo", tool: "list_profiles" },
         { kind: "mcp", server: "paseo", tool: "beads_status" },
+        { kind: "mcp", server: "paseo", tool: "start_council" },
+        { kind: "mcp", server: "paseo", tool: "record_council_seat" },
       ]),
     );
-    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(30);
+    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(32);
     expect(created.config.toolPolicy).toBeUndefined();
   } finally {
     await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
