@@ -7,7 +7,9 @@ import { ProviderOverrideSchema } from "./agent/provider-launch-config.js";
 import {
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
+  PeerDelegationModelRouteSchema,
 } from "@getpaseo/protocol/messages";
+import { resolvePeerDelegationProviderPriority } from "@getpaseo/protocol/peer-delegation-priority";
 import { resolveFoundationCredentialFile } from "./foundation-credential-store.js";
 import { validateRoleProfilePreferencesMap } from "./agent/role-profiles.js";
 
@@ -31,6 +33,9 @@ interface SupportedMutableConfigPatch {
   roleProfiles?: MutableDaemonConfigPatch["roleProfiles"];
   resetRoleProfiles?: MutableDaemonConfigPatch["resetRoleProfiles"];
   peerDelegation?: MutableDaemonConfigPatch["peerDelegation"];
+  peerDelegationProfileIds?: MutableDaemonConfig["peerDelegationProfileIds"];
+  peerDelegationProviderPriority?: MutableDaemonConfig["peerDelegationProviderPriority"];
+  peerDelegationDefaultSubrole?: MutableDaemonConfig["peerDelegationDefaultSubrole"];
   terminalProfiles?: MutableDaemonConfig["terminalProfiles"];
   agentProfiles?: MutableDaemonConfig["agentProfiles"];
   pluginsEnabled?: boolean;
@@ -212,6 +217,9 @@ const RELOADABLE_PATHS = [
   "daemon.appendSystemPrompt",
   "daemon.roleProfiles",
   "daemon.peerDelegation",
+  "daemon.peerDelegationProfileIds",
+  "daemon.peerDelegationProviderPriority",
+  "daemon.peerDelegationDefaultSubrole",
   "daemon.terminalProfiles",
   "daemon.agentProfiles",
   "app.baseUrl",
@@ -236,6 +244,10 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["daemon.enableTerminalAgentHooks", "enableTerminalAgentHooks"],
   ["daemon.appendSystemPrompt", "appendSystemPrompt"],
   ["daemon.roleProfiles", "roleProfiles"],
+  ["daemon.peerDelegation", "peerDelegation"],
+  ["daemon.peerDelegationProfileIds", "peerDelegationProfileIds"],
+  ["daemon.peerDelegationProviderPriority", "peerDelegationProviderPriority"],
+  ["daemon.peerDelegationDefaultSubrole", "peerDelegationDefaultSubrole"],
   ["daemon.terminalProfiles", "terminalProfiles"],
   ["daemon.agentProfiles", "agentProfiles"],
   ["app.baseUrl", "app.baseUrl"],
@@ -284,7 +296,13 @@ function pickFoundationPatchFields(
   patch: MutableDaemonConfigPatch,
 ): Pick<
   SupportedMutableConfigPatch,
-  "beadsCentral" | "roleProfiles" | "resetRoleProfiles" | "peerDelegation"
+  | "beadsCentral"
+  | "roleProfiles"
+  | "resetRoleProfiles"
+  | "peerDelegation"
+  | "peerDelegationProfileIds"
+  | "peerDelegationProviderPriority"
+  | "peerDelegationDefaultSubrole"
 > {
   return {
     ...(patch.beadsCentral !== undefined ? { beadsCentral: patch.beadsCentral } : {}),
@@ -293,6 +311,71 @@ function pickFoundationPatchFields(
       ? { resetRoleProfiles: patch.resetRoleProfiles }
       : {}),
     ...(patch.peerDelegation !== undefined ? { peerDelegation: patch.peerDelegation } : {}),
+    ...(patch.peerDelegationProfileIds !== undefined
+      ? { peerDelegationProfileIds: patch.peerDelegationProfileIds }
+      : {}),
+    ...(patch.peerDelegationProviderPriority !== undefined
+      ? { peerDelegationProviderPriority: patch.peerDelegationProviderPriority }
+      : {}),
+    ...(patch.peerDelegationDefaultSubrole !== undefined
+      ? { peerDelegationDefaultSubrole: patch.peerDelegationDefaultSubrole }
+      : {}),
+  };
+}
+
+function resolvePeerDelegationProfileRoutes(
+  profiles: MutableDaemonConfig["agentProfiles"],
+  profileIds: readonly string[],
+): NonNullable<MutableDaemonConfig["peerDelegation"]>["allowedModels"] {
+  const selected = new Set(profileIds);
+  const seen = new Set<string>();
+  return (profiles ?? []).flatMap((profile) => {
+    if (!selected.has(profile.id)) return [];
+    const parsed = PeerDelegationModelRouteSchema.safeParse({
+      provider: profile.provider,
+      model: profile.model,
+    });
+    if (!parsed.success) return [];
+    const key = `${parsed.data.provider}\u0000${parsed.data.model}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [parsed.data];
+  });
+}
+
+function synchronizePeerDelegationProfilePatch(
+  current: MutableDaemonConfig,
+  patch: Omit<SupportedMutableConfigPatch, "removeProviders">,
+): Omit<SupportedMutableConfigPatch, "removeProviders"> {
+  if (
+    patch.peerDelegationProfileIds === undefined &&
+    patch.peerDelegationProviderPriority === undefined &&
+    patch.agentProfiles === undefined &&
+    patch.peerDelegation === undefined
+  ) {
+    return patch;
+  }
+  const profileIds = patch.peerDelegationProfileIds ?? current.peerDelegationProfileIds;
+  if (profileIds === undefined) return patch;
+  const profiles = patch.agentProfiles ?? current.agentProfiles;
+  const synchronizedProfileIds =
+    patch.agentProfiles === undefined
+      ? profileIds
+      : profileIds.filter((id) => patch.agentProfiles?.some((profile) => profile.id === id));
+  return {
+    ...patch,
+    peerDelegationProfileIds: synchronizedProfileIds,
+    peerDelegationProviderPriority: resolvePeerDelegationProviderPriority(
+      profiles ?? [],
+      synchronizedProfileIds,
+      patch.peerDelegationProviderPriority ?? current.peerDelegationProviderPriority,
+    ),
+    peerDelegation: {
+      enabled: current.peerDelegation?.enabled ?? false,
+      runMode: current.peerDelegation?.runMode ?? "unattended",
+      ...patch.peerDelegation,
+      allowedModels: resolvePeerDelegationProfileRoutes(profiles, synchronizedProfileIds),
+    },
   };
 }
 
@@ -396,8 +479,9 @@ export class DaemonConfigStore {
       removeProviders = [],
       roleProfiles: roleProfilePatch,
       resetRoleProfiles = [],
-      ...configPatch
+      ...rawConfigPatch
     } = parsedPatch;
+    const configPatch = synchronizePeerDelegationProfilePatch(this.current, rawConfigPatch);
     const removedProviders = Array.from(new Set(removeProviders));
     const nextRoleProfiles = { ...this.current.roleProfiles };
     for (const [roleId, preferences] of Object.entries(roleProfilePatch ?? {})) {
@@ -714,6 +798,15 @@ function mergeMutableDaemonPatch(
     next.roleProfiles = validateRoleProfilePreferencesMap(patch.roleProfiles);
   }
   Object.assign(next, mergePeerDelegationPatch(next.peerDelegation, patch.peerDelegation));
+  if (patch.peerDelegationProfileIds !== undefined) {
+    next.peerDelegationProfileIds = patch.peerDelegationProfileIds;
+  }
+  if (patch.peerDelegationProviderPriority !== undefined) {
+    next.peerDelegationProviderPriority = patch.peerDelegationProviderPriority;
+  }
+  if (patch.peerDelegationDefaultSubrole !== undefined) {
+    next.peerDelegationDefaultSubrole = patch.peerDelegationDefaultSubrole;
+  }
   if (patch.terminalProfiles !== undefined) next.terminalProfiles = patch.terminalProfiles;
   if (patch.agentProfiles !== undefined) next.agentProfiles = patch.agentProfiles;
   return Object.keys(next).length > 0 ? next : undefined;

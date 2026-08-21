@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import type { AgentFeature } from "@getpaseo/protocol/agent-types";
-import type { AgentProfile } from "@getpaseo/protocol/messages";
+import type { AgentProfile, PeerSubrole } from "@getpaseo/protocol/messages";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { Button } from "@/components/ui/button";
 import { type FieldControlSize } from "@/components/ui/control-geometry";
@@ -45,6 +45,44 @@ export interface AgentProfileEditModalProps {
  * id as soon as one exists, and none of them offer an "unset" row.
  */
 const UNSET_VALUE = "";
+
+const PEER_SUBROLE_OPTIONS: SelectFieldOption<PeerSubrole | "">[] = [
+  {
+    id: "none",
+    value: "",
+    label: "Not used for automatic Peer routing",
+    description: "Lead must choose this profile explicitly.",
+    testID: "agent-profile-peer-subrole-none",
+  },
+  {
+    id: "scout",
+    value: "scout",
+    label: "Scout",
+    description: "Bounded reconnaissance and evidence collection.",
+    testID: "agent-profile-peer-subrole-scout",
+  },
+  {
+    id: "engineer",
+    value: "engineer",
+    label: "Engineer",
+    description: "Bounded implementation under the assignment write lease.",
+    testID: "agent-profile-peer-subrole-engineer",
+  },
+  {
+    id: "reviewer",
+    value: "reviewer",
+    label: "Reviewer",
+    description: "Independent review and regression analysis.",
+    testID: "agent-profile-peer-subrole-reviewer",
+  },
+  {
+    id: "architect",
+    value: "architect",
+    label: "Architect",
+    description: "Read-only architecture and design analysis.",
+    testID: "agent-profile-peer-subrole-architect",
+  },
+];
 
 function openKey(props: AgentProfileEditModalProps): string {
   return props.mode === "edit" ? `edit:${props.profile?.id ?? ""}` : "create";
@@ -154,6 +192,13 @@ function OpenAgentProfileEditModal({
     () => toSelectOptions(state.thinkingOptions),
     [state.thinkingOptions],
   );
+  const peerSubroleDisplay = useMemo<SelectFieldDisplay>(() => {
+    const option = PEER_SUBROLE_OPTIONS.find((candidate) => candidate.value === state.peerSubrole);
+    return {
+      label: option?.label ?? state.peerSubrole,
+      ...(option?.description ? { description: option.description } : {}),
+    };
+  }, [state.peerSubrole]);
 
   const handleAppearanceChange = useCallback(
     (value: { icon: string; color: string }) => model.setAppearance(value),
@@ -174,6 +219,10 @@ function OpenAgentProfileEditModal({
   const handleThinkingChange = useCallback(
     (value: string, display: SelectFieldDisplay) =>
       model.setThinking(value, value ? display : null),
+    [model],
+  );
+  const handlePeerSubroleChange = useCallback(
+    (value: PeerSubrole | "") => model.setPeerSubrole(value),
     [model],
   );
 
@@ -263,6 +312,23 @@ function OpenAgentProfileEditModal({
           size={controlSize}
           testID="agent-profile-provider-field"
           triggerTestID="agent-profile-provider-trigger"
+        />
+
+        <SelectField
+          label="Peer subrole"
+          value={state.peerSubrole}
+          selectedDisplay={peerSubroleDisplay}
+          options={PEER_SUBROLE_OPTIONS}
+          onChange={handlePeerSubroleChange}
+          placeholder="Select Peer subrole"
+          emptyText="No Peer subroles available"
+          hint="Routing metadata only. It does not grant role, write, review, or acceptance authority."
+          disabled={state.isSubmitting}
+          searchable={false}
+          title="Peer subrole"
+          size={controlSize}
+          testID="agent-profile-peer-subrole-field"
+          triggerTestID="agent-profile-peer-subrole-trigger"
         />
 
         {state.disclosure.showModelField ? (

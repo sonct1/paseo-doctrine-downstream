@@ -35,6 +35,8 @@ export const ROLE_TOOL_CEILINGS = {
     "archive_agent",
     "get_agent_activity",
     "create_room",
+    "start_council",
+    "record_council_seat",
     "read_room",
     "post_room",
     "beads_status",

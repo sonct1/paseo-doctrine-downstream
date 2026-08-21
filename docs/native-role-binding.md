@@ -78,11 +78,31 @@ Technical role support không thay user-account policy; qualification dùng offi
 
 Không có silent fallback. Provider có model phù hợp nhưng thiếu native role channel vẫn không tương thích với Foundation role.
 
+Lead-to-Peer routing có Human-configured allowlist, provider priority và optional global default subrole.
+Agent Profile có thể mang `peerSubrole=scout|engineer|reviewer|architect` như routing metadata; field này
+không phải ExecutionSpecialization và không cấp role, instruction, lease hoặc acceptance authority.
+`list_profiles` trả exact profiles, priority và default hiện hành. Exact `launchProfileId` luôn thắng. Khi
+Lead bỏ field đó, daemon dùng specialization/disposition đã explicit nếu nó map được sang Reviewer hoặc
+Architect; nếu không thì dùng global default. Resolver chỉ chọn profile cùng subrole từ provider sớm nhất,
+materialize exact profile vào create receipt và fail closed khi không có match. Global default `null` giữ
+hành vi bắt chọn exact profile. Sau khi một route đã được chọn, preflight hoặc launch failure không tự
+failover sang provider khác; retry vẫn là create request mới để không che runtime failure.
+
 Assignment `no-write` có thêm capability gate độc lập với durable instruction channel. Daemon pin Codex
-vào `read-only`, Claude/Cursor/Antigravity vào `plan`, khóa mode switch và từ chối permission response
-`allow`. Pi và OMP vẫn có durable role channel nhưng chưa có no-write mode đã qualify, nên no-write
-launch của hai route này fail closed. Write-authorized assignment không bị gate này mở rộng scope:
-provider mode chỉ là capability, assignment vẫn là authority.
+vào `read-only`, Claude vào guarded `default`, Cursor/Antigravity vào `plan`, khóa mode switch và từ chối permission response
+`allow` cho tool escalation; câu trả lời `AskUserQuestion` không cấp capability nên vẫn hợp lệ. Với
+Claude, guarded `default` đi kèm built-in tool allowlist chỉ đọc và deny rõ `Bash`, các tool
+edit/write notebook, worktree/cron mutation và `ExitPlanMode`; vì `allowedTools` chỉ pre-approve chứ
+không thu hẹp tool surface, adapter dùng SDK `tools` làm strict allowlist. Exact Paseo MCP grants trong
+immutable role tool policy còn được `canUseTool` auto-allow trực tiếp. Không dùng Claude `plan` vì Plan
+workflow tự yêu cầu model tránh cả native Room coordination dù tool đã pre-approved; guarded `default`
+loại variance đó mà strict tool surface vẫn giữ technical no-write. Tool ngoài receipt vẫn đi qua
+permission gate bình thường. Pi và OMP vẫn có durable role channel nhưng chưa có no-write mode đã
+qualify, nên no-write launch của hai route này fail closed.
+Assignment boundary luôn thắng global Peer run mode và mode lưu trong Agent Profile: `no-write` ép
+qualified read-only/guarded/plan mode với `unattended=false`; global `unattended` chỉ áp cho assignment có write
+lease. Write-authorized assignment không bị gate này mở rộng scope: provider mode chỉ là capability,
+assignment vẫn là authority.
 
 ### Hai Codex route độc lập với role
 
@@ -122,6 +142,11 @@ toàn bộ projection.
 - Một successful `beads_status` receipt được bind với exact assignment digest; mọi Beads operation khác
   bị runtime từ chối cho tới khi receipt đó tồn tại. Final prose không chữa được checkpoint sai thứ tự.
 - Lead có Paseo delegation/lifecycle và Beads mutation tools trong Human lease.
+- Lead có `start_council` để tạo một Room thật và nhận canonical seat plan cho các Peer
+  `scout|architect|reviewer`; Lead vẫn phải gọi `list_profiles` rồi `create_agent` cho từng seat, nên
+  Council không sinh orchestration runtime thứ hai. `record_council_seat` chỉ cho Lead cập nhật phase,
+  integrity và disposition của direct Peer child thuộc đúng case/workspace; nó không mở generic
+  `update_agent`.
 - Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
   Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;
   Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
@@ -209,8 +234,8 @@ Không restart daemon hoặc mutate user credentials/provider activation trong i
 - Resume/reload giữ exact provider route và model; model mutation trên role-bound agent bị reject.
 - Assignment `no-write` phải persist và launch bằng exact qualified no-write mode; provider thiếu mode
   đó bị reject trước session launch.
-- Role-bound no-write session từ chối mode switch ra khỏi pinned mode và mọi permission response
-  `allow`; `deny` vẫn hợp lệ.
+- Role-bound no-write session từ chối mode switch ra khỏi pinned mode và permission response `allow`
+  có thể mở capability; `deny` và câu trả lời `AskUserQuestion` vẫn hợp lệ.
 - Codex/Claude provider extras không thể ghi đè role instruction hoặc native-delegation guards.
 - Built-in Codex chỉ launch khi native account readback là ChatGPT subscription.
 - Custom Codex thiếu model/URL/key hoặc launch lỗi không fallback sang built-in subscription.

@@ -726,6 +726,89 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
+  test("technically restricts a no-write role assignment to Claude read tools", async () => {
+    const { queryFactory, launches } = createQueryMock();
+    const client = new ClaudeAgentClient({
+      logger,
+      queryFactory,
+      resolveBinary: async () => "/test/claude/bin",
+    });
+    const session = await client.createSession(
+      {
+        provider: "claude",
+        cwd: process.cwd(),
+        modeId: "default",
+        mcpServers: { paseo: { type: "http", url: "http://127.0.0.1/paseo" } },
+        toolPolicy: {
+          preapproved: [
+            { kind: "mcp", server: "paseo", tool: "beads_status" },
+            { kind: "mcp", server: "paseo", tool: "post_room" },
+          ],
+        },
+      },
+      {
+        roleBinding: {
+          roleId: "peer",
+          instructions: "PASEO ROLE PEER",
+          noWrite: true,
+        },
+      },
+    );
+
+    try {
+      await session.startTurn("inspect without changing anything");
+
+      expect(launches[0]?.options.permissionMode).toBe("default");
+      expect(launches[0]?.options.allowDangerouslySkipPermissions).toBe(false);
+      expect(launches[0]?.options.allowedTools).toEqual([
+        "mcp__paseo__beads_status",
+        "mcp__paseo__post_room",
+      ]);
+      expect(launches[0]?.options.tools).toEqual([
+        "Read",
+        "Glob",
+        "Grep",
+        "WebFetch",
+        "WebSearch",
+        "AskUserQuestion",
+        "Skill",
+        "ToolSearch",
+      ]);
+      expect(launches[0]?.options.disallowedTools).toEqual(
+        expect.arrayContaining([
+          "Bash",
+          "Write",
+          "Edit",
+          "NotebookEdit",
+          "ExitPlanMode",
+          "EnterWorktree",
+          "ExitWorktree",
+          "CronCreate",
+          "CronDelete",
+        ]),
+      );
+      const canUseTool = launches[0]?.options.canUseTool as
+        | ((
+            toolName: string,
+            input: Record<string, unknown>,
+            options: Record<string, unknown>,
+          ) => Promise<Record<string, unknown>>)
+        | undefined;
+      await expect(canUseTool?.("mcp__paseo__beads_status", {}, {})).resolves.toEqual({
+        behavior: "allow",
+        updatedInput: {},
+      });
+      await expect(
+        canUseTool?.("mcp__paseo__post_room", { roomId: "room-1" }, {}),
+      ).resolves.toEqual({
+        behavior: "allow",
+        updatedInput: { roomId: "room-1" },
+      });
+    } finally {
+      await session.close();
+    }
+  });
+
   test("projects bundled Council as a Lead-only Claude session plugin", async () => {
     const { queryFactory, launches } = createQueryMock();
     const client = new ClaudeAgentClient({

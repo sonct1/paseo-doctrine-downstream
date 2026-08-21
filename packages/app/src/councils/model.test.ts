@@ -123,13 +123,15 @@ describe("groupCouncilCases", () => {
     ]);
   });
 
-  it("recognizes the native Solution Architect and Reviewer Council seats", () => {
+  it("recognizes the native Scout, Solution Architect, and Reviewer Council seats", () => {
+    const scout = makeAgent("scout", councilLabels("scout"));
     const reviewer = makeAgent("reviewer", councilLabels("reviewer"));
     const architect = makeAgent("architect", councilLabels("architect"));
 
-    const council = groupCouncilCases([reviewer, architect])[0];
+    const council = groupCouncilCases([reviewer, scout, architect])[0];
 
-    expect(council?.seats.map((seat) => seat.role)).toEqual(["architect", "reviewer"]);
+    expect(council?.seats.map((seat) => seat.role)).toEqual(["scout", "architect", "reviewer"]);
+    expect(councilRoleLabel("scout")).toBe("Scout");
     expect(councilRoleLabel("architect")).toBe("Solution Architect");
     expect(councilRoleLabel("reviewer")).toBe("Reviewer");
   });

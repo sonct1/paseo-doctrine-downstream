@@ -341,10 +341,12 @@ function configureOpenCodeProviderStub(
 ): void {
   const claudeModes: AgentMode[] = [
     { id: "default", label: "Default", description: "Ask first" },
+    { id: "plan", label: "Plan", description: "Read only" },
     { id: "bypassPermissions", label: "Bypass", description: "No prompts", isUnattended: true },
   ];
   const codexModes: AgentMode[] = [
     { id: "default", label: "Default", description: "Default" },
+    { id: "read-only", label: "Read only", description: "No writes" },
     { id: "auto", label: "Auto", description: "Auto" },
     { id: "full-access", label: "Full Access", description: "No prompts", isUnattended: true },
   ];
@@ -1545,6 +1547,305 @@ describe("create_agent MCP tool", () => {
 
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ provider: "codex", model: "gpt-5.4", modeId: "default" }),
+      undefined,
+      expect.objectContaining({ roleId: "peer" }),
+    );
+  });
+
+  it("materializes an allowed Peer Agent Profile and blocks raw or disallowed overrides", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      provider: "claude",
+      config: { model: "claude-haiku-4-5" },
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({ id: "peer-agent", roleBinding: createTestRoleBinding("peer") }),
+    );
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: {
+        get: () =>
+          MutableDaemonConfigSchema.parse({
+            mcp: { injectIntoAgents: true },
+            peerDelegation: {
+              enabled: true,
+              runMode: "unattended",
+              allowedModels: [{ provider: "codex", model: "gpt-5.4" }],
+            },
+            peerDelegationProfileIds: ["peer-scout"],
+            agentProfiles: [
+              {
+                id: "peer-scout",
+                name: "Peer Scout",
+                provider: "codex",
+                model: "gpt-5.4",
+                modeId: "full-access",
+                thinkingOptionId: "high",
+                featureValues: { fast_mode: true },
+                notes: "Use for bounded codebase reconnaissance.",
+              },
+              {
+                id: "peer-reviewer",
+                name: "Peer Reviewer",
+                provider: "codex",
+                model: "gpt-5.4",
+              },
+            ],
+          }),
+      },
+      callerAgentId: caller.id,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+
+    await expect(
+      tool.handler({
+        title: "Raw Peer",
+        provider: "codex/gpt-5.4",
+        role: "peer",
+        initialPrompt: "Do bounded work",
+      }),
+    ).rejects.toThrow("omit provider and settings");
+    await expect(
+      tool.handler({
+        title: "Disallowed Peer",
+        launchProfileId: "peer-reviewer",
+        role: "peer",
+        initialPrompt: "Do bounded work",
+      }),
+    ).rejects.toThrow("is not allowed by the Human-configured policy");
+
+    const response = await tool.handler({
+      title: "Scout Peer",
+      launchProfileId: "peer-scout",
+      role: "peer",
+      initialPrompt: "Map the bounded implementation path",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledTimes(1);
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5.4",
+        modeId: "full-access",
+        thinkingOptionId: "high",
+        featureValues: { fast_mode: true },
+      }),
+      undefined,
+      expect.objectContaining({ roleId: "peer", workspaceId: "wks_lead" }),
+    );
+    expect(response.structuredContent).toEqual(
+      expect.objectContaining({
+        launchProfile: { id: "peer-scout", name: "Peer Scout" },
+      }),
+    );
+  });
+
+  it("lets a no-write Peer assignment override an unattended Agent Profile mode", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      provider: "claude",
+      config: { model: "claude-fable-5" },
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({ id: "peer-agent", roleBinding: createTestRoleBinding("peer") }),
+    );
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: {
+        get: () =>
+          MutableDaemonConfigSchema.parse({
+            mcp: { injectIntoAgents: true },
+            peerDelegation: {
+              enabled: true,
+              runMode: "unattended",
+              allowedModels: [{ provider: "claude", model: "claude-fable-5" }],
+            },
+            peerDelegationProfileIds: ["peer-reviewer-claude"],
+            agentProfiles: [
+              {
+                id: "peer-reviewer-claude",
+                name: "Peer Reviewer Claude",
+                provider: "claude",
+                model: "claude-fable-5",
+                modeId: "bypassPermissions",
+                peerSubrole: "reviewer",
+              },
+            ],
+          }),
+      },
+      callerAgentId: caller.id,
+      logger,
+    });
+    const assignment = {
+      version: 1,
+      disposition: "independent-review",
+      objective: "Review the bounded implementation without changing files.",
+      effectClass: "read-only",
+      mutationBoundary: { mode: "no-write" },
+      externalEffectBoundary: { mode: "denied" },
+      evidence: "Return exact review evidence.",
+      handbackAndStop: "Stop after the review handback.",
+    } as const;
+
+    await registeredTool(server, "create_agent").handler({
+      title: "Reviewer Peer",
+      launchProfileId: "peer-reviewer-claude",
+      role: "peer",
+      assignment,
+      initialPrompt: "Review this bounded change and do not write anything",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "claude",
+        model: "claude-fable-5",
+        modeId: "default",
+      }),
+      undefined,
+      expect.objectContaining({ roleId: "peer", assignment }),
+    );
+  });
+
+  it("resolves a generic Peer through default subrole and provider priority", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      provider: "codex",
+      config: { model: "gpt-5.4" },
+      cwd: existingCwd,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    spies.agentManager.createAgent.mockResolvedValue(
+      createManagedAgent({ id: "peer-agent", roleBinding: createTestRoleBinding("peer") }),
+    );
+    const profiles: AgentProfile[] = [
+      {
+        id: "codex-engineer",
+        name: "Peer Engineer — Codex",
+        provider: "codex",
+        model: "gpt-5.4",
+        modeId: "full-access",
+        peerSubrole: "engineer",
+      },
+      {
+        id: "claude-scout",
+        name: "Peer Scout — Claude",
+        provider: "claude",
+        model: "claude-sonnet-5",
+        modeId: "bypassPermissions",
+        peerSubrole: "scout",
+      },
+      {
+        id: "claude-engineer",
+        name: "Peer Engineer — Claude",
+        provider: "claude",
+        model: "claude-sonnet-5",
+        modeId: "bypassPermissions",
+        peerSubrole: "engineer",
+      },
+    ];
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: true },
+      peerDelegation: {
+        enabled: true,
+        runMode: "unattended",
+        allowedModels: profiles.map((profile) => ({
+          provider: profile.provider,
+          model: profile.model,
+        })),
+      },
+      peerDelegationProfileIds: profiles.map((profile) => profile.id),
+      peerDelegationProviderPriority: ["claude", "codex"],
+      peerDelegationDefaultSubrole: "engineer",
+      agentProfiles: profiles,
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: { get: () => config },
+      callerAgentId: caller.id,
+      logger,
+    });
+    const tool = registeredTool(server, "create_agent");
+
+    const genericResponse = await tool.handler({
+      title: "Generic implementation Peer",
+      role: "peer",
+      initialPrompt: "Implement the bounded fix",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        provider: "claude",
+        model: "claude-sonnet-5",
+        modeId: "bypassPermissions",
+      }),
+      undefined,
+      expect.objectContaining({ roleId: "peer" }),
+    );
+    expect(genericResponse.structuredContent).toEqual(
+      expect.objectContaining({
+        launchProfile: { id: "claude-engineer", name: "Peer Engineer — Claude" },
+      }),
+    );
+
+    await tool.handler({
+      title: "Exact implementation Peer",
+      launchProfileId: "codex-engineer",
+      role: "peer",
+      initialPrompt: "Implement with the exact requested route",
+    });
+
+    expect(spies.agentManager.createAgent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ provider: "codex", model: "gpt-5.4", modeId: "full-access" }),
       undefined,
       expect.objectContaining({ roleId: "peer" }),
     );
@@ -6092,6 +6393,7 @@ describe("agent profile listing MCP tool", () => {
         thinkingOptionId: "high",
         featureValues: { fast_mode: true },
         notes: "Use for UI work: components, layout, design tokens. Not for backend.",
+        peerSubrole: "engineer",
       },
     ];
     const server = await createAgentMcpServer({
@@ -6103,14 +6405,92 @@ describe("agent profile listing MCP tool", () => {
     });
     const tool = registeredTool(server, "list_profiles");
 
-    expect(tool.description).toContain("`${provider}/${model}`");
-    expect(tool.description).toContain("create_agent.settings");
+    expect(tool.description).toContain("create_agent.launchProfileId");
+    expect(tool.description).toContain("peerSubrole");
+    expect(tool.description).toContain("defaultSubrole");
     expect(tool.description).toContain("routing guidance only");
-    expect(tool.description).toContain("do not use it for role-bound delegation");
 
     const response = await tool.handler({});
 
     expect(response.structuredContent).toEqual({ profiles });
+  });
+
+  it("returns only Human-approved Peer profiles to a role-bound Lead", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    const caller = createManagedAgent({
+      id: "lead-agent",
+      cwd: REPO_CWD,
+      workspaceId: "wks_lead",
+      roleBinding: createTestRoleBinding("lead"),
+    });
+    spies.agentManager.getAgent.mockImplementation((agentId: string) =>
+      agentId === caller.id ? caller : null,
+    );
+    mockStoredAgentRecords(spies.agentStorage.get, [
+      createActiveStoredRecord({
+        id: caller.id,
+        cwd: caller.cwd,
+        workspaceId: caller.workspaceId,
+        roleBinding: caller.roleBinding,
+      }),
+    ]);
+    const scout: AgentProfile = {
+      id: "peer-scout",
+      name: "Peer Scout",
+      provider: "codex",
+      model: "gpt-5.6-luna",
+      notes: "Use for bounded reconnaissance.",
+      peerSubrole: "scout",
+    };
+    const reviewer: AgentProfile = {
+      id: "peer-reviewer",
+      name: "Peer Reviewer",
+      provider: "codex",
+      model: "gpt-5.4",
+      peerSubrole: "reviewer",
+    };
+    const architect: AgentProfile = {
+      id: "peer-architect-claude",
+      name: "Peer Architect — Claude",
+      provider: "claude",
+      model: "claude-opus-4-1",
+      peerSubrole: "architect",
+    };
+    const engineer: AgentProfile = {
+      id: "peer-engineer-cursor",
+      name: "Peer Engineer — Cursor",
+      provider: "cursor",
+      model: "composer-1.5",
+      peerSubrole: "engineer",
+    };
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: true },
+      peerDelegation: {
+        enabled: true,
+        allowedModels: [{ provider: "codex", model: "gpt-5.6-luna" }],
+        runMode: "unattended",
+      },
+      peerDelegationProfileIds: [scout.id, architect.id, reviewer.id, engineer.id],
+      peerDelegationProviderPriority: ["claude", "codex", "cursor"],
+      peerDelegationDefaultSubrole: "engineer",
+      agentProfiles: [scout, reviewer, architect, engineer],
+    });
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      daemonConfigStore: { get: () => config },
+      callerAgentId: caller.id,
+      logger,
+    });
+
+    const response = await registeredTool(server, "list_profiles").handler({});
+
+    expect(response.structuredContent).toEqual({
+      defaultSubrole: "engineer",
+      providerPriority: ["claude", "codex", "cursor"],
+      profiles: [architect, scout, reviewer, engineer],
+    });
   });
 
   it("returns an empty array when no profiles are configured", async () => {

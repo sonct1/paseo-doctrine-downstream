@@ -5537,6 +5537,7 @@ export class AgentManager {
               ...(roleBinding.roleProfile
                 ? { allowedSkills: roleBinding.roleProfile.allowedSkills }
                 : {}),
+              noWrite: roleBinding.assignment?.mutationBoundary.mode === "no-write",
             },
           }
         : {}),

@@ -55,7 +55,7 @@ phép và transfer không thêm independent judgment. Lead không implement rồ
 
 ## Peer
 
-Peer là independent full session nhận đúng một disposition và một bounded outcome. Common dispositions: `Engineer/Owner`, `Solution Architect`, `Reviewer`, `Scout`, `Shadow`.
+Peer là independent full session nhận đúng một disposition và một bounded outcome. Common dispositions: `Engineer`, `Solution Architect`, `Reviewer`, `Scout`, `Shadow`.
 
 Peer phải:
 
@@ -66,7 +66,7 @@ Peer phải:
 - preserve unrelated state, tự verify writes và hand back exact artifact/evidence;
 - không create/coordinate/replace agent, không tự mở rộng scope và không claim acceptance.
 
-`Engineer/Owner` cần exact write lease. Mọi disposition không có write lease giữ non-mutating bằng
+`Engineer` cần exact write lease và nhận ownership của đúng moving scope được giao. Mọi disposition không có write lease giữ non-mutating bằng
 provider/OS no-write boundary đã qualify; nếu boundary đó unavailable thì launch fail closed. Reviewer
 falsify một stable candidate theo mandate, không tự patch finding hoặc redesign ngoài scope. Independent
 judgment không có nghĩa manufacture dissent.

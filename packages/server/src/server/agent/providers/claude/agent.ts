@@ -426,6 +426,7 @@ interface ClaudeAgentSessionOptions {
   roleInstructions?: string;
   roleId?: PaseoRoleId;
   allowedFoundationSkills?: readonly string[];
+  noWrite?: boolean;
   productSkillBundleRoot?: string;
   persistSession?: boolean;
   logger: Logger;
@@ -1536,6 +1537,7 @@ export class ClaudeAgentClient implements AgentClient {
       roleInstructions: launchContext?.roleBinding?.instructions,
       roleId: launchContext?.roleBinding?.roleId,
       allowedFoundationSkills: launchContext?.roleBinding?.allowedSkills,
+      noWrite: launchContext?.roleBinding?.noWrite === true,
       productSkillBundleRoot: this.productSkillBundleRoot,
       persistSession: options?.persistSession,
       logger: this.logger,
@@ -1569,6 +1571,7 @@ export class ClaudeAgentClient implements AgentClient {
       roleInstructions: launchContext?.roleBinding?.instructions,
       roleId: launchContext?.roleBinding?.roleId,
       allowedFoundationSkills: launchContext?.roleBinding?.allowedSkills,
+      noWrite: launchContext?.roleBinding?.noWrite === true,
       productSkillBundleRoot: this.productSkillBundleRoot,
       logger: this.logger,
       queryFactory: this.queryFactory,
@@ -2046,6 +2049,8 @@ class ClaudeAgentSession implements AgentSession {
   private readonly launchEnv?: Record<string, string>;
   private readonly agentId?: string;
   private readonly roleInstructions?: string;
+  private readonly noWrite: boolean;
+  private readonly exactPreapprovedToolNames: ReadonlySet<string>;
   private readonly foundationSkillPolicy: FoundationSkillPolicy | null;
   private readonly productSkillPolicy: ProductSkillPolicy | null;
   private readonly defaults?: { agents?: Record<string, AgentDefinition> };
@@ -2121,6 +2126,10 @@ class ClaudeAgentSession implements AgentSession {
     this.launchEnv = options.launchEnv;
     this.agentId = options.agentId;
     this.roleInstructions = options.roleInstructions;
+    this.noWrite = options.noWrite === true;
+    this.exactPreapprovedToolNames = new Set(
+      (config.toolPolicy?.preapproved ?? []).map((grant) => `mcp__${grant.server}__${grant.tool}`),
+    );
     this.foundationSkillPolicy = options.roleId
       ? narrowFoundationSkillPolicy(
           loadFoundationSkillPolicy(options.roleId),
@@ -3341,8 +3350,35 @@ class ClaudeAgentSession implements AgentSession {
         "TeamCreate",
         "TeamDelete",
         "SendMessage",
+        ...(this.noWrite
+          ? [
+              "Bash",
+              "Write",
+              "Edit",
+              "MultiEdit",
+              "NotebookEdit",
+              "ExitPlanMode",
+              "EnterWorktree",
+              "ExitWorktree",
+              "CronCreate",
+              "CronDelete",
+            ]
+          : []),
       ]),
     );
+    if (this.noWrite) {
+      base.tools = [
+        "Read",
+        "Glob",
+        "Grep",
+        "WebFetch",
+        "WebSearch",
+        "AskUserQuestion",
+        "Skill",
+        "ToolSearch",
+      ];
+      base.allowDangerouslySkipPermissions = false;
+    }
   }
 
   private buildSettingsOptions(
@@ -4545,6 +4581,18 @@ class ClaudeAgentSession implements AgentSession {
     input,
     options,
   ): Promise<PermissionResult> => {
+    // Claude plan mode may still consult canUseTool for MCP calls even when
+    // allowedTools contains the exact daemon-owned grant. Honor only the
+    // immutable ToolPolicy receipts here so role-scoped Paseo tools do not
+    // deadlock behind a permission escalation that no-write assignments must
+    // reject. Unlisted MCP tools and every provider-native write tool continue
+    // through the normal permission path.
+    if (this.exactPreapprovedToolNames.has(toolName)) {
+      return {
+        behavior: "allow",
+        updatedInput: input,
+      };
+    }
     const requestId = `permission-${randomUUID()}`;
     const kind = resolvePermissionKind(toolName, input);
     const requestInput = normalizeClaudeAskUserQuestionRequestInput(toolName, input);

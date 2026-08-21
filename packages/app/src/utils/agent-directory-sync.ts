@@ -31,6 +31,18 @@ export function applyAgentDirectoryDelta(input: { serverId: string; delta: Agent
 
 type AgentUpsertDelta = Extract<AgentDirectoryDelta, { kind: "upsert" }>;
 
+function preserveFoundationReceipts(previous: Agent | undefined, incoming: Agent): Agent {
+  return {
+    ...incoming,
+    ...(incoming.roleBinding || !previous?.roleBinding
+      ? {}
+      : { roleBinding: previous.roleBinding }),
+    ...(incoming.launchContract || !previous?.launchContract
+      ? {}
+      : { launchContract: previous.launchContract }),
+  };
+}
+
 function upsertAgentDirectoryReplica(
   serverId: string,
   delta: AgentUpsertDelta,
@@ -46,13 +58,13 @@ function upsertAgentDirectoryReplica(
         session?.serverInfo?.features?.workspaceMultiplicity !== true &&
         workspace.workspaceDirectory === normalized.cwd,
     )?.id;
-  const agent: Agent = {
+  const agent = preserveFoundationReceipts(previousAgent, {
     ...normalized,
     workspaceId: normalized.workspaceId ?? legacyWorkspaceId,
     projectPlacement:
       resolveProjectPlacement({ projectPlacement: delta.project, cwd: normalized.cwd }) ??
       previousAgent?.projectPlacement,
-  };
+  });
   const acceptedAgent = upsertAgentReplica(serverId, agent);
   if (acceptedAgent.archivedAt) {
     clearArchiveAgentPending({ queryClient, serverId, agentId: acceptedAgent.id });
@@ -158,6 +170,7 @@ interface PendingPermissionEntry {
 export function buildAgentDirectoryState(input: {
   serverId: string;
   entries: AgentDirectoryFetchEntry[];
+  previous?: ReadonlyMap<string, Agent>;
 }): {
   agents: Map<string, Agent>;
   pendingPermissions: Map<string, PendingPermissionEntry>;
@@ -171,10 +184,10 @@ export function buildAgentDirectoryState(input: {
       projectPlacement: entry.project,
       cwd: normalized.cwd,
     });
-    const agent: Agent = {
+    const agent = preserveFoundationReceipts(input.previous?.get(normalized.id), {
       ...normalized,
       projectPlacement,
-    };
+    });
     agents.set(agent.id, agent);
 
     for (const request of agent.pendingPermissions) {
@@ -190,8 +203,12 @@ export function replaceFetchedAgentDirectory(input: {
   serverId: string;
   entries: FetchAgentsEntry[];
 }): { agents: Map<string, Agent> } {
-  const { agents: fetchedAgents, pendingPermissions } = buildAgentDirectoryState(input);
   const store = useSessionStore.getState();
+  const previous = store.sessions[input.serverId]?.agents;
+  const { agents: fetchedAgents, pendingPermissions } = buildAgentDirectoryState({
+    ...input,
+    previous,
+  });
   for (const agent of fetchedAgents.values()) {
     if (agent.archivedAt) {
       clearArchiveAgentPending({ queryClient, serverId: input.serverId, agentId: agent.id });

@@ -1796,6 +1796,15 @@ export class VoiceAssistantWebSocketServer {
         checkoutDiscardChanges: true,
         // COMPAT(agentProfiles): added in v0.3.2, remove gate after 2027-02-11.
         agentProfiles: true,
+        // COMPAT(peerDelegationProfiles): added in v0.4.0-paseo.25, remove gate
+        // after 2027-08-19.
+        peerDelegationProfiles: true,
+        // COMPAT(peerDelegationProviderPriority): added in v0.4.0-paseo.26,
+        // remove gate after 2027-08-19.
+        peerDelegationProviderPriority: true,
+        // COMPAT(peerDelegationDefaultSubrole): added in v0.4.0-paseo.27,
+        // remove gate after 2027-08-20.
+        peerDelegationDefaultSubrole: true,
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: true,
       },

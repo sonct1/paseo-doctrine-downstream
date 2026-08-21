@@ -4,6 +4,7 @@ import type { RoleBindingReceipt } from "@getpaseo/protocol/role-binding";
 export const COUNCIL_TIERS = ["lens", "debate", "debate-with-proof", "high-risk"] as const;
 export const COUNCIL_PHASES = ["sealed", "review", "audit", "verdict"] as const;
 export const COUNCIL_ROLES = [
+  "scout",
   "architect",
   "reviewer",
   "independent",
@@ -80,13 +81,14 @@ const PHASE_ORDER: Record<CouncilPhase, number> = {
 };
 
 const ROLE_ORDER: Record<CouncilRole, number> = {
-  architect: 0,
-  reviewer: 1,
-  independent: 2,
-  challenger: 3,
-  specialist: 4,
-  verifier: 5,
-  auditor: 6,
+  scout: 0,
+  architect: 1,
+  reviewer: 2,
+  independent: 3,
+  challenger: 4,
+  specialist: 5,
+  verifier: 6,
+  auditor: 7,
 };
 
 function isCouncilTier(value: string): value is CouncilTier {

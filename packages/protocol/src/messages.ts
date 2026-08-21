@@ -204,6 +204,9 @@ export type PeerDelegationModelRoute = z.infer<typeof PeerDelegationModelRouteSc
 export const PeerDelegationRunModeSchema = z.enum(["guarded", "unattended"]);
 export type PeerDelegationRunMode = z.infer<typeof PeerDelegationRunModeSchema>;
 
+export const PeerSubroleSchema = z.enum(["scout", "engineer", "reviewer", "architect"]);
+export type PeerSubrole = z.infer<typeof PeerSubroleSchema>;
+
 const MutablePeerDelegationConfigSchema = z
   .object({
     enabled: z.boolean(),
@@ -248,6 +251,11 @@ export const AgentProfileSchema = z
     featureValues: z.record(z.string(), z.unknown()).optional(),
     /** Free text, surfaced to orchestrating agents by the `list_profiles` MCP tool. */
     notes: z.string().optional(),
+    /**
+     * Human-authored routing metadata for Lead-to-Peer selection. This never
+     * grants role identity, execution specialization, mutation, or acceptance authority.
+     */
+    peerSubrole: PeerSubroleSchema.optional(),
   })
   .passthrough();
 
@@ -334,6 +342,17 @@ export const MutableDaemonConfigSchema = z
     // COMPAT(peerDelegation): absent/disabled or an empty allowlist denies new
     // Lead-to-Peer creation. Enabled routes are exact provider/model grants.
     peerDelegation: MutablePeerDelegationConfigSchema.optional(),
+    // COMPAT(peerDelegationProfiles): added in v0.4.0-paseo.25, remove the gate
+    // after 2027-08-19. Keep this outside the strict peerDelegation object so
+    // older apps can continue parsing config emitted by a newer daemon.
+    peerDelegationProfileIds: z.array(z.string().trim().min(1)).optional(),
+    // COMPAT(peerDelegationProviderPriority): added in v0.4.0-paseo.26,
+    // remove the gate after 2027-08-19. This stays outside the strict legacy
+    // object for the same mixed-version reason as peerDelegationProfileIds.
+    peerDelegationProviderPriority: z.array(z.string().trim().min(1)).optional(),
+    // COMPAT(peerDelegationDefaultSubrole): added in v0.4.0-paseo.27,
+    // remove the gate after 2027-08-20. Null preserves exact-profile routing.
+    peerDelegationDefaultSubrole: PeerSubroleSchema.nullable().optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
@@ -358,6 +377,9 @@ export const MutableDaemonConfigPatchSchema = z
     roleProfiles: RoleProfilePreferencesMapSchema.optional(),
     resetRoleProfiles: z.array(PaseoRoleIdSchema).optional(),
     peerDelegation: MutablePeerDelegationConfigSchema.partial().optional(),
+    peerDelegationProfileIds: z.array(z.string().trim().min(1)).optional(),
+    peerDelegationProviderPriority: z.array(z.string().trim().min(1)).optional(),
+    peerDelegationDefaultSubrole: PeerSubroleSchema.nullable().optional(),
     metadataGeneration: MutableMetadataGenerationConfigSchema.partial().optional(),
     autoArchiveAfterMerge: z.boolean().optional(),
     enableTerminalAgentHooks: z.boolean().optional(),
@@ -3526,6 +3548,15 @@ export const ServerInfoStatusPayloadSchema = z
         // agentProfiles to one is silently dropped. The client hides the feature
         // rather than letting a save appear to succeed.
         agentProfiles: z.boolean().optional(),
+        // COMPAT(peerDelegationProfiles): added in v0.4.0-paseo.25, remove gate
+        // after 2027-08-19. The client must not send profile IDs to older daemons.
+        peerDelegationProfiles: z.boolean().optional(),
+        // COMPAT(peerDelegationProviderPriority): added in v0.4.0-paseo.26,
+        // remove gate after 2027-08-19.
+        peerDelegationProviderPriority: z.boolean().optional(),
+        // COMPAT(peerDelegationDefaultSubrole): added in v0.4.0-paseo.27,
+        // remove gate after 2027-08-20.
+        peerDelegationDefaultSubrole: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
       })

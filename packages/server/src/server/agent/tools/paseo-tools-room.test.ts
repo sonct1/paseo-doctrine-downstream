@@ -8,13 +8,24 @@ import type { FileBackedChatService } from "../../chat/chat-service.js";
 import { createPaseoToolCatalog } from "./paseo-tools.js";
 
 class RoomAgentManagerFake {
-  public constructor(private readonly roleId?: "lead" | "peer" | "supervisor") {}
+  public readonly metadataUpdates: Array<{
+    agentId: string;
+    updates: { title?: string; labels?: Record<string, string> };
+  }> = [];
+
+  public constructor(
+    private readonly roleId?: "lead" | "peer" | "supervisor",
+    private readonly child?: ManagedAgent,
+  ) {}
 
   public getRoleBindingForToolCatalog(agentId: string) {
     return agentId === "agent-caller" && this.roleId ? { roleId: this.roleId } : undefined;
   }
 
   public getAgent(agentId: string): ManagedAgent | null {
+    if (agentId === this.child?.id) {
+      return this.child;
+    }
     if (agentId !== "agent-caller") {
       return null;
     }
@@ -27,15 +38,27 @@ class RoomAgentManagerFake {
       currentModeId: null,
       availableModes: [],
       config: { title: "Room caller" },
+      labels: {},
     } as ManagedAgent;
   }
 
   public listAgents(): ManagedAgent[] {
     return [];
   }
+
+  public async updateAgentMetadata(
+    agentId: string,
+    updates: { title?: string; labels?: Record<string, string> },
+  ): Promise<void> {
+    this.metadataUpdates.push({ agentId, updates });
+  }
 }
 
 class RoomAgentStorageFake {
+  public async get(): Promise<StoredAgentRecord | null> {
+    return null;
+  }
+
   public async list(): Promise<StoredAgentRecord[]> {
     return [];
   }
@@ -87,11 +110,13 @@ class RoomChatServiceFake {
 function createCatalog(options: {
   callerAgentId?: string;
   roleId?: "lead" | "peer" | "supervisor";
+  agentManager?: RoomAgentManagerFake;
   chatService?: RoomChatServiceFake;
   enablePosting?: boolean;
 }) {
   return createPaseoToolCatalog({
-    agentManager: new RoomAgentManagerFake(options.roleId) as unknown as AgentManager,
+    agentManager: (options.agentManager ??
+      new RoomAgentManagerFake(options.roleId)) as unknown as AgentManager,
     agentStorage: new RoomAgentStorageFake() as unknown as AgentStorage,
     providerSnapshotManager: {} as ProviderSnapshotManager,
     callerAgentId: options.callerAgentId,
@@ -148,7 +173,10 @@ describe("Paseo room tools", () => {
     });
 
     expect(peer.getTool("create_room")).toBeUndefined();
+    expect(peer.getTool("start_council")).toBeUndefined();
+    expect(peer.getTool("record_council_seat")).toBeUndefined();
     expect(supervisor.getTool("create_room")).toBeUndefined();
+    expect(supervisor.getTool("start_council")).toBeUndefined();
     const result = await lead.executeTool("create_room", {
       name: "council-case",
       purpose: "One bounded challenge and response",
@@ -159,6 +187,102 @@ describe("Paseo room tools", () => {
     ]);
     expect(result.structuredContent).toEqual({
       room: expect.objectContaining({ id: "room-1", name: "council-case" }),
+    });
+  });
+
+  test("starts a Lead-owned Council with one Room and canonical Peer seat plans", async () => {
+    const chatService = new RoomChatServiceFake();
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      chatService,
+    });
+
+    const result = await lead.executeTool("start_council", {
+      title: "Choose the implementation boundary",
+      question: "Which change is smallest and still technically enforced?",
+    });
+
+    expect(chatService.created).toHaveLength(1);
+    expect(chatService.dispatched).toEqual([
+      expect.objectContaining({
+        room: "room-1",
+        authorAgentId: "agent-caller",
+        body: expect.stringContaining("Sealed seats: scout, architect, reviewer"),
+      }),
+    ]);
+    expect(result.structuredContent).toEqual(
+      expect.objectContaining({
+        caseId: expect.stringMatching(/^case_[a-f0-9]{12}$/u),
+        phase: "sealed",
+        room: expect.objectContaining({ id: "room-1" }),
+        seats: [
+          expect.objectContaining({ role: "scout", peerSubrole: "scout" }),
+          expect.objectContaining({
+            role: "architect",
+            peerSubrole: "architect",
+            executionProfile: "solution-architect",
+          }),
+          expect.objectContaining({
+            role: "reviewer",
+            peerSubrole: "reviewer",
+            executionProfile: "reviewer",
+          }),
+        ],
+      }),
+    );
+  });
+
+  test("lets a Lead record only its own direct Peer Council seat", async () => {
+    const child = {
+      id: "peer-seat",
+      cwd: "/tmp/room-agent",
+      workspaceId: "workspace-room",
+      internal: false,
+      lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Scout seat" },
+      labels: {
+        "paseo.parent-agent-id": "agent-caller",
+        "council.case_id": "case_123456789abc",
+      },
+      roleBinding: { roleId: "peer" },
+    } as ManagedAgent;
+    const agentManager = new RoomAgentManagerFake("lead", child);
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager,
+      chatService: new RoomChatServiceFake(),
+    });
+
+    const result = await lead.executeTool("record_council_seat", {
+      caseId: "case_123456789abc",
+      agentId: "peer-seat",
+      phase: "review",
+      integrity: "valid",
+      disposition: "usable independent report",
+    });
+
+    expect(agentManager.metadataUpdates).toEqual([
+      {
+        agentId: "peer-seat",
+        updates: {
+          labels: {
+            "council.phase": "review",
+            "council.integrity": "valid",
+            "council.disposition": "usable independent report",
+          },
+        },
+      },
+    ]);
+    expect(result.structuredContent).toEqual({
+      agentId: "peer-seat",
+      caseId: "case_123456789abc",
+      phase: "review",
+      integrity: "valid",
+      disposition: "usable independent report",
     });
   });
 

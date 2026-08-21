@@ -39,6 +39,8 @@ function createAgentPayload(
     persistence: input.persistence ?? null,
     title: input.title ?? null,
     labels: input.labels ?? {},
+    ...(input.roleBinding ? { roleBinding: input.roleBinding } : {}),
+    ...(input.launchContract ? { launchContract: input.launchContract } : {}),
   };
 }
 
@@ -64,6 +66,37 @@ function createEntry(agent: AgentSnapshotPayload): FetchAgentsEntry {
 function permission(id: string): AgentPermissionRequest {
   return { id, provider: "codex", name: id, kind: "tool", title: id };
 }
+
+const roleBindingReceipt = {
+  roleId: "peer",
+  definitionVersion: "test",
+  definitionDigest: "a".repeat(64),
+  bindingDigest: "b".repeat(64),
+  provider: "codex",
+  injectionMethod: "codex-developer-instructions",
+  qualification: "implementation-supported",
+  workspaceProtocol: {
+    status: "bound",
+    readership: "assignment-only",
+    path: "/repo/WORKSPACE_PROTOCOL.md",
+    digest: "c".repeat(64),
+  },
+  createdAt: "2026-08-20T00:00:00.000Z",
+} as const;
+
+const launchContractReceipt = {
+  version: 1,
+  contractDigest: "d".repeat(64),
+  roleId: "peer",
+  providerId: "codex",
+  providerFamily: "codex",
+  model: "gpt-5.4",
+  routeKind: "codex-subscription",
+  modelProviderId: "openai",
+  authMethod: "codex-native",
+  credentialConfigured: true,
+  createdAt: "2026-08-20T00:00:00.000Z",
+} as const;
 
 function beginPendingSubmission(serverId: string, agentId: string): string {
   const clientMessageId = `client-${agentId}`;
@@ -207,6 +240,80 @@ describe("message submission authority", () => {
 });
 
 describe("replaceFetchedAgentDirectory", () => {
+  it("preserves Foundation receipts when later directory snapshots omit compact fields", () => {
+    const serverId = "server-foundation-receipts-snapshot";
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, null as unknown as DaemonClient);
+
+    replaceFetchedAgentDirectory({
+      serverId,
+      entries: [
+        createEntry(
+          createAgentPayload({
+            id: "peer-agent",
+            roleBinding: roleBindingReceipt,
+            launchContract: launchContractReceipt,
+          }),
+        ),
+      ],
+    });
+    replaceFetchedAgentDirectory({
+      serverId,
+      entries: [
+        createEntry(
+          createAgentPayload({
+            id: "peer-agent",
+            updatedAt: "2026-08-20T00:02:00.000Z",
+          }),
+        ),
+      ],
+    });
+
+    expect(store.getSession(serverId)?.agents.get("peer-agent")).toEqual(
+      expect.objectContaining({
+        roleBinding: roleBindingReceipt,
+        launchContract: launchContractReceipt,
+      }),
+    );
+    store.clearSession(serverId);
+  });
+
+  it("preserves Foundation receipts when a later live delta omits compact fields", () => {
+    const serverId = "server-foundation-receipts-delta";
+    const store = useSessionStore.getState();
+    store.initializeSession(serverId, null as unknown as DaemonClient);
+    const initial = createAgentPayload({
+      id: "peer-agent",
+      roleBinding: roleBindingReceipt,
+      launchContract: launchContractReceipt,
+    });
+    applyAgentDirectoryDelta({
+      serverId,
+      delta: { kind: "upsert", agent: initial, project: createEntry(initial).project },
+    });
+    const compactUpdate = createAgentPayload({
+      id: "peer-agent",
+      status: "idle",
+      updatedAt: "2026-08-20T00:02:00.000Z",
+    });
+    applyAgentDirectoryDelta({
+      serverId,
+      delta: {
+        kind: "upsert",
+        agent: compactUpdate,
+        project: createEntry(compactUpdate).project,
+      },
+    });
+
+    expect(store.getSession(serverId)?.agents.get("peer-agent")).toEqual(
+      expect.objectContaining({
+        roleBinding: roleBindingReceipt,
+        launchContract: launchContractReceipt,
+      }),
+    );
+    store.clearSession(serverId);
+  });
+
   it("preserves timeline initialization while replacing directory state", () => {
     const serverId = "server-initializing";
     const store = useSessionStore.getState();

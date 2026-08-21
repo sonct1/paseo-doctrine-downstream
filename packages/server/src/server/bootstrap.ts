@@ -429,6 +429,9 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   roleProfiles?: RoleProfilePreferencesMap;
   peerDelegation?: MutableDaemonConfig["peerDelegation"];
+  peerDelegationProfileIds?: MutableDaemonConfig["peerDelegationProfileIds"];
+  peerDelegationProviderPriority?: MutableDaemonConfig["peerDelegationProviderPriority"];
+  peerDelegationDefaultSubrole?: MutableDaemonConfig["peerDelegationDefaultSubrole"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
   pluginsEnabled?: boolean;
@@ -576,6 +579,15 @@ function resolveOptionalMutableDaemonConfig(
       : {}),
     ...(config.terminalProfiles !== undefined ? { terminalProfiles: config.terminalProfiles } : {}),
     ...(config.agentProfiles !== undefined ? { agentProfiles: config.agentProfiles } : {}),
+    ...(config.peerDelegationProfileIds !== undefined
+      ? { peerDelegationProfileIds: config.peerDelegationProfileIds }
+      : {}),
+    ...(config.peerDelegationProviderPriority !== undefined
+      ? { peerDelegationProviderPriority: config.peerDelegationProviderPriority }
+      : {}),
+    ...(config.peerDelegationDefaultSubrole !== undefined
+      ? { peerDelegationDefaultSubrole: config.peerDelegationDefaultSubrole }
+      : {}),
     peerDelegation: config.peerDelegation ?? {
       enabled: false,
       allowedModels: [],

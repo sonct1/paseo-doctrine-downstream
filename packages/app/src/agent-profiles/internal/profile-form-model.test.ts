@@ -128,16 +128,33 @@ describe("openAgentProfileForm", () => {
         thinkingOptionId: "think-hard",
         featureValues: { webSearch: true },
         notes: "Visual work only.",
+        peerSubrole: "reviewer",
       },
     });
     const state = model.getState();
 
     expect(state.name).toBe("UI work");
     expect(state.icon).toBe("palette");
+    expect(state.peerSubrole).toBe("reviewer");
     // Ids double as labels until the catalog arrives.
     expect(state.modelDisplay).toEqual({ label: "claude-opus-5" });
     expect(state.thinkingDisplay).toEqual({ label: "think-hard" });
     expect(state.catalogResolution).toBe("idle");
+  });
+
+  it("persists optional Peer subrole routing metadata", () => {
+    const model = openWithCatalog({ mode: "create" });
+    model.setName("Peer Engineer");
+    model.setProvider("codex", { label: "Codex" });
+    model.setPeerSubrole("engineer");
+
+    expect(model.getState().submitValue).toEqual(
+      expect.objectContaining({ peerSubrole: "engineer" }),
+    );
+
+    model.setPeerSubrole("");
+
+    expect(model.getState().submitValue).not.toHaveProperty("peerSubrole");
   });
 
   it("upgrades seeded displays to catalog labels without touching selections", () => {

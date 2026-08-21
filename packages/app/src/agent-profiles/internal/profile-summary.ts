@@ -30,6 +30,13 @@ export function buildAgentProfileTags(input: {
     { id: "provider", label: entry?.label ?? input.profile.provider },
   ];
 
+  if (input.profile.peerSubrole) {
+    tags.unshift({
+      id: "peer-subrole",
+      label: `Peer ${input.profile.peerSubrole.slice(0, 1).toUpperCase()}${input.profile.peerSubrole.slice(1)}`,
+    });
+  }
+
   const modelId = input.profile.model?.trim();
   if (modelId) {
     const model = entry?.models?.find((candidate) => candidate.id === modelId);

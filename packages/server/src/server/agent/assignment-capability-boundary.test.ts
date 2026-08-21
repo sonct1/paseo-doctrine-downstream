@@ -57,6 +57,21 @@ test("no-write Cursor assignment disables ACP auto-accept and pins plan mode", (
   ).toMatchObject({ modeId: "plan", featureValues: { auto_accept: false, fast: true } });
 });
 
+test("no-write Claude assignment pins guarded default mode for the strict tool boundary", () => {
+  const config: AgentSessionConfig = {
+    provider: "claude",
+    cwd: "/workspace/repo",
+    modeId: "bypassPermissions",
+  };
+
+  expect(
+    enforceRoleAssignmentCapability(
+      config,
+      roleBinding({ injectionMethod: "claude-system-prompt" }),
+    ),
+  ).toMatchObject({ modeId: "default" });
+});
+
 test("bounded-write assignment preserves the requested provider capability", () => {
   const config: AgentSessionConfig = {
     provider: "claude",
@@ -85,13 +100,32 @@ test("no-write assignment rejects mode and permission escalation", () => {
   const binding = roleBinding({ injectionMethod: "claude-system-prompt" });
 
   expect(() => assertRoleAssignmentModeAllowed(binding, "bypassPermissions")).toThrow(
-    "pinned to provider mode 'plan'",
+    "pinned to provider mode 'default'",
   );
   expect(() =>
     assertRoleAssignmentPermissionResponseAllowed(binding, { behavior: "allow" }),
   ).toThrow("cannot approve a permission escalation");
   expect(() =>
     assertRoleAssignmentPermissionResponseAllowed(binding, { behavior: "deny" }),
+  ).not.toThrow();
+});
+
+test("no-write assignment permits answering a provider question without granting capability", () => {
+  const binding = roleBinding({ injectionMethod: "claude-system-prompt" });
+
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(
+      binding,
+      { behavior: "allow", updatedInput: { answers: { decision: "stop" } } },
+      {
+        id: "permission-question",
+        provider: "claude",
+        name: "AskUserQuestion",
+        kind: "question",
+        title: "Choose how to continue",
+        actions: [],
+      },
+    ),
   ).not.toThrow();
 });
 

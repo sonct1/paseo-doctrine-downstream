@@ -104,6 +104,36 @@ describe("wire schema compatibility", () => {
     expect(parsed.features?.paseoToolPolicies).toBe(true);
   });
 
+  test("server info accepts the optional Peer Agent Profile routing flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "peer-profile-server",
+      features: { peerDelegationProfiles: true },
+    });
+
+    expect(parsed.features?.peerDelegationProfiles).toBe(true);
+  });
+
+  test("server info accepts the optional Peer provider priority flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "peer-priority-server",
+      features: { peerDelegationProviderPriority: true },
+    });
+
+    expect(parsed.features?.peerDelegationProviderPriority).toBe(true);
+  });
+
+  test("server info accepts the optional generic Peer default flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "peer-default-server",
+      features: { peerDelegationDefaultSubrole: true },
+    });
+
+    expect(parsed.features?.peerDelegationDefaultSubrole).toBe(true);
+  });
+
   test("server info accepts the optional chat rooms feature flag", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",

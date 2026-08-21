@@ -5,7 +5,7 @@ import type {
   AgentSelectOption,
   ProviderSnapshotEntry,
 } from "@getpaseo/protocol/agent-types";
-import type { AgentProfile } from "@getpaseo/protocol/messages";
+import type { AgentProfile, PeerSubrole } from "@getpaseo/protocol/messages";
 import { formatAgentModeLabel, formatThinkingOptionLabel } from "@/agent-controls/labels";
 import { applyFeatureValues, pruneFeatureValues } from "@/hooks/feature-preferences";
 import { filterSelectableModels } from "@/provider-selection/model-catalog";
@@ -71,6 +71,7 @@ export interface AgentProfileFormState {
   icon: string;
   color: string;
   notes: string;
+  peerSubrole: PeerSubrole | "";
   provider: string;
   modelId: string;
   modeId: string;
@@ -113,6 +114,7 @@ export interface AgentProfileFormModel {
   setName: (value: string) => void;
   setAppearance: (value: { icon: string; color: string }) => void;
   setNotes: (value: string) => void;
+  setPeerSubrole: (value: PeerSubrole | "") => void;
   setProvider: (providerId: string, display: AgentProfileFormDisplay) => void;
   setModel: (modelId: string, display: AgentProfileFormDisplay | null) => void;
   setMode: (modeId: string, display: AgentProfileFormDisplay | null) => void;
@@ -341,6 +343,7 @@ function buildSubmitValue(state: AgentProfileFormState): AgentProfileValue | nul
     ...(state.thinkingOptionId ? { thinkingOptionId: state.thinkingOptionId } : {}),
     ...(Object.keys(state.featureValues).length > 0 ? { featureValues: state.featureValues } : {}),
     ...(notes ? { notes } : {}),
+    ...(state.peerSubrole ? { peerSubrole: state.peerSubrole } : {}),
   };
 }
 
@@ -373,6 +376,7 @@ function buildInitialState(snapshot: AgentProfileFormSnapshot): AgentProfileForm
     icon: profile.icon ?? "",
     color: profile.color ?? "",
     notes: profile.notes ?? "",
+    peerSubrole: profile.peerSubrole ?? "",
     provider: profile.provider,
     modelId: profile.model ?? "",
     modeId: profile.modeId ?? "",
@@ -539,6 +543,7 @@ export function openAgentProfileForm(snapshot: AgentProfileFormSnapshot): AgentP
     setAppearance: (value) =>
       publish((current) => ({ ...current, icon: value.icon, color: value.color })),
     setNotes: (value) => publish((current) => ({ ...current, notes: value })),
+    setPeerSubrole: (value) => publish((current) => ({ ...current, peerSubrole: value })),
     setProvider: (providerId, display) =>
       publish((current) => {
         if (current.provider === providerId) {

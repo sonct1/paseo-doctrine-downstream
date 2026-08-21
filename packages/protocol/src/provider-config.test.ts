@@ -88,6 +88,41 @@ describe("provider Paseo-tool policy", () => {
     ).toEqual({ disabledTools: ["browser_future_tool"] });
   });
 
+  test("keeps Peer profile routing fields outside the strict legacy delegation object", () => {
+    const config = MutableDaemonConfigSchema.parse({
+      mcp: { injectIntoAgents: true },
+      peerDelegation: {
+        enabled: true,
+        allowedModels: [{ provider: "codex", model: "gpt-5.6-luna" }],
+        runMode: "unattended",
+      },
+      peerDelegationProfileIds: ["peer-scout"],
+      peerDelegationProviderPriority: ["claude", "codex"],
+      peerDelegationDefaultSubrole: "engineer",
+      agentProfiles: [
+        {
+          id: "peer-scout",
+          name: "Peer Scout",
+          provider: "codex",
+          peerSubrole: "scout",
+        },
+      ],
+    });
+    const patch = MutableDaemonConfigPatchSchema.parse({
+      peerDelegationProfileIds: ["peer-scout", "peer-reviewer"],
+      peerDelegationProviderPriority: ["codex", "claude"],
+      peerDelegationDefaultSubrole: null,
+    });
+
+    expect(config.peerDelegationProfileIds).toEqual(["peer-scout"]);
+    expect(config.peerDelegationProviderPriority).toEqual(["claude", "codex"]);
+    expect(config.peerDelegationDefaultSubrole).toBe("engineer");
+    expect(config.agentProfiles?.[0]?.peerSubrole).toBe("scout");
+    expect(patch.peerDelegationProfileIds).toEqual(["peer-scout", "peer-reviewer"]);
+    expect(patch.peerDelegationProviderPriority).toEqual(["codex", "claude"]);
+    expect(patch.peerDelegationDefaultSubrole).toBeNull();
+  });
+
   test("keeps credential references and rejects credential material in mutable provider env", () => {
     expect(
       MutableDaemonConfigPatchSchema.parse({

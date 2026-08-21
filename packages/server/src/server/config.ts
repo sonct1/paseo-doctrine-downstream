@@ -535,6 +535,15 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
   };
 }
 
+function resolvePeerDelegationSettings(persisted: ReturnType<typeof loadPersistedConfig>) {
+  return {
+    peerDelegation: persisted.daemon?.peerDelegation,
+    peerDelegationProfileIds: persisted.daemon?.peerDelegationProfileIds,
+    peerDelegationProviderPriority: persisted.daemon?.peerDelegationProviderPriority,
+    peerDelegationDefaultSubrole: persisted.daemon?.peerDelegationDefaultSubrole,
+  };
+}
+
 function resolveStaticLoadConfigSettings(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
@@ -549,7 +558,7 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     roleProfiles: resolveRoleProfiles(persisted),
-    peerDelegation: persisted.daemon?.peerDelegation,
+    ...resolvePeerDelegationSettings(persisted),
     ...resolveProfileLists(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
@@ -588,6 +597,9 @@ export function resolveConfigFromPersisted(
     appendSystemPrompt,
     roleProfiles,
     peerDelegation,
+    peerDelegationProfileIds,
+    peerDelegationProviderPriority,
+    peerDelegationDefaultSubrole,
     terminalProfiles,
     agentProfiles,
     hostnames,
@@ -636,6 +648,9 @@ export function resolveConfigFromPersisted(
     appendSystemPrompt,
     roleProfiles,
     peerDelegation,
+    peerDelegationProfileIds,
+    peerDelegationProviderPriority,
+    peerDelegationDefaultSubrole,
     terminalProfiles,
     agentProfiles,
     pluginsEnabled: persisted.pluginsEnabled ?? false,

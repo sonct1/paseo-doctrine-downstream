@@ -71,16 +71,16 @@ export const PASEO_TOOL_MANIFEST = [
   },
   {
     id: "list_profiles",
-    label: "List agent launch presets",
+    label: "List allowed agent profiles",
     description:
-      "List the host-wide provider/model/mode presets a Human configured for repeated agent launches.",
+      "List Human-approved Agent Profiles, routing subroles, the generic Peer default, and highest-first provider priority available for Lead-to-Peer delegation and other repeated launches.",
     group: "Agents",
   },
   {
     id: "create_agent",
     label: "Create agent",
     description:
-      "Create an agent. Agent-scoped creation defaults to your workspace and creates your subagent. Top-level creation without workspaceId creates a new local workspace. Requires provider/model (for example codex/gpt-5.4) and an initial prompt. Do not guess; call list_providers and list_models first if uncertain.",
+      "Create an agent. A role-bound Lead creating a Peer should call list_profiles, then pass launchProfileId or omit it to use the Human-configured default Peer subrole. Other agent-scoped creation can inherit the caller route; top-level creation requires provider/model and an initial prompt.",
     group: "Agents",
   },
   {
@@ -216,6 +216,19 @@ export const PASEO_TOOL_MANIFEST = [
     id: "create_room",
     label: "Create room",
     description: "Create a Paseo room for bounded agent coordination.",
+    group: "Rooms",
+  },
+  {
+    id: "start_council",
+    label: "Start council",
+    description: "Create a Lead-owned Council room and return canonical Peer seat launch labels.",
+    group: "Rooms",
+  },
+  {
+    id: "record_council_seat",
+    label: "Record council seat",
+    description:
+      "Record the phase, integrity, and optional disposition of one direct Council Peer seat.",
     group: "Rooms",
   },
   {

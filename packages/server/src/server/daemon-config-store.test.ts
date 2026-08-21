@@ -189,7 +189,7 @@ describe("DaemonConfigStore", () => {
     expect(loadPersistedConfig(paseoHome).daemon?.roleProfiles?.peer).toBeUndefined();
   });
 
-  test("persists the daemon-enforced Peer delegation model policy", () => {
+  test("persists Peer Agent Profile policy and keeps the legacy model mirror synchronized", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-peer-policy-"));
     tempDirs.push(paseoHome);
     const store = new DaemonConfigStore(paseoHome, {
@@ -203,27 +203,119 @@ describe("DaemonConfigStore", () => {
     });
 
     store.patch({
+      agentProfiles: [
+        {
+          id: "peer-scout",
+          name: "Peer Scout",
+          provider: "codex",
+          model: "gpt-5.4",
+        },
+      ],
+      peerDelegationProfileIds: ["peer-scout"],
       peerDelegation: {
         enabled: true,
         runMode: "guarded",
-        allowedModels: [
-          { provider: "claude", model: "claude-opus-4-1" },
-          { provider: "codex", model: "gpt-5.4" },
-        ],
+        allowedModels: [{ provider: "claude", model: "claude-opus-4-1" }],
       },
     });
 
     expect(store.get().peerDelegation).toEqual({
       enabled: true,
       runMode: "guarded",
-      allowedModels: [
-        { provider: "claude", model: "claude-opus-4-1" },
-        { provider: "codex", model: "gpt-5.4" },
-      ],
+      allowedModels: [{ provider: "codex", model: "gpt-5.4" }],
     });
+    expect(store.get().peerDelegationProfileIds).toEqual(["peer-scout"]);
     expect(loadPersistedConfig(paseoHome).daemon?.peerDelegation).toEqual(
       store.get().peerDelegation,
     );
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegationProfileIds).toEqual(["peer-scout"]);
+
+    store.patch({
+      agentProfiles: [
+        {
+          id: "peer-scout",
+          name: "Peer Scout",
+          provider: "codex",
+          model: "gpt-5.6-luna",
+        },
+      ],
+    });
+
+    expect(store.get().peerDelegation?.allowedModels).toEqual([
+      { provider: "codex", model: "gpt-5.6-luna" },
+    ]);
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegation?.allowedModels).toEqual([
+      { provider: "codex", model: "gpt-5.6-luna" },
+    ]);
+
+    store.patch({ agentProfiles: [] });
+
+    expect(store.get().peerDelegationProfileIds).toEqual([]);
+    expect(store.get().peerDelegation?.allowedModels).toEqual([]);
+  });
+
+  test("normalizes Peer provider priority against selected profiles", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-peer-priority-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+    const agentProfiles = [
+      {
+        id: "claude-scout",
+        name: "Claude Scout",
+        provider: "claude",
+        model: "opus",
+        peerSubrole: "scout" as const,
+      },
+      {
+        id: "codex-engineer",
+        name: "Codex Engineer",
+        provider: "codex",
+        model: "gpt",
+        peerSubrole: "engineer" as const,
+      },
+      {
+        id: "cursor-reviewer",
+        name: "Cursor Reviewer",
+        provider: "cursor",
+        model: "composer",
+        peerSubrole: "reviewer" as const,
+      },
+    ];
+
+    store.patch({
+      agentProfiles,
+      peerDelegationProfileIds: agentProfiles.map((profile) => profile.id),
+      peerDelegationProviderPriority: ["cursor", "stale", "cursor", "claude"],
+      peerDelegationDefaultSubrole: "engineer",
+    });
+
+    expect(store.get().peerDelegationProviderPriority).toEqual(["cursor", "claude", "codex"]);
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegationProviderPriority).toEqual([
+      "cursor",
+      "claude",
+      "codex",
+    ]);
+    expect(store.get().peerDelegationDefaultSubrole).toBe("engineer");
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegationDefaultSubrole).toBe("engineer");
+
+    store.patch({
+      peerDelegationProfileIds: ["claude-scout", "codex-engineer"],
+    });
+
+    expect(store.get().peerDelegationProviderPriority).toEqual(["claude", "codex"]);
+
+    store.patch({ peerDelegationDefaultSubrole: null });
+
+    expect(store.get().peerDelegationDefaultSubrole).toBeNull();
+    expect(loadPersistedConfig(paseoHome).daemon?.peerDelegationDefaultSubrole).toBeNull();
   });
 
   test("materializes only a credential file path in provider runtime env", () => {

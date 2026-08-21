@@ -12,12 +12,23 @@ export const ASSIGNMENT_CAPABILITY_BOUNDARY_ERROR = "assignment_capability_bound
 
 const NO_WRITE_MODE_BY_INJECTION_METHOD: Partial<Record<RoleBindingInjectionMethod, string>> = {
   "codex-developer-instructions": "read-only",
-  "claude-system-prompt": "plan",
+  // Claude plan mode injects a planning workflow that tells the model to avoid
+  // every state-changing call, including exact daemon-preapproved Paseo Room
+  // coordination. The adapter enforces no-write independently with a strict
+  // built-in tools allowlist plus explicit write-tool denies, so pin the
+  // guarded default mode and keep the model out of the Plan workflow.
+  "claude-system-prompt": "default",
   "cursor-project-rule-capsule": "plan",
   "cursor-always-apply-plugin": "plan",
   "antigravity-custom-agent": "plan",
   "mock-launch-context": "read-only",
 };
+
+export function noWriteModeForInjectionMethod(
+  injectionMethod: RoleBindingInjectionMethod,
+): string | null {
+  return NO_WRITE_MODE_BY_INJECTION_METHOD[injectionMethod] ?? null;
+}
 
 function requiresTechnicalNoWrite(roleBinding: PersistedRoleBinding | undefined): boolean {
   return roleBinding?.assignment?.mutationBoundary.mode === "no-write";
@@ -27,7 +38,7 @@ export function requiredNoWriteMode(roleBinding: PersistedRoleBinding | undefine
   if (!roleBinding || !requiresTechnicalNoWrite(roleBinding)) {
     return null;
   }
-  const modeId = NO_WRITE_MODE_BY_INJECTION_METHOD[roleBinding.injectionMethod];
+  const modeId = noWriteModeForInjectionMethod(roleBinding.injectionMethod);
   if (!modeId) {
     throw new Error(
       `${ASSIGNMENT_CAPABILITY_BOUNDARY_ERROR}: provider injection '${roleBinding.injectionMethod}' has no qualified no-write mode for ${roleBinding.roleId} assignment`,
@@ -98,9 +109,11 @@ export function assertRoleAssignmentPermissionResponseAllowed(
     request?.kind === "tool" &&
     request.metadata?.transportShadow === "cursor-opaque-mcp" &&
     context.onlyRuntimePaseoMcp === true;
+  const isQuestionResponse = request?.kind === "question";
   if (
     requiresTechnicalNoWrite(roleBinding) &&
     response.behavior === "allow" &&
+    !isQuestionResponse &&
     !isExactCursorPaseoToolConsent &&
     !isRoleScopedOpaqueCursorPaseoConsent
   ) {

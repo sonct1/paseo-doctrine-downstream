@@ -14,6 +14,7 @@ import {
   FoundationCredentialRefSchema,
   AgentProfileSchema,
   PeerDelegationRunModeSchema,
+  PeerSubroleSchema,
   PluginIdSchema,
   PluginSourceSchema,
   TerminalProfileSchema,
@@ -294,6 +295,9 @@ export const PersistedConfigSchema = z
           })
           .strict()
           .optional(),
+        peerDelegationProfileIds: z.array(z.string().trim().min(1)).optional(),
+        peerDelegationProviderPriority: z.array(z.string().trim().min(1)).optional(),
+        peerDelegationDefaultSubrole: PeerSubroleSchema.nullable().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
         cors: z

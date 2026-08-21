@@ -639,6 +639,8 @@ export interface AgentLaunchContext {
     };
     /** Immutable Foundation skill allowlist captured when the role binding was created. */
     allowedSkills?: string[];
+    /** Daemon-owned assignment capability. Provider adapters must enforce this technically. */
+    noWrite?: boolean;
   };
   /** Exact daemon-owned provider route paired with the role for this session. */
   providerLaunchBinding?: ProviderLaunchBinding;

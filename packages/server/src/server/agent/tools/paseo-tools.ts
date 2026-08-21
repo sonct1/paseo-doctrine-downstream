@@ -1,5 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { AssignmentEnvelopeSchema } from "@getpaseo/protocol/assignment-contract";
+import {
+  AssignmentEnvelopeSchema,
+  type AssignmentEnvelope,
+} from "@getpaseo/protocol/assignment-contract";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -7,10 +11,19 @@ import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-
 import type { AgentManager, ManagedAgent } from "../agent-manager.js";
 import {
   AgentProfileSchema,
+  PeerSubroleSchema,
+  type AgentProfile,
   type PeerDelegationModelRoute,
   type PeerDelegationRunMode,
+  type PeerSubrole,
 } from "@getpaseo/protocol/messages";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
+import {
+  orderPeerDelegationProfiles,
+  resolvePeerDelegationProviderPriority,
+  selectPeerDelegationProfileForSubrole,
+  selectPeerDelegationProfiles,
+} from "@getpaseo/protocol/peer-delegation-priority";
 import {
   AgentFeatureSchema,
   AgentPermissionRequestPayloadSchema,
@@ -119,12 +132,15 @@ import { toLaunchContractReceipt } from "../launch-contract.js";
 import {
   PaseoRoleIdSchema,
   RoleBindingReceiptSchema,
+  type RoleBindingInjectionMethod,
   type PaseoRoleId,
 } from "@getpaseo/protocol/role-binding";
+import { noWriteModeForInjectionMethod } from "../assignment-capability-boundary.js";
 import {
   ExecutionProfileBindingReceiptSchema,
   FoundationExecutionProfileIdSchema,
   getFoundationExecutionProfileDefinition,
+  type FoundationExecutionProfileId,
 } from "../foundation-execution-profiles.js";
 import {
   ManualCoordinationSignalKindSchema,
@@ -200,8 +216,92 @@ export interface PaseoToolHostDependencies {
   logger: Logger;
 }
 
+type LaunchableAgentProfile = AgentProfile & { model: string };
+
 function formatPeerRouteList(routes: readonly PeerDelegationModelRoute[]): string[] {
   return routes.map((route) => formatProviderModel(route.provider, route.model));
+}
+
+function selectPeerLaunchProfile(input: {
+  profileIds: readonly string[];
+  profiles: readonly AgentProfile[];
+  requestedProfileId?: string;
+  requestedSubrole?: PeerSubrole;
+  defaultSubrole?: PeerSubrole;
+  providerPriority?: readonly string[];
+}): AgentProfile {
+  if (input.profileIds.length === 0) {
+    throw new Error(
+      "Lead-to-Peer creation is blocked because no Agent Profiles are Human-approved",
+    );
+  }
+  const profilesById = new Map(input.profiles.map((profile) => [profile.id, profile]));
+  if (input.requestedProfileId !== undefined) {
+    if (!input.profileIds.includes(input.requestedProfileId)) {
+      throw new Error(
+        `Peer Agent Profile '${input.requestedProfileId}' is not allowed by the Human-configured policy`,
+      );
+    }
+    const requested = profilesById.get(input.requestedProfileId);
+    if (!requested) {
+      throw new Error(
+        `Peer Agent Profile '${input.requestedProfileId}' no longer exists; call list_profiles and choose an exact returned ID`,
+      );
+    }
+    return requested;
+  }
+
+  const available = input.profileIds.flatMap((id) => {
+    const candidate = profilesById.get(id);
+    return candidate ? [candidate] : [];
+  });
+  if (available.length === 0) {
+    throw new Error(
+      "The Human-approved Peer Agent Profiles no longer exist; ask the Human to update Agents settings",
+    );
+  }
+  const selectedSubrole = input.requestedSubrole ?? input.defaultSubrole;
+  if (selectedSubrole) {
+    const selected = selectPeerDelegationProfileForSubrole(
+      available,
+      available.map((profile) => profile.id),
+      input.providerPriority,
+      selectedSubrole,
+    );
+    if (!selected) {
+      throw new Error(
+        `No Human-approved Peer Agent Profile is tagged for subrole '${selectedSubrole}'; choose an exact launchProfileId or update Agents settings`,
+      );
+    }
+    return selected;
+  }
+  if (available.length > 1) {
+    throw new Error(
+      `Select an exact Human-approved Peer Agent Profile with launchProfileId: ${available
+        .map((candidate) => `${candidate.name} (${candidate.id})`)
+        .join(", ")}`,
+    );
+  }
+  return available[0];
+}
+
+function resolveRequestedPeerSubrole(input: {
+  executionProfile?: FoundationExecutionProfileId;
+  assignment?: AssignmentEnvelope;
+}): PeerSubrole | undefined {
+  if (input.executionProfile === "solution-architect") return "architect";
+  if (input.executionProfile === "review" || input.executionProfile === "reviewer") {
+    return "reviewer";
+  }
+  if (input.assignment?.disposition === "independent-review") return "reviewer";
+  return undefined;
+}
+
+function projectLaunchProfileReceipt(profile: LaunchableAgentProfile | undefined): {
+  launchProfile?: { id: string; name: string };
+} {
+  if (!profile) return {};
+  return { launchProfile: { id: profile.id, name: profile.name } };
 }
 
 function resolvePeerPolicyProviderRoute(
@@ -980,9 +1080,81 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     const config = daemonConfigStore.get();
     const policy = config.peerDelegation;
     if (!policy?.enabled) return [];
+    if (config.peerDelegationProfileIds !== undefined) {
+      const selected = new Set(config.peerDelegationProfileIds);
+      const seen = new Set<string>();
+      return (config.agentProfiles ?? []).flatMap((profile) => {
+        if (!selected.has(profile.id) || !profile.model?.trim()) return [];
+        try {
+          const route = resolveRequiredProviderModel(`${profile.provider}/${profile.model}`);
+          if (!route.model) return [];
+          if (!isPaseoSupportedProvider(route.provider, config.providers?.[route.provider])) {
+            return [];
+          }
+          const key = formatProviderModel(route.provider, route.model);
+          if (seen.has(key)) return [];
+          seen.add(key);
+          return [{ provider: route.provider, model: route.model }];
+        } catch {
+          return [];
+        }
+      });
+    }
     return policy.allowedModels.filter((route) =>
       isPaseoSupportedProvider(route.provider, config.providers?.[route.provider]),
     );
+  };
+
+  const resolvePeerLaunchProfile = (input: {
+    requestedRole?: PaseoRoleId;
+    requestedProfileId?: string;
+    requestedSubrole?: PeerSubrole;
+    requestedProvider?: string;
+    hasRequestedSettings: boolean;
+  }): LaunchableAgentProfile | undefined => {
+    const callerAgent = resolveCallerAgent();
+    const isLeadToPeer =
+      callerAgent?.roleBinding?.roleId === "lead" && input.requestedRole === "peer";
+    if (!isLeadToPeer) {
+      if (input.requestedProfileId !== undefined) {
+        throw new Error("launchProfileId is only valid for role-bound Lead-to-Peer creation");
+      }
+      return undefined;
+    }
+    if (!daemonConfigStore) return undefined;
+    const config = daemonConfigStore.get();
+    const profileIds = config.peerDelegationProfileIds;
+    if (profileIds === undefined) {
+      if (input.requestedProfileId !== undefined) {
+        throw new Error(
+          "Peer Agent Profile routing is not configured on this host; ask the Human to select allowed profiles in Agents settings",
+        );
+      }
+      return undefined;
+    }
+    if (!config.peerDelegation?.enabled) {
+      throw new Error("Lead-to-Peer creation is disabled by the Human-configured policy");
+    }
+    const profile = selectPeerLaunchProfile({
+      profileIds,
+      profiles: config.agentProfiles ?? [],
+      requestedProfileId: input.requestedProfileId,
+      requestedSubrole: input.requestedSubrole,
+      defaultSubrole: config.peerDelegationDefaultSubrole ?? undefined,
+      providerPriority: config.peerDelegationProviderPriority,
+    });
+
+    if (!profile.model?.trim()) {
+      throw new Error(
+        `Peer Agent Profile '${profile.name}' (${profile.id}) has no model and cannot launch a role-bound Peer`,
+      );
+    }
+    if (input.requestedProvider?.trim() || input.hasRequestedSettings) {
+      throw new Error(
+        "When Peer Agent Profile routing is configured, omit provider and settings; launchProfileId supplies the exact runtime preset",
+      );
+    }
+    return { ...profile, model: profile.model.trim() };
   };
 
   const resolvePeerDelegationRunMode = (): PeerDelegationRunMode | undefined => {
@@ -1013,14 +1185,40 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     requestedRole?: PaseoRoleId;
     requestedMode?: string;
     requestedCwd?: string;
+    assignmentNoWrite?: boolean;
   }): Promise<{ enforcedMode?: string; unattended?: boolean }> => {
     const runMode = input.requestedRole === "peer" ? resolvePeerDelegationRunMode() : undefined;
-    if (!runMode) return {};
+    if (!runMode && !input.assignmentNoWrite) return {};
     const providerEntry = await providerSnapshotManager.getProvider({
       provider: input.provider,
       cwd: input.requestedCwd,
       wait: true,
     });
+    if (input.assignmentNoWrite) {
+      const fallbackInjectionMethods: Partial<Record<AgentProvider, RoleBindingInjectionMethod>> = {
+        codex: "codex-developer-instructions",
+        claude: "claude-system-prompt",
+        cursor: "cursor-project-rule-capsule",
+        "gemini-antigravity": "antigravity-custom-agent",
+      };
+      const injectionMethod =
+        providerEntry.roleBinding?.status === "supported"
+          ? providerEntry.roleBinding.injectionMethod
+          : fallbackInjectionMethods[input.provider];
+      const enforcedMode = injectionMethod ? noWriteModeForInjectionMethod(injectionMethod) : null;
+      if (!enforcedMode) {
+        throw new Error(
+          `assignment_capability_boundary_required: provider '${input.provider}' has no qualified no-write mode`,
+        );
+      }
+      if (!(providerEntry.modes ?? []).some((mode) => mode.id === enforcedMode)) {
+        throw new Error(
+          `assignment_capability_boundary_required: provider '${input.provider}' does not expose required no-write mode '${enforcedMode}'`,
+        );
+      }
+      return { enforcedMode, unattended: false };
+    }
+    if (!runMode) return {};
     const enforcedMode = resolvePeerPolicyMode({
       provider: input.provider,
       modes: providerEntry.modes ?? [],
@@ -1040,6 +1238,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     requestedRole?: PaseoRoleId;
     requestedMode?: string;
     requestedCwd?: string;
+    assignmentNoWrite?: boolean;
   }): Promise<{
     providerRoute: string;
     provider: AgentProvider;
@@ -1080,6 +1279,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       requestedRole: input.requestedRole,
       requestedMode: input.requestedMode,
       requestedCwd: input.requestedCwd,
+      assignmentNoWrite: input.assignmentNoWrite,
     });
     return {
       providerRoute,
@@ -1464,6 +1664,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const agentToAgentInputSchema = {
     ...canonicalCreateAgentFields,
+    launchProfileId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional exact Human-approved Agent Profile ID for a role-bound Lead creating a Peer. Call list_profiles first; omit only when the Human-configured defaultSubrole should resolve the route.",
+      ),
     provider: createAgentProviderField
       .optional()
       .describe(
@@ -1504,6 +1712,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
   };
   const legacyAgentToAgentInputSchema = {
     ...commonCreateAgentFields,
+    launchProfileId: agentToAgentInputSchema.launchProfileId,
     provider: createAgentProviderField
       .optional()
       .describe("Optional provider/model override; omit it to inherit the caller route."),
@@ -1700,6 +1909,179 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           return {
             content: [],
             structuredContent: ensureValidJson({ room }),
+          };
+        },
+      );
+
+      const CouncilTierSchema = z.enum(["lens", "debate", "debate-with-proof", "high-risk"]);
+      const CouncilPhaseSchema = z.enum(["sealed", "review", "audit", "verdict"]);
+      const CouncilSeatRoleSchema = z.enum(["scout", "architect", "reviewer"]);
+      const CouncilSeatIntegritySchema = z.enum([
+        "unspecified",
+        "valid",
+        "compromised",
+        "missing",
+        "redundant",
+      ]);
+      const CouncilSeatPlanSchema = z.object({
+        role: CouncilSeatRoleSchema,
+        peerSubrole: PeerSubroleSchema,
+        executionProfile: FoundationExecutionProfileIdSchema.optional(),
+        labels: z.record(z.string(), z.string()),
+      });
+
+      registerTool(
+        "start_council",
+        {
+          title: "Start council",
+          description:
+            "Lead-only: create one real Paseo Room and return canonical launch labels for ordinary Peer seats. Call list_profiles, choose a Human-approved Agent Profile matching each peerSubrole, then call create_agent once per seat with the exact labels. This does not create a second orchestration runtime.",
+          inputSchema: {
+            title: z.string().trim().min(1).max(120),
+            question: z.string().trim().min(1),
+            tier: CouncilTierSchema.default("debate-with-proof"),
+            roles: z
+              .array(CouncilSeatRoleSchema)
+              .min(2)
+              .max(3)
+              .default(["scout", "architect", "reviewer"]),
+            roomName: z.string().trim().min(1).optional(),
+          },
+          outputSchema: {
+            caseId: z.string(),
+            title: z.string(),
+            question: z.string(),
+            tier: CouncilTierSchema,
+            phase: CouncilPhaseSchema,
+            room: ChatRoomDetailSchema,
+            kickoff: ChatMessageSchema,
+            seats: z.array(CouncilSeatPlanSchema),
+          },
+        },
+        async ({ title, question, tier, roles, roomName }) => {
+          const uniqueRoles = Array.from(new Set(roles));
+          if (uniqueRoles.length !== roles.length) {
+            throw new Error("Council seat roles must be unique");
+          }
+          const caseId = `case_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+          const room = await options.chatService!.createRoom({
+            name: roomName ?? `council-${caseId}`,
+            purpose: `${title}: ${question}`,
+          });
+          const kickoff = await options.chatService!.dispatchMessage({
+            room: room.id,
+            authorAgentId: callerAgentId,
+            body: [
+              `Council ${caseId}: ${title}`,
+              `Question: ${question}`,
+              `Tier: ${tier}. Sealed seats: ${uniqueRoles.join(", ")}.`,
+              "Each seat must report independently in this Room before the Lead records integrity.",
+            ].join("\n"),
+          });
+          const seats = uniqueRoles.map((role) => {
+            let executionProfile: FoundationExecutionProfileId | undefined;
+            if (role === "architect") {
+              executionProfile = "solution-architect";
+            } else if (role === "reviewer") {
+              executionProfile = "reviewer";
+            }
+            return {
+              role,
+              peerSubrole: PeerSubroleSchema.parse(role),
+              executionProfile,
+              labels: {
+                "council.case_id": caseId,
+                "council.title": title,
+                "council.tier": tier,
+                "council.phase": "sealed",
+                "council.role": role,
+                "council.round": "1",
+                "council.integrity": "unspecified",
+              },
+            };
+          });
+          return {
+            content: [],
+            structuredContent: ensureValidJson({
+              caseId,
+              title,
+              question,
+              tier,
+              phase: "sealed",
+              room,
+              kickoff,
+              seats,
+            }),
+          };
+        },
+      );
+
+      registerTool(
+        "record_council_seat",
+        {
+          title: "Record council seat",
+          description:
+            "Lead-only: audit one direct Peer child in this Council and update only its canonical Council lifecycle labels.",
+          inputSchema: {
+            caseId: z.string().trim().min(1),
+            agentId: z.string().trim().min(1),
+            phase: CouncilPhaseSchema,
+            integrity: CouncilSeatIntegritySchema,
+            disposition: z.string().trim().min(1).max(240).optional(),
+          },
+          outputSchema: {
+            agentId: z.string(),
+            caseId: z.string(),
+            phase: CouncilPhaseSchema,
+            integrity: CouncilSeatIntegritySchema,
+            disposition: z.string().optional(),
+          },
+        },
+        async ({ caseId, agentId, phase, integrity, disposition }) => {
+          const target = agentManager.getAgent(agentId) ?? (await agentStorage.get(agentId));
+          if (!target) {
+            throw new Error(`Council seat agent '${agentId}' is unavailable`);
+          }
+          if (target.roleBinding?.roleId !== "peer") {
+            throw new Error("A Council seat must be a role-bound Peer");
+          }
+          if (getParentAgentIdFromLabels(target.labels) !== callerAgentId) {
+            throw new Error("A Lead may record only its own direct Peer child");
+          }
+          const caller = resolveCallerAgent();
+          if (
+            caller?.workspaceId &&
+            target.workspaceId &&
+            target.workspaceId !== caller.workspaceId
+          ) {
+            throw new Error("A Council seat must belong to the Lead workspace");
+          }
+          if (target.labels["council.case_id"] !== caseId) {
+            throw new Error(`Peer '${agentId}' is not a seat in Council '${caseId}'`);
+          }
+          const result = await updateAgentCommand(
+            { agentManager },
+            {
+              agentId,
+              labels: {
+                "council.phase": phase,
+                "council.integrity": integrity,
+                ...(disposition ? { "council.disposition": disposition } : {}),
+              },
+            },
+          );
+          if (!result.accepted) {
+            throw new Error(result.error ?? "Council seat update was not accepted");
+          }
+          return {
+            content: [],
+            structuredContent: ensureValidJson({
+              agentId,
+              caseId,
+              phase,
+              integrity,
+              ...(disposition ? { disposition } : {}),
+            }),
           };
         },
       );
@@ -1964,7 +2346,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "Create agent",
       description:
-        "Create an agent. Agent-scoped creation creates your subagent: omit provider to inherit your exact validated provider/model route, and set cwd to route a child into a descendant project workspace. Top-level creation without workspaceId creates a new local workspace and requires provider/model (for example codex/gpt-5.4). An initial prompt is required; choose role=lead|peer|supervisor for a Foundation role-first launch. Never infer a provider from a model name; call list_providers and list_models before an explicit override.",
+        "Create an agent. A role-bound Lead creating a Peer can pass an exact Human-approved launchProfileId, or omit it to use the Human-configured default Peer subrole and provider priority. Omit provider/settings when profile routing is configured because the resolved profile supplies them. Other agent-scoped creation can inherit the caller route. Top-level creation requires provider/model. An initial prompt is always required.",
       inputSchema: createAgentInputSchema,
       outputSchema: {
         agentId: z.string(),
@@ -1976,6 +2358,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         availableModes: z.array(ProviderModeSchema),
         roleBinding: RoleBindingReceiptSchema.optional(),
         launchContract: LaunchContractReceiptSchema.optional(),
+        launchProfile: z.object({ id: z.string(), name: z.string() }).strict().optional(),
         ...executionProfileOutputShape(canCreateExecutionProfile),
         lastMessage: z.string().nullable().optional(),
         permission: AgentPermissionRequestPayloadSchema.nullable().optional(),
@@ -1985,6 +2368,9 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     async (args: unknown) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs, worktree } = resolvedArgs;
+      const launchSettings = resolveCreateLaunchSettings(resolvedArgs);
+      const { launchProfile } = launchSettings;
+      const launchProfileReceipt = projectLaunchProfileReceipt(launchProfile);
       const executionProfileId = resolveExecutionProfileRequest(parsedArgs, callerRoleId);
       let requestedBackground: boolean;
       let notifyOnFinish: boolean;
@@ -2001,10 +2387,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         enforcedMode,
         unattended,
       } = await resolveCreateAgentProviderRoute({
-        requestedProvider: parsedArgs.provider,
+        requestedProvider: launchSettings.requestedProvider,
         requestedRole: parsedArgs.role,
-        requestedMode: parsedArgs.settings?.modeId,
+        requestedMode: launchSettings.requestedMode,
         requestedCwd: resolvedArgs.cwd,
+        assignmentNoWrite:
+          parsedArgs.role === "peer" && parsedArgs.assignment?.mutationBoundary.mode === "no-write",
       });
       const inheritedConfig = resolveInheritedProviderConfig(selectedProvider);
       const {
@@ -2036,10 +2424,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           config: inheritedConfig,
           cwd: resolvedArgs.cwd,
           workspaceId: resolvedArgs.workspaceId,
-          thinking: parsedArgs.settings?.thinkingOptionId,
-          features: parsedArgs.settings?.features,
+          thinking: launchSettings.thinkingOptionId,
+          features: launchSettings.featureValues,
           labels: parsedArgs.labels,
-          mode: enforcedMode ?? parsedArgs.settings?.modeId,
+          mode: enforcedMode ?? launchSettings.requestedMode,
           unattended,
           background: requestedBackground,
           notifyOnFinish,
@@ -2068,6 +2456,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ...projectFoundationLaunchReceipts(liveSnapshot, {
               includeExecutionProfile: canCreateExecutionProfile,
             }),
+            ...launchProfileReceipt,
             lastMessage: result.lastMessage,
             permission: sanitizePermissionRequest(result.permission),
           };
@@ -2103,6 +2492,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           ...projectFoundationLaunchReceipts(currentSnapshot, {
             includeExecutionProfile: canCreateExecutionProfile,
           }),
+          ...launchProfileReceipt,
           lastMessage: null,
           permission: null,
           ...(guidance ? { guidance } : {}),
@@ -2129,6 +2519,42 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         workspaceId: string | undefined;
         worktree: CreateAgentFromMcpInput["worktree"];
       };
+
+  function resolveCreateLaunchSettings(resolvedArgs: ResolvedCreateAgentToolArgs): {
+    launchProfile?: LaunchableAgentProfile;
+    requestedProvider?: string;
+    requestedMode?: string;
+    thinkingOptionId?: string;
+    featureValues?: Record<string, unknown>;
+  } {
+    const { parsedArgs } = resolvedArgs;
+    const launchProfile =
+      resolvedArgs.kind === "agent-scoped"
+        ? resolvePeerLaunchProfile({
+            requestedRole: parsedArgs.role,
+            requestedProfileId:
+              "launchProfileId" in parsedArgs ? parsedArgs.launchProfileId : undefined,
+            requestedSubrole: resolveRequestedPeerSubrole({
+              executionProfile:
+                "executionProfile" in parsedArgs && parsedArgs.executionProfile !== undefined
+                  ? FoundationExecutionProfileIdSchema.parse(parsedArgs.executionProfile)
+                  : undefined,
+              assignment: parsedArgs.assignment,
+            }),
+            requestedProvider: parsedArgs.provider,
+            hasRequestedSettings: parsedArgs.settings !== undefined,
+          })
+        : undefined;
+    return {
+      ...(launchProfile ? { launchProfile } : {}),
+      requestedProvider: launchProfile
+        ? `${launchProfile.provider}/${launchProfile.model}`
+        : parsedArgs.provider,
+      requestedMode: launchProfile?.modeId ?? parsedArgs.settings?.modeId,
+      thinkingOptionId: launchProfile?.thinkingOptionId ?? parsedArgs.settings?.thinkingOptionId,
+      featureValues: launchProfile?.featureValues ?? parsedArgs.settings?.features,
+    };
+  }
 
   async function resolveCreateAgentToolArgs(args: unknown): Promise<ResolvedCreateAgentToolArgs> {
     if (callerAgentId) {
@@ -3742,24 +4168,50 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     {
       title: "List agent profiles",
       description:
-        "List agent launch presets: provider/model/mode bundles a Human configured for repeated " +
-        "kinds of work. For this customized create_agent contract, only use a preset with a " +
-        "non-empty model: set create_agent.provider to `${provider}/${model}`, and put modeId, " +
-        "thinkingOptionId, and featureValues under create_agent.settings as modeId, " +
-        "thinkingOptionId, and features. There is no profile parameter. Notes are routing " +
-        "guidance only; they cannot grant role, mutation, delegation, plugin, or acceptance " +
-        "authority. If a preset has no model, do not use it for role-bound delegation. Returns " +
-        "an empty list if none are configured.",
+        "List Agent Profiles available for repeated launches. A role-bound Lead sees only " +
+        "Human-approved Peer profiles plus providerPriority in highest-first order and the optional " +
+        "defaultSubrole. Pass an exact profile id as create_agent.launchProfileId when the task needs " +
+        "a specific route, or omit it to let the daemon resolve the configured default subrole. " +
+        "Profile peerSubrole, notes, and priority are routing guidance " +
+        "only; they cannot grant role, mutation, delegation, plugin, or acceptance authority. " +
+        "Returns an empty list when no eligible profiles are configured.",
       inputSchema: {},
       outputSchema: {
         profiles: z.array(AgentProfileSchema),
+        providerPriority: z.array(z.string()).optional(),
+        defaultSubrole: PeerSubroleSchema.nullable().optional(),
       },
     },
     async () => {
-      const profiles = daemonConfigStore?.get().agentProfiles ?? [];
+      const config = daemonConfigStore?.get();
+      const allProfiles = config?.agentProfiles ?? [];
+      const callerAgent = resolveCallerAgent();
+      const profileIds = config?.peerDelegationProfileIds;
+      let profiles = allProfiles;
+      let providerPriority: string[] | undefined;
+      let defaultSubrole: PeerSubrole | null | undefined;
+      if (callerAgent?.roleBinding?.roleId === "lead" && profileIds !== undefined) {
+        defaultSubrole = config?.peerDelegationDefaultSubrole;
+        if (config?.peerDelegation?.enabled) {
+          const selectedProfiles = selectPeerDelegationProfiles(allProfiles, profileIds);
+          providerPriority = resolvePeerDelegationProviderPriority(
+            allProfiles,
+            profileIds,
+            config.peerDelegationProviderPriority,
+          );
+          profiles = orderPeerDelegationProfiles(selectedProfiles, providerPriority);
+        } else {
+          profiles = [];
+          providerPriority = [];
+        }
+      }
       return {
         content: [],
-        structuredContent: ensureValidJson({ profiles }),
+        structuredContent: ensureValidJson({
+          profiles,
+          ...(providerPriority !== undefined ? { providerPriority } : {}),
+          ...(defaultSubrole !== undefined ? { defaultSubrole } : {}),
+        }),
       };
     },
   );
