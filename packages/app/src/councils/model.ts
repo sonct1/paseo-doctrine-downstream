@@ -1,5 +1,9 @@
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
 import type { RoleBindingReceipt } from "@getpaseo/protocol/role-binding";
+import {
+  COUNCIL_REPORT_RECEIPT_VERSION,
+  COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
+} from "@getpaseo/protocol/council-labels";
 
 export const COUNCIL_TIERS = ["lens", "debate", "debate-with-proof", "high-risk"] as const;
 export const COUNCIL_PHASES = ["sealed", "review", "audit", "verdict"] as const;
@@ -124,6 +128,8 @@ function hasCouncilReportReceipt(agent: CouncilAgentSource): boolean {
   const reportDigest = readLabel(agent.labels, "council.report_digest");
   const reportCreatedAt = readLabel(agent.labels, "council.report_created_at");
   return (
+    readLabel(agent.labels, COUNCIL_REPORT_RECEIPT_VERSION_LABEL) ===
+      COUNCIL_REPORT_RECEIPT_VERSION &&
     readLabel(agent.labels, "council.room_id").length > 0 &&
     readLabel(agent.labels, "council.kickoff_message_id").length > 0 &&
     readLabel(agent.labels, "council.report_message_id").length > 0 &&

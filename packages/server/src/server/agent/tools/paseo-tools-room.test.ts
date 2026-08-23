@@ -355,6 +355,7 @@ describe("Paseo room tools", () => {
             "council.report_message_id": "report-1",
             "council.report_digest": createHash("sha256").update(reportBody).digest("hex"),
             "council.report_created_at": "2026-08-12T00:01:00.000Z",
+            "council.report_receipt_version": "1",
           },
         },
       },
@@ -376,6 +377,39 @@ describe("Paseo room tools", () => {
         createdAt: "2026-08-12T00:01:00.000Z",
       },
     });
+  });
+
+  test("rejects generic updates to daemon-managed Council labels", async () => {
+    const child = {
+      id: "peer-seat",
+      cwd: "/tmp/room-agent",
+      workspaceId: "workspace-room",
+      internal: false,
+      lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Scout seat" },
+      labels: { "council.case_id": "case_123456789abc" },
+      roleBinding: { roleId: "peer" },
+    } as ManagedAgent;
+    const agentManager = new RoomAgentManagerFake("lead", child);
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager,
+      chatService: new RoomChatServiceFake(),
+    });
+
+    await expect(
+      lead.executeTool("update_agent", {
+        agentId: "peer-seat",
+        labels: {
+          "council.integrity": "valid",
+          "council.report_receipt_version": "1",
+        },
+      }),
+    ).rejects.toThrow("Council labels are daemon-managed");
+    expect(agentManager.metadataUpdates).toEqual([]);
   });
 
   test("rejects valid Council integrity without the exact Peer-authored Room receipt", async () => {

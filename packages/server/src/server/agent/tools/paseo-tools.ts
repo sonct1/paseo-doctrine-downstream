@@ -4,6 +4,10 @@ import {
   AssignmentEnvelopeSchema,
   type AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
+import {
+  COUNCIL_REPORT_RECEIPT_VERSION,
+  COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
+} from "@getpaseo/protocol/council-labels";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -99,6 +103,7 @@ import {
   closeAgentCommand,
   setAgentModeCommand,
   updateAgentCommand,
+  validateAgentLabelUpdate,
 } from "../lifecycle-command.js";
 import type { ForgeService } from "../../../services/forge-service.js";
 import type { WorkspaceGitService } from "../../workspace-git-service.js";
@@ -2286,10 +2291,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
                       "council.report_message_id": reportReceipt.reportMessageId,
                       "council.report_digest": reportReceipt.reportDigest,
                       "council.report_created_at": reportReceipt.createdAt,
+                      [COUNCIL_REPORT_RECEIPT_VERSION_LABEL]: COUNCIL_REPORT_RECEIPT_VERSION,
                     }
                   : {}),
               },
             },
+            { allowCouncilLabels: true },
           );
           if (!result.accepted) {
             throw new Error(result.error ?? "Council seat update was not accepted");
@@ -3600,6 +3607,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId, name, labels, settings }) => {
+      const labelError = validateAgentLabelUpdate(labels);
+      if (labelError) {
+        throw new Error(labelError);
+      }
       if (settings?.modeId !== undefined) {
         await agentManager.setAgentMode(agentId, settings.modeId);
       }
@@ -3615,7 +3626,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         }
       }
 
-      await updateAgentCommand({ agentManager }, { agentId, name, labels });
+      if (name !== undefined || labels !== undefined) {
+        const updateResult = await updateAgentCommand({ agentManager }, { agentId, name, labels });
+        if (!updateResult.accepted) {
+          throw new Error(updateResult.error ?? "Agent update was not accepted");
+        }
+      }
 
       return {
         content: [],

@@ -46,6 +46,7 @@ function councilLabels(
           "council.report_message_id": `report-${role}`,
           "council.report_digest": "c".repeat(64),
           "council.report_created_at": "2026-08-10T10:00:00.000Z",
+          "council.report_receipt_version": "1",
           "council.report_start_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_V1`,
           "council.report_end_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_END`,
         }
@@ -192,6 +193,21 @@ describe("groupCouncilCases", () => {
     );
 
     const council = groupCouncilCases([unreceipted])[0];
+
+    expect(council?.readyCount).toBe(0);
+    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
+  });
+
+  it("fails closed for legacy or caller-forged receipt labels without the daemon marker", () => {
+    const forged = makeAgent(
+      "forged",
+      councilLabels("independent", {
+        "council.integrity": "valid-audited-report",
+        "council.report_receipt_version": "",
+      }),
+    );
+
+    const council = groupCouncilCases([forged])[0];
 
     expect(council?.readyCount).toBe(0);
     expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
