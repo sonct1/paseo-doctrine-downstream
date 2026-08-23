@@ -29,6 +29,11 @@ Provider/profile/mode chỉ transport capability. Authority đến từ current 
 - Creator đặt workspace title theo objective. Title không cấp authority.
 - Sau thay đổi chạm daemon/runtime, chỉ build và reload/restart main Paseo daemon khi fresh authoritative readback chứng minh không có agent `running`/`starting` và không có workspace script đang chạy. Nếu state active hoặc không xác định chắc thì không restart; activation phải giữ nguyên home/listen/relay/WebUI settings trừ khi Human yêu cầu đổi.
 - Provider/model/effort được discover rồi đúng authority pin cho assignment; route không cấp authority và không silent fallback.
+- Mọi role-bound create/resume phải revalidate current assignment/exception expiry và Workspace Protocol
+  receipt trước provider launch. Binding `bound` chỉ tiếp tục khi exact path + digest vẫn valid; binding
+  `missing` chỉ tiếp tục khi file vẫn missing và current assignment vẫn đủ graduated-admission
+  conditions. Protocol xuất hiện, biến mất, invalid hoặc đổi digest đều yêu cầu fresh role binding;
+  không resume bằng standing instructions stale.
 - Beads Central là durable issue/work graph bắt buộc. Mỗi role gọi `beads_status` ở assignment start và material handoff; unavailable thì `BLOCKED`, không fallback native `bd`/tracker khác. Lead giữ graph/closure trong lease, Peer dùng exact granted issue, Supervisor read-only.
 
 ## Lead

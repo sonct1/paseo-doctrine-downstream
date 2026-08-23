@@ -105,15 +105,32 @@ Room là coordination channel. Tạo Room trong sidebar, post checkpoint, reply/
 author receipt. Message không chuyển ownership hoặc acceptance.
 
 Council là Lead-only decision workflow. Human yêu cầu exact Lead mở Council; daemon admit ba fresh Peer
-seats `Scout`, `Architect`, `Reviewer`, giữ authored Room evidence và trả một Lead verdict. Seat không
-spawn seat khác, generic Engineer không được giả làm Council seat, và trạng thái idle/completed không
-thay literal seat report cùng receipt.
+seats `Scout`, `Architect`, `Reviewer`, giữ authored Room evidence và trả một Lead verdict. Luồng native
+step-by-step:
+
+1. Lead gọi `beads_status`, bind exact case/child issues rồi gọi `start_council` đúng một lần.
+2. Giữ nguyên `caseId`, Room/kickoff IDs, toàn bộ labels và opening/closing sentinel daemon trả về.
+3. Lead gọi `list_profiles`; mỗi seat dùng exact Human-approved `launchProfileId` đúng `peerSubrole`.
+4. Khi gọi `create_agent`, dùng `role=peer`, exact seat labels và bounded no-write assignment; omit cả
+   `workspaceId` lẫn `cwd` để inherit current Lead workspace. Khi profile routing active, cũng omit
+   `provider`/`settings` vì profile đã pin route.
+5. Peer không có `read_room`; nó derive độc lập, rồi `post_room` đúng một complete report nằm giữa exact
+   sentinels và hand back `reportMessageId`.
+6. Sau mọi terminal notification, Lead audit activity + Room và gọi `record_council_seat` với exact
+   `reportMessageId`. Daemon verify parent/workspace/case/kickoff, terminal lifecycle, Peer author,
+   timestamp, sentinels và SHA-256 trước khi ghi receipt.
+7. Chỉ receipt-valid seat mới được UI tính `Report ready`; Lead mới issue verdict/dissent/unknown và
+   handoff. Existing record từ runtime cũ thiếu receipt phải hiện fail-closed, không backfill bằng label.
+
+Seat không spawn seat khác, generic Engineer không được giả làm Council seat, và trạng thái
+idle/completed hay bare `council.integrity=valid` không thay literal seat report cùng native receipt.
 
 Prompt mẫu:
 
 ```text
 mở council cho tao: Scout tìm evidence, Architect đề xuất, Reviewer phản biện. Mỗi seat post report vào
-Room; cuối cùng mày trả verdict, dissent, unknown và native receipts. Chưa đủ seat evidence thì BLOCKED.
+Room bằng đúng sentinel + report receipt; cuối cùng mày trả verdict, dissent, unknown và native
+receipts. Chưa đủ seat evidence thì BLOCKED, đừng tự set label cho qua.
 ```
 
 ## 8. Handback và acceptance

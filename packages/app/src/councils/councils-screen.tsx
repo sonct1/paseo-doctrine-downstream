@@ -547,7 +547,7 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
   }
   if (ready) {
-    return "The report is ready in the agent timeline. Open the agent to inspect its complete evidence.";
+    return "The Lead recorded a daemon-validated Peer-authored Room receipt. Open the Room and agent timeline to inspect the complete evidence.";
   }
   if (
     seat.integrity === "unspecified" &&

@@ -11687,6 +11687,16 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(manager.getAgent(created.id)?.roleBinding?.definitionDigest).toBe(
       created.roleBinding?.definitionDigest,
     );
+
+    writeFileSync(
+      join(workdir, "WORKSPACE_PROTOCOL.md"),
+      `${buildWorkspaceProtocolTemplate(workdir)}\n- local revision: changed after role binding\n`,
+      "utf8",
+    );
+    await expect(manager.reloadAgentSession(created.id)).rejects.toThrow(
+      "workspace_protocol_admission_required: stale_digest",
+    );
+    expect(client.launchContexts).toHaveLength(2);
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

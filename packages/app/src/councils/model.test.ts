@@ -31,6 +31,7 @@ function councilLabels(
   role: string,
   overrides: Partial<Record<string, string>> = {},
 ): Record<string, string> {
+  const hasValidIntegrity = overrides["council.integrity"]?.startsWith("valid") === true;
   return {
     "council.case_id": "case-1",
     "council.title": "Choose the migration boundary",
@@ -38,6 +39,17 @@ function councilLabels(
     "council.phase": "sealed",
     "council.role": role,
     "council.round": "1",
+    ...(hasValidIntegrity
+      ? {
+          "council.room_id": "room-1",
+          "council.kickoff_message_id": "kickoff-1",
+          "council.report_message_id": `report-${role}`,
+          "council.report_digest": "c".repeat(64),
+          "council.report_created_at": "2026-08-10T10:00:00.000Z",
+          "council.report_start_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_V1`,
+          "council.report_end_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_END`,
+        }
+      : {}),
     ...overrides,
   };
 }
@@ -168,6 +180,21 @@ describe("groupCouncilCases", () => {
           )
         : true,
     ).toBe(false);
+  });
+
+  it("does not count a valid label without a daemon-issued authored report receipt", () => {
+    const unreceipted = makeAgent(
+      "unreceipted",
+      councilLabels("independent", {
+        "council.integrity": "valid-audited-report",
+        "council.report_message_id": "",
+      }),
+    );
+
+    const council = groupCouncilCases([unreceipted])[0];
+
+    expect(council?.readyCount).toBe(0);
+    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
   });
 
   it("counts only usable reports while preserving redundant replacements for audit", () => {

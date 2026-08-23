@@ -36,6 +36,7 @@ import {
 } from "./assignment-contract.js";
 
 export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
+export const ASSIGNMENT_CONTRACT_EXPIRED_ERROR = "assignment_contract_expired";
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
@@ -441,6 +442,80 @@ export async function materializeRoleBinding(
 
 export function toRoleBindingReceipt(binding: PersistedRoleBinding): RoleBindingReceipt {
   return RoleBindingReceiptSchema.parse(binding);
+}
+
+function assertAdmissionTimestampCurrent(
+  value: string | undefined,
+  now: Date,
+  field: "expiresAt" | "protocolExceptionExpiresAt",
+): void {
+  if (value !== undefined && Date.parse(value) <= now.getTime()) {
+    throw new Error(`${ASSIGNMENT_CONTRACT_EXPIRED_ERROR}: ${field}=${value}`);
+  }
+}
+
+/** Revalidate drift-prone authority receipts before every role-bound create or resume. */
+export function assertPersistedRoleAdmissionCurrent(
+  binding: PersistedRoleBinding,
+  cwd: string,
+  now = new Date(),
+): void {
+  assertAdmissionTimestampCurrent(binding.assignment?.expiresAt, now, "expiresAt");
+  assertAdmissionTimestampCurrent(
+    binding.assignment?.protocolExceptionExpiresAt,
+    now,
+    "protocolExceptionExpiresAt",
+  );
+
+  const current = inspectWorkspaceProtocol(cwd);
+  if (binding.workspaceProtocol.path !== current.path) {
+    throw new Error(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: path_changed: bound=${binding.workspaceProtocol.path}; current=${current.path}`,
+    );
+  }
+
+  if (binding.workspaceProtocol.status === "bound") {
+    if (current.status !== "valid") {
+      const issues = current.status === "invalid" ? `; issues=${current.issues.join(",")}` : "";
+      throw new Error(
+        `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: ${current.status}: ${current.path}${issues}`,
+      );
+    }
+    if (
+      !binding.workspaceProtocol.digest ||
+      binding.workspaceProtocol.digest !== current.revision.sha256
+    ) {
+      throw new Error(
+        `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: stale_digest: ${current.path}; bound=${binding.workspaceProtocol.digest ?? "missing"}; current=${current.revision.sha256}`,
+      );
+    }
+    return;
+  }
+
+  if (current.status !== "missing") {
+    let details: string = current.status;
+    if (current.status === "valid") {
+      details = "protocol_now_present";
+    } else if (current.status === "invalid" && current.issues.length > 0) {
+      details = `${current.status}; issues=${current.issues.join(",")}`;
+    }
+    throw new Error(`${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: ${details}: ${current.path}`);
+  }
+
+  const assignment = binding.assignment;
+  if (!assignment) {
+    throw new Error(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing_protocol_requires_current_assignment: ${current.path}`,
+    );
+  }
+  const performsMaterialWork =
+    assignment.mutationBoundary.mode !== "no-write" ||
+    assignment.externalEffectBoundary.mode !== "denied";
+  if (performsMaterialWork && !assignment.protocolExceptionExpiresAt) {
+    throw new Error(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: missing_protocol_blocks_material_assignment: ${current.path}`,
+    );
+  }
 }
 
 function intersectRoleTools(

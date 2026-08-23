@@ -54,7 +54,18 @@ async function seedCouncilScenario(caseTitle = CASE_TITLE, options: { integrity?
           "council.phase": "verdict",
           "council.role": role,
           "council.round": round,
-          ...(options.integrity ? { "council.integrity": options.integrity } : {}),
+          ...(options.integrity
+            ? {
+                "council.integrity": options.integrity,
+                "council.room_id": "room-browser-fixture",
+                "council.kickoff_message_id": "kickoff-browser-fixture",
+                "council.report_message_id": `report-${role}-${round}`,
+                "council.report_digest": "d".repeat(64),
+                "council.report_created_at": "2026-08-10T10:00:00.000Z",
+                "council.report_start_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_V1`,
+                "council.report_end_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_END`,
+              }
+            : {}),
         },
       });
 

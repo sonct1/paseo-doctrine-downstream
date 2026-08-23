@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import pino from "pino";
 import type { ChatMessage, ChatRoomDetail } from "@getpaseo/protocol/chat/types";
@@ -68,6 +69,8 @@ class RoomChatServiceFake {
   public readonly created: Array<Parameters<FileBackedChatService["createRoom"]>[0]> = [];
   public readonly dispatched: Array<Parameters<FileBackedChatService["dispatchMessage"]>[0]> = [];
 
+  public constructor(public readonly messages: ChatMessage[] = []) {}
+
   public async createRoom(
     input: Parameters<FileBackedChatService["createRoom"]>[0],
   ): Promise<ChatRoomDetail> {
@@ -83,8 +86,14 @@ class RoomChatServiceFake {
     };
   }
 
-  public async readMessages(): Promise<ChatMessage[]> {
-    return [];
+  public async readMessages(
+    input: Parameters<FileBackedChatService["readMessages"]>[0],
+  ): Promise<ChatMessage[]> {
+    return this.messages.filter(
+      (message) =>
+        message.roomId === input.room &&
+        (!input.authorAgentId || message.authorAgentId === input.authorAgentId),
+    );
   }
 
   public async listRoomPosterAgentIds(): Promise<string[]> {
@@ -217,7 +226,18 @@ describe("Paseo room tools", () => {
         phase: "sealed",
         room: expect.objectContaining({ id: "room-1" }),
         seats: [
-          expect.objectContaining({ role: "scout", peerSubrole: "scout" }),
+          expect.objectContaining({
+            role: "scout",
+            peerSubrole: "scout",
+            reportStartSentinel: "SCOUT_COUNCIL_REPORT_V1",
+            reportEndSentinel: "SCOUT_COUNCIL_REPORT_END",
+            labels: expect.objectContaining({
+              "council.room_id": "room-1",
+              "council.kickoff_message_id": "message-1",
+              "council.report_start_sentinel": "SCOUT_COUNCIL_REPORT_V1",
+              "council.report_end_sentinel": "SCOUT_COUNCIL_REPORT_END",
+            }),
+          }),
           expect.objectContaining({
             role: "architect",
             peerSubrole: "architect",
@@ -233,13 +253,178 @@ describe("Paseo room tools", () => {
     );
   });
 
+  test("supports a one-seat lens Council without inventing a second seat", async () => {
+    const chatService = new RoomChatServiceFake();
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      chatService,
+    });
+
+    const result = await lead.executeTool("start_council", {
+      title: "Review one bounded proposition",
+      question: "Is the supplied evidence sufficient?",
+      tier: "lens",
+      roles: ["reviewer"],
+    });
+
+    expect(result.structuredContent).toEqual(
+      expect.objectContaining({
+        tier: "lens",
+        seats: [
+          expect.objectContaining({
+            role: "reviewer",
+            executionProfile: "reviewer",
+          }),
+        ],
+      }),
+    );
+  });
+
   test("lets a Lead record only its own direct Peer Council seat", async () => {
+    const reportBody = [
+      "SCOUT_COUNCIL_REPORT_V1",
+      "VERDICT: usable independent report",
+      "SCOUT_COUNCIL_REPORT_END",
+    ].join("\n");
     const child = {
       id: "peer-seat",
       cwd: "/tmp/room-agent",
       workspaceId: "workspace-room",
       internal: false,
       lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Scout seat" },
+      labels: {
+        "paseo.parent-agent-id": "agent-caller",
+        "council.case_id": "case_123456789abc",
+        "council.role": "scout",
+        "council.room_id": "room-1",
+        "council.kickoff_message_id": "kickoff-1",
+        "council.report_start_sentinel": "SCOUT_COUNCIL_REPORT_V1",
+        "council.report_end_sentinel": "SCOUT_COUNCIL_REPORT_END",
+      },
+      roleBinding: { roleId: "peer" },
+    } as ManagedAgent;
+    const agentManager = new RoomAgentManagerFake("lead", child);
+    const chatService = new RoomChatServiceFake([
+      {
+        id: "kickoff-1",
+        roomId: "room-1",
+        authorAgentId: "agent-caller",
+        body: "Council case_123456789abc: Choose the implementation boundary",
+        replyToMessageId: null,
+        mentionAgentIds: [],
+        createdAt: "2026-08-12T00:00:00.000Z",
+      },
+      {
+        id: "report-1",
+        roomId: "room-1",
+        authorAgentId: "peer-seat",
+        body: reportBody,
+        replyToMessageId: null,
+        mentionAgentIds: [],
+        createdAt: "2026-08-12T00:01:00.000Z",
+      },
+    ]);
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager,
+      chatService,
+    });
+
+    const result = await lead.executeTool("record_council_seat", {
+      caseId: "case_123456789abc",
+      agentId: "peer-seat",
+      phase: "review",
+      integrity: "valid",
+      reportMessageId: "report-1",
+      disposition: "usable independent report",
+    });
+
+    expect(agentManager.metadataUpdates).toEqual([
+      {
+        agentId: "peer-seat",
+        updates: {
+          labels: {
+            "council.phase": "review",
+            "council.integrity": "valid",
+            "council.disposition": "usable independent report",
+            "council.report_message_id": "report-1",
+            "council.report_digest": createHash("sha256").update(reportBody).digest("hex"),
+            "council.report_created_at": "2026-08-12T00:01:00.000Z",
+          },
+        },
+      },
+    ]);
+    expect(result.structuredContent).toEqual({
+      agentId: "peer-seat",
+      caseId: "case_123456789abc",
+      phase: "review",
+      integrity: "valid",
+      disposition: "usable independent report",
+      reportReceipt: {
+        roomId: "room-1",
+        kickoffMessageId: "kickoff-1",
+        reportMessageId: "report-1",
+        reportDigest: createHash("sha256").update(reportBody).digest("hex"),
+        authorAgentId: "peer-seat",
+        startSentinel: "SCOUT_COUNCIL_REPORT_V1",
+        endSentinel: "SCOUT_COUNCIL_REPORT_END",
+        createdAt: "2026-08-12T00:01:00.000Z",
+      },
+    });
+  });
+
+  test("rejects valid Council integrity without the exact Peer-authored Room receipt", async () => {
+    const child = {
+      id: "peer-seat",
+      cwd: "/tmp/room-agent",
+      workspaceId: "workspace-room",
+      internal: false,
+      lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Scout seat" },
+      labels: {
+        "paseo.parent-agent-id": "agent-caller",
+        "council.case_id": "case_123456789abc",
+        "council.role": "scout",
+        "council.room_id": "room-1",
+        "council.kickoff_message_id": "kickoff-1",
+        "council.report_start_sentinel": "SCOUT_COUNCIL_REPORT_V1",
+        "council.report_end_sentinel": "SCOUT_COUNCIL_REPORT_END",
+      },
+      roleBinding: { roleId: "peer" },
+    } as ManagedAgent;
+    const agentManager = new RoomAgentManagerFake("lead", child);
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager,
+      chatService: new RoomChatServiceFake(),
+    });
+
+    await expect(
+      lead.executeTool("record_council_seat", {
+        caseId: "case_123456789abc",
+        agentId: "peer-seat",
+        phase: "review",
+        integrity: "valid",
+      }),
+    ).rejects.toThrow("integrity=valid requires reportMessageId");
+    expect(agentManager.metadataUpdates).toEqual([]);
+  });
+
+  test("rejects valid Council integrity while the seat is still running", async () => {
+    const child = {
+      id: "peer-seat",
+      cwd: "/tmp/room-agent",
+      workspaceId: "workspace-room",
+      internal: false,
+      lifecycle: "running",
       currentModeId: null,
       availableModes: [],
       config: { title: "Scout seat" },
@@ -257,33 +442,89 @@ describe("Paseo room tools", () => {
       chatService: new RoomChatServiceFake(),
     });
 
-    const result = await lead.executeTool("record_council_seat", {
-      caseId: "case_123456789abc",
-      agentId: "peer-seat",
-      phase: "review",
-      integrity: "valid",
-      disposition: "usable independent report",
+    await expect(
+      lead.executeTool("record_council_seat", {
+        caseId: "case_123456789abc",
+        agentId: "peer-seat",
+        phase: "review",
+        integrity: "valid",
+        reportMessageId: "report-1",
+      }),
+    ).rejects.toThrow("is not terminal; current lifecycle is 'running'");
+    expect(agentManager.metadataUpdates).toEqual([]);
+  });
+
+  test.each([
+    {
+      name: "wrong author",
+      authorAgentId: "another-peer",
+      body: "SCOUT_COUNCIL_REPORT_V1\nVERDICT: usable\nSCOUT_COUNCIL_REPORT_END",
+      error: "is not authored by Peer",
+    },
+    {
+      name: "wrong sentinel",
+      authorAgentId: "peer-seat",
+      body: "FORGED_COUNCIL_REPORT_V1\nVERDICT: usable\nFORGED_COUNCIL_REPORT_END",
+      error: "does not satisfy SCOUT_COUNCIL_REPORT_V1..SCOUT_COUNCIL_REPORT_END",
+    },
+  ])("rejects a $name Council report", async ({ authorAgentId, body, error }) => {
+    const child = {
+      id: "peer-seat",
+      cwd: "/tmp/room-agent",
+      workspaceId: "workspace-room",
+      internal: false,
+      lifecycle: "idle",
+      currentModeId: null,
+      availableModes: [],
+      config: { title: "Scout seat" },
+      labels: {
+        "paseo.parent-agent-id": "agent-caller",
+        "council.case_id": "case_123456789abc",
+        "council.role": "scout",
+        "council.room_id": "room-1",
+        "council.kickoff_message_id": "kickoff-1",
+        "council.report_start_sentinel": "SCOUT_COUNCIL_REPORT_V1",
+        "council.report_end_sentinel": "SCOUT_COUNCIL_REPORT_END",
+      },
+      roleBinding: { roleId: "peer" },
+    } as ManagedAgent;
+    const agentManager = new RoomAgentManagerFake("lead", child);
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager,
+      chatService: new RoomChatServiceFake([
+        {
+          id: "kickoff-1",
+          roomId: "room-1",
+          authorAgentId: "agent-caller",
+          body: "Council case_123456789abc: Choose the implementation boundary",
+          replyToMessageId: null,
+          mentionAgentIds: [],
+          createdAt: "2026-08-12T00:00:00.000Z",
+        },
+        {
+          id: "report-1",
+          roomId: "room-1",
+          authorAgentId,
+          body,
+          replyToMessageId: null,
+          mentionAgentIds: [],
+          createdAt: "2026-08-12T00:01:00.000Z",
+        },
+      ]),
     });
 
-    expect(agentManager.metadataUpdates).toEqual([
-      {
+    await expect(
+      lead.executeTool("record_council_seat", {
+        caseId: "case_123456789abc",
         agentId: "peer-seat",
-        updates: {
-          labels: {
-            "council.phase": "review",
-            "council.integrity": "valid",
-            "council.disposition": "usable independent report",
-          },
-        },
-      },
-    ]);
-    expect(result.structuredContent).toEqual({
-      agentId: "peer-seat",
-      caseId: "case_123456789abc",
-      phase: "review",
-      integrity: "valid",
-      disposition: "usable independent report",
-    });
+        phase: "review",
+        integrity: "valid",
+        reportMessageId: "report-1",
+      }),
+    ).rejects.toThrow(error);
+    expect(agentManager.metadataUpdates).toEqual([]);
   });
 
   test("binds post_room author identity to the calling agent", async () => {

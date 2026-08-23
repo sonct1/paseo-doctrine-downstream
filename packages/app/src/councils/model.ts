@@ -120,6 +120,20 @@ function councilDisposition(agent: CouncilAgentSource): string | null {
   return readLabel(agent.labels, "council.disposition") || null;
 }
 
+function hasCouncilReportReceipt(agent: CouncilAgentSource): boolean {
+  const reportDigest = readLabel(agent.labels, "council.report_digest");
+  const reportCreatedAt = readLabel(agent.labels, "council.report_created_at");
+  return (
+    readLabel(agent.labels, "council.room_id").length > 0 &&
+    readLabel(agent.labels, "council.kickoff_message_id").length > 0 &&
+    readLabel(agent.labels, "council.report_message_id").length > 0 &&
+    readLabel(agent.labels, "council.report_start_sentinel").length > 0 &&
+    readLabel(agent.labels, "council.report_end_sentinel").length > 0 &&
+    /^[a-f0-9]{64}$/u.test(reportDigest) &&
+    Number.isFinite(Date.parse(reportCreatedAt))
+  );
+}
+
 function parseCouncilSeat(agent: CouncilAgentSource): CouncilSeat | null {
   const caseId = readLabel(agent.labels, "council.case_id");
   const tier = readLabel(agent.labels, "council.tier");
@@ -154,6 +168,7 @@ function latestSeat(seats: readonly CouncilSeat[]): CouncilSeat {
 export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
   return (
     seat.integrity === "valid" &&
+    hasCouncilReportReceipt(seat.agent) &&
     (seat.agent.status === "idle" || seat.agent.status === "closed") &&
     seat.agent.attentionReason !== "error"
   );

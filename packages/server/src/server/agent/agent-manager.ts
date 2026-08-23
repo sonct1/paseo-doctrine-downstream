@@ -105,6 +105,7 @@ import {
 } from "./provider-subagents/store.js";
 import {
   applyRolePaseoToolPolicy,
+  assertPersistedRoleAdmissionCurrent,
   assertPersistedRoleBindingMatches,
   materializeRoleBinding,
   type PersistedRoleBinding,
@@ -5425,7 +5426,7 @@ export class AgentManager {
       assertPersistedLaunchContractMatches(launchContract, storedConfig);
     }
     if (roleBinding) {
-      this.assertCurrentRoleAdmission(roleBinding, storedConfig.provider);
+      this.assertCurrentRoleAdmission(roleBinding, storedConfig.provider, storedConfig.cwd);
     }
     const paseoToolPolicy = this.resolveEffectivePaseoToolPolicy(
       storedConfig.provider,
@@ -5476,6 +5477,7 @@ export class AgentManager {
   private assertCurrentRoleAdmission(
     roleBinding: PersistedRoleBinding,
     provider: AgentProvider,
+    cwd: string,
   ): void {
     const currentSupport = this.providerRoleBindingSupport.get(provider);
     if (
@@ -5486,6 +5488,7 @@ export class AgentManager {
         `Provider '${provider}' is no longer admitted for Paseo role '${roleBinding.roleId}'`,
       );
     }
+    assertPersistedRoleAdmissionCurrent(roleBinding, cwd);
     this.assertMandatoryRoleToolTransport(roleBinding, provider);
   }
 

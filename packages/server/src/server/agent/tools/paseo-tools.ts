@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   AssignmentEnvelopeSchema,
@@ -84,7 +84,11 @@ import {
 } from "../mcp-shared.js";
 import { sendPromptToAgent, setupFinishNotification } from "../agent-prompt.js";
 import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
-import { ChatMessageSchema, ChatRoomDetailSchema } from "@getpaseo/protocol/chat/types";
+import {
+  ChatMessageSchema,
+  ChatRoomDetailSchema,
+  type ChatMessage,
+} from "@getpaseo/protocol/chat/types";
 import { LaunchContractReceiptSchema } from "@getpaseo/protocol/launch-contract";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import { postChatMessageWithMentions } from "../../chat/post.js";
@@ -217,6 +221,175 @@ export interface PaseoToolHostDependencies {
 }
 
 type LaunchableAgentProfile = AgentProfile & { model: string };
+
+const NativeCouncilSeatRoleSchema = z.enum(["scout", "architect", "reviewer"]);
+type NativeCouncilSeatRole = z.infer<typeof NativeCouncilSeatRoleSchema>;
+
+interface CouncilSeatReportReceipt {
+  roomId: string;
+  kickoffMessageId: string;
+  reportMessageId: string;
+  reportDigest: string;
+  authorAgentId: string;
+  startSentinel: string;
+  endSentinel: string;
+  createdAt: string;
+}
+
+function councilReportSentinels(role: NativeCouncilSeatRole): {
+  startSentinel: string;
+  endSentinel: string;
+} {
+  const prefix = role.toUpperCase();
+  return {
+    startSentinel: `${prefix}_COUNCIL_REPORT_V1`,
+    endSentinel: `${prefix}_COUNCIL_REPORT_END`,
+  };
+}
+
+function requireCouncilReportContext(
+  labels: Readonly<Record<string, string>>,
+  agentId: string,
+): {
+  roomId: string;
+  kickoffMessageId: string;
+  startSentinel: string;
+  endSentinel: string;
+} {
+  const roomId = labels["council.room_id"]?.trim();
+  const kickoffMessageId = labels["council.kickoff_message_id"]?.trim();
+  const seatRole = NativeCouncilSeatRoleSchema.safeParse(labels["council.role"]);
+  if (!roomId || !kickoffMessageId || !seatRole.success) {
+    throw new Error(
+      `Council seat '${agentId}' is missing daemon-issued Room, kickoff, or role labels`,
+    );
+  }
+  const sentinels = councilReportSentinels(seatRole.data);
+  if (
+    labels["council.report_start_sentinel"] !== sentinels.startSentinel ||
+    labels["council.report_end_sentinel"] !== sentinels.endSentinel
+  ) {
+    throw new Error(`Council seat '${agentId}' has invalid report sentinel labels`);
+  }
+  return { roomId, kickoffMessageId, ...sentinels };
+}
+
+function assertCouncilSeatTerminal(agent: ManagedAgent): void {
+  if (agent.lifecycle !== "idle" && agent.lifecycle !== "closed") {
+    throw new Error(
+      `Council seat '${agent.id}' is not terminal; current lifecycle is '${agent.lifecycle}'`,
+    );
+  }
+  if (
+    agent.lastError ||
+    (agent.attention?.requiresAttention && agent.attention.attentionReason === "error")
+  ) {
+    throw new Error(`Council seat '${agent.id}' ended with an error`);
+  }
+}
+
+function requireCouncilKickoff(input: {
+  messages: readonly ChatMessage[];
+  roomId: string;
+  kickoffMessageId: string;
+  callerAgentId: string;
+  caseId: string;
+}): ChatMessage {
+  const kickoff = input.messages.find((message) => message.id === input.kickoffMessageId);
+  if (
+    !kickoff ||
+    kickoff.roomId !== input.roomId ||
+    kickoff.authorAgentId !== input.callerAgentId ||
+    !kickoff.body.includes(`Council ${input.caseId}:`)
+  ) {
+    throw new Error(`Council '${input.caseId}' kickoff receipt is unavailable or invalid`);
+  }
+  return kickoff;
+}
+
+function requireCouncilReport(input: {
+  messages: readonly ChatMessage[];
+  roomId: string;
+  reportMessageId: string;
+  agentId: string;
+  kickoff: ChatMessage;
+  startSentinel: string;
+  endSentinel: string;
+}): ChatMessage {
+  const report = input.messages.find((message) => message.id === input.reportMessageId);
+  if (!report || report.roomId !== input.roomId || report.authorAgentId !== input.agentId) {
+    throw new Error(
+      `Council report '${input.reportMessageId}' is not authored by Peer '${input.agentId}' in Room '${input.roomId}'`,
+    );
+  }
+  if (report.createdAt < input.kickoff.createdAt) {
+    throw new Error(`Council report '${input.reportMessageId}' predates the Council kickoff`);
+  }
+  const reportLines = report.body.trim().split(/\r?\n/u);
+  if (
+    reportLines[0] !== input.startSentinel ||
+    reportLines.at(-1) !== input.endSentinel ||
+    reportLines.slice(1, -1).every((line) => line.trim().length === 0)
+  ) {
+    throw new Error(
+      `Council report '${input.reportMessageId}' does not satisfy ${input.startSentinel}..${input.endSentinel}`,
+    );
+  }
+  return report;
+}
+
+async function validateCouncilSeatReportReceipt(input: {
+  agentManager: AgentManager;
+  chatService: FileBackedChatService;
+  target: { labels: Readonly<Record<string, string>> };
+  callerAgentId: string;
+  caseId: string;
+  agentId: string;
+  phase: "sealed" | "review" | "audit" | "verdict";
+  reportMessageId?: string;
+}): Promise<CouncilSeatReportReceipt> {
+  if (input.phase === "sealed") {
+    throw new Error("A valid Council seat must advance beyond the sealed phase");
+  }
+  const liveTarget = input.agentManager.getAgent(input.agentId);
+  if (!liveTarget) {
+    throw new Error(
+      `Council seat '${input.agentId}' must be loaded so its terminal lifecycle can be audited`,
+    );
+  }
+  assertCouncilSeatTerminal(liveTarget);
+  if (!input.reportMessageId) {
+    throw new Error("integrity=valid requires reportMessageId from the Peer post_room receipt");
+  }
+
+  const context = requireCouncilReportContext(input.target.labels, input.agentId);
+  const messages = await input.chatService.readMessages({ room: context.roomId, limit: 100 });
+  const kickoff = requireCouncilKickoff({
+    messages,
+    callerAgentId: input.callerAgentId,
+    ...context,
+    caseId: input.caseId,
+  });
+  const report = requireCouncilReport({
+    messages,
+    roomId: context.roomId,
+    reportMessageId: input.reportMessageId,
+    agentId: input.agentId,
+    kickoff,
+    startSentinel: context.startSentinel,
+    endSentinel: context.endSentinel,
+  });
+  return {
+    roomId: context.roomId,
+    kickoffMessageId: context.kickoffMessageId,
+    reportMessageId: input.reportMessageId,
+    reportDigest: createHash("sha256").update(report.body).digest("hex"),
+    authorAgentId: input.agentId,
+    startSentinel: context.startSentinel,
+    endSentinel: context.endSentinel,
+    createdAt: report.createdAt,
+  };
+}
 
 function formatPeerRouteList(routes: readonly PeerDelegationModelRoute[]): string[] {
   return routes.map((route) => formatProviderModel(route.provider, route.model));
@@ -1915,7 +2088,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
 
       const CouncilTierSchema = z.enum(["lens", "debate", "debate-with-proof", "high-risk"]);
       const CouncilPhaseSchema = z.enum(["sealed", "review", "audit", "verdict"]);
-      const CouncilSeatRoleSchema = z.enum(["scout", "architect", "reviewer"]);
+      const CouncilSeatRoleSchema = NativeCouncilSeatRoleSchema;
       const CouncilSeatIntegritySchema = z.enum([
         "unspecified",
         "valid",
@@ -1923,10 +2096,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         "missing",
         "redundant",
       ]);
+      const CouncilSeatReportReceiptSchema = z.object({
+        roomId: z.string(),
+        kickoffMessageId: z.string(),
+        reportMessageId: z.string(),
+        reportDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+        authorAgentId: z.string(),
+        startSentinel: z.string(),
+        endSentinel: z.string(),
+        createdAt: z.string(),
+      });
       const CouncilSeatPlanSchema = z.object({
         role: CouncilSeatRoleSchema,
         peerSubrole: PeerSubroleSchema,
         executionProfile: FoundationExecutionProfileIdSchema.optional(),
+        reportStartSentinel: z.string(),
+        reportEndSentinel: z.string(),
         labels: z.record(z.string(), z.string()),
       });
 
@@ -1942,7 +2127,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             tier: CouncilTierSchema.default("debate-with-proof"),
             roles: z
               .array(CouncilSeatRoleSchema)
-              .min(2)
+              .min(1)
               .max(3)
               .default(["scout", "architect", "reviewer"]),
             roomName: z.string().trim().min(1).optional(),
@@ -1979,24 +2164,33 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             ].join("\n"),
           });
           const seats = uniqueRoles.map((role) => {
+            const seatRole = CouncilSeatRoleSchema.parse(role);
             let executionProfile: FoundationExecutionProfileId | undefined;
-            if (role === "architect") {
+            if (seatRole === "architect") {
               executionProfile = "solution-architect";
-            } else if (role === "reviewer") {
+            } else if (seatRole === "reviewer") {
               executionProfile = "reviewer";
             }
+            const { startSentinel: reportStartSentinel, endSentinel: reportEndSentinel } =
+              councilReportSentinels(seatRole);
             return {
-              role,
-              peerSubrole: PeerSubroleSchema.parse(role),
+              role: seatRole,
+              peerSubrole: PeerSubroleSchema.parse(seatRole),
               executionProfile,
+              reportStartSentinel,
+              reportEndSentinel,
               labels: {
                 "council.case_id": caseId,
                 "council.title": title,
                 "council.tier": tier,
                 "council.phase": "sealed",
-                "council.role": role,
+                "council.role": seatRole,
                 "council.round": "1",
                 "council.integrity": "unspecified",
+                "council.room_id": room.id,
+                "council.kickoff_message_id": kickoff.id,
+                "council.report_start_sentinel": reportStartSentinel,
+                "council.report_end_sentinel": reportEndSentinel,
               },
             };
           });
@@ -2021,12 +2215,18 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           title: "Record council seat",
           description:
-            "Lead-only: audit one direct Peer child in this Council and update only its canonical Council lifecycle labels.",
+            "Lead-only: audit one direct Peer child in this Council and update only its canonical Council lifecycle labels. integrity=valid requires a terminal seat and the exact Peer-authored Room report message returned by post_room.",
           inputSchema: {
             caseId: z.string().trim().min(1),
             agentId: z.string().trim().min(1),
             phase: CouncilPhaseSchema,
             integrity: CouncilSeatIntegritySchema,
+            reportMessageId: z
+              .string()
+              .trim()
+              .min(1)
+              .optional()
+              .describe("Required when integrity=valid; exact message ID returned by post_room."),
             disposition: z.string().trim().min(1).max(240).optional(),
           },
           outputSchema: {
@@ -2035,9 +2235,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             phase: CouncilPhaseSchema,
             integrity: CouncilSeatIntegritySchema,
             disposition: z.string().optional(),
+            reportReceipt: CouncilSeatReportReceiptSchema.optional(),
           },
         },
-        async ({ caseId, agentId, phase, integrity, disposition }) => {
+        async ({ caseId, agentId, phase, integrity, reportMessageId, disposition }) => {
           const target = agentManager.getAgent(agentId) ?? (await agentStorage.get(agentId));
           if (!target) {
             throw new Error(`Council seat agent '${agentId}' is unavailable`);
@@ -2059,6 +2260,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           if (target.labels["council.case_id"] !== caseId) {
             throw new Error(`Peer '${agentId}' is not a seat in Council '${caseId}'`);
           }
+          let reportReceipt: z.infer<typeof CouncilSeatReportReceiptSchema> | undefined;
+          if (integrity === "valid") {
+            reportReceipt = await validateCouncilSeatReportReceipt({
+              agentManager,
+              chatService: options.chatService!,
+              target,
+              callerAgentId,
+              caseId,
+              agentId,
+              phase,
+              reportMessageId,
+            });
+          }
           const result = await updateAgentCommand(
             { agentManager },
             {
@@ -2067,6 +2281,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
                 "council.phase": phase,
                 "council.integrity": integrity,
                 ...(disposition ? { "council.disposition": disposition } : {}),
+                ...(reportReceipt
+                  ? {
+                      "council.report_message_id": reportReceipt.reportMessageId,
+                      "council.report_digest": reportReceipt.reportDigest,
+                      "council.report_created_at": reportReceipt.createdAt,
+                    }
+                  : {}),
               },
             },
           );
@@ -2081,6 +2302,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
               phase,
               integrity,
               ...(disposition ? { disposition } : {}),
+              ...(reportReceipt ? { reportReceipt } : {}),
             }),
           };
         },
