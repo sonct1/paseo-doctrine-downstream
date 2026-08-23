@@ -2,13 +2,14 @@
 
 ## Bottom line
 
-- Recommendation: merge exact annotated tag `v0.5.0`, peeled commit
-  `b8a31034ca36301067edadc2d622f42f4a4f7a37`, bằng một semantic two-parent merge trên branch riêng.
+- Result: exact annotated tag `v0.5.0`, peeled commit
+  `b8a31034ca36301067edadc2d622f42f4a4f7a37`, đã được semantic two-parent merge tại
+  `081abc7b46040eb410c8ac5cc84370726882ad58`.
 - Không dùng `v0.5.0-beta.*`, upstream `main`, `next` hoặc tag mới hơn làm integration input.
 - Resolve theo owner contract; không lấy nguyên file bằng `ours` hoặc `theirs` ở protocol, agent,
   profile, pane, plugin, skill, Hub hoặc release paths.
-- Confidence: 94%. Remaining uncertainty nằm ở 50 conflict paths và live cross-platform behavior,
-  được xử lý bằng focused gates, activation readback và in-app Browser E2E.
+- 50 conflict paths đã closeout về zero unmerged path. Cross-platform behavior ngoài local macOS và
+  post-stable upstream vẫn nằm ngoài claim của job này.
 
 Đây là đường nhẹ nhất còn giữ đủ provenance. Rebase sẽ replay 194 downstream commits và lặp conflict.
 Selective cherry-pick phải reconstruct dependency của 181 stable commits và dễ bỏ final-release fix.
@@ -83,10 +84,25 @@ Ledger này được cập nhật trong lúc resolve; mỗi entry phải có sou
 | Nix desktop top-level `skills/` copy                   | `NOT RETAINED`              | Daemon-owned skill lifecycle là canonical owner                                 | Chỉ reopen nếu một packaged runtime consumer được reproduce là thiếu asset       |
 | Downstream Foundation doctrine, roles, Room/Council    | `RETAIN`                    | Là Foundation owner bytes, không có upstream replacement tương đương            | Chỉ đổi qua Foundation doctrine/release process                                  |
 
+## Merged / adapted closeout
+
+| Surface                                | Result                  | Downstream adaptation                                                                                             |
+| -------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Protocol, bootstrap, WebSocket, config | `MERGE WITH ADAPTATION` | Union stable optional fields với role binding, assignment, Council, Workspace Protocol revision và MCP admission  |
+| Durable timeline                       | `RETAIN + ADAPT`        | Nhận snapshot/reconciliation interfaces nhưng giữ persistent store; không xóa timeline khi startup                |
+| Profiles, panes, workspace UI          | `MERGE WITH ADAPTATION` | Nhận stable editor/tabs/panes/tracks và giữ peer subrole, role intent, Topology, Issues, protocol/admission draft |
+| Plugin SDK/runtime                     | `MERGE WITH ADAPTATION` | Canonical private `@getpaseo/plugin`, giữ scope cũ chỉ như compatibility alias, không publish                     |
+| Orchestration skills                   | `MERGE WITH ADAPTATION` | Daemon là owner; migrate selection cũ, preserve user files, không copy/install trùng từ desktop/Nix               |
+| Hub discovery                          | `MERGE DORMANT`         | Giữ provider/connection/resource helpers nhưng public init/continuation fail closed trước mọi side effect         |
+| Hub starter deployment                 | `DEFER`                 | Chưa có role/assignment/admission revision/file ownership receipt nên không tạo generic agent hoặc workflow       |
+| ACP catalog                            | `MERGE METADATA`        | Giữ exact command/version/icon metadata; Product route vẫn chỉ hiện provider đã downstream qualify                |
+| Codex role resume                      | `MERGE WITH FIX`        | Runtime role/MCP config sống qua unarchive; role-tool gate không native-resume cùng thread lần hai                |
+| Foundation doctrine/components         | `RETAIN`                | Supervisor, Lead, Peer, Room, Council, Beads Central, Topology và release authority tiếp tục là downstream owner  |
+
 ## Acceptance gates
 
 - Conflict ledger reaches zero with every resolution mapped to an owner train.
-- Focused tests for every changed conflict owner; no full local suite.
+- Focused tests cho từng conflict owner và full local suite cho distribution surfaces được ship.
 - `npm run format`, `npm run format:check`, `npm run typecheck`, `npm run lint`, release guards and
   downstream Foundation validators pass.
 - Version is bumped once after code merge and internal workspace versions, lockfile and Nix hash agree.

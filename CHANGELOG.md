@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.5.0-paseo.32 - 2026-08-24
+
+Bản này tích hợp semantic exact stable upstream `v0.5.0` tại
+`b8a31034ca36301067edadc2d622f42f4a4f7a37`, không dùng beta refs làm input, đồng thời giữ nguyên
+Foundation authority, durable evidence và các component downstream đã build.
+
+### Added
+
+- Nhận stable panes, workspace tabs, sidebar/project labels, profile editor, tracks, plugin themes/RPC,
+  file/diff/terminal improvements và daemon-owned orchestration skill controller.
+- Thêm guided first-run downstream cho Workspace Protocol admission, Agent Profile so với Role Profile,
+  Lead, Peer, Supervisor, Room, Council, checkpoint và handback.
+- Giữ stable Hub provider/connection/resource discovery làm dormant input cho một starter governed sau
+  này, nhưng chưa cho nó tạo unbound agent hoặc ghi workflow.
+
+### Changed
+
+- Canonical plugin SDK là private `@getpaseo/plugin`; release/build/smoke paths không còn dùng scope cũ,
+  còn `@paseo/plugin` chỉ tồn tại như compatibility alias có test.
+- Chuyển skill lifecycle về daemon host controller, migrate selection cũ và không giữ desktop-owned
+  global installer hoặc Nix top-level skill copy trùng owner.
+- Union protocol/server/app stable với role binding, assignment grants, Workspace Protocol revision,
+  Beads Central, Room/Council, Topology và workspace admission thay vì replace downstream owner bytes.
+- `hub init` và automatic guided continuation fail closed trước filesystem/login/daemon/deploy cho tới
+  khi Hub wire có role, assignment, admission revision và file-scoped ownership receipts.
+
+### Fixed
+
+- Giữ durable timeline snapshot/reconciliation qua restart; không nhận destructive startup cleanup của
+  upstream #3647.
+- Inject Agent MCP chỉ khi cả MCP và `injectIntoAgents` được bật, giữ credential debug redaction và
+  namespace `paseo` fail closed.
+- Giữ role config và runtime MCP khi unarchive/resume Codex, đồng thời bỏ native `thread/resume` thừa
+  trong role-tool admission.
+- Giữ downstream `xs` typography tier, Agent/Role Profile fields, pane contribution identity và natural
+  Room composer behavior khi nhận stable UI refactors.
+
+### Deferred / not merged
+
+- Không merge `v0.5.0-beta.*`, `v0.5.1` hoặc commit sau stable boundary.
+- Reject as-is destructive timeline cleanup và whole-directory `.paseo/` Hub writer; defer automatic
+  unbound Hub starter tới cross-repo admission protocol đầy đủ.
+- Giữ raw ACP metadata nhưng defer Product UI/install qualification cho MiniMax Code, fast-agent,
+  Hermes và các provider ngoài downstream allowlist.
+- Không merge upstream npm publication, upstream changelog prose hoặc bất kỳ thay đổi nào thay thế
+  Foundation doctrine, Supervisor/Lead/Peer, Room/Council hay downstream release authority.
+
+### Qualified
+
+- Merge commit có đúng hai parent: downstream `65402d53132748b1815a74d52d8b47d0a0bdfde2` và stable
+  `b8a31034ca36301067edadc2d622f42f4a4f7a37`; zero unmerged path.
+- App unit/browser Vitest, protocol/client/plugin/highlight/relay, CLI E2E 41/41, Foundation CLI,
+  focused Foundation authority, agent manager, bootstrap/session/skill controller, format, lint,
+  typecheck và server/CLI build đều pass trước release closeout.
+- Lockfile và Nix dependency hash được regenerate từ downstream graph; clean install, installed artifact,
+  live role canaries và in-app Browser E2E được ghi vào closeout ledger của exact release commit.
+
 ## 0.4.0-paseo.30 - 2026-08-21
 
 Bản này đưa Peer routing theo subrole/profile vào Product, thêm Council/Room native và giữ exact
