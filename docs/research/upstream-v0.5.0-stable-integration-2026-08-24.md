@@ -213,6 +213,33 @@ gap vì Supervisor phải audit authored Lead ↔ Peer evidence theo exact gover
 duy nhất `read_room` vào Supervisor ceiling, không thêm mutator, profile-routing hay acceptance authority
 và không đổi bất kỳ upstream/not-merged disposition nào.
 
+Installed `.35` qualification sau correction xác nhận:
+
+- CLI, daemon, `/api/health`, WebUI root và About UI cùng readback `0.5.0-paseo.35`; release artifact
+  được build từ clean downstream source và local-stack no-flag readback xác nhận runtime exact-tree.
+- Fresh Supervisor `619da3ec-be49-4438-8692-be9541fcc9ef` revalidate full protocol digest
+  `9bd0e971081a0279661a73503f0825a7bb41a53d91df3f5374ea69cf68513ec0`, giữ
+  `read-only`/`no-write`/external-denied assignment và effective role receipt `24 tools / 4 skills`.
+  Nó gọi `read_room` đúng một lần, audit trực tiếp đủ sáu authored messages, ba exact Peer sentinels,
+  prior BLOCKED verdict và final superseding PASS verdict; `list_profiles` vẫn Lead-only by design.
+- Lead, Peer và Supervisor effective receipts lần lượt là `32/3`, `10/2` và `24/4`; Settings render đủ
+  16 Agent Profiles. Councils render `.34` `3/3 ready` và old `.33` `0/3`; Rooms render đủ exact chain.
+- Mutation boundary pass: Supervisor không gọi `create_agent`, `post_room`, `record_council_seat`,
+  `update_agent` hay bất kỳ mutation nào. Browser log không có application error; chỉ còn Expo/web
+  capability warnings đã biết.
+
+Một residual durable-evidence riêng vẫn `BLOCKED`: bốn closed Beads issues của case `.34` giữ stale
+BLOCKED notes/`close_reason`, cũ hơn final Room PASS. Exact Human correction lease cho existing Lead
+đã revalidate admission và inspect schema nhưng thực hiện `0/4` updates: native `beads_update` chỉ có
+`appendNotes`, `description`, `addLabels`/`removeLabels` và status transitions, không thể replace sạch
+notes hoặc `close_reason` trên closed issue. Xóa label rồi append PASS sẽ tạo hai authoritative narratives
+mâu thuẫn nên bị reject như một partial workaround. Không reopen/close/create issue và không mutation
+artifact nào được thực hiện.
+
+Guided Hub starter cũng được re-run trên installed `.35`: non-TTY fail; PTY fail closed với zero files
+vì stable `v0.5.0` Hub không thể mang revision-scoped role/assignment receipt tới daemon admission.
+Disposition vẫn `DEFER`; không manual writer hay auto-start flow nào được activate.
+
 ## Acceptance gates
 
 - Conflict ledger reaches zero with every resolution mapped to an owner train.

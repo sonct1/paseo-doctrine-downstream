@@ -26,7 +26,14 @@ Supervisor audit tìm thấy sau khi Council `.34` đã pass toàn bộ receipt 
   `read_room` absence trước source correction này.
 - Focused role-profile/binding suites pass `25/25`; exact isolated Claude suite pass `78/78` khi dùng
   installed path; full Server unit với authoritative PATH pass `5,502/5,502` và skip `45`.
-  Installed-runtime và Browser `.35` requalification vẫn là activation gate.
+- Installed `.35` requalification pass CLI/daemon/health/WebUI và Browser: fresh Supervisor có
+  `24 tools / 4 skills`, gọi `read_room` đúng một lần, audit trực tiếp đủ sáu authored Room messages,
+  ba daemon-issued Council receipt markers và no-mutation boundary. Councils UI giữ `.34` ở `3/3`
+  ready và fail closed `.33` ở `0/3`.
+- Durable Beads closeout vẫn `BLOCKED` không mutation: native `beads_update` có thể append notes và
+  đổi labels nhưng không thể replace stale notes/`close_reason` trên closed issues. Guided Hub starter
+  cũng tiếp tục `DEFER` fail-closed vì stable Hub chưa mang revision-scoped authority receipt qua
+  daemon admission.
 
 ## 0.5.0-paseo.34 - 2026-08-24
 
