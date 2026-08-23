@@ -188,6 +188,31 @@ Reviewer đồng thời chỉ ra caller vẫn có thể đi ngoài dedicated too
   pass/`45` skip và integration `10/10` + `1/1`. Source/build receipts không thay cho installed-runtime
   và Browser activation gate.
 
+Installed `.34` sau đó được activate từ clean source `f6be268448719f93426efe3ff9fce350d3595af3`,
+fingerprint `0232964bc4f2246f294bb2955bbd649f740e46e6d37f473d7348cece6c877bf2`; CLI, daemon,
+health và WebUI đều readback đúng `0.5.0-paseo.34`. Browser human-style journey mới đã pass exact
+Lead/Peer/Council route:
+
+- Lead `71bdbfec-430f-4d65-9d55-1e18955572c0`, case `case_aeb268c2d7a2`, Room
+  `7c2d1f68-0a13-4d19-9654-f989c2eae2b7`, kickoff
+  `d90c2aeb-f2ff-4676-b235-e2a6d0354c1f` và superseding PASS verdict
+  `7e3af5b9-bba7-4e3e-bd9a-fedb5037dfd4`.
+- Ba direct Peer `5d9e5dc0-a056-468d-9428-628cd08a932a`,
+  `ef6fbd8c-b2b7-4332-996c-d67b1ff5e3a7` và `7ae3000e-4ad5-433c-a3ee-737af1bfbffc`
+  giữ same-workspace `read-only`/`no-write` assignments, exact authored reports và
+  `council.report_receipt_version=1`.
+- Operator-lane attempt tự ghi năm `council.*` receipt labels bị installed daemon reject với
+  `UPDATE_FAILED`; immediate Scout readback chứng minh zero side effect trước ba correct records.
+- Existing `.33` case `case_bf86c1b38857` hiển thị `0/3 ready`, chứng minh marker migration fail
+  closed thay vì grandfather receipt cũ.
+
+Fresh Supervisor `cdff64c5-3d73-44f9-bc18-f34efa3128de` sau đó pass self/protocol/Central/agent receipt
+audit nhưng không thể trực tiếp đọc Room vì `read_room` vắng khỏi Supervisor ceiling. `list_profiles`
+vắng là intentional Lead-only routing boundary đã có contract test; `read_room` vắng là observation
+gap vì Supervisor phải audit authored Lead ↔ Peer evidence theo exact governance mandate. `.35` thêm
+duy nhất `read_room` vào Supervisor ceiling, không thêm mutator, profile-routing hay acceptance authority
+và không đổi bất kỳ upstream/not-merged disposition nào.
+
 ## Acceptance gates
 
 - Conflict ledger reaches zero with every resolution mapped to an owner train.

@@ -152,7 +152,10 @@ toàn bộ projection.
 - Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
   Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;
   Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
-- Supervisor chỉ có observation/governance và Beads read-only subset; recovery/replacement vẫn cần exact Human lease.
+- Supervisor chỉ có observation/governance và Beads read-only subset. Exact governance mandate cho
+  phép `read_room` để audit trực tiếp Lead ↔ Peer evidence, nhưng không cấp `post_room`,
+  `record_council_seat`, `list_profiles`, mutation hoặc acceptance authority; recovery/replacement vẫn
+  cần exact Human lease.
 
 `full-access` là runtime capability, không phải write lease, ownership, external-effect hoặc acceptance authority; đồng thời nó không được dùng làm fallback cho mutation boundary `no-write`.
 

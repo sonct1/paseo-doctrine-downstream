@@ -97,6 +97,11 @@ mày check giúp tao workspace này đang có gì bất thường, chỉ quan s�
 sửa gì. Tách evidence, suspected mechanism, impact và unknown; đề xuất correction nhỏ nhất cho tao.
 ```
 
+Trong exact governance mandate, Supervisor có thể dùng `read_room` để audit trực tiếp authored
+Lead/Peer messages và verdict chain. `list_profiles` vẫn là Lead routing capability; Supervisor chỉ
+đọc effective role/profile receipts từ exact agent status và giữ current approval state là `UNKNOWN`
+nếu Human mandate cần fact đó nhưng không có authoritative receipt.
+
 Chỉ exact Human recovery/replacement lease mới mở bounded `STOP`, `FREEZE` hoặc Lead replacement flow.
 
 ## 7. Room và Council

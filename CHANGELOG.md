@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0-paseo.35 - 2026-08-24
+
+Bản follow-up này không nhận thêm upstream bytes. Nó close một read-only governance gap do Browser
+Supervisor audit tìm thấy sau khi Council `.34` đã pass toàn bộ receipt route.
+
+### Fixed
+
+- Supervisor role ceiling có `read_room` để exact Human governance mandate audit trực tiếp authored
+  Lead ↔ Peer evidence và verdict supersession, thay vì chỉ suy ra từ truncated agent activity.
+- `list_profiles` vẫn Lead-only; Supervisor không nhận `post_room`, `record_council_seat`, generic
+  `update_agent`, mutation hoặc acceptance authority.
+
+### Compatibility
+
+- Existing Supervisor preferences vẫn bị daemon intersect với Foundation ceiling; capability mới chỉ
+  mở đường đọc Room và không đổi recovery/replacement lease.
+- Stable merge parent, Foundation `0.1.0-dev.21`, beta exclusion, `v0.5.1` exclusion và toàn bộ deferred
+  upstream/post-tag ledger không đổi.
+
+### Qualified
+
+- Browser trên installed `.34` pass Lead → ba profile-routed Peer → Room → Council, operator-lane
+  forged-label rejection và ba daemon-issued receipt markers; fresh Supervisor audit reproduce đúng
+  `read_room` absence trước source correction này.
+- Focused role-profile/binding suites pass `25/25`; exact isolated Claude suite pass `78/78` khi dùng
+  installed path; full Server unit với authoritative PATH pass `5,502/5,502` và skip `45`.
+  Installed-runtime và Browser `.35` requalification vẫn là activation gate.
+
 ## 0.5.0-paseo.34 - 2026-08-24
 
 Bản follow-up này vẫn không nhận thêm upstream bytes. Nó close đường forge còn lại mà Browser Council
