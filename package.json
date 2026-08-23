@@ -1,6 +1,6 @@
 {
   "name": "paseo",
-  "version": "0.4.0-paseo.30",
+  "version": "0.4.0-paseo.31",
   "private": true,
   "description": "Paseo: voice-controlled development environment for local AI coding agents",
   "keywords": [
@@ -101,7 +101,7 @@
     "version": "npm run version:sync-internal && npm run release:prepare && git add -A",
     "version:sync-internal": "node scripts/sync-workspace-versions.mjs",
     "release:toolchain:check": "node scripts/check-release-toolchain.mjs",
-    "release:prepare": "npm run release:toolchain:check && npm install --workspaces --include-workspace-root",
+    "release:prepare": "npm run release:toolchain:check && npm install --workspaces --include-workspace-root && ./scripts/update-nix.sh",
     "version:all:patch": "node scripts/set-release-version.mjs --mode patch",
     "version:all:minor": "node scripts/set-release-version.mjs --mode minor",
     "version:all:major": "node scripts/set-release-version.mjs --mode major",
