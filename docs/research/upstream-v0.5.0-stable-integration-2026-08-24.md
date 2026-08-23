@@ -84,6 +84,31 @@ Ledger này được cập nhật trong lúc resolve; mỗi entry phải có sou
 | Nix desktop top-level `skills/` copy                   | `NOT RETAINED`              | Daemon-owned skill lifecycle là canonical owner                                 | Chỉ reopen nếu một packaged runtime consumer được reproduce là thiếu asset       |
 | Downstream Foundation doctrine, roles, Room/Council    | `RETAIN`                    | Là Foundation owner bytes, không có upstream replacement tương đương            | Chỉ đổi qua Foundation doctrine/release process                                  |
 
+### Post-tag ACP registry drift không merge
+
+`npm run acp:version-drift:check` ngày 2026-08-24 thấy 13 registry versions mới hơn stable catalog.
+Đây không phải bytes của `v0.5.0`; nhận chúng trong job này sẽ phá exact-source boundary. Downstream
+`acp:pin-consistency:check` vẫn pass với zero internal drift.
+
+| Provider      | Stable pin retained            | Registry version observed | Disposition             |
+| ------------- | ------------------------------ | ------------------------- | ----------------------- |
+| Auggie        | `@augmentcode/auggie@0.35.0`   | `0.36.0`                  | `NOT MERGED — POST-TAG` |
+| Cline         | `cline@3.0.55`                 | `3.0.57`                  | `NOT MERGED — POST-TAG` |
+| DeepAgents    | `deepagents-acp@0.1.25`        | `0.1.27`                  | `NOT MERGED — POST-TAG` |
+| DimCode       | `dimcode@0.3.13`               | `0.3.18`                  | `NOT MERGED — POST-TAG` |
+| Dirac         | `dirac-cli@0.4.36`             | `0.4.37`                  | `NOT MERGED — POST-TAG` |
+| Factory Droid | `droid@0.197.0`                | `0.202.0`                 | `NOT MERGED — POST-TAG` |
+| fast-agent    | `fast-agent-acp==0.9.22`       | `0.10.9`                  | `NOT MERGED — POST-TAG` |
+| Gemini CLI    | `@google/gemini-cli@0.55.1`    | `0.56.0`                  | `NOT MERGED — POST-TAG` |
+| GLM Agent     | `glm-acp-agent@1.5.0`          | `1.6.0`                   | `NOT MERGED — POST-TAG` |
+| MiniMax Code  | `@minimax-ai/code@0.1.2`       | `0.2.3`                   | `NOT MERGED — POST-TAG` |
+| Nova          | `@compass-ai/nova@1.1.35`      | `1.1.37`                  | `NOT MERGED — POST-TAG` |
+| Qoder         | `@qoder-ai/qodercli@1.1.23`    | `1.1.28`                  | `NOT MERGED — POST-TAG` |
+| Qwen Code     | `@qwen-code/qwen-code@0.21.13` | `0.22.0`                  | `NOT MERGED — POST-TAG` |
+
+Reopen các pin này bằng một ACP maintenance assessment riêng, qualification provider-specific và Human
+approval; không gộp vào stable integration provenance.
+
 ## Merged / adapted closeout
 
 | Surface                                | Result                  | Downstream adaptation                                                                                             |

@@ -44,6 +44,8 @@ Foundation authority, durable evidence và các component downstream đã build.
   unbound Hub starter tới cross-repo admission protocol đầy đủ.
 - Giữ raw ACP metadata nhưng defer Product UI/install qualification cho MiniMax Code, fast-agent,
   Hermes và các provider ngoài downstream allowlist.
+- Không nhận 13 package-runner updates xuất hiện trên npm/PyPI sau stable tag; exact stable pins và
+  commands được giữ, còn registry-latest drift được record như maintenance advisory riêng.
 - Không merge upstream npm publication, upstream changelog prose hoặc bất kỳ thay đổi nào thay thế
   Foundation doctrine, Supervisor/Lead/Peer, Room/Council hay downstream release authority.
 
