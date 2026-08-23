@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "distributionVersion": "0.1.0-dev.19",
+  "distributionVersion": "0.1.0-dev.20",
   "foundationSource": {
-    "commit": "35b3487a3dbf015d9411600e25b6769bb2b7ec2f",
-    "ref": "foundation-v0.1.0-dev.19"
+    "commit": "67991aeac151f9c49081286ec09b3cfa6e8b4da8",
+    "ref": "foundation-v0.1.0-dev.20"
   },
   "files": [
     {
@@ -54,7 +54,7 @@
     {
       "path": "profiles/claude-plugins/paseo-lead/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "8eada97b51b991ad24c77dd1e23a9f6379cfcc3a95deaf2440588a962c721fce"
+      "sha256": "dc1a24fe771d4f9d0f53efd37dea32d7ce5062f362a1e07a82019d70106af659"
     },
     {
       "path": "profiles/claude-plugins/paseo-lead/agents/paseo-lead.md",
@@ -99,7 +99,7 @@
     {
       "path": "profiles/claude-plugins/paseo-peer/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "68f65ebb589abc95c1b0c171b4f1f9d217bc28186adc3fb41e135792c89df1d4"
+      "sha256": "0f33401e2beeb7118b6cc5ae20c57b7da8bbcc74a4f04299d977d705c6b4e765"
     },
     {
       "path": "profiles/claude-plugins/paseo-peer/agents/paseo-peer.md",
@@ -124,7 +124,7 @@
     {
       "path": "profiles/claude-plugins/paseo-supervisor/.claude-plugin/plugin.json",
       "mode": "0644",
-      "sha256": "daaa9976e504b70b829714e7c10c9f7bdb512df8d3128f620569f5296d6bc665"
+      "sha256": "d70ae29995d7f9db8960cdd33039ddd5df0381e108575143a55bae7dfb78c63a"
     },
     {
       "path": "profiles/claude-plugins/paseo-supervisor/agents/paseo-supervisor.md",
