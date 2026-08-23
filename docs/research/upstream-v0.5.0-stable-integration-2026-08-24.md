@@ -10,6 +10,9 @@
   profile, pane, plugin, skill, Hub hoặc release paths.
 - 50 conflict paths đã closeout về zero unmerged path. Cross-platform behavior ngoài local macOS và
   post-stable upstream vẫn nằm ngoài claim của job này.
+- Adversarial Browser qualification trên installed `.32` đã tìm thấy hai retained downstream gaps;
+  source correction `c98923af8b5123d3aafe9a303025a7068a70fab6` đưa chúng vào `.33` mà không đổi
+  upstream source boundary.
 
 Đây là đường nhẹ nhất còn giữ đủ provenance. Rebase sẽ replay 194 downstream commits và lặp conflict.
 Selective cherry-pick phải reconstruct dependency của 181 stable commits và dễ bỏ final-release fix.
@@ -123,6 +126,38 @@ approval; không gộp vào stable integration provenance.
 | ACP catalog                            | `MERGE METADATA`        | Giữ exact command/version/icon metadata; Product route vẫn chỉ hiện provider đã downstream qualify                |
 | Codex role resume                      | `MERGE WITH FIX`        | Runtime role/MCP config sống qua unarchive; role-tool gate không native-resume cùng thread lần hai                |
 | Foundation doctrine/components         | `RETAIN`                | Supervisor, Lead, Peer, Room, Council, Beads Central, Topology và release authority tiếp tục là downstream owner  |
+
+## Adversarial live E2E correction closeout
+
+Browser journey trên installed `0.5.0-paseo.32` dùng prompt tự nhiên theo giọng Human đã verify Project
+Workspace Protocol, 16 Agent Profiles, ba Role Profiles và một native Supervisor/Lead/three-Peer
+Council. Exact case `case_4ca4d9938b16`, Room
+`bbde0507-bc71-49f5-8194-f1ce1cde0b3b` và ba Peer-authored reports chứng minh Room author binding hoạt
+động, nhưng binding verdict là `NOT_PRESERVED` vì hai pre-existing downstream seams:
+
+1. `record_council_seat` có thể ghi `valid` chỉ từ Peer/direct-parent/workspace/case labels, không đọc
+   Room và không cần authored report, sentinel hoặc terminal lifecycle.
+2. persisted role resume chỉ re-check provider/tool transport, không re-inspect current protocol
+   status/digest và không reject assignment/protocol-exception expiry.
+
+`.33` close đúng owning layers:
+
+- `start_council` đóng dấu Room/kickoff/sentinels vào exact seat plan; one-seat `lens` không còn bị schema
+  ép thành hai seat.
+- `record_council_seat(valid)` require exact `reportMessageId`, terminal no-error Peer, Lead kickoff,
+  Peer author, post-kickoff timestamp, role sentinel body và SHA-256; receipt IDs/digest/time được ghi
+  vào canonical labels. Wrong author, missing receipt, wrong sentinel và running seat đều reject trước
+  metadata mutation.
+- Council UI chỉ gọi report ready khi receipt label set đầy đủ; old `.32` Council rows thiếu receipt
+  fail closed và không được backfill.
+- role-bound create/resume re-check expiry, exact protocol path/status/digest và graduated missing-file
+  conditions trước provider launch. Any drift requires fresh binding.
+- current Council skill và first-run guide dùng exact `start_council`, profile-routed Peer launch,
+  `post_room` authored report và receipt-bound record flow; không truyền cả `workspaceId` lẫn `cwd`.
+
+Focused source receipt: 5 suites, `240/240` tests pass; full workspace typecheck và staged lint/format
+pass. Installed `.33` activation và post-fix Browser requalification được ghi ở final runtime closeout,
+không suy ra từ source tests.
 
 ## Acceptance gates
 

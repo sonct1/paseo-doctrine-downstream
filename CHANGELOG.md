@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.5.0-paseo.33 - 2026-08-24
+
+Bản follow-up này không nhận thêm upstream bytes. Nó giữ nguyên exact stable `v0.5.0` merge boundary,
+import Foundation `0.1.0-dev.21`, và close hai evidence gap mà Browser Council adversarial journey trên
+`.32` đã reproduce.
+
+### Fixed
+
+- `record_council_seat(integrity=valid)` giờ bắt buộc exact terminal Peer, Council Room/kickoff labels,
+  Peer-authored post-kickoff `reportMessageId`, role sentinels và SHA-256 report receipt; app không còn
+  tính bare `valid` label + idle lifecycle là `Report ready`.
+- Role-bound create/resume revalidate assignment/exception expiry cùng current Workspace Protocol path,
+  validity và digest trước provider launch. Protocol xuất hiện, biến mất, invalid hoặc đổi bytes đều
+  fail closed tới fresh role binding.
+- Native Council skill/first-run guide dùng `start_council` → exact `list_profiles` route →
+  same-workspace `create_agent` không truyền đồng thời `workspaceId`/`cwd` → sealed `post_room` →
+  receipt-bound `record_council_seat`; tier `lens` được dùng đúng một seat.
+
+### Compatibility
+
+- Council record cũ thiếu Room/kickoff/report receipt vẫn được giữ để audit nhưng không còn được gọi là
+  ready; không backfill authority bằng suy đoán từ labels.
+- Không merge beta refs, `v0.5.1`, upstream `main`, 13 post-tag ACP registry drifts hoặc bất kỳ Hub
+  starter writer nào đã defer trong `.32` ledger.
+
+### Qualified
+
+- Focused Council, role binding/resume, Agent Manager, app projection và tool-manifest suites pass
+  `240/240`; full workspace typecheck, staged lint và format gates pass trên source correction.
+- Foundation validator pass trên tagged source `foundation-v0.1.0-dev.21`; downstream import giữ exact
+  source commit và manifest SHA-256 receipts.
+
 ## 0.5.0-paseo.32 - 2026-08-24
 
 Bản này tích hợp semantic exact stable upstream `v0.5.0` tại
