@@ -10,6 +10,8 @@ import { terminalPanelRegistration } from "@/panels/terminal-panel";
 import { topologyPanelRegistration } from "@/panels/topology-panel";
 import { providerSubagentPanelRegistration } from "@/panels/provider-subagent-panel";
 import { pullRequestPanelRegistration } from "@/panels/pull-request-panel";
+import { pluginPanelRegistration } from "@/plugins/workspace-panels/panel";
+import { newTabPanelRegistration } from "@/panels/new-tab-panel";
 
 let panelsRegistered = false;
 
@@ -18,6 +20,7 @@ export function ensurePanelsRegistered(): void {
     return;
   }
   registerPanel(draftPanelRegistration);
+  registerPanel(newTabPanelRegistration);
   registerPanel(agentPanelRegistration);
   registerPanel(providerSubagentPanelRegistration);
   registerPanel(setupPanelRegistration);
@@ -29,5 +32,6 @@ export function ensurePanelsRegistered(): void {
   registerPanel(commitDiffPanelRegistration);
   registerPanel(workingDiffPanelRegistration);
   registerPanel(topologyPanelRegistration);
+  registerPanel(pluginPanelRegistration);
   panelsRegistered = true;
 }

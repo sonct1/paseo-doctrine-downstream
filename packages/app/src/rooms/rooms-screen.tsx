@@ -5,7 +5,6 @@ import {
   useReducer,
   useRef,
   useState,
-  type ComponentProps,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -13,14 +12,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ChatMessage, ChatRoomDetail } from "@getpaseo/protocol/chat/types";
 import { router } from "expo-router";
 import { MessageSquare, Plus, Reply, Send, Trash2, UserRound, X } from "lucide-react-native";
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  type PressableStateCallbackType,
-} from "react-native";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { BackHeader } from "@/components/headers/back-header";
 import { MenuHeader } from "@/components/headers/menu-header";
@@ -29,8 +21,12 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import {
+  EditingTextInput,
+  type EditingTextInputHandle,
+  type EditingTextInputProps,
+} from "@/components/ui/text-input";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { isWeb } from "@/constants/platform";
 import { useAggregatedAgents, type AggregatedAgent } from "@/hooks/use-aggregated-agents";
 import type { Theme } from "@/styles/theme";
 import { confirmDialog } from "@/utils/confirm-dialog";
@@ -67,7 +63,7 @@ const EMPTY_COMPOSER: RoomComposerState = { text: "", cursor: 0, replyToMessageI
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedMessageSquare = withUnistyles(MessageSquare);
 const ThemedReply = withUnistyles(Reply);
-const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
+const ThemedTextInput = withUnistyles(EditingTextInput, (theme) => ({
   placeholderTextColor: theme.colors.foregroundMuted,
 }));
 const ThemedUserRound = withUnistyles(UserRound);
@@ -578,7 +574,7 @@ function RoomComposer({
   dispatch: Dispatch<RoomComposerAction>;
 }) {
   const queryClient = useQueryClient();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<EditingTextInputHandle>(null);
   const restoreInputFocusRef = useRef(false);
   const roomsQuery = useRoomsQuery(serverId);
   const { agents } = useAggregatedAgents();
@@ -625,6 +621,7 @@ function RoomComposer({
         (current = []) => mergeChatMessages(current, [message]),
       );
       void queryClient.invalidateQueries({ queryKey: roomQueryKeys.list(serverId) });
+      inputRef.current?.replaceText("");
       dispatch({ type: "sent" });
     },
   });
@@ -637,7 +634,7 @@ function RoomComposer({
     [dispatch],
   );
   const handleSelectionChange = useCallback(
-    (event: Parameters<NonNullable<ComponentProps<typeof TextInput>["onSelectionChange"]>>[0]) => {
+    (event: Parameters<NonNullable<EditingTextInputProps["onSelectionChange"]>>[0]) => {
       dispatch({ type: "cursor", cursor: event.nativeEvent.selection.start });
     },
     [dispatch],
@@ -646,13 +643,14 @@ function RoomComposer({
   const handleMentionSelect = useCallback(
     (agentId: string) => {
       restoreInputFocusRef.current = true;
+      const inserted = insertRoomMention(state.text, state.cursor, agentId);
+      inputRef.current?.replaceText(inserted.text, {
+        start: inserted.cursor,
+        end: inserted.cursor,
+      });
       dispatch({ type: "mention", agentId });
     },
-    [dispatch],
-  );
-  const inputSelection = useMemo(
-    () => ({ start: state.cursor, end: state.cursor }),
-    [state.cursor],
+    [dispatch, state.cursor, state.text],
   );
   useEffect(() => {
     if (!restoreInputFocusRef.current) {
@@ -664,12 +662,7 @@ function RoomComposer({
       return;
     }
     node.focus();
-    if (isWeb && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
-      node.setSelectionRange(inputSelection.start, inputSelection.end);
-    } else if (!isWeb) {
-      node.setNativeProps({ selection: inputSelection });
-    }
-  }, [inputSelection]);
+  }, [state.cursor]);
 
   return (
     <View style={styles.composer}>
@@ -703,8 +696,7 @@ function RoomComposer({
       <View style={styles.composerRow}>
         <ThemedTextInput
           ref={inputRef}
-          value={state.text}
-          selection={inputSelection}
+          initialValue={state.text}
           onChangeText={handleTextChange}
           onSelectionChange={handleSelectionChange}
           placeholder="Message room. Type @ to mention an agent"

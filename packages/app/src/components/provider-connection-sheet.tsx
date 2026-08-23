@@ -296,7 +296,7 @@ export function ProviderConnectionSheet({
             >
               <FormTextInput
                 size={controlSize}
-                value={state.providerId}
+                initialValue={state.providerId}
                 onChangeText={model.setProviderId}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -309,7 +309,7 @@ export function ProviderConnectionSheet({
             >
               <FormTextInput
                 size={controlSize}
-                value={state.providerLabel}
+                initialValue={state.providerLabel}
                 onChangeText={model.setProviderLabel}
                 autoCorrect={false}
                 placeholder="Codex proxy"
@@ -321,7 +321,7 @@ export function ProviderConnectionSheet({
             >
               <FormTextInput
                 size={controlSize}
-                value={state.modelId}
+                initialValue={state.modelId}
                 onChangeText={model.setModelId}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -341,7 +341,7 @@ export function ProviderConnectionSheet({
         >
           <FormTextInput
             size={controlSize}
-            value={state.baseUrl}
+            initialValue={state.baseUrl}
             onChangeText={model.setBaseUrl}
             autoCapitalize="none"
             autoCorrect={false}
@@ -357,7 +357,7 @@ export function ProviderConnectionSheet({
         >
           <FormTextInput
             size={controlSize}
-            value={state.apiKey}
+            initialValue={state.apiKey}
             onChangeText={model.setApiKey}
             autoCapitalize="none"
             autoCorrect={false}

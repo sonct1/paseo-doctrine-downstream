@@ -1,4 +1,6 @@
 import { normalizeWorkspaceFileLocation, workspaceFileLocationsEqual } from "@/workspace/file-open";
+import { AssignmentEffectClassSchema } from "@getpaseo/protocol/assignment-contract";
+import { PaseoRoleIdSchema } from "@getpaseo/protocol/role-binding";
 import type { WorkspaceDraftTabSetup, WorkspaceTabTarget } from "@/workspace-tabs/model";
 
 export function normalizeWorkspaceTabTarget(
@@ -14,6 +16,9 @@ export function normalizeWorkspaceTabTarget(
     }
     const setup = normalizeWorkspaceDraftTabSetup(value.setup);
     return setup ? { kind: "draft", draftId, setup } : { kind: "draft", draftId };
+  }
+  if (value.kind === "new_tab") {
+    return { kind: "new_tab" };
   }
   if (value.kind === "agent") {
     const agentId = trimNonEmpty(value.agentId);
@@ -31,6 +36,9 @@ export function normalizeWorkspaceTabTarget(
   }
   if (value.kind === "working_diff") {
     return normalizeWorkingDiffTabTarget(value);
+  }
+  if (value.kind === "plugin") {
+    return normalizePluginTabTarget(value);
   }
   return normalizeSimpleWorkspaceTabTarget(value);
 }
@@ -79,6 +87,17 @@ export function normalizeWorkspaceDraftTabSetup(
   if (!provider || !cwd) {
     return undefined;
   }
+  const roleId = normalizeDraftRoleId(record.roleId);
+  const assignmentEffect = AssignmentEffectClassSchema.safeParse(record.assignmentEffect);
+  const beadsIssueIds = Array.isArray(record.beadsIssueIds)
+    ? Array.from(
+        new Set(
+          record.beadsIssueIds
+            .map((issueId) => (typeof issueId === "string" ? trimNonEmpty(issueId) : null))
+            .filter((issueId): issueId is string => issueId !== null),
+        ),
+      )
+    : undefined;
   return {
     provider,
     cwd,
@@ -88,6 +107,9 @@ export function normalizeWorkspaceDraftTabSetup(
       typeof record.thinkingOptionId === "string" ? record.thinkingOptionId : null,
     ),
     featureValues: isPlainRecord(record.featureValues) ? { ...record.featureValues } : {},
+    ...(roleId !== undefined ? { roleId } : {}),
+    ...(assignmentEffect.success ? { assignmentEffect: assignmentEffect.data } : {}),
+    ...(beadsIssueIds !== undefined ? { beadsIssueIds } : {}),
   };
 }
 
@@ -113,7 +135,28 @@ export function workspaceTabTargetsEqual(
   if (left.kind === "topology" && right.kind === "topology") {
     return true;
   }
+  if (left.kind === "plugin" && right.kind === "plugin") {
+    return pluginWorkspaceTabTargetsEqual(left, right);
+  }
   return secondaryWorkspaceTabTargetsEqual(left, right);
+}
+
+function normalizeDraftRoleId(value: unknown) {
+  if (value === null) return null;
+  const parsed = PaseoRoleIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function pluginWorkspaceTabTargetsEqual(
+  left: Extract<WorkspaceTabTarget, { kind: "plugin" }>,
+  right: Extract<WorkspaceTabTarget, { kind: "plugin" }>,
+): boolean {
+  return (
+    left.pluginId === right.pluginId &&
+    left.panelId === right.panelId &&
+    left.context === right.context &&
+    (left.context === "workspace" || (right.context === "agent" && left.agentId === right.agentId))
+  );
 }
 
 function secondaryWorkspaceTabTargetsEqual(
@@ -157,8 +200,19 @@ function workspaceDraftTabSetupsEqual(
     left.modeId === right.modeId &&
     left.model === right.model &&
     left.thinkingOptionId === right.thinkingOptionId &&
+    left.roleId === right.roleId &&
+    left.assignmentEffect === right.assignmentEffect &&
+    arraysShallowEqual(left.beadsIssueIds, right.beadsIssueIds) &&
     recordsShallowEqual(left.featureValues, right.featureValues)
   );
+}
+
+function arraysShallowEqual(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
+  if (!left || !right) return left === right;
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function recordsShallowEqual(
@@ -178,6 +232,9 @@ function recordsShallowEqual(
 }
 
 export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): string {
+  if (target.kind === "new_tab") {
+    throw new Error("New tabs do not have deterministic target identities");
+  }
   if (target.kind === "draft") {
     return target.draftId;
   }
@@ -208,7 +265,26 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   if (target.kind === "files" || target.kind === "pull_request") {
     return target.kind;
   }
+  if (target.kind === "plugin") {
+    const identity = `${target.pluginId.length}_${target.pluginId}_${target.panelId.length}_${target.panelId}`;
+    return target.context === "workspace"
+      ? `plugin_workspace_${identity}`
+      : `plugin_agent_${identity}_${target.agentId.length}_${target.agentId}`;
+  }
   return `file_${target.path}`;
+}
+
+function normalizePluginTabTarget(
+  value: Extract<WorkspaceTabTarget, { kind: "plugin" }>,
+): WorkspaceTabTarget | null {
+  const pluginId = trimNonEmpty(value.pluginId);
+  const panelId = trimNonEmpty(value.panelId);
+  if (!pluginId || !panelId) return null;
+  if (value.context === "workspace") {
+    return { kind: "plugin", pluginId, panelId, context: "workspace" };
+  }
+  const agentId = trimNonEmpty(value.agentId);
+  return agentId ? { kind: "plugin", pluginId, panelId, context: "agent", agentId } : null;
 }
 
 function trimNonEmpty(value: string | null | undefined): string | null {

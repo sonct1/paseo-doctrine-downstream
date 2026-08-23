@@ -13,6 +13,9 @@ function findProvider(id: string) {
 describe("ACP provider catalog", () => {
   it("offers only Cursor on the currently supported product surface", () => {
     expect(getAcpProviderCatalog().map((entry) => entry.id)).toEqual(["cursor"]);
+    expect(getAcpProviderCatalog().map((entry) => entry.id)).not.toContain("minimax-code");
+    expect(getAcpProviderCatalog().map((entry) => entry.id)).not.toContain("fast-agent");
+    expect(getAcpProviderCatalog().map((entry) => entry.id)).not.toContain("hermes");
   });
 
   it("vendors provider entries with unique ids and concrete commands", () => {
@@ -56,6 +59,24 @@ describe("ACP provider catalog", () => {
     expect(findProvider("kiro").command).toEqual(["kiro-cli", "acp"]);
     expect(findProvider("poolside").command).toEqual(["pool", "acp"]);
     expect(findProvider("traecli").command).toEqual(["traecli", "acp", "serve"]);
+  });
+
+  it("retains MiniMax Code as raw upstream metadata without product qualification", () => {
+    expect(findProvider("minimax-code")).toMatchObject({
+      title: "MiniMax Code",
+      version: "0.1.2",
+      command: ["npx", "-y", "@minimax-ai/code@0.1.2", "acp"],
+    });
+    expect(findProvider("minimax-code").iconSvg).toContain("<svg");
+  });
+
+  it("retains stable fast-agent metadata with the exact uvx invocation", () => {
+    expect(findProvider("fast-agent")).toMatchObject({
+      title: "fast-agent",
+      version: "0.9.22",
+      command: ["uvx", "--from", "fast-agent-acp==0.9.22", "fast-agent-acp", "-x"],
+    });
+    expect(findProvider("fast-agent").iconSvg).toContain("<svg");
   });
 
   it("maps a catalog entry to the daemon provider config patch", () => {

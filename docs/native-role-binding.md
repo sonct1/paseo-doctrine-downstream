@@ -16,9 +16,11 @@ RoleDefinition + optional ExecutionSpecialization + Provider + Workspace Protoco
 
 - `RoleDefinition` giữ identity, universal authority boundary và anti-pattern guards.
 - `Provider` chỉ giữ transport, credentials, endpoint, model catalog và runtime capability.
-- Root `WORKSPACE_PROTOCOL.md` v3 là mandatory repository contract; Paseo quản lý path, digest,
-  byte-validity state và readership. Missing/invalid file block ordinary role launch; chỉ exact bounded
-  Human bootstrap/governance exception mới được materialize.
+- Root `WORKSPACE_PROTOCOL.md` là mandatory repository contract cho material work; Paseo quản lý path,
+  digest, byte-validity state và readership. File absent cho phép exact no-write/no-external-effect role
+  launch và ghi receipt `missing`, nhưng block delegation, mutation hoặc protected work cho tới khi
+  bootstrap baseline hoặc có exact bounded Human exception. File hiện diện nhưng invalid luôn fail
+  closed. Reader nhận mọi schema version đã phát hành; version marker không phải admission gate.
 - `Assignment` giữ bounded objective, disposition, lease, scope, evidence, handback và stop condition.
 
 Một Lead có thể thêm private execution specialization vào Peer binding khi repository protocol hoặc

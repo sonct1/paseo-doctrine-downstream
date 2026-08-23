@@ -170,6 +170,15 @@ const CATALOG_DATA = [
     params: { supportsMcpServers: false },
   },
   {
+    id: "fast-agent",
+    title: "fast-agent",
+    description: "Code and build agents with comprehensive multi-provider support",
+    version: "0.9.22",
+    iconId: "fast-agent",
+    installLink: "https://fast-agent.ai/acp/",
+    command: ["uvx", "--from", "fast-agent-acp==0.9.22", "fast-agent-acp", "-x"],
+  },
+  {
     id: "gemini",
     title: "Gemini CLI",
     description: "Google's official CLI for Gemini",
@@ -251,6 +260,15 @@ const CATALOG_DATA = [
     iconId: "kimi",
     installLink: "https://github.com/MoonshotAI/kimi-code",
     command: ["kimi", "acp"],
+  },
+  {
+    id: "minimax-code",
+    title: "MiniMax Code",
+    description: "MiniMax's coding agent for the terminal",
+    version: "0.1.2",
+    iconId: "minimax-code",
+    installLink: "https://agent.minimax.io",
+    command: ["npx", "-y", "@minimax-ai/code@0.1.2", "acp"],
   },
   {
     id: "minion-code",

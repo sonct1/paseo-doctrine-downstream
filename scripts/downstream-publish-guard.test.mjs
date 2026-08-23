@@ -1,25 +1,25 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const repoRoot = new URL("../", import.meta.url);
-const downstreamPackages = [
-  "packages/highlight/package.json",
-  "packages/relay/package.json",
-  "packages/protocol/package.json",
-  "packages/client/package.json",
-  "packages/server/package.json",
-  "packages/cli/package.json",
-  "packages/foundation-cli/package.json",
-];
+const rootPackageJson = JSON.parse(readFileSync(new URL("package.json", repoRoot), "utf8"));
+const repoRootPath = dirname(fileURLToPath(new URL("package.json", repoRoot)));
+const downstreamPackages = rootPackageJson.workspaces.map((workspace) =>
+  join(workspace, "package.json"),
+);
 
 test("downstream packages cannot be published under the upstream npm scope", () => {
   for (const relativePath of downstreamPackages) {
-    const packageJson = JSON.parse(readFileSync(new URL(relativePath, repoRoot), "utf8"));
-    assert.equal(
-      packageJson.private,
-      true,
-      `${relativePath} must stay private while it uses the @getpaseo scope`,
-    );
+    const packageJson = JSON.parse(readFileSync(join(repoRootPath, relativePath), "utf8"));
+    if (packageJson.name?.startsWith("@getpaseo/")) {
+      assert.equal(
+        packageJson.private,
+        true,
+        `${relativePath} must stay private while it uses the @getpaseo scope`,
+      );
+    }
   }
 });
