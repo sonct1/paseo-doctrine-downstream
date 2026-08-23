@@ -178,8 +178,8 @@ labels:
   council.issue_id: <THIS_SEAT_CHILD_ISSUE_ID>
 ```
 
-Omit both `workspaceId` and `cwd` so agent-scoped creation inherits the Lead workspace and establishes
-real parent ownership. Passing both is invalid, and passing either is unnecessary for a same-workspace
+Omit `workspaceId` and `cwd` so agent-scoped creation inherits the Lead workspace and establishes real
+parent ownership. Passing both is invalid, and passing either is unnecessary for a same-workspace
 Council. When Agent Profile routing is configured, also omit `provider` and `settings`: the exact
 `launchProfileId` supplies provider/model/mode/thinking. Do not pass legacy relationship/workspace
 objects. Launch required Round 1 seats in parallel where the tool surface permits, keep every returned

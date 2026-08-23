@@ -79,8 +79,9 @@ describe("product role skill policy", () => {
     expect(councilSkill).toContain("at most 60 characters");
     expect(councilSkill).not.toContain('relationship: { kind: "subagent" }');
     expect(councilSkill).not.toContain('workspace: { kind: "current" }');
-    expect(councilSkill).toContain("council.integrity: pending-lead-audit");
-    expect(councilSkill).toContain("council.integrity=valid-audited-report");
+    expect(councilSkill).toContain("the exact\n`reportMessageId` returned by that Peer");
+    expect(councilSkill).toContain("Room author, sentinels, timestamp, and report digest");
+    expect(councilSkill).toContain("bare `council.integrity` label alone is not a valid report");
     expect(councilSkill).toContain("at most one targeted challenge and permit one");
     expect(councilSkill).toContain("Lead issues one binding decision packet");
     expect(councilSkill).toContain("Do not create a Council\ndaemon, database, queue");
