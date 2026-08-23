@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.5.0-paseo.34 - 2026-08-24
+
+Bản follow-up này vẫn không nhận thêm upstream bytes. Nó close đường forge còn lại mà Browser Council
+`.33` adversarial journey tìm thấy sau khi route `record_council_seat` chuẩn đã pass.
+
+### Fixed
+
+- Council `Report ready` giờ cần exact `council.report_receipt_version=1` do
+  `record_council_seat` ghi cùng authored Room receipt; bare caller labels không còn đủ để tạo ready
+  state.
+- `create_agent` chỉ nhận sealed Council bootstrap labels cho role-bound Peer do role-bound Lead tạo;
+  generic `update_agent`, WebSocket metadata update và provider-session import đều reject mọi attempt
+  tự ghi Council lifecycle/receipt labels trước mutation.
+- Settings-only `update_agent` giữ nguyên behavior; Council label preflight chạy trước mode/model/feature
+  mutation nên forged request không để lại partial side effect.
+
+### Compatibility
+
+- Receipt `.33` hoặc cũ hơn thiếu version marker vẫn được giữ để audit nhưng fail closed về not-ready;
+  Lead phải audit Room và record lại qua dedicated tool nếu muốn promote.
+- Stable merge parent, Foundation `0.1.0-dev.21`, beta exclusion, `v0.5.1` exclusion và toàn bộ deferred
+  upstream/post-tag ledger không đổi.
+
+### Qualified
+
+- Focused six-suite regression pass `66/66`; Protocol pass `640/640`, App pass `4,813/4,813`, Server
+  unit pass `5,502` với `45` skip, Server integration pass `10/10` và `1/1` focused worktree case.
+- Full workspace typecheck, changed-file format/lint, official pinned-Nix `prefetch-npm-deps` và macOS
+  desktop release build pass. Installed runtime và Browser requalification là activation gate riêng,
+  không được suy ra từ source/build receipts này.
+
 ## 0.5.0-paseo.33 - 2026-08-24
 
 Bản follow-up này không nhận thêm upstream bytes. Nó giữ nguyên exact stable `v0.5.0` merge boundary,

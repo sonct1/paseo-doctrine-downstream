@@ -13,6 +13,9 @@
 - Adversarial Browser qualification trên installed `.32` đã tìm thấy hai retained downstream gaps;
   source correction `c98923af8b5123d3aafe9a303025a7068a70fab6` đưa chúng vào `.33` mà không đổi
   upstream source boundary.
+- Browser requalification trên installed `.33` pass exact receipt-bound route nhưng tìm thêm một
+  caller-label bypass; source correction `7eeb8ceb0` đưa daemon-managed receipt marker và label
+  authority gates vào `.34`, vẫn không nhận thêm upstream bytes.
 
 Đây là đường nhẹ nhất còn giữ đủ provenance. Rebase sẽ replay 194 downstream commits và lặp conflict.
 Selective cherry-pick phải reconstruct dependency của 181 stable commits và dễ bỏ final-release fix.
@@ -156,8 +159,34 @@ Council. Exact case `case_4ca4d9938b16`, Room
   `post_room` authored report và receipt-bound record flow; không truyền cả `workspaceId` lẫn `cwd`.
 
 Focused source receipt: 5 suites, `240/240` tests pass; full workspace typecheck và staged lint/format
-pass. Installed `.33` activation và post-fix Browser requalification được ghi ở final runtime closeout,
-không suy ra từ source tests.
+pass.
+
+Installed `.33` Browser requalification sau đó chạy một native debate-with-proof Council thật:
+
+- Lead `17e7ed82-bbfe-4479-b986-718f4c15995c`, case `case_bf86c1b38857`, Room
+  `0a2c0759-afb0-4f13-8fcb-b0684e6f6880`, kickoff
+  `cf4c8d0b-4c4d-466c-bab6-a3e46e7fd148`.
+- Ba direct Peer dùng exact Scout/Architect/Reviewer Agent Profiles, same workspace và daemon-pinned
+  `read-only`/`no-write`/external-denied assignments. Report messages lần lượt là
+  `3bd0624b-3be2-43e5-a569-e030e78587a7`, `4b02a082-2019-4d40-91ed-d7a9e024a8a3` và
+  `45a3f67a-e858-4a78-aa2a-d6b1e2bed6f8`.
+- Negative `record_council_seat(valid)` thật sự omit `reportMessageId` bị daemon reject và không để
+  receipt side effect; ba correct records trả exact message/digest/time receipts, verdict Room message
+  `b94907ef-683c-468b-8f79-801c3465f76f`, rồi bốn Beads test issues được readback closed.
+
+Reviewer đồng thời chỉ ra caller vẫn có thể đi ngoài dedicated tool bằng cách tự ghi
+`council.integrity` và `council.report_*` labels. `.34` close seam này ở owning boundaries:
+
+- `council.report_receipt_version=1` chỉ do `record_council_seat` ghi; UI require exact marker cùng
+  authored receipt, terminal lifecycle và no-error state.
+- Council-labelled create require exact sealed/unspecified bootstrap, role-bound Peer và role-bound
+  Lead parent. Generic tool/WebSocket metadata updates reject mọi `council.*`; provider-session import
+  cũng không được claim Council state.
+- Old `.33` receipt labels thiếu marker fail closed thay vì được grandfather/backfill. Đây là deliberate
+  authority migration; muốn ready lại phải re-audit/re-record qua native tool.
+- `.34` focused regression pass `66/66`; Protocol `640/640`, App `4,813/4,813`, Server unit `5,502`
+  pass/`45` skip và integration `10/10` + `1/1`. Source/build receipts không thay cho installed-runtime
+  và Browser activation gate.
 
 ## Acceptance gates
 
