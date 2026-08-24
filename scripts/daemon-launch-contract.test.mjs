@@ -28,6 +28,14 @@ function assertNoSpawnedWorkerEntrypoint(label, source) {
   );
 }
 
+function wrapperBlock(source, wrapperName) {
+  const marker = `$out/bin/${wrapperName} \\\n`;
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, `Nix package must define the ${wrapperName} wrapper`);
+  const end = source.indexOf("\n    makeWrapper ", start + marker.length);
+  return source.slice(start, end === -1 ? source.length : end);
+}
+
 test("every executable daemon entrypoint enters the supervisor", async () => {
   const [
     serverPackageSource,
@@ -36,6 +44,8 @@ test("every executable daemon entrypoint enters the supervisor", async () => {
     desktopRuntimePaths,
     nixPackage,
     nixModule,
+    nixFlake,
+    nixBeadsCentral,
   ] = await Promise.all([
     readFile(join(repoRoot, "packages/server/package.json"), "utf8"),
     readFile(join(repoRoot, "packages/app/e2e/support/helpers/isolated-host-daemon.ts"), "utf8"),
@@ -46,6 +56,8 @@ test("every executable daemon entrypoint enters the supervisor", async () => {
     readFile(join(repoRoot, "packages/desktop/src/daemon/runtime-paths.ts"), "utf8"),
     readFile(join(repoRoot, "nix/package.nix"), "utf8"),
     readFile(join(repoRoot, "nix/module.nix"), "utf8"),
+    readFile(join(repoRoot, "flake.nix"), "utf8"),
+    readFile(join(repoRoot, "nix/beads-central.nix"), "utf8"),
   ]);
 
   const serverPackage = JSON.parse(serverPackageSource);
@@ -75,10 +87,27 @@ test("every executable daemon entrypoint enters the supervisor", async () => {
 
   assert.match(nixPackage, /dist\/scripts\/supervisor-entrypoint\.js/);
   assertNoDirectWorkerLaunch("Nix package wrapper", nixPackage);
-  assert.match(nixPackage, /--set PASEO_NODE_ENV production/);
+  assert.match(wrapperBlock(nixPackage, "paseo-server"), /--set PASEO_NODE_ENV production/);
+  for (const wrapperName of ["paseo-server", "paseo"]) {
+    const block = wrapperBlock(nixPackage, wrapperName);
+    assert.match(
+      block,
+      /--set PASEO_BEADS_CENTRAL_SIDECAR "\$\{beadsCentral\}\/bin\/beads-central"/,
+      `${wrapperName} must configure the bundled Beads Central sidecar`,
+    );
+    assert.match(
+      block,
+      /--set PASEO_BEADS_CENTRAL_BD_BIN "\$\{beadsCentral\}\/bin\/bd"/,
+      `${wrapperName} must configure the bundled bd binary`,
+    );
+  }
   assert.doesNotMatch(nixPackage, /--set(-default)?\s+NODE_ENV\b/);
   assert.doesNotMatch(nixModule, /\bNODE_ENV\b\s*=/);
   assert.doesNotMatch(nixModule, /\bPASEO_NODE_ENV\b/);
+  assert.match(nixFlake, /nix\/beads-central\.nix/);
+  assert.match(nixFlake, /inherit beadsCentral/);
+  assert.match(nixBeadsCentral, /buildGo126Module/);
+  assert.match(nixBeadsCentral, /go_1_26\.overrideAttrs/);
 });
 
 test("trace-daemon closure lists both Foundation workspace-protocol JSON assets", async () => {

@@ -25,7 +25,8 @@
         system:
         let
           pkgs = pkgsFor system;
-          paseo = pkgs.callPackage ./nix/package.nix { };
+          beadsCentral = pkgs.callPackage ./nix/beads-central.nix { };
+          paseo = pkgs.callPackage ./nix/package.nix { inherit beadsCentral; };
           versionParts = pkgs.lib.splitString "." paseo.version;
           sourceRevision = if self ? revCount && self.revCount != null then self.revCount else 0;
           buildRevision = sourceRevision - (sourceRevision / 10000) * 10000;
