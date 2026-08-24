@@ -6,6 +6,7 @@ import { findByType } from "../../test-utils/session-stubs.js";
 import type { SessionOutboundMessage } from "../../messages.js";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import type { ScheduleService } from "../../schedule/service.js";
+import type { PersistedWorkspaceRecord, WorkspaceRegistry } from "../../workspace-registry.js";
 
 type ChatMessageFixture = Awaited<ReturnType<FileBackedChatService["dispatchMessage"]>>;
 
@@ -13,6 +14,7 @@ interface MakeOptions {
   chat?: { [K in keyof FileBackedChatService]?: unknown };
   schedule?: { [K in keyof ScheduleService]?: unknown };
   host?: Partial<ChatScheduleSessionHost>;
+  workspaceRegistry?: Pick<WorkspaceRegistry, "get">;
 }
 
 function makeSubsystem(options: MakeOptions = {}) {
@@ -34,6 +36,7 @@ function makeSubsystem(options: MakeOptions = {}) {
     host,
     chatService: createStub<FileBackedChatService>(options.chat ?? {}),
     scheduleService: createStub<ScheduleService>(options.schedule ?? {}),
+    workspaceRegistry: options.workspaceRegistry ?? { get: async () => null },
     clientId: "client-1",
     logger: pino({ level: "silent" }),
   });
@@ -120,6 +123,106 @@ describe("ChatScheduleSession", () => {
     const err = findByType(emitted, "rpc_error");
     expect(err?.payload.code).toBe("chat_mention_fanout_limit_exceeded");
     expect(err?.payload.requestId).toBe("p3");
+  });
+
+  it("chat/create binds the room to an existing workspace's authoritative project", async () => {
+    const workspace: PersistedWorkspaceRecord = {
+      workspaceId: "wks_1",
+      projectId: "prj_1",
+      cwd: "/repo",
+      kind: "local_checkout",
+      displayName: "repo",
+      title: null,
+      branch: null,
+      worktreeRoot: null,
+      baseBranch: null,
+      isPaseoOwnedWorktree: false,
+      mainRepoRoot: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      autoArchivedChangeRequestUrl: null,
+      pinnedAt: null,
+    };
+    let received: Parameters<FileBackedChatService["createRoom"]>[0] | undefined;
+    const room = {
+      id: "r1",
+      name: "release",
+      purpose: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      workspaceId: "wks_1",
+      projectId: "prj_1",
+      messageCount: 0,
+      lastMessageAt: null,
+    };
+    const { subsystem, emitted } = makeSubsystem({
+      chat: {
+        createRoom: async (input: Parameters<FileBackedChatService["createRoom"]>[0]) => {
+          received = input;
+          return room;
+        },
+      },
+      workspaceRegistry: { get: async () => workspace },
+    });
+
+    await subsystem.handleChatCreateRequest({
+      type: "chat/create",
+      requestId: "c1",
+      name: "release",
+      workspaceId: "wks_1",
+    });
+
+    expect(received).toMatchObject({ workspaceId: "wks_1", projectId: "prj_1" });
+    expect(findByType(emitted, "chat/create/response")?.payload.room).toEqual(room);
+  });
+
+  it("chat/create fails closed when the supplied workspaceId does not resolve", async () => {
+    const { subsystem, emitted } = makeSubsystem({
+      workspaceRegistry: { get: async () => null },
+    });
+
+    await subsystem.handleChatCreateRequest({
+      type: "chat/create",
+      requestId: "c2",
+      name: "release",
+      workspaceId: "missing-workspace",
+    });
+
+    const err = findByType(emitted, "rpc_error");
+    expect(err?.payload.code).toBe("chat_room_workspace_not_found");
+    expect(err?.payload.requestId).toBe("c2");
+  });
+
+  it("chat/create leaves the room unscoped when no workspaceId is supplied (legacy path)", async () => {
+    let received: Parameters<FileBackedChatService["createRoom"]>[0] | undefined;
+    const room = {
+      id: "r2",
+      name: "legacy",
+      purpose: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      messageCount: 0,
+      lastMessageAt: null,
+    };
+    const { subsystem, emitted } = makeSubsystem({
+      chat: {
+        createRoom: async (input: Parameters<FileBackedChatService["createRoom"]>[0]) => {
+          received = input;
+          return room;
+        },
+      },
+    });
+
+    await subsystem.handleChatCreateRequest({
+      type: "chat/create",
+      requestId: "c3",
+      name: "legacy",
+    });
+
+    expect(received?.workspaceId).toBeUndefined();
+    expect(received?.projectId).toBeUndefined();
+    expect(findByType(emitted, "chat/create/response")?.payload.error).toBeNull();
   });
 
   it("schedule/create returns a summary with the runs stripped", async () => {

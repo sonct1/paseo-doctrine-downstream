@@ -43,6 +43,6 @@ test("keeps release qualification immutable and version preparation explicit", (
 
   assert.equal(
     releasePrepare,
-    "npm run release:toolchain:check && npm install --workspaces --include-workspace-root",
+    "npm run release:toolchain:check && npm install --workspaces --include-workspace-root && ./scripts/update-nix.sh",
   );
 });

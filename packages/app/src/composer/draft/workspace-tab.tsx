@@ -11,6 +11,7 @@ import invariant from "tiny-invariant";
 import { Composer } from "@/composer";
 import { FileDropZone } from "@/components/file-drop/file-drop-zone";
 import { ComposerImportPill } from "@/composer/draft/import-pill";
+import { COMPOSER_PILL_CLEARANCE } from "@/composer/pill-styles";
 import { AgentStreamView } from "@/agent-stream/view";
 import { composerWorkspaceAttachment } from "@/composer/attachments/workspace";
 import { useAgentInputDraft } from "@/composer/draft/input-draft";
@@ -21,7 +22,6 @@ import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-
 import { useHostFeature } from "@/runtime/host-features";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
-import { usePanelStore } from "@/stores/panel-store";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import type { Agent } from "@/stores/session-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
@@ -51,7 +51,11 @@ import {
   useIsCompactFormFactor,
 } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
-import type { WorkspaceDraftTabSetup } from "@/workspace-tabs/model";
+import {
+  buildWorkspaceTabPersistenceKey,
+  type WorkspaceDraftTabSetup,
+} from "@/workspace-tabs/model";
+import { openSidePanelView } from "@/workspace-tabs/side-panel";
 import {
   requireWorkspaceProtocolForRole,
   workspaceProtocolAdmissionMessageKey,
@@ -567,28 +571,19 @@ export function WorkspaceDraftAgentTab({
   const clearWorkspaceAttachments = useWorkspaceAttachmentsStore(
     (state) => state.clearWorkspaceAttachments,
   );
-  const openFileExplorerForCheckout = usePanelStore((state) => state.openFileExplorerForCheckout);
-  const setExplorerTabForCheckout = usePanelStore((state) => state.setExplorerTabForCheckout);
   const handleOpenWorkspaceAttachment = useCallback(
     (attachment: WorkspaceComposerAttachment) => {
       if (attachment.kind !== "review") {
         return;
       }
-      const checkout = {
-        serverId,
-        cwd: attachment.attachment.cwd,
-        isGit: true,
-      };
-      openFileExplorerForCheckout({
-        checkout,
+      openSidePanelView({
         isCompact: isCompactFormFactor,
-      });
-      setExplorerTabForCheckout({
-        ...checkout,
-        tab: "changes",
+        workspaceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId: workspaceId ?? "" }),
+        checkout: { serverId, cwd: attachment.attachment.cwd, isGit: true },
+        view: "changes",
       });
     },
-    [isCompactFormFactor, openFileExplorerForCheckout, serverId, setExplorerTabForCheckout],
+    [isCompactFormFactor, serverId, workspaceId],
   );
 
   const {
@@ -897,8 +892,14 @@ const styles = StyleSheet.create((theme) => ({
   importPillRow: {
     width: "100%",
     paddingHorizontal: theme.spacing[4],
-    paddingTop: theme.spacing[3],
-    paddingBottom: theme.spacing[3],
+    paddingTop: {
+      xs: COMPOSER_PILL_CLEARANCE.compact,
+      md: COMPOSER_PILL_CLEARANCE.wide,
+    },
+    paddingBottom: {
+      xs: COMPOSER_PILL_CLEARANCE.compact,
+      md: COMPOSER_PILL_CLEARANCE.wide,
+    },
     alignItems: "center",
   },
   importPillContent: {

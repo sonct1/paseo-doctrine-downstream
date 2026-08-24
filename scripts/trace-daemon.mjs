@@ -51,12 +51,18 @@ const entries = [
 // Files read at runtime via fs APIs rather than `require`. nft only
 // traces the module graph; data files have to be listed explicitly.
 const additionalInputs = [
+  // Agent orchestration skill catalog loaded through filesystem paths
+  "packages/server/dist/server/skills/**",
   // Shell integration scripts loaded by the terminal manager
   "packages/server/dist/server/terminal/shell-integration/**",
   // Silero VAD ONNX model (sherpa speech provider)
   "packages/server/dist/server/server/speech/providers/local/sherpa/assets/silero_vad.onnx",
   // Server runtime config files (read by path, not require)
   "packages/server/.env.example",
+  // Foundation workspace-protocol contract and fixtures, read by path
+  // at runtime rather than required.
+  "packages/server/dist/server/utils/foundation-workspace-protocol-contract.json",
+  "packages/server/dist/server/utils/foundation-workspace-protocol-fixtures.json",
   // CLI shebang script wrapping dist/index.js
   "packages/cli/bin/paseo",
   // node-pty's compiled native addon. nft can't trace it because

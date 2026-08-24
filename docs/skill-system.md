@@ -22,7 +22,7 @@ tool catalog vẫn quyết định action hợp lệ.
 
 Product package không đồng nghĩa với global package. Canonical admission cho product skill nhạy role nằm
 tại [`skills/role-admission.json`](../skills/role-admission.json). `council` được admit `active` cho Lead và
-`packaged-disabled` cho Peer/Supervisor. Desktop global installer loại các package trong manifest này khỏi
+`packaged-disabled` cho Peer/Supervisor. Daemon-owned host controller loại các package trong manifest này khỏi
 catalog selectable, nhưng vẫn quản lý tên của chúng để phát hiện và gỡ bản global cũ. Daemon bundle exact
 bytes rồi project vào từng role-bound session, nên một Lead có thể gọi Council trong bất kỳ workspace nào
 mà không phụ thuộc `~/.agents/skills`, `~/.claude/skills` hay `~/.codex/skills`.

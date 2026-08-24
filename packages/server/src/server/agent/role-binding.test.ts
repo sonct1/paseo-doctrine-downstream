@@ -5,6 +5,8 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import {
   applyRolePaseoToolPolicy,
+  assertPersistedRoleAdmissionCurrent,
+  ASSIGNMENT_CONTRACT_EXPIRED_ERROR,
   detectLegacyProviderRole,
   LEGACY_PROVIDER_ROLE_DETECTION_EXPIRES_AT,
   materializeRoleBinding,
@@ -285,6 +287,7 @@ describe("native Foundation role materialization", () => {
     // Absence is a gap to report, never a licence to assume the repository has no tactics.
     expect(binding.instructions).toContain("unknown rather than absent");
     expect(binding.instructions).not.toContain("bootstrap exception");
+    expect(() => assertPersistedRoleAdmissionCurrent(binding, cwd)).not.toThrow();
   });
 
   test("still blocks external effects when the protocol has not been bootstrapped", async () => {
@@ -330,6 +333,121 @@ describe("native Foundation role materialization", () => {
     const receiptJson = JSON.stringify(toRoleBindingReceipt(binding));
     expect(receiptJson).not.toContain("Inspect repository facts needed for bootstrap");
     expect(receiptJson).not.toContain("assignmentContract");
+  });
+
+  test("rejects resume when a bound Workspace Protocol digest has changed", async () => {
+    const cwd = await createWorkspace();
+    const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
+    await writeFile(protocolPath, buildWorkspaceProtocolTemplate(cwd), "utf8");
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+      ...assignmentBinding("lead", cwd),
+    });
+
+    await writeFile(
+      protocolPath,
+      `${buildWorkspaceProtocolTemplate(cwd)}\n- local revision: changed after binding\n`,
+      "utf8",
+    );
+
+    expect(() => assertPersistedRoleAdmissionCurrent(binding, cwd)).toThrow(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: stale_digest`,
+    );
+  });
+
+  test.each(["missing", "invalid"] as const)(
+    "rejects resume when a bound Workspace Protocol becomes %s",
+    async (nextStatus) => {
+      const cwd = await createWorkspace();
+      const protocolPath = join(cwd, "WORKSPACE_PROTOCOL.md");
+      await writeFile(protocolPath, buildWorkspaceProtocolTemplate(cwd), "utf8");
+      const binding = await materializeRoleBinding({
+        roleId: "lead",
+        provider: "codex",
+        cwd,
+        ...assignmentBinding("lead", cwd),
+      });
+
+      if (nextStatus === "missing") {
+        await rm(protocolPath);
+      } else {
+        await writeFile(protocolPath, "# Workspace Protocol\n", "utf8");
+      }
+
+      expect(() => assertPersistedRoleAdmissionCurrent(binding, cwd)).toThrow(
+        `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: ${nextStatus}`,
+      );
+    },
+  );
+
+  test("requires a fresh binding when a previously missing protocol now exists", async () => {
+    const cwd = await createWorkspace();
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+      ...assignmentBinding("lead", cwd),
+    });
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+
+    expect(() => assertPersistedRoleAdmissionCurrent(binding, cwd)).toThrow(
+      `${WORKSPACE_PROTOCOL_ADMISSION_ERROR}: protocol_now_present`,
+    );
+  });
+
+  test("rejects expired assignment and protocol-exception leases on resume", async () => {
+    const assignmentExpiresAt = "2026-08-05T01:00:00.000Z";
+    const assignmentWorkspace = await createWorkspace();
+    const expiringAssignment = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd: assignmentWorkspace,
+      workspaceId: `workspace:${assignmentWorkspace}`,
+      assignmentAssigner: { kind: "human-session" },
+      assignment: { ...assignmentFor("lead"), expiresAt: assignmentExpiresAt },
+      createdAt: new Date("2026-08-05T00:00:00.000Z"),
+    });
+    expect(() =>
+      assertPersistedRoleAdmissionCurrent(
+        expiringAssignment,
+        assignmentWorkspace,
+        new Date("2026-08-05T02:00:00.000Z"),
+      ),
+    ).toThrow(`${ASSIGNMENT_CONTRACT_EXPIRED_ERROR}: expiresAt=${assignmentExpiresAt}`);
+
+    const exceptionExpiresAt = "2026-08-05T01:30:00.000Z";
+    const exceptionWorkspace = await createWorkspace();
+    const expiringException = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd: exceptionWorkspace,
+      workspaceId: `workspace:${exceptionWorkspace}`,
+      assignmentAssigner: { kind: "human-session" },
+      assignment: {
+        ...assignmentFor("lead"),
+        protocolException: {
+          reason: "Inspect exact bytes during bootstrap.",
+          scope: exceptionWorkspace,
+          expiresAt: exceptionExpiresAt,
+        },
+      },
+      createdAt: new Date("2026-08-05T00:00:00.000Z"),
+    });
+    expect(() =>
+      assertPersistedRoleAdmissionCurrent(
+        expiringException,
+        exceptionWorkspace,
+        new Date("2026-08-05T02:00:00.000Z"),
+      ),
+    ).toThrow(
+      `${ASSIGNMENT_CONTRACT_EXPIRED_ERROR}: protocolExceptionExpiresAt=${exceptionExpiresAt}`,
+    );
   });
   test("fails closed for a provider without a native durable role channel", async () => {
     const cwd = await createWorkspace();

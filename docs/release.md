@@ -187,7 +187,7 @@ republish the packages:
 
 ```bash
 PASEO_VERSION=$(node -p "require('./package.json').version")
-for package in highlight relay protocol client server cli; do
+for package in highlight relay protocol client plugin server cli; do
   npm dist-tag add "@getpaseo/$package@$PASEO_VERSION" beta
 done
 ```
@@ -504,7 +504,9 @@ This ensures the checkout ref matches the actual code on `main` with the fix inc
 
 - `version:all:*` bumps root + syncs workspace versions and `@getpaseo/*` dependency versions
 - `release:check` uses a frozen `npm ci` install and ends with a clean-tree assertion
-- `release:prepare` runs only during versioning to refresh workspace links and the lockfile
+- `release:prepare` chỉ chạy trong bước versioning để refresh workspace links, lockfile và
+  `nix/npm-deps.hash`; máy cắt release phải có Nix vì version metadata trong lockfile cũng làm đổi
+  dependency hash của Nix
 - `npm run dev:desktop` and `npm run build:desktop` target the Electron desktop package in `packages/desktop`
 - If `release:publish` partially fails, re-run it — npm skips already-published versions
 - If `release:publish:beta` partially fails, re-run it — npm skips already-published versions and keeps prereleases off `latest` because every publish uses `--tag beta`

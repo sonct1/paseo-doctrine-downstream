@@ -20,6 +20,7 @@ import { AgentProfileAppearanceField } from "./agent-profile-appearance-field";
 import type {
   AgentProfileFormModel,
   AgentProfileFormOption,
+  AgentProfileSeed,
   AgentProfileValue,
 } from "../internal/profile-form-model";
 import {
@@ -36,6 +37,7 @@ export interface AgentProfileEditModalProps {
   visible: boolean;
   mode: "create" | "edit";
   profile?: AgentProfile;
+  seed?: AgentProfileSeed;
   onClose: () => void;
   onSave: (value: AgentProfileValue) => Promise<void>;
 }
@@ -85,7 +87,10 @@ const PEER_SUBROLE_OPTIONS: SelectFieldOption<PeerSubrole | "">[] = [
 ];
 
 function openKey(props: AgentProfileEditModalProps): string {
-  return props.mode === "edit" ? `edit:${props.profile?.id ?? ""}` : "create";
+  if (props.mode === "edit") {
+    return `edit:${props.profile?.id ?? ""}`;
+  }
+  return `create:${props.seed?.provider ?? ""}:${props.seed?.modelId ?? ""}`;
 }
 
 /**
@@ -160,13 +165,17 @@ function OpenAgentProfileEditModal({
   visible,
   mode,
   profile,
+  seed,
   onClose,
   onDismiss,
   onSave,
 }: AgentProfileEditModalProps & { onDismiss: () => void }): ReactElement {
   const { t } = useTranslation();
   const controlSize: FieldControlSize = useIsCompactFormFactor() ? "md" : "sm";
-  const snapshot = useMemo(() => ({ mode, ...(profile ? { profile } : {}) }), [mode, profile]);
+  const snapshot = useMemo(
+    () => ({ mode, ...(profile ? { profile } : {}), ...(seed ? { seed } : {}) }),
+    [mode, profile, seed],
+  );
   const model = useAgentProfileFormModel(snapshot);
   const state = useAgentProfileFormState(model);
   useAgentProfileFormCatalog({ serverId, model });
@@ -283,7 +292,7 @@ function OpenAgentProfileEditModal({
               testID="agent-profile-name-field"
             >
               <FormTextInput
-                initialValue={profile?.name ?? ""}
+                initialValue={seed?.name ?? profile?.name ?? ""}
                 onChangeText={model.setName}
                 placeholder={t("settings.host.agentProfiles.namePlaceholder")}
                 autoCapitalize="none"
@@ -589,11 +598,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   featureLabel: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
   },
   featureDescription: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
   },
   notesInput: {
     minHeight: 88,
@@ -601,7 +610,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   submitError: {
     color: theme.colors.statusDanger,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
   },
   actions: {
     flexDirection: "row",

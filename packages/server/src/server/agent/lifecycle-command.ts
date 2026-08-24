@@ -7,6 +7,7 @@ import {
 } from "./agent-manager.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type { AgentProviderNotice } from "./agent-sdk-types.js";
+import { councilLabelKeys } from "@getpaseo/protocol/council-labels";
 
 export type LifecycleAgentSnapshot = Pick<ManagedAgent, "id" | "cwd" | "lifecycle">;
 
@@ -156,6 +157,19 @@ export interface UpdateAgentResult {
   error: string | null;
 }
 
+export function validateAgentLabelUpdate(
+  labels: Record<string, string> | undefined,
+  authority?: { allowCouncilLabels: boolean },
+): string | null {
+  const councilLabels = councilLabelKeys(labels);
+  if (councilLabels.length > 0 && authority?.allowCouncilLabels !== true) {
+    return `Council labels are daemon-managed; use start_council and record_council_seat (${councilLabels.join(
+      ", ",
+    )})`;
+  }
+  return null;
+}
+
 export async function updateAgentCommand(
   dependencies: Pick<AgentLifecycleCommandDependencies, "agentManager">,
   input: {
@@ -163,6 +177,7 @@ export async function updateAgentCommand(
     name?: string;
     labels?: Record<string, string>;
   },
+  authority?: { allowCouncilLabels: boolean },
 ): Promise<UpdateAgentResult> {
   const title = input.name?.trim();
   const labels = input.labels && Object.keys(input.labels).length > 0 ? input.labels : undefined;
@@ -171,6 +186,14 @@ export async function updateAgentCommand(
     return {
       accepted: false,
       error: "Nothing to update (provide name and/or labels)",
+    };
+  }
+
+  const labelError = validateAgentLabelUpdate(labels, authority);
+  if (labelError) {
+    return {
+      accepted: false,
+      error: labelError,
     };
   }
 

@@ -14,7 +14,7 @@ import {
   type MaterializedAgentProfile,
 } from "./materialize-profile";
 import { buildAgentProfileTags } from "./profile-summary";
-import { agentProfileTargetAllowsApply } from "./target-policy";
+import { agentProfileTargetAllowsApply, isHumanSelectableAgentProfile } from "./target-policy";
 import { useAgentProfiles } from "./use-agent-profiles";
 
 /** The draft composer owns profile application as one state transition. */
@@ -29,12 +29,14 @@ export type AgentProfileApplyTarget =
       availableModeIds: readonly string[] | null;
       roleBound: boolean;
     }
-  | { kind: "draft"; controls: DraftAgentProfileControls };
+  | { kind: "draft"; controls: DraftAgentProfileControls; roleBound: boolean };
 
 /** Everything the model picker renders for one profile. It never sees the profile itself. */
 export interface AgentProfilePickerRow {
   id: string;
   provider: string;
+  /** Empty when the profile names no model. */
+  modelId: string;
   /** Icon registry key and identity colour; either may be empty for the default glyph. */
   icon: string;
   color: string;
@@ -86,7 +88,9 @@ export function useAgentProfilePicker(
       return [];
     }
     const available = new Set(availableProviders);
-    return profiles.filter((profile) => available.has(profile.provider));
+    return profiles.filter(
+      (profile) => isHumanSelectableAgentProfile(profile) && available.has(profile.provider),
+    );
   }, [availableProviders, isSupported, profiles, targetAllowsApply]);
 
   const formatFeatureCount = useCallback(
@@ -102,6 +106,7 @@ export function useAgentProfilePicker(
       applicableProfiles.map((profile) => ({
         id: profile.id,
         provider: profile.provider,
+        modelId: profile.model?.trim() ?? "",
         icon: profile.icon ?? "",
         color: profile.color ?? "",
         name: profile.name,

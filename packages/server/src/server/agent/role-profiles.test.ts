@@ -31,6 +31,9 @@ describe("Foundation role profiles", () => {
     ).not.toContain("list_profiles");
     expect(
       catalog.profiles.find((profile) => profile.roleId === "supervisor")?.toolCeiling,
+    ).toContain("read_room");
+    expect(
+      catalog.profiles.find((profile) => profile.roleId === "supervisor")?.toolCeiling,
     ).toEqual(expect.arrayContaining(["create_agent", "send_agent_prompt"]));
     for (const profile of catalog.profiles) {
       expect(profile.effective.allowedTools).toEqual(profile.toolCeiling);

@@ -8,6 +8,12 @@ category: Hub
 
 # Hub
 
+> **Paseo Foundation downstream:** the stable v0.5.0 guided starter is intentionally unavailable.
+> Its Hub-to-daemon create request does not carry a revision-scoped assigner, role/assignment
+> contract, Workspace Protocol admission receipt, or exact output grants. Manual Hub configuration
+> remains available for explicitly reviewed compatibility workflows; `paseo hub init` fails closed
+> before login, connection, file writes, or deployment.
+
 A daemon runs agents on one machine, for you. Paseo Hub is the layer above your daemons. You register your daemons with it, and it gives them capabilities they do not have on their own.
 
 ```text
@@ -26,35 +32,37 @@ What that gives you today:
 
 Your daemons keep running agents where they always did. Hub decides when to ask them to.
 
-## What you write
+## What lives in your repository
 
-One project resource file names environments and complete agent configurations. Each discovered workflow file keeps one trigger beside its ordered steps:
+Upstream v0.5.0 guided setup would create a project resource file for environments and agents, plus one starter workflow:
 
 ```text
 .paseo/
 ├── hub.yml
 └── workflows/
-    ├── slack-help.yml
-    └── partials/
-        └── answer.md
+    └── slack-help.yml
 ```
 
-Push the bundle, mention the bot, and an agent starts on your machine. [Quickstart](/docs/hub/quickstart) builds the first bundle; [Workflows](/docs/hub/workflows) covers routing and provider-specific replies.
+This downstream keeps that shape documented as an adaptation target, but does not deploy it until
+Hub and daemon negotiate the Foundation authority contract. The [generated starter bundle](/docs/hub/configuration#generated-starter-bundle)
+shows the deferred upstream shape, while [Workflows](/docs/hub/workflows) covers manual routing,
+prompt partials, and provider-specific replies.
 
 ## Reading order
 
-1. [How it works](/docs/hub/concepts)
-2. [Daemons](/docs/hub/daemons)
-3. [Triggers](/docs/hub/triggers)
-4. [Workflows](/docs/hub/workflows)
-5. [GitHub access](/docs/hub/github)
-6. [Configuration](/docs/hub/configuration)
-7. [Security](/docs/hub/security)
-
-[Quickstart](/docs/hub/quickstart) goes end to end if you would rather start by doing.
+1. [Quickstart](/docs/hub/quickstart)
+2. [How it works](/docs/hub/concepts)
+3. [Daemons](/docs/hub/daemons)
+4. [Triggers](/docs/hub/triggers)
+5. [Workflows](/docs/hub/workflows)
+6. [GitHub access](/docs/hub/github)
+7. [Configuration](/docs/hub/configuration)
+8. [Security](/docs/hub/security)
 
 If a workflow accepts requests from GitHub, Slack, Discord, or the API, read [Hub security](/docs/hub/security) before giving an agent access to a working directory or output capability.
 
-## Where it runs
+## Run Hub yourself
 
-Everything on this page and the pages it links to works the same way on [hosted Hub](/docs/hub/hosted) and on a Hub you run yourself under [self-hosting](/docs/hub/self-hosting).
+Start on your machine with the embedded database, then add PostgreSQL or a public deployment only when you need them. [Self-hosting](/docs/hub/self-hosting) covers each step.
+
+[Hosted Hub](/docs/hub/hosted) uses the same projects, workflows, daemons, and activity model. New account registration is currently closed.

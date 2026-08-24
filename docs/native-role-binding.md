@@ -16,9 +16,11 @@ RoleDefinition + optional ExecutionSpecialization + Provider + Workspace Protoco
 
 - `RoleDefinition` giữ identity, universal authority boundary và anti-pattern guards.
 - `Provider` chỉ giữ transport, credentials, endpoint, model catalog và runtime capability.
-- Root `WORKSPACE_PROTOCOL.md` v3 là mandatory repository contract; Paseo quản lý path, digest,
-  byte-validity state và readership. Missing/invalid file block ordinary role launch; chỉ exact bounded
-  Human bootstrap/governance exception mới được materialize.
+- Root `WORKSPACE_PROTOCOL.md` là mandatory repository contract cho material work; Paseo quản lý path,
+  digest, byte-validity state và readership. File absent cho phép exact no-write/no-external-effect role
+  launch và ghi receipt `missing`, nhưng block delegation, mutation hoặc protected work cho tới khi
+  bootstrap baseline hoặc có exact bounded Human exception. File hiện diện nhưng invalid luôn fail
+  closed. Reader nhận mọi schema version đã phát hành; version marker không phải admission gate.
 - `Assignment` giữ bounded objective, disposition, lease, scope, evidence, handback và stop condition.
 
 Một Lead có thể thêm private execution specialization vào Peer binding khi repository protocol hoặc
@@ -81,6 +83,10 @@ Không có silent fallback. Provider có model phù hợp nhưng thiếu native 
 Lead-to-Peer routing có Human-configured allowlist, provider priority và optional global default subrole.
 Agent Profile có thể mang `peerSubrole=scout|engineer|reviewer|architect` như routing metadata; field này
 không phải ExecutionSpecialization và không cấp role, instruction, lease hoặc acceptance authority.
+WebUI không đưa profile có `peerSubrole` vào Human model picker. Khi draft đã chọn một native role,
+toàn bộ Agent Profiles surface trong model picker bị tắt và Human chọn provider/model trực tiếp; Human
+vẫn quản lý inventory trong Settings, còn Lead dùng `list_profiles` rồi pin exact `launchProfileId` khi
+gọi `create_agent`. Đây là downstream role boundary có chủ ý, khác reusable-profile UX của upstream.
 `list_profiles` trả exact profiles, priority và default hiện hành. Exact `launchProfileId` luôn thắng. Khi
 Lead bỏ field đó, daemon dùng specialization/disposition đã explicit nếu nó map được sang Reviewer hoặc
 Architect; nếu không thì dùng global default. Resolver chỉ chọn profile cùng subrole từ provider sớm nhất,
@@ -150,7 +156,10 @@ toàn bộ projection.
 - Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
   Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;
   Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
-- Supervisor chỉ có observation/governance và Beads read-only subset; recovery/replacement vẫn cần exact Human lease.
+- Supervisor chỉ có observation/governance và Beads read-only subset. Exact governance mandate cho
+  phép `read_room` để audit trực tiếp Lead ↔ Peer evidence, nhưng không cấp `post_room`,
+  `record_council_seat`, `list_profiles`, mutation hoặc acceptance authority; recovery/replacement vẫn
+  cần exact Human lease.
 
 `full-access` là runtime capability, không phải write lease, ownership, external-effect hoặc acceptance authority; đồng thời nó không được dùng làm fallback cho mutation boundary `no-write`.
 

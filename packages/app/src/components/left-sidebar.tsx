@@ -54,7 +54,8 @@ import {
 import { useSidebarModel } from "@/components/sidebar/sidebar-model";
 import type { PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { RetainedPanelActivity } from "@/components/retained-panel";
-import type { StatusGroup } from "@/hooks/sidebar-status-view-model";
+import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
+import type { SidebarProjectIconTarget } from "@/utils/sidebar-project-row-model";
 import { type SidebarGroupMode, useSidebarViewStore } from "@/stores/sidebar-view-store";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { useHosts } from "@/runtime/host-runtime";
@@ -77,9 +78,9 @@ import {
   buildSchedulesRoute,
   buildSessionsRoute,
   buildSettingsAddHostRoute,
-  buildSettingsHostSectionRoute,
   buildSettingsRoute,
 } from "@/utils/host-routes";
+import { openHostOverview } from "@/navigation/settings-navigation";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
@@ -92,9 +93,12 @@ const DEV_BUILD_LABEL = process.env.EXPO_PUBLIC_PASEO_DEV_BUILD_LABEL?.trim() ||
 
 interface SidebarSharedProps {
   theme: SidebarTheme;
-  statusGroups: StatusGroup[];
+  workspaceGroups: SidebarWorkspaceGroup[];
+  projectIconTargets: SidebarProjectIconTarget[];
   pinnedGroups: PinnedSidebarGroups;
   projects: SidebarProjectEntry[];
+  hasProjectsBeforeFilter: boolean;
+  hasActiveProjectFilter: boolean;
   workspaceEntriesByKey: ReadonlyMap<string, SidebarWorkspaceEntry>;
   isInitialLoad: boolean;
   isRevalidating: boolean;
@@ -161,11 +165,14 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
 
   const {
     projects,
+    hasProjectsBeforeFilter,
+    resolvedProjectFilters,
     workspaceEntriesByKey,
     isInitialLoad,
     isRevalidating,
     refreshAll,
-    statusGroups,
+    workspaceGroups,
+    projectIconTargets,
     pinnedGroups,
     collapsedProjectKeys,
     toggleProjectCollapsed,
@@ -219,13 +226,13 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
   const handleOpenHostSettingsMobile = useCallback(
     (serverId: string) => {
       showMobileAgent();
-      router.push(buildSettingsHostSectionRoute(serverId, "connections"));
+      openHostOverview(serverId);
     },
     [showMobileAgent],
   );
 
   const handleOpenHostSettingsDesktop = useCallback((serverId: string) => {
-    router.push(buildSettingsHostSectionRoute(serverId, "connections"));
+    openHostOverview(serverId);
   }, []);
 
   const handleHomeMobile = useCallback(() => {
@@ -284,9 +291,12 @@ export const LeftSidebar = memo(function LeftSidebar({ active }: { active: boole
 
   const sharedProps = {
     theme,
-    statusGroups,
+    workspaceGroups,
+    projectIconTargets,
     pinnedGroups,
     projects,
+    hasProjectsBeforeFilter,
+    hasActiveProjectFilter: resolvedProjectFilters.length > 0,
     workspaceEntriesByKey,
     isInitialLoad,
     isRevalidating,
@@ -643,9 +653,12 @@ function SidebarFooter({
 
 function MobileSidebar({
   theme,
-  statusGroups,
+  workspaceGroups,
+  projectIconTargets,
   pinnedGroups,
   projects,
+  hasProjectsBeforeFilter,
+  hasActiveProjectFilter,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -805,9 +818,12 @@ function MobileSidebar({
             onToggleProjectCollapsed={toggleProjectCollapsed}
             shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
             groupMode={groupMode}
-            statusGroups={statusGroups}
+            workspaceGroups={workspaceGroups}
+            projectIconTargets={projectIconTargets}
             pinnedGroups={pinnedGroups}
             projects={projects}
+            hasProjectsBeforeFilter={hasProjectsBeforeFilter}
+            hasActiveProjectFilter={hasActiveProjectFilter}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}
@@ -835,9 +851,12 @@ function MobileSidebar({
 
 function DesktopSidebar({
   theme,
-  statusGroups,
+  workspaceGroups,
+  projectIconTargets,
   pinnedGroups,
   projects,
+  hasProjectsBeforeFilter,
+  hasActiveProjectFilter,
   workspaceEntriesByKey,
   isInitialLoad,
   isRevalidating,
@@ -1036,9 +1055,12 @@ function DesktopSidebar({
             onToggleProjectCollapsed={toggleProjectCollapsed}
             shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
             groupMode={groupMode}
-            statusGroups={statusGroups}
+            workspaceGroups={workspaceGroups}
+            projectIconTargets={projectIconTargets}
             pinnedGroups={pinnedGroups}
             projects={projects}
+            hasProjectsBeforeFilter={hasProjectsBeforeFilter}
+            hasActiveProjectFilter={hasActiveProjectFilter}
             workspaceEntriesByKey={workspaceEntriesByKey}
             isRefreshing={isManualRefresh && isRevalidating}
             onRefresh={handleRefresh}
@@ -1167,7 +1189,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   workspacesSectionTitle: {
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
   },
   workspacesSectionActions: {
@@ -1241,7 +1263,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 0,
     flexShrink: 1,
     color: theme.colors.accentForeground,
-    fontSize: theme.fontSize.xs,
+    fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
   },
   sidebarFooter: {
@@ -1276,7 +1298,7 @@ const styles = StyleSheet.create((theme) => ({
   footerAddProjectLabel: {
     minWidth: 0,
     flexShrink: 1,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.normal,
     color: theme.colors.foregroundMuted,
   },
@@ -1297,7 +1319,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
   },
   tooltipText: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     color: theme.colors.popoverForeground,
   },
 }));

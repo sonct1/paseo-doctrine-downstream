@@ -19,6 +19,7 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useAggregatedAgents } from "@/hooks/use-aggregated-agents";
+import { useWorkspace } from "@/stores/session-store-hooks";
 import type { Theme } from "@/styles/theme";
 import {
   buildHostAgentDetailRoute,
@@ -30,6 +31,7 @@ import {
   councilCaseScopeIdentity,
   councilRoleLabel,
   councilTierLabel,
+  describeCouncilPlacement,
   groupCouncilCases,
   isCouncilSeatReportReady,
   isCouncilSeatUnavailable,
@@ -231,6 +233,11 @@ function councilScopeTestIdentity(council: CouncilCase): string {
 
 function CouncilRow({ council, selected }: { council: CouncilCase; selected: boolean }) {
   const phaseLabel = councilCasePhaseLabel(council);
+  const workspace = useWorkspace(council.serverId, council.workspaceId ?? null);
+  const placement = useMemo(
+    () => describeCouncilPlacement(council, workspace),
+    [council, workspace],
+  );
   const scopeTestId = `${council.id}-${councilScopeTestIdentity(council)}`;
   const scopeId = councilCaseScopeIdentity(council);
   const workspaceScopeId = scopeId.startsWith("workspace:")
@@ -278,8 +285,12 @@ function CouncilRow({ council, selected }: { council: CouncilCase; selected: boo
           {councilTierLabel(council.tier)} · {phaseLabel}
           {council.disposition ? ` · ${council.disposition}` : ""}
         </Text>
-        <Text style={styles.councilRowMeta} numberOfLines={1}>
-          Workspace {council.workspaceId ?? "legacy scope"}
+        <Text
+          style={[styles.councilRowPlacement, placement.legacy && styles.councilRowMetaLegacy]}
+          numberOfLines={1}
+          testID={`council-row-placement-${scopeTestId}`}
+        >
+          {placement.text}
         </Text>
       </View>
       <View style={styles.councilRowCount}>
@@ -356,6 +367,11 @@ function CouncilDetail({
 
 function CouncilHero({ council, compact }: { council: CouncilCase; compact: boolean }) {
   const tierLabel = councilTierLabel(council.tier);
+  const workspace = useWorkspace(council.serverId, council.workspaceId ?? null);
+  const placement = useMemo(
+    () => describeCouncilPlacement(council, workspace),
+    [council, workspace],
+  );
   const dispositionLabel = council.disposition?.replaceAll("-", " ") ?? null;
   let reportMetricLabel = "reports ready";
   if (council.unavailableCount > 0) {
@@ -391,6 +407,12 @@ function CouncilHero({ council, compact }: { council: CouncilCase; compact: bool
             </Text>
           </View>
           <Text style={styles.heroTitle}>{council.title}</Text>
+          <Text
+            style={[styles.heroPlacement, placement.legacy && styles.councilRowMetaLegacy]}
+            testID="council-detail-placement"
+          >
+            {placement.text}
+          </Text>
           <Text style={styles.heroSubtitle}>
             One accountable Lead. Architect + Reviewer. No vote.
           </Text>
@@ -547,7 +569,7 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
   }
   if (ready) {
-    return "The report is ready in the agent timeline. Open the agent to inspect its complete evidence.";
+    return "The Lead recorded a daemon-validated Peer-authored Room receipt. Open the Room and agent timeline to inspect the complete evidence.";
   }
   if (
     seat.integrity === "unspecified" &&
@@ -838,6 +860,13 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.xs,
     textTransform: "capitalize",
   },
+  councilRowPlacement: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  councilRowMetaLegacy: {
+    fontStyle: "italic",
+  },
   councilRowCount: {
     alignItems: "flex-end",
   },
@@ -937,6 +966,10 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize["3xl"],
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 38,
+  },
+  heroPlacement: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
   },
   heroSubtitle: {
     color: theme.colors.foregroundMuted,

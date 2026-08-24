@@ -84,7 +84,7 @@ jobs:
       - name: Typecheck downstream shipped packages
         run: |
           npm run typecheck --workspace=@getpaseo/highlight
-          npm run typecheck --workspace=@paseo/plugin
+          npm run typecheck --workspace=@getpaseo/plugin
           npm run typecheck --workspace=@getpaseo/protocol
           npm run typecheck --workspace=@getpaseo/client
           npm run typecheck --workspace=@getpaseo/relay

@@ -516,6 +516,21 @@ test("normalizeImportAgentRequest accepts new and legacy import handle shapes", 
   });
 });
 
+test("normalizeImportAgentRequest rejects caller-supplied Council labels", () => {
+  expect(
+    normalizeImportAgentRequest({
+      type: "import_agent_request",
+      requestId: "forged-council",
+      providerId: "codex",
+      providerHandleId: "thread-3",
+      labels: { "council.report_receipt_version": "1" },
+    }),
+  ).toEqual({
+    error:
+      "Imported sessions cannot claim daemon-managed Council labels (council.report_receipt_version)",
+  });
+});
+
 function makeStoredProviderSession(input: {
   id: string;
   cwd: string;

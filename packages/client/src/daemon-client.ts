@@ -106,6 +106,9 @@ import type {
   WorkspaceRecoveryState,
   PluginListItem,
   PluginLogEntry,
+  AgentSkillSelection,
+  AgentSkillsStatus,
+  AgentSkillsSaveResult,
 } from "@getpaseo/protocol/messages";
 import type {
   AgentPermissionRequest,
@@ -727,6 +730,26 @@ export type FetchWorkspacesOptions = Omit<FetchWorkspacesRequest, "type" | "requ
 };
 export type FetchWorkspacesEntry = FetchWorkspacesPayload["entries"][number];
 export type FetchWorkspacesPageInfo = FetchWorkspacesPayload["pageInfo"];
+export type WorkspaceLabelListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "workspace.label.list.response" }
+>["payload"];
+export type WorkspaceLabelAssignmentPayload = Extract<
+  SessionOutboundMessage,
+  { type: "workspace.label.assignment.set.response" }
+>["payload"];
+export type WorkspaceLabelUpdatePayload = Extract<
+  SessionOutboundMessage,
+  { type: "workspace.label.update.response" }
+>["payload"];
+export type WorkspaceLabelDeletePayload = Extract<
+  SessionOutboundMessage,
+  { type: "workspace.label.delete.response" }
+>["payload"];
+export type WorkspaceLabelDeleteInspectPayload = Extract<
+  SessionOutboundMessage,
+  { type: "workspace.label.delete.inspect.response" }
+>["payload"];
 export type ProjectListPayload = Extract<
   SessionOutboundMessage,
   { type: "project.list.response" }
@@ -738,6 +761,9 @@ export type ProjectListOptions = Omit<ProjectListRequest, "type" | "requestId"> 
 export interface CreateChatRoomOptions {
   name: string;
   purpose?: string | null;
+  // Existing workspace this room is scoped to. Optional: omitting it creates
+  // a legacy host-level room with no workspace/project placement.
+  workspaceId?: string;
   requestId?: string;
 }
 export interface InspectChatRoomOptions {
@@ -907,6 +933,7 @@ interface CorrelatedResponseIdentity {
 interface PendingBinaryFileRead {
   cwd: string;
   path: string;
+  maxBytes?: number;
 }
 
 interface BinaryFileTransferState extends PendingBinaryFileRead {
@@ -2208,6 +2235,81 @@ export class DaemonClient {
           return null;
         }
         return msg.payload;
+      },
+    });
+  }
+
+  listWorkspaceLabels(options: {
+    subscriptionId: string;
+    sync?: { generation: string; afterSeq: number };
+    requestId?: string;
+  }): Promise<WorkspaceLabelListPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "workspace.label.list.request",
+        subscribe: { subscriptionId: options.subscriptionId },
+        ...(options.sync ? { sync: options.sync } : {}),
+      },
+    });
+  }
+
+  setWorkspaceLabel(options: {
+    workspaceId: string;
+    label: Extract<
+      SessionInboundMessage,
+      { type: "workspace.label.assignment.set.request" }
+    >["label"];
+    assigned: boolean;
+    requestId?: string;
+  }): Promise<WorkspaceLabelAssignmentPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest({
+      requestId: options.requestId,
+      message: {
+        type: "workspace.label.assignment.set.request",
+        workspaceId: options.workspaceId,
+        label: options.label,
+        assigned: options.assigned,
+      },
+    });
+  }
+
+  updateWorkspaceLabel(options: {
+    name: string;
+    newName?: string;
+    color?: Extract<SessionInboundMessage, { type: "workspace.label.update.request" }>["color"];
+    requestId?: string;
+  }): Promise<WorkspaceLabelUpdatePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"workspace.label.update.response">({
+      requestId: options.requestId,
+      message: {
+        type: "workspace.label.update.request",
+        name: options.name,
+        ...(options.newName === undefined ? {} : { newName: options.newName }),
+        ...(options.color === undefined ? {} : { color: options.color }),
+      },
+    });
+  }
+
+  deleteWorkspaceLabel(options: {
+    name: string;
+    requestId?: string;
+  }): Promise<WorkspaceLabelDeletePayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"workspace.label.delete.response">({
+      requestId: options.requestId,
+      message: { type: "workspace.label.delete.request", name: options.name },
+    });
+  }
+
+  inspectWorkspaceLabelDelete(options: {
+    name: string;
+    requestId?: string;
+  }): Promise<WorkspaceLabelDeleteInspectPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"workspace.label.delete.inspect.response">({
+      requestId: options.requestId,
+      message: {
+        type: "workspace.label.delete.inspect.request",
+        name: options.name,
       },
     });
   }
@@ -4331,6 +4433,7 @@ export class DaemonClient {
     mode: "list" | "file",
     requestId?: string,
     acceptBinary = false,
+    maxBytes?: number,
   ): Promise<FileExplorerPayload> {
     return this.sendCorrelatedSessionRequest({
       requestId,
@@ -4340,6 +4443,7 @@ export class DaemonClient {
         path,
         mode,
         ...(acceptBinary ? { acceptBinary: true } : {}),
+        ...(maxBytes ? { maxBytes } : {}),
       },
       responseType: "file_explorer_response",
     });
@@ -4360,11 +4464,23 @@ export class DaemonClient {
     return payload.directory;
   }
 
-  async readFile(cwd: string, path: string, requestId?: string): Promise<FileReadResult> {
+  async readFile(
+    cwd: string,
+    path: string,
+    requestId?: string,
+    maxBytes?: number,
+  ): Promise<FileReadResult> {
     const resolvedRequestId = this.createRequestId(requestId);
-    this.pendingBinaryFileReads.set(resolvedRequestId, { cwd, path });
+    this.pendingBinaryFileReads.set(resolvedRequestId, { cwd, path, maxBytes });
     try {
-      const payload = await this.requestFileExplorer(cwd, path, "file", resolvedRequestId, true);
+      const payload = await this.requestFileExplorer(
+        cwd,
+        path,
+        "file",
+        resolvedRequestId,
+        true,
+        maxBytes,
+      );
       if (payload.error) {
         throw new Error(payload.error);
       }
@@ -4980,6 +5096,61 @@ export class DaemonClient {
     return payload.entries;
   }
 
+  async getAgentSkillsStatus(): Promise<AgentSkillsStatus> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "agent.skills.get_status.request", requestId },
+      responseType: "agent.skills.get_status.response",
+    });
+  }
+
+  async reconcileAgentSkills(): Promise<AgentSkillsStatus> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "agent.skills.reconcile.request", requestId },
+      responseType: "agent.skills.reconcile.response",
+    });
+  }
+
+  async uninstallAgentSkills(): Promise<AgentSkillsStatus> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: { type: "agent.skills.uninstall.request", requestId },
+      responseType: "agent.skills.uninstall.response",
+    });
+  }
+
+  async saveAgentSkillsSelection(
+    selection: AgentSkillSelection,
+    confirmedRemovals?: readonly string[],
+  ): Promise<AgentSkillsSaveResult> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: {
+        type: "agent.skills.save_selection.request",
+        requestId,
+        selection,
+        ...(confirmedRemovals ? { confirmedRemovals: [...confirmedRemovals] } : {}),
+      },
+      responseType: "agent.skills.save_selection.response",
+    });
+  }
+
+  async importLegacyAgentSkillsSelection(selection: AgentSkillSelection): Promise<{
+    imported: boolean;
+    selection: AgentSkillSelection;
+  }> {
+    const requestId = this.createRequestId();
+    return this.sendCorrelatedSessionRequest({
+      message: {
+        type: "agent.skills.import_legacy_selection.request",
+        requestId,
+        selection,
+      },
+      responseType: "agent.skills.import_legacy_selection.response",
+    });
+  }
+
   async installDirectoryPlugin(path: string, id?: string): Promise<PluginListItem> {
     const requestId = this.createRequestId();
     const payload = await this.sendCorrelatedSessionRequest({
@@ -5423,6 +5594,7 @@ export class DaemonClient {
         type: "chat/create",
         name: options.name,
         ...(options.purpose ? { purpose: options.purpose } : {}),
+        ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
       },
       responseType: "chat/create/response",
     });
@@ -5964,7 +6136,30 @@ export class DaemonClient {
     }
 
     if (frame.opcode === FileTransferOpcode.FileChunk) {
+      // COMPAT(fileReadByteBudget): added in v0.5.0, remove after 2027-02-21 once daemon floor >= v0.5.0.
+      // Old daemons stream despite maxBytes; discard before client-side accumulation.
+      if (transfer.maxBytes && transfer.size > transfer.maxBytes) {
+        return;
+      }
       transfer.chunks.push(frame.payload);
+      return;
+    }
+
+    // COMPAT(fileReadByteBudget): added in v0.5.0, remove after 2027-02-21 once daemon floor >= v0.5.0.
+    if (transfer.maxBytes && transfer.size > transfer.maxBytes) {
+      this.activeBinaryFileTransfers.delete(frame.requestId);
+      this.handleSessionMessage({
+        type: "file_explorer_response",
+        payload: {
+          cwd: transfer.cwd,
+          path: transfer.path,
+          mode: "file",
+          directory: null,
+          file: null,
+          error: "File is too large to display",
+          requestId: frame.requestId,
+        },
+      });
       return;
     }
 

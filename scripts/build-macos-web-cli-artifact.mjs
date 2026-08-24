@@ -35,7 +35,7 @@ const OUTPUT_CHECKSUM = `${OUTPUT_ARCHIVE}.sha256`;
 const BEADS_CENTRAL_VERSION = "1.2.0";
 const INTERNAL_PACKAGES = [
   "@getpaseo/highlight",
-  "@paseo/plugin",
+  "@getpaseo/plugin",
   "@getpaseo/relay",
   "@getpaseo/protocol",
   "@getpaseo/client",

@@ -1,5 +1,8 @@
 # Hướng dẫn sử dụng SLP
 
+Nếu đây là lần đầu dùng downstream, đi theo [Foundation first run](foundation-first-run.md) trước khi
+chọn topology hoặc tạo role-bound agent.
+
 SLP là topology `Supervisor — Lead — Peer` của Paseo Foundation. Không phải task nào cũng cần đủ ba
 role. Chọn topology nhỏ nhất vẫn giữ được ownership, independent judgment và acceptance boundary.
 

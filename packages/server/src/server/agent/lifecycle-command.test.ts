@@ -309,6 +309,37 @@ describe("agent lifecycle commands", () => {
     expect(manager.detachedAgentIds).toEqual(["agent-1"]);
   });
 
+  test("rejects external Council label mutations and allows the dedicated receipt path", async () => {
+    const storage = new FakeLifecycleAgentStorage();
+    storage.records.set("agent-1", storedAgent("agent-1"));
+    const manager = new FakeLifecycleAgentManager(storage);
+    const labels = {
+      "council.integrity": "valid",
+      "council.report_receipt_version": "1",
+    };
+
+    await expect(
+      updateAgentCommand({ agentManager: manager }, { agentId: "agent-1", labels }),
+    ).resolves.toEqual({
+      accepted: false,
+      error: expect.stringContaining("Council labels are daemon-managed"),
+    });
+    await expect(
+      updateAgentCommand(
+        { agentManager: manager },
+        { agentId: "agent-1", labels },
+        { allowCouncilLabels: true },
+      ),
+    ).resolves.toEqual({ accepted: true, error: null });
+
+    expect(manager.metadataUpdates).toEqual([
+      {
+        agentId: "agent-1",
+        updates: { labels },
+      },
+    ]);
+  });
+
   test("detach is accepted when the agent is already detached", async () => {
     const storage = new FakeLifecycleAgentStorage();
     storage.records.set("agent-1", storedAgent("agent-1"));

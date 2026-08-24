@@ -196,7 +196,7 @@ function validateArtifactManifest(manifest) {
     manifest.arch !== process.arch ||
     manifest.beadsBackend !== "central" ||
     manifest.bundledBeadsBinary !== true ||
-    manifest.internalPackages?.["@paseo/plugin"] !== manifest.version
+    manifest.internalPackages?.["@getpaseo/plugin"] !== manifest.version
   ) {
     fail("artifact manifest does not match the smoke host");
   }

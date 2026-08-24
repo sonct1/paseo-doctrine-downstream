@@ -28,6 +28,8 @@ export interface StartAgentRunOptions {
   replaceRunning?: boolean;
   activeTurnBehavior?: ActiveTurnBehavior;
   runOptions?: AgentRunOptions;
+  /** Ask the provider to deny permissions blocking this steer. */
+  clearPendingPermissions?: boolean;
 }
 
 export type PromptDispatchDisposition = "out_of_band" | "steered" | "turn_started";
@@ -48,10 +50,13 @@ async function steerOrReplaceActiveRun(
   if (options?.activeTurnBehavior !== "steer") {
     return null;
   }
+  const steerOptions = options.clearPendingPermissions
+    ? { ...options.runOptions, clearPendingPermissions: true }
+    : options.runOptions;
   const result = await agentManager.steerOrReplaceActiveTurnAuthorized(
     agentId,
     prompt,
-    options.runOptions,
+    steerOptions,
   );
   if (result.status === "steered") {
     return { disposition: "steered" };
@@ -201,6 +206,8 @@ export interface SendPromptToAgentParams {
   unarchive?: boolean;
   /** Default true. Set false for safe-boundary delivery that must never replace an active run. */
   replaceRunning?: boolean;
+  /** See {@link StartAgentRunOptions.clearPendingPermissions}. */
+  clearPendingPermissions?: boolean;
   logger: Logger;
 }
 
@@ -213,14 +220,35 @@ export interface StartCreatedAgentInitialPromptParams {
   logger: Logger;
 }
 
-const AGENT_RUN_START_TIMEOUT_MS = 15_000;
+/**
+ * Outer bound on a run reaching "started" after dispatch.
+ *
+ * This wraps provider startup, so it MUST stay larger than the slowest provider's own
+ * startup budget — otherwise it aborts a start the provider was still allowed to be
+ * working on, and the provider's budget can never apply. OpenCode is the slowest today:
+ * up to 30s for the server to boot (OPENCODE_SERVER_STARTUP_TIMEOUT_MS) and then a
+ * session.create on the same budget, so this is deliberately set well above 30s.
+ *
+ * Not derived from the provider constant on purpose: this module is provider-agnostic
+ * and must not depend on a specific provider's internals.
+ */
+const AGENT_RUN_START_TIMEOUT_MS = 60_000;
 
 export async function waitForAgentRunStartWithTimeout(
   agentManager: AgentManager,
   agentId: string,
 ): Promise<void> {
+  const provider = agentManager.getAgent(agentId)?.provider ?? "provider";
   const startAbort = new AbortController();
-  const startTimeout = setTimeout(() => startAbort.abort("timeout"), AGENT_RUN_START_TIMEOUT_MS);
+  const startTimeout = setTimeout(
+    () =>
+      startAbort.abort(
+        new Error(
+          `${provider} run did not start within ${AGENT_RUN_START_TIMEOUT_MS / 1000} seconds (phase: run start)`,
+        ),
+      ),
+    AGENT_RUN_START_TIMEOUT_MS,
+  );
 
   try {
     await agentManager.waitForAgentRunStart(agentId, { signal: startAbort.signal });
@@ -271,6 +299,7 @@ export async function sendPromptToAgent(
   return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
     replaceRunning: params.replaceRunning ?? true,
     activeTurnBehavior: params.activeTurnBehavior,
+    clearPendingPermissions: params.clearPendingPermissions,
     runOptions,
   });
 }
@@ -411,6 +440,7 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
       agentStorage,
       agentId: callerAgentId,
       prompt: formatSystemNotificationPrompt(body),
+      activeTurnBehavior: "steer",
       unarchive: false,
       logger,
     });

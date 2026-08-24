@@ -19,9 +19,11 @@ task.
 
 The Human may start Council by asking Lead directly or through a Council control surface that routes
 the request to the existing Lead. A Council page is a Human view and trigger, not another authority
-tier. A native Paseo Room remains optional transport only for bounded post-sealed reconciliation; it
-does not launch seats or carry Round 1 reports. Round 1 reports remain sealed in their own agent
-timelines.
+tier. Council remains optional across Foundation work. Once Lead starts a native Council with
+`start_council`, that exact case uses the one returned Paseo Room as an authored-evidence channel.
+Seats still derive independently in their own sessions: Peer has `post_room` but no `read_room`, so it
+can publish its own sealed report without reading a sibling report. Room receipts prove authorship;
+they do not launch seats, grant authority, or replace the agent timeline and Lead audit.
 
 Use Paseo's built-in agent and Beads tools. Do not use provider-native subagents, Codex-native
 collaboration, shell-launched agents, or manually forged parent labels.
@@ -100,9 +102,14 @@ recoverable snapshot.
 
 ## Native specialist seats
 
-Every core seat is a fresh parent-owned Paseo agent in the Lead's current workspace. Use
-agent-scoped `create_agent` with `notifyOnFinish: true`, top-level `role: peer`, and the native
-execution specialization below.
+After the durable case graph is ready, call `start_council` exactly once. Preserve its exact `caseId`,
+Room ID, kickoff message ID, and each seat plan's labels plus opening/closing report sentinels. Use the
+smallest returned role set needed by the chosen tier. Do not hand-author substitute Room, kickoff, or
+sentinel labels.
+
+Every core seat is then a fresh parent-owned Paseo agent in the Lead's current workspace. Use
+agent-scoped `create_agent` with `notifyOnFinish: true`, top-level `role: peer`, the exact labels from
+`start_council`, and the native execution specialization below.
 
 ### Solution Architect
 
@@ -151,14 +158,11 @@ For each seat, call `create_agent` with this shape:
 
 ```text
 title: <at most 60 characters>
-provider: <qualified provider/model from routing preferences>
 role: peer
-executionProfile: <solution-architect|reviewer>
+executionProfile: <omit for Scout | solution-architect | reviewer>
+launchProfileId: <exact Human-approved profile returned by list_profiles for this peerSubrole>
 initialPrompt: <neutral brief + this seat's distinct mandate>
 notifyOnFinish: true
-settings:
-  modeId: <configured mode, if present>
-  thinkingOptionId: <configured thinking, if present>
 assignment:
   version: 1
   disposition: independent-review
@@ -170,20 +174,16 @@ assignment:
   evidence: <required report plus exact tracker/source evidence>
   handbackAndStop: <return report to Lead, then stop>
 labels:
-  council.case_id: <stable URL-safe case ID>
-  council.title: <short case title>
-  council.tier: <tier>
-  council.phase: sealed
-  council.integrity: pending-lead-audit
-  council.role: <architect|reviewer|verifier|auditor>
-  council.round: "1"
+  <copy every exact label returned for this seat by start_council>
   council.issue_id: <THIS_SEAT_CHILD_ISSUE_ID>
 ```
 
-Omit `workspaceId` so agent-scoped creation inherits the Lead workspace and establishes real parent
-ownership. Do not pass legacy relationship/workspace objects. Launch required Round 1 seats in
-parallel where the tool surface permits, keep every returned agent ID, and wait for finish
-notifications rather than polling.
+Omit `workspaceId` and `cwd` so agent-scoped creation inherits the Lead workspace and establishes real
+parent ownership. Passing both is invalid, and passing either is unnecessary for a same-workspace
+Council. When Agent Profile routing is configured, also omit `provider` and `settings`: the exact
+`launchProfileId` supplies provider/model/mode/thinking. Do not pass legacy relationship/workspace
+objects. Launch required Round 1 seats in parallel where the tool surface permits, keep every returned
+agent ID, and wait for finish notifications rather than polling.
 
 The native execution profile already supplies the role-specific identity. Do not paste or override
 that profile in `initialPrompt`. The prompt adds only the case brief, exact seat method, source/snapshot
@@ -197,7 +197,11 @@ the issue identity does not match the assignment.
 Then inspect the exact authorized repository/sources read-only and produce your own report. Do not
 edit files, mutate Beads, inspect sibling issues/reports/agents, contact another seat, use Council or
 Paseo orchestration, or claim the binding verdict. Distinguish observation from inference and state
-what would reverse the recommendation. Hand back to Lead and stop.
+what would reverse the recommendation. As your final action, call `post_room` exactly once with the
+exact Room ID from the assignment. The body must start with the returned role-specific opening
+sentinel, end with its closing sentinel, and contain the complete report between them. Do not call
+`read_room`, reply to another seat, or inspect Room history. Preserve the returned Room message ID in
+your final handback to Lead, then stop.
 ```
 
 This is soft, audited isolation: Paseo provides fresh sessions and durable instructions, but the
@@ -207,19 +211,23 @@ impossible.
 ## Collect and audit
 
 Do not inspect a Round 1 report until every required Round 1 seat has sent a terminal notification.
-Then use `get_agent_activity` for each seat and verify:
+Then use `get_agent_activity` for each seat, read the exact Council Room as Lead, and verify:
 
 - one successful `beads_status`, followed by one successful checkpoint read of the exact granted
   child issue;
 - no workspace mutation, Beads mutation, sibling-report access, agent discovery/contact, or
   orchestration;
 - source/snapshot identity remained within the brief;
-- the returned report satisfies that seat's distinct method without manufactured disagreement.
+- the returned report satisfies that seat's distinct method without manufactured disagreement;
+- the exact Room message is authored by that Peer after the kickoff and satisfies the role sentinels.
 
-Mark a usable report `council.phase=review` and
-`council.integrity=valid-audited-report`. Mark a provenance/boundary violation
-`compromised-<reason>`, no usable report `missing-<reason>`, and a preserved superseded retry
-`redundant-<reason>`. Terminal status or plausible prose alone is not a valid report.
+For a usable report, call `record_council_seat` with `phase=review`, `integrity=valid`, and the exact
+`reportMessageId` returned by that Peer. The daemon must validate terminal lifecycle, direct-child and
+workspace ownership, case/kickoff identity, Room author, sentinels, timestamp, and report digest before
+writing the receipt labels. Mark a provenance/boundary violation `compromised`, no usable report
+`missing`, and a preserved superseded retry `redundant`; those classifications do not accept a report
+message. Never use `update_agent` to forge Council integrity. Terminal status, plausible prose, or a
+bare `council.integrity` label alone is not a valid report.
 
 Allow at most one fresh replacement for infrastructure, provenance, or output-contract failure.
 Keep the same brief and snapshot. `debate` may continue with one missing core seat only as explicitly
@@ -237,10 +245,10 @@ Lead collects reports only after the sealed round and performs convergence:
    response from the original seat;
 5. draft one verdict without voting, confidence averaging, or provider-count authority.
 
-Nếu dùng optional Room, Lead post challenge rồi relay exact room/message ID và challenge text tới đúng
-seat bằng `send_agent_prompt`. Seat chỉ dùng `post_room` với `replyToMessageId` để trả lời; không gọi
-`read_room` và không inspect Room history hoặc sibling positions. Missing `post_room` là degraded
-transport evidence, không được chữa bằng shell/CLI fallback hoặc biến Room thành Council state store.
+Khi cross-examination cần Room, Lead post challenge rồi relay exact room/message ID và challenge text
+tới đúng seat bằng `send_agent_prompt`. Seat chỉ dùng `post_room` với `replyToMessageId` để trả lời;
+không gọi `read_room` và không inspect Room history hoặc sibling positions. Missing `post_room` là
+missing native evidence, không được chữa bằng shell/CLI fallback hoặc biến Room thành authority store.
 
 Use [references/report-format.md](references/report-format.md) only as adaptable output patterns. A
 Verifier receives one proposition, one evidence mandate, one fresh child issue, a read-only Peer

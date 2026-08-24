@@ -228,7 +228,7 @@ export const PASEO_TOOL_MANIFEST = [
     id: "record_council_seat",
     label: "Record council seat",
     description:
-      "Record the phase, integrity, and optional disposition of one direct Council Peer seat.",
+      "Record one direct Council Peer seat after validating its terminal lifecycle and authored Room report receipt.",
     group: "Rooms",
   },
   {

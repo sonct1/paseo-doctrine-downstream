@@ -639,7 +639,7 @@ function IssueDetailContent({
         </Text>
         <Field label="Reason" error={closeError ? errorText(closeError) : null}>
           <FormTextInput
-            value={reason}
+            initialValue={reason}
             onChangeText={handleReasonChange}
             placeholder="Evidence, verdict, or resolution"
             multiline
@@ -865,7 +865,7 @@ function CreateIssuePanel({
           </View>
           <Field label="Title" error={createError ? errorText(createError) : null}>
             <FormTextInput
-              value={draft.title}
+              initialValue={draft.title}
               onChangeText={handleTitleChange}
               placeholder="A bounded, decision-useful outcome"
               autoFocus
@@ -901,7 +901,7 @@ function CreateIssuePanel({
           </Field>
           <Field label="Description">
             <FormTextInput
-              value={draft.description}
+              initialValue={draft.description}
               onChangeText={handleDescriptionChange}
               placeholder="Problem, context, and bounded scope"
               multiline
@@ -916,7 +916,7 @@ function CreateIssuePanel({
             hint="Evidence required before the work can be accepted."
           >
             <FormTextInput
-              value={draft.acceptance}
+              initialValue={draft.acceptance}
               onChangeText={handleAcceptanceChange}
               placeholder="Observable checks and handback evidence"
               multiline

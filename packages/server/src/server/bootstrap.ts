@@ -119,6 +119,7 @@ export async function fanOutReconciledWorkspaceUpdates(input: {
 
 import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 import { WorkspaceSetupRuntime } from "./workspace-setup-runtime.js";
+import { createWorkspaceLabelService } from "./workspace-labels/index.js";
 import { createGitHubService } from "../services/github-service.js";
 import { createPaseoWorktree as createRegisteredPaseoWorktree } from "./paseo-worktree-service.js";
 import { createWorkspaceProvisioningService } from "./session/workspace-provisioning/workspace-provisioning-service.js";
@@ -161,6 +162,7 @@ import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
 import { resolvePaseoToolPolicy } from "./agent/paseo-tool-policy.js";
+import { createOrchestrationSkills } from "./orchestration-skills/index.js";
 import { resolveConfigFromPersisted, type CliConfigOverrides } from "./config.js";
 import { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { DaemonConfigBrowserToolsPolicy } from "./browser-tools/policy.js";
@@ -190,6 +192,7 @@ import type { AgentClient, AgentProvider } from "./agent/agent-sdk-types.js";
 import {
   isProviderCredentialEnvironmentKey,
   type AgentProfile,
+  type AgentSkillSelection,
   type FirstAgentContext,
   type PluginSource,
   type TerminalProfile,
@@ -434,6 +437,7 @@ export interface PaseoDaemonConfig {
   peerDelegationDefaultSubrole?: MutableDaemonConfig["peerDelegationDefaultSubrole"];
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
+  skillSelection?: AgentSkillSelection;
   pluginsEnabled?: boolean;
   plugins?: Record<string, PluginSource>;
   staticDir: string;
@@ -631,9 +635,17 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     appendSystemPrompt: config.appendSystemPrompt ?? "",
     pluginsEnabled: config.pluginsEnabled ?? false,
     plugins: config.plugins ?? {},
+    skills: { selection: config.skillSelection },
   };
 
   return initialConfig;
+}
+
+function agentMcpIsAvailable(
+  enabled: boolean | undefined,
+  injectIntoAgents: boolean | undefined,
+): boolean {
+  return enabled !== false && injectIntoAgents !== false;
 }
 
 export async function createPaseoDaemon(
@@ -663,6 +675,10 @@ export async function createPaseoDaemon(
         };
       },
     },
+  });
+  const orchestrationSkills = createOrchestrationSkills(daemonConfigStore);
+  void orchestrationSkills.autoUpdate().catch((error) => {
+    logger.error({ err: error }, "Failed to maintain orchestration skills at startup");
   });
   const browserToolsPolicy = new DaemonConfigBrowserToolsPolicy(daemonConfigStore);
   const browserToolsBroker = new BrowserToolsBroker({});
@@ -938,6 +954,10 @@ export async function createPaseoDaemon(
     paseoHome: config.paseoHome,
     logger,
   });
+  const workspaceLabelService = createWorkspaceLabelService({
+    paseoHome: config.paseoHome,
+    workspaceRegistry,
+  });
   const github = createGitHubService();
   const workspaceGitService = new WorkspaceGitServiceImpl({
     logger,
@@ -1016,6 +1036,7 @@ export async function createPaseoDaemon(
     workspaceGitService,
     logger,
   });
+  await workspaceLabelService.initialize();
   logger.info({ elapsed: elapsed() }, "Workspace registries bootstrapped");
   await chatService.initialize();
   logger.info({ elapsed: elapsed() }, "Chat service initialized");
@@ -1515,7 +1536,9 @@ export async function createPaseoDaemon(
   const createAgentToolCatalog = (runtime: PaseoToolRuntimeContext) =>
     createPaseoToolCatalog(createAgentToolHostDependencies(runtime));
   agentManager.setPaseoToolCatalogFactory(createAgentToolCatalog);
-  agentManager.setPaseoToolsEnabled(config.mcpInjectIntoAgents !== false);
+  agentManager.setPaseoToolsEnabled(
+    agentMcpIsAvailable(config.mcpEnabled, config.mcpInjectIntoAgents),
+  );
 
   let mcpEnabled = config.mcpEnabled ?? true;
   let agentMcpBaseUrl: string | null = null;
@@ -1665,18 +1688,22 @@ export async function createPaseoDaemon(
           const logAndResolve = async () => {
             boundListenTarget = resolveBoundListenTarget(listenTarget, httpServer);
             const mcpBaseUrl = createAgentMcpBaseUrl(boundListenTarget);
-            agentMcpBaseUrl = mcpEnabled ? mcpBaseUrl : null;
-            agentManager.setMcpBaseUrl(agentMcpBaseUrl);
-            agentManager.setPaseoToolsEnabled(mcpEnabled && config.mcpInjectIntoAgents !== false);
+            const applyAgentMcpConfig = () => {
+              const agentMcpAvailable = agentMcpIsAvailable(
+                mcpEnabled,
+                daemonConfigStore.get().mcp.injectIntoAgents,
+              );
+              agentMcpBaseUrl = agentMcpAvailable ? mcpBaseUrl : null;
+              agentManager.setMcpBaseUrl(agentMcpBaseUrl);
+              agentManager.setPaseoToolsEnabled(agentMcpAvailable);
+            };
+            applyAgentMcpConfig();
             daemonConfigStore.onFieldChange("mcp.enabled", (value) => {
               mcpEnabled = value !== false;
-              const inject = daemonConfigStore.get().mcp.injectIntoAgents !== false;
-              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsEnabled(mcpEnabled && inject);
+              applyAgentMcpConfig();
             });
-            daemonConfigStore.onFieldChange("mcp.injectIntoAgents", (value) => {
-              agentManager.setMcpBaseUrl(mcpEnabled ? mcpBaseUrl : null);
-              agentManager.setPaseoToolsEnabled(mcpEnabled && value !== false);
+            daemonConfigStore.onFieldChange("mcp.injectIntoAgents", () => {
+              applyAgentMcpConfig();
             });
             daemonConfigStore.onFieldChange("appendSystemPrompt", (value) => {
               agentManager.setAppendSystemPrompt(typeof value === "string" ? value : "");
@@ -1779,6 +1806,8 @@ export async function createPaseoDaemon(
               pluginRuntime,
               beadsService,
               chatService,
+              orchestrationSkills,
+              workspaceLabelService,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

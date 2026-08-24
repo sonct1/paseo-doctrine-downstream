@@ -5,6 +5,7 @@ import type { ManagedAgent } from "../../agent/agent-manager.js";
 import { ChatServiceError, type FileBackedChatService } from "../../chat/chat-service.js";
 import { postChatMessageWithMentions } from "../../chat/post.js";
 import type { ScheduleService } from "../../schedule/service.js";
+import type { WorkspaceRegistry } from "../../workspace-registry.js";
 
 /**
  * The collaborators a chat command reaches that are NOT part of the chat/schedule
@@ -26,6 +27,7 @@ export interface ChatScheduleSessionOptions {
   host: ChatScheduleSessionHost;
   chatService: FileBackedChatService;
   scheduleService: ScheduleService;
+  workspaceRegistry: Pick<WorkspaceRegistry, "get">;
   clientId: string;
   logger: pino.Logger;
 }
@@ -45,6 +47,7 @@ export class ChatScheduleSession {
   private readonly host: ChatScheduleSessionHost;
   private readonly chatService: FileBackedChatService;
   private readonly scheduleService: ScheduleService;
+  private readonly workspaceRegistry: Pick<WorkspaceRegistry, "get">;
   private readonly clientId: string;
   private readonly logger: pino.Logger;
 
@@ -52,6 +55,7 @@ export class ChatScheduleSession {
     this.host = options.host;
     this.chatService = options.chatService;
     this.scheduleService = options.scheduleService;
+    this.workspaceRegistry = options.workspaceRegistry;
     this.clientId = options.clientId;
     this.logger = options.logger;
   }
@@ -75,9 +79,23 @@ export class ChatScheduleSession {
     request: Extract<SessionInboundMessage, { type: "chat/create" }>,
   ): Promise<void> {
     try {
+      const workspaceId = request.workspaceId?.trim() || undefined;
+      let projectId: string | undefined;
+      if (workspaceId) {
+        const workspace = await this.workspaceRegistry.get(workspaceId);
+        if (!workspace || workspace.archivedAt) {
+          throw new ChatServiceError(
+            "chat_room_workspace_not_found",
+            `Workspace not found: ${workspaceId}`,
+          );
+        }
+        projectId = workspace.projectId;
+      }
       const room = await this.chatService.createRoom({
         name: request.name,
         purpose: request.purpose,
+        workspaceId,
+        projectId,
       });
       this.host.emit({
         type: "chat/create/response",

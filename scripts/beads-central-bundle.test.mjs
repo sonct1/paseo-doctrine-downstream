@@ -12,6 +12,9 @@ const buildSource = readFileSync(
   new URL("scripts/build-beads-central-sidecar.mjs", repoRoot),
   "utf8",
 );
+const nixPackageSource = readFileSync(new URL("nix/package.nix", repoRoot), "utf8");
+const nixBeadsCentralSource = readFileSync(new URL("nix/beads-central.nix", repoRoot), "utf8");
+const nixFlakeSource = readFileSync(new URL("flake.nix", repoRoot), "utf8");
 const smokeSource = readFileSync(new URL("scripts/smoke-web-cli-artifact.mjs", repoRoot), "utf8");
 const attributesSource = readFileSync(new URL(".gitattributes", repoRoot), "utf8");
 const centralSourceFiles = [
@@ -84,4 +87,24 @@ test("portable smoke requires and starts the real installed Central component", 
   assert.match(smokeSource, /componentManifest\.beadsBinarySha256 !== sha256/);
   assert.match(smokeSource, /await waitForBeadsCentral\(\)/);
   assert.match(smokeSource, /beads_central=\$\{beadsReady\.central\}/);
+});
+
+test("Nix daemon package owns the immutable Central and bd bundle", () => {
+  assert.match(nixFlakeSource, /nix\/beads-central\.nix/);
+  assert.match(nixFlakeSource, /inherit beadsCentral/);
+  assert.match(nixPackageSource, /PASEO_BEADS_CENTRAL_SIDECAR/);
+  assert.match(nixPackageSource, /PASEO_BEADS_CENTRAL_BD_BIN/);
+  assert.match(nixBeadsCentralSource, /fetchurl/);
+  assert.match(nixBeadsCentralSource, /buildGo126Module/);
+  assert.match(nixBeadsCentralSource, /go_1_26\.overrideAttrs/);
+  assert.match(nixBeadsCentralSource, /buildGo126Module\.override \{ go = go1262; \}/);
+  assert.match(nixBeadsCentralSource, /go1\.26\.2\.src\.tar\.gz/);
+  assert.match(nixBeadsCentralSource, /sha256-LpHrtpR6lulDb7KzkmqIAu\/mOm03Xf\/sT4Kqnb1v1Ds=/);
+  assert.match(
+    nixBeadsCentralSource,
+    /vendorHash = "sha256-WWEwGpCwMPD7jaz02zN745RQQqYTQttehbcT3J9hayM="/,
+  );
+  assert.doesNotMatch(nixBeadsCentralSource, /go 1\.26\.1/);
+  assert.match(nixBeadsCentralSource, /beadsSourceSha256/);
+  assert.match(nixBeadsCentralSource, /python3Packages/);
 });

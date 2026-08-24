@@ -141,6 +141,38 @@ test("session create validates the requested mode against the provider's modes",
   expect(createAgent).not.toHaveBeenCalled();
 });
 
+test("session create rejects caller-forged Council receipt labels before provider work", async () => {
+  const createAgent = vi.fn();
+  const stub = createProviderSnapshotManagerStub();
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: { createAgent } as unknown as Parameters<
+      typeof createAgentCommand
+    >[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger: createTestLogger(),
+    providerSnapshotManager: stub.manager,
+  };
+
+  await expect(
+    createAgentCommand(dependencies, {
+      kind: "session",
+      config: { provider: "codex", cwd: "/tmp/paseo-create-test" },
+      workspaceId: "ws-create-test",
+      labels: {
+        "council.phase": "verdict",
+        "council.integrity": "valid",
+        "council.report_receipt_version": "1",
+      },
+      provisionalTitle: null,
+      firstAgentContext: { attachments: [] },
+      buildSessionConfig: async (config) => ({ sessionConfig: config }),
+    }),
+  ).rejects.toThrow("is daemon-managed");
+
+  expect(stub.resolveCreateConfig).not.toHaveBeenCalled();
+  expect(createAgent).not.toHaveBeenCalled();
+});
+
 test("session create applies the resolved mode from the provider create config", async () => {
   const snapshot = {
     id: "agent-1",

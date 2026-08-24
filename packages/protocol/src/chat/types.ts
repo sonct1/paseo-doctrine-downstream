@@ -8,6 +8,10 @@ export const ChatRoomSchema = z.object({
   purpose: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // Added for workspace-scoped Room/Council placement. Optional so old daemons
+  // and mixed-version peers parse legacy host-scoped rooms with no scope.
+  workspaceId: z.string().optional(),
+  projectId: z.string().optional(),
 });
 
 export type ChatRoom = z.infer<typeof ChatRoomSchema>;

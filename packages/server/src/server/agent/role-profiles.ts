@@ -73,6 +73,7 @@ export const ROLE_TOOL_CEILINGS = {
     "get_agent_status",
     "list_agents",
     "get_agent_activity",
+    "read_room",
     "list_pending_permissions",
     "list_terminals",
     "capture_terminal",

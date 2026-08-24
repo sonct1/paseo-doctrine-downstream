@@ -13,6 +13,7 @@ import {
   BeadsCentralEndpointSchema,
   FoundationCredentialRefSchema,
   AgentProfileSchema,
+  AgentSkillSelectionSchema,
   PeerDelegationRunModeSchema,
   PeerSubroleSchema,
   PluginIdSchema,
@@ -353,6 +354,7 @@ export const PersistedConfigSchema = z
         credentials: AgentCredentialsSchema.optional(),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
+        skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
       })
       .strict()
       .optional(),

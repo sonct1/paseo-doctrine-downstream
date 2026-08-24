@@ -19,6 +19,7 @@ import type {
   RecentProviderSessionDescriptorPayload,
 } from "@getpaseo/protocol/messages";
 import { getParentAgentIdFromLabels, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
+import { councilLabelKeys } from "@getpaseo/protocol/council-labels";
 import { createRealpathAwarePathMatcher } from "../../utils/path.js";
 
 type ImportAgentRequestMessage = z.infer<typeof ImportAgentRequestMessageSchema>;
@@ -103,6 +104,14 @@ export function normalizeImportAgentRequest(
   const providerHandleId = msg.providerHandleId ?? msg.sessionId;
   if (!provider || !providerHandleId) {
     return { error: "Import requires providerId and providerHandleId" };
+  }
+  const councilLabels = councilLabelKeys(msg.labels);
+  if (councilLabels.length > 0) {
+    return {
+      error: `Imported sessions cannot claim daemon-managed Council labels (${councilLabels.join(
+        ", ",
+      )})`,
+    };
   }
   return {
     provider: provider as AgentProvider,

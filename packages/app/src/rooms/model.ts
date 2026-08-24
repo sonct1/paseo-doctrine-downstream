@@ -1,9 +1,44 @@
 import type { ChatMessage } from "@getpaseo/protocol/chat/types";
+import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
+import type { WorkspaceDescriptor } from "@/stores/session-store";
 
 export interface ActiveRoomMention {
   start: number;
   end: number;
   query: string;
+}
+
+export interface RoomPlacement {
+  text: string;
+  legacy: boolean;
+}
+
+const ROOM_PLACEMENT_LEGACY: RoomPlacement = { text: "Host-level (legacy)", legacy: true };
+
+export function describeRoomPlacement(
+  room: { workspaceId?: string; projectId?: string },
+  workspace: WorkspaceDescriptor | null,
+): RoomPlacement {
+  if (!room.workspaceId) {
+    return ROOM_PLACEMENT_LEGACY;
+  }
+  if (!workspace) {
+    // The workspace record is gone (or not yet hydrated), but the room's own
+    // scope IDs are still authoritative persisted state. Surface them exactly
+    // rather than collapsing to a bare "unknown" that hides which workspace
+    // and project this room was actually bound to.
+    const idLabels = [
+      room.projectId ? `project: ${room.projectId}` : null,
+      `workspace: ${room.workspaceId}`,
+    ].filter((label): label is string => label !== null);
+    return { text: `Unavailable workspace (${idLabels.join(", ")})`, legacy: true };
+  }
+  const projectName =
+    workspace.projectCustomName ??
+    workspace.projectDisplayName ??
+    projectDisplayNameFromProjectId(workspace.projectId);
+  const workspaceName = workspace.title ?? workspace.name;
+  return { text: `${projectName} / ${workspaceName}`, legacy: false };
 }
 
 export interface InsertRoomMentionResult {

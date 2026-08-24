@@ -32,6 +32,10 @@ import {
   emitLiveTimelineItemIfAgentKnown,
 } from "../timeline-append.js";
 import { resolveCreateAgentIntent } from "./intent.js";
+import {
+  councilLabelKeys,
+  validateCouncilSeatBootstrapLabels,
+} from "@getpaseo/protocol/council-labels";
 
 export interface CreateAgentSessionWorktreeResult {
   sessionConfig: AgentSessionConfig;
@@ -186,6 +190,7 @@ export async function createAgentCommand(
   dependencies: CreateAgentCommandDependencies,
   input: CreateAgentCommandInput,
 ): Promise<CreateAgentCommandResult> {
+  assertCouncilCreateAuthority(input);
   const resolved =
     input.kind === "session"
       ? await resolveSessionCreateAgent(dependencies, input)
@@ -233,6 +238,33 @@ export async function createAgentCommand(
     initialPromptError,
     ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
   };
+}
+
+function assertCouncilCreateAuthority(input: CreateAgentCommandInput): void {
+  const labels =
+    input.kind === "mcp"
+      ? { ...input.callerContext?.childAgentDefaultLabels, ...input.labels }
+      : input.labels;
+  const validationError = validateCouncilSeatBootstrapLabels(labels);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+  if (councilLabelKeys(labels).length === 0) return;
+  if (input.kind !== "mcp" || input.roleId !== "peer" || !input.callerAgentId) {
+    throw new Error(
+      "Council seat labels require an agent-scoped role-bound Peer created by a Lead",
+    );
+  }
+}
+
+function assertCouncilMcpParentAuthority(
+  input: CreateAgentFromMcpInput,
+  parentAgent: ManagedAgent | null,
+): void {
+  const labels = { ...input.callerContext?.childAgentDefaultLabels, ...input.labels };
+  if (councilLabelKeys(labels).length > 0 && parentAgent?.roleBinding?.roleId !== "lead") {
+    throw new Error("Council seat labels may be assigned only by a role-bound Lead");
+  }
 }
 
 async function resolveSessionCreateAgent(
@@ -328,6 +360,7 @@ async function resolveMcpCreateAgent(
   const parentAgent = input.callerAgentId
     ? requireParentAgent(dependencies.agentManager, input.callerAgentId)
     : null;
+  assertCouncilMcpParentAuthority(input, parentAgent);
   const cwd = resolveMcpInitialCwd(input, parentAgent);
   const { resolvedCwd, setupContinuation, createdWorkspaceId, createdWorktree } =
     await resolveMcpCwd({

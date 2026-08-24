@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { CouncilAgentSource, CouncilCase } from "./model";
 import {
   councilCaseScopeIdentity,
   councilRoleLabel,
+  describeCouncilPlacement,
   groupCouncilCases,
   isCouncilSeatReportReady,
 } from "./model";
@@ -31,6 +33,7 @@ function councilLabels(
   role: string,
   overrides: Partial<Record<string, string>> = {},
 ): Record<string, string> {
+  const hasValidIntegrity = overrides["council.integrity"]?.startsWith("valid") === true;
   return {
     "council.case_id": "case-1",
     "council.title": "Choose the migration boundary",
@@ -38,6 +41,18 @@ function councilLabels(
     "council.phase": "sealed",
     "council.role": role,
     "council.round": "1",
+    ...(hasValidIntegrity
+      ? {
+          "council.room_id": "room-1",
+          "council.kickoff_message_id": "kickoff-1",
+          "council.report_message_id": `report-${role}`,
+          "council.report_digest": "c".repeat(64),
+          "council.report_created_at": "2026-08-10T10:00:00.000Z",
+          "council.report_receipt_version": "1",
+          "council.report_start_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_V1`,
+          "council.report_end_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_END`,
+        }
+      : {}),
     ...overrides,
   };
 }
@@ -57,6 +72,22 @@ const leadRoleBinding = {
   },
   createdAt: "2026-08-10T09:00:00.000Z",
 } as const;
+
+const workspace: WorkspaceDescriptor = {
+  id: "wks_1",
+  projectId: "project",
+  projectDisplayName: "Project",
+  projectRootPath: "/repo",
+  workspaceDirectory: "/repo",
+  projectKind: "git",
+  workspaceKind: "local_checkout",
+  name: "main",
+  status: "done",
+  statusEnteredAt: null,
+  archivingAt: null,
+  diffStat: null,
+  scripts: [],
+};
 
 function summarizeCouncilWorkspace(council: CouncilCase) {
   return {
@@ -168,6 +199,36 @@ describe("groupCouncilCases", () => {
           )
         : true,
     ).toBe(false);
+  });
+
+  it("does not count a valid label without a daemon-issued authored report receipt", () => {
+    const unreceipted = makeAgent(
+      "unreceipted",
+      councilLabels("independent", {
+        "council.integrity": "valid-audited-report",
+        "council.report_message_id": "",
+      }),
+    );
+
+    const council = groupCouncilCases([unreceipted])[0];
+
+    expect(council?.readyCount).toBe(0);
+    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
+  });
+
+  it("fails closed for legacy or caller-forged receipt labels without the daemon marker", () => {
+    const forged = makeAgent(
+      "forged",
+      councilLabels("independent", {
+        "council.integrity": "valid-audited-report",
+        "council.report_receipt_version": "",
+      }),
+    );
+
+    const council = groupCouncilCases([forged])[0];
+
+    expect(council?.readyCount).toBe(0);
+    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
   });
 
   it("counts only usable reports while preserving redundant replacements for audit", () => {
@@ -346,5 +407,32 @@ describe("groupCouncilCases", () => {
       "shared-lead-workspace",
       undefined,
     ]);
+  });
+});
+
+describe("describeCouncilPlacement", () => {
+  it("labels a legacy host-level council without guessing a workspace", () => {
+    expect(describeCouncilPlacement({}, null)).toEqual({
+      text: "Host-level (legacy)",
+      legacy: true,
+    });
+    expect(describeCouncilPlacement({}, workspace)).toEqual({
+      text: "Host-level (legacy)",
+      legacy: true,
+    });
+  });
+
+  it("flags a scoped council whose workspace no longer resolves, preserving the exact workspace id", () => {
+    expect(describeCouncilPlacement({ workspaceId: "wks_1" }, null)).toEqual({
+      text: "Unavailable workspace (workspace: wks_1)",
+      legacy: true,
+    });
+  });
+
+  it("shows human-readable project / workspace placement for a scoped council", () => {
+    expect(describeCouncilPlacement({ workspaceId: "wks_1" }, workspace)).toEqual({
+      text: "Project / main",
+      legacy: false,
+    });
   });
 });

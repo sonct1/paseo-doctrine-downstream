@@ -1,5 +1,162 @@
 # Changelog
 
+## 0.5.0-paseo.35 - 2026-08-24
+
+Bản follow-up này không nhận thêm upstream bytes. Nó close một read-only governance gap do Browser
+Supervisor audit tìm thấy sau khi Council `.34` đã pass toàn bộ receipt route.
+
+### Fixed
+
+- Supervisor role ceiling có `read_room` để exact Human governance mandate audit trực tiếp authored
+  Lead ↔ Peer evidence và verdict supersession, thay vì chỉ suy ra từ truncated agent activity.
+- `list_profiles` vẫn Lead-only; Supervisor không nhận `post_room`, `record_council_seat`, generic
+  `update_agent`, mutation hoặc acceptance authority.
+
+### Compatibility
+
+- Existing Supervisor preferences vẫn bị daemon intersect với Foundation ceiling; capability mới chỉ
+  mở đường đọc Room và không đổi recovery/replacement lease.
+- Stable merge parent, Foundation `0.1.0-dev.21`, beta exclusion, `v0.5.1` exclusion và toàn bộ deferred
+  upstream/post-tag ledger không đổi.
+
+### Qualified
+
+- Browser trên installed `.34` pass Lead → ba profile-routed Peer → Room → Council, operator-lane
+  forged-label rejection và ba daemon-issued receipt markers; fresh Supervisor audit reproduce đúng
+  `read_room` absence trước source correction này.
+- Focused role-profile/binding suites pass `25/25`; exact isolated Claude suite pass `78/78` khi dùng
+  installed path; full Server unit với authoritative PATH pass `5,502/5,502` và skip `45`.
+- Installed `.35` requalification pass CLI/daemon/health/WebUI và Browser: fresh Supervisor có
+  `24 tools / 4 skills`, gọi `read_room` đúng một lần, audit trực tiếp đủ sáu authored Room messages,
+  ba daemon-issued Council receipt markers và no-mutation boundary. Councils UI giữ `.34` ở `3/3`
+  ready và fail closed `.33` ở `0/3`.
+- Durable Beads closeout vẫn `BLOCKED` không mutation: native `beads_update` có thể append notes và
+  đổi labels nhưng không thể replace stale notes/`close_reason` trên closed issues. Guided Hub starter
+  cũng tiếp tục `DEFER` fail-closed vì stable Hub chưa mang revision-scoped authority receipt qua
+  daemon admission.
+
+## 0.5.0-paseo.34 - 2026-08-24
+
+Bản follow-up này vẫn không nhận thêm upstream bytes. Nó close đường forge còn lại mà Browser Council
+`.33` adversarial journey tìm thấy sau khi route `record_council_seat` chuẩn đã pass.
+
+### Fixed
+
+- Council `Report ready` giờ cần exact `council.report_receipt_version=1` do
+  `record_council_seat` ghi cùng authored Room receipt; bare caller labels không còn đủ để tạo ready
+  state.
+- `create_agent` chỉ nhận sealed Council bootstrap labels cho role-bound Peer do role-bound Lead tạo;
+  generic `update_agent`, WebSocket metadata update và provider-session import đều reject mọi attempt
+  tự ghi Council lifecycle/receipt labels trước mutation.
+- Settings-only `update_agent` giữ nguyên behavior; Council label preflight chạy trước mode/model/feature
+  mutation nên forged request không để lại partial side effect.
+
+### Compatibility
+
+- Receipt `.33` hoặc cũ hơn thiếu version marker vẫn được giữ để audit nhưng fail closed về not-ready;
+  Lead phải audit Room và record lại qua dedicated tool nếu muốn promote.
+- Stable merge parent, Foundation `0.1.0-dev.21`, beta exclusion, `v0.5.1` exclusion và toàn bộ deferred
+  upstream/post-tag ledger không đổi.
+
+### Qualified
+
+- Focused six-suite regression pass `66/66`; Protocol pass `640/640`, App pass `4,813/4,813`, Server
+  unit pass `5,502` với `45` skip, Server integration pass `10/10` và `1/1` focused worktree case.
+- Full workspace typecheck, changed-file format/lint, official pinned-Nix `prefetch-npm-deps` và macOS
+  desktop release build pass. Installed runtime và Browser requalification là activation gate riêng,
+  không được suy ra từ source/build receipts này.
+
+## 0.5.0-paseo.33 - 2026-08-24
+
+Bản follow-up này không nhận thêm upstream bytes. Nó giữ nguyên exact stable `v0.5.0` merge boundary,
+import Foundation `0.1.0-dev.21`, và close hai evidence gap mà Browser Council adversarial journey trên
+`.32` đã reproduce.
+
+### Fixed
+
+- `record_council_seat(integrity=valid)` giờ bắt buộc exact terminal Peer, Council Room/kickoff labels,
+  Peer-authored post-kickoff `reportMessageId`, role sentinels và SHA-256 report receipt; app không còn
+  tính bare `valid` label + idle lifecycle là `Report ready`.
+- Role-bound create/resume revalidate assignment/exception expiry cùng current Workspace Protocol path,
+  validity và digest trước provider launch. Protocol xuất hiện, biến mất, invalid hoặc đổi bytes đều
+  fail closed tới fresh role binding.
+- Native Council skill/first-run guide dùng `start_council` → exact `list_profiles` route →
+  same-workspace `create_agent` không truyền đồng thời `workspaceId`/`cwd` → sealed `post_room` →
+  receipt-bound `record_council_seat`; tier `lens` được dùng đúng một seat.
+
+### Compatibility
+
+- Council record cũ thiếu Room/kickoff/report receipt vẫn được giữ để audit nhưng không còn được gọi là
+  ready; không backfill authority bằng suy đoán từ labels.
+- Không merge beta refs, `v0.5.1`, upstream `main`, 13 post-tag ACP registry drifts hoặc bất kỳ Hub
+  starter writer nào đã defer trong `.32` ledger.
+
+### Qualified
+
+- Focused Council, role binding/resume, Agent Manager, app projection và tool-manifest suites pass
+  `240/240`; full workspace typecheck, staged lint và format gates pass trên source correction.
+- Foundation validator pass trên tagged source `foundation-v0.1.0-dev.21`; downstream import giữ exact
+  source commit và manifest SHA-256 receipts.
+
+## 0.5.0-paseo.32 - 2026-08-24
+
+Bản này tích hợp semantic exact stable upstream `v0.5.0` tại
+`b8a31034ca36301067edadc2d622f42f4a4f7a37`, không dùng beta refs làm input, đồng thời giữ nguyên
+Foundation authority, durable evidence và các component downstream đã build.
+
+### Added
+
+- Nhận stable panes, workspace tabs, sidebar/project labels, profile editor, tracks, plugin themes/RPC,
+  file/diff/terminal improvements và daemon-owned orchestration skill controller.
+- Thêm guided first-run downstream cho Workspace Protocol admission, Agent Profile so với Role Profile,
+  Lead, Peer, Supervisor, Room, Council, checkpoint và handback.
+- Giữ stable Hub provider/connection/resource discovery làm dormant input cho một starter governed sau
+  này, nhưng chưa cho nó tạo unbound agent hoặc ghi workflow.
+
+### Changed
+
+- Canonical plugin SDK là private `@getpaseo/plugin`; release/build/smoke paths không còn dùng scope cũ,
+  còn `@paseo/plugin` chỉ tồn tại như compatibility alias có test.
+- Chuyển skill lifecycle về daemon host controller, migrate selection cũ và không giữ desktop-owned
+  global installer hoặc Nix top-level skill copy trùng owner.
+- Union protocol/server/app stable với role binding, assignment grants, Workspace Protocol revision,
+  Beads Central, Room/Council, Topology và workspace admission thay vì replace downstream owner bytes.
+- `hub init` và automatic guided continuation fail closed trước filesystem/login/daemon/deploy cho tới
+  khi Hub wire có role, assignment, admission revision và file-scoped ownership receipts.
+
+### Fixed
+
+- Giữ durable timeline snapshot/reconciliation qua restart; không nhận destructive startup cleanup của
+  upstream #3647.
+- Inject Agent MCP chỉ khi cả MCP và `injectIntoAgents` được bật, giữ credential debug redaction và
+  namespace `paseo` fail closed.
+- Giữ role config và runtime MCP khi unarchive/resume Codex, đồng thời bỏ native `thread/resume` thừa
+  trong role-tool admission.
+- Giữ downstream `xs` typography tier, Agent/Role Profile fields, pane contribution identity và natural
+  Room composer behavior khi nhận stable UI refactors.
+
+### Deferred / not merged
+
+- Không merge `v0.5.0-beta.*`, `v0.5.1` hoặc commit sau stable boundary.
+- Reject as-is destructive timeline cleanup và whole-directory `.paseo/` Hub writer; defer automatic
+  unbound Hub starter tới cross-repo admission protocol đầy đủ.
+- Giữ raw ACP metadata nhưng defer Product UI/install qualification cho MiniMax Code, fast-agent,
+  Hermes và các provider ngoài downstream allowlist.
+- Không nhận 13 package-runner updates xuất hiện trên npm/PyPI sau stable tag; exact stable pins và
+  commands được giữ, còn registry-latest drift được record như maintenance advisory riêng.
+- Không merge upstream npm publication, upstream changelog prose hoặc bất kỳ thay đổi nào thay thế
+  Foundation doctrine, Supervisor/Lead/Peer, Room/Council hay downstream release authority.
+
+### Qualified
+
+- Merge commit có đúng hai parent: downstream `65402d53132748b1815a74d52d8b47d0a0bdfde2` và stable
+  `b8a31034ca36301067edadc2d622f42f4a4f7a37`; zero unmerged path.
+- App unit/browser Vitest, protocol/client/plugin/highlight/relay, CLI E2E 41/41, Foundation CLI,
+  focused Foundation authority, agent manager, bootstrap/session/skill controller, format, lint,
+  typecheck và server/CLI build đều pass trước release closeout.
+- Lockfile và Nix dependency hash được regenerate từ downstream graph; clean install, installed artifact,
+  live role canaries và in-app Browser E2E được ghi vào closeout ledger của exact release commit.
+
 ## 0.4.0-paseo.30 - 2026-08-21
 
 Bản này đưa Peer routing theo subrole/profile vào Product, thêm Council/Room native và giữ exact

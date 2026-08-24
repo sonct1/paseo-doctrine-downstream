@@ -149,6 +149,7 @@ function seedSession(): void {
           ...workspace(),
           workspaceKind: "worktree",
           worktreeSlug: "owned-worktree",
+          labels: ["backend"],
         }),
       ],
     ]),
@@ -208,6 +209,35 @@ afterEach(() => {
 });
 
 describe("ReplicaCache", () => {
+  it("persists after user inactivity even while replica changes continue", async () => {
+    vi.useFakeTimers();
+    const storage = new MemoryStorage();
+    const cache = new ReplicaCache(storage);
+    cache.setHosts([SERVER_ID]);
+    seedSession();
+    await cache.flush();
+    cache.start();
+    const writesBeforeChange = storage.writes;
+
+    useSessionStore
+      .getState()
+      .setAgentStreamTail(SERVER_ID, new Map([["agent-1", [message("first", "First")]]]));
+    await vi.advanceTimersByTimeAsync(4_000);
+    cache.recordUserActivity();
+    await vi.advanceTimersByTimeAsync(1_000);
+    useSessionStore
+      .getState()
+      .setAgentStreamTail(SERVER_ID, new Map([["agent-1", [message("second", "Second")]]]));
+    await vi.advanceTimersByTimeAsync(3_999);
+
+    expect(storage.writes).toBe(writesBeforeChange);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(storage.writes).toBe(writesBeforeChange + 1);
+    cache.setHosts([]);
+  });
+
   it("persists focused replica changes without writing transient stream head updates", async () => {
     vi.useFakeTimers();
     const storage = new MemoryStorage();
@@ -221,14 +251,14 @@ describe("ReplicaCache", () => {
     useSessionStore
       .getState()
       .setAgentStreamHead(SERVER_ID, new Map([["agent-1", [message("live", "Streaming")]]]));
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(5_000);
 
     expect(storage.writes).toBe(writesBeforeStream);
 
     useSessionStore
       .getState()
       .setAgentStreamTail(SERVER_ID, new Map([["agent-1", [message("saved", "Committed")]]]));
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(5_000);
 
     expect(storage.writes).toBe(writesBeforeStream + 1);
     cache.setHosts([]);
@@ -261,6 +291,9 @@ describe("ReplicaCache", () => {
     expect(session.agents.get("agent-1")?.projectPlacement?.checkout.cwd).toBe("/repo/paseo");
     expect(session.workspaces.get("workspace-1")?.statusEnteredAt).toBeInstanceOf(Date);
     expect(session.workspaces.get("workspace-1")?.worktreeSlug).toBe("owned-worktree");
+    // A restored row draws its label chips. The reconnect cursor is current, so nothing re-sends
+    // them and a cache that dropped them would leave the sidebar unlabelled until the next edit.
+    expect(session.workspaces.get("workspace-1")?.labels).toEqual(["backend"]);
     expect(session.agentStreamTail.get("agent-1")).toEqual([message("message-1", "Cached")]);
     expect(session.agentAuthoritativeHistoryApplied).toEqual(new Map([["agent-1", true]]));
     expect(session.agentTimelineCursor).toEqual(
@@ -487,6 +520,63 @@ describe("ReplicaCache", () => {
     await reader.restore();
     expect(reader.readDirectoryCheckpoint(SERVER_ID)).toEqual({
       agents: { generation: "daemon-generation", afterSeq: 7 },
+    });
+  });
+
+  it("restores workspace change request checks beside the directory cursor", async () => {
+    const githubRuntime = {
+      featuresEnabled: true,
+      pullRequest: {
+        number: 824,
+        url: "https://github.com/blank-dot-page/editor/pull/824",
+        title: "Cut realistic editor typing latency by two thirds",
+        state: "OPEN",
+        baseRefName: "main",
+        headRefName: "perf-editor-typing-latency",
+        isMerged: false,
+        checksStatus: "success" as const,
+        checks: [
+          {
+            name: "Check",
+            status: "success" as const,
+            url: "https://github.com/blank-dot-page/editor/actions/runs/824",
+          },
+        ],
+      },
+      error: null,
+    };
+    const storage = new MemoryStorage();
+    const writer = new ReplicaCache(storage);
+    writer.setHosts([SERVER_ID]);
+    seedSession();
+    useSessionStore.getState().setWorkspaces(
+      SERVER_ID,
+      new Map([
+        [
+          "workspace-1",
+          normalizeWorkspaceDescriptor({
+            ...workspace(),
+            forge: "github",
+            githubRuntime,
+          }),
+        ],
+      ]),
+    );
+    writer.writeDirectoryCheckpoint(SERVER_ID, {
+      workspaces: { generation: "daemon-generation", afterSeq: 9 },
+    });
+    await writer.flush();
+
+    useSessionStore.getState().clearSession(SERVER_ID);
+    const reader = new ReplicaCache(storage);
+    reader.setHosts([SERVER_ID]);
+    await reader.restore();
+
+    expect(
+      useSessionStore.getState().sessions[SERVER_ID]?.workspaces.get("workspace-1")?.githubRuntime,
+    ).toEqual(githubRuntime);
+    expect(reader.readDirectoryCheckpoint(SERVER_ID)).toEqual({
+      workspaces: { generation: "daemon-generation", afterSeq: 9 },
     });
   });
 

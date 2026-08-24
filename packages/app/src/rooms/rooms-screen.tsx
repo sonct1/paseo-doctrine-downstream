@@ -5,22 +5,14 @@ import {
   useReducer,
   useRef,
   useState,
-  type ComponentProps,
   type Dispatch,
   type ReactNode,
 } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ChatMessage, ChatRoomDetail } from "@getpaseo/protocol/chat/types";
 import { router } from "expo-router";
-import { MessageSquare, Plus, Reply, Send, Trash2, UserRound, X } from "lucide-react-native";
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  type PressableStateCallbackType,
-} from "react-native";
+import { MessageSquare, Plus, Reply, Trash2, UserRound, X } from "lucide-react-native";
+import { Pressable, ScrollView, Text, View, type PressableStateCallbackType } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { BackHeader } from "@/components/headers/back-header";
 import { MenuHeader } from "@/components/headers/menu-header";
@@ -29,9 +21,16 @@ import { ScreenTitle } from "@/components/headers/screen-title";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useIsCompactFormFactor } from "@/constants/layout";
-import { isWeb } from "@/constants/platform";
+import { MAX_CONTENT_WIDTH, useIsCompactFormFactor } from "@/constants/layout";
+import {
+  MessageInput,
+  type AttachmentMenuItem,
+  type MessageInputRef,
+} from "@/composer/input/input";
+import type { MessagePayload } from "@/composer/types";
+import type { ComposerAttachment } from "@/attachments/types";
 import { useAggregatedAgents, type AggregatedAgent } from "@/hooks/use-aggregated-agents";
+import { useWorkspace } from "@/stores/session-store-hooks";
 import type { Theme } from "@/styles/theme";
 import { confirmDialog } from "@/utils/confirm-dialog";
 import { toErrorMessage } from "@/utils/error-messages";
@@ -42,7 +41,12 @@ import {
 } from "@/utils/host-routes";
 import { CreateRoomSheet } from "./create-room-sheet";
 import { roomQueryKeys, useRoomLiveMessages, useRoomMessagesQuery, useRoomsQuery } from "./data";
-import { findActiveRoomMention, insertRoomMention, mergeChatMessages } from "./model";
+import {
+  describeRoomPlacement,
+  findActiveRoomMention,
+  insertRoomMention,
+  mergeChatMessages,
+} from "./model";
 
 interface RoomsScreenProps {
   serverId: string;
@@ -53,6 +57,9 @@ interface RoomComposerState {
   text: string;
   cursor: number;
   replyToMessageId: string | null;
+  // Bumped on every programmatic (not user-typed) text change, so the shared
+  // MessageInput primitive knows to resync its native text via textReplacementKey.
+  inputRevision: number;
 }
 
 type RoomComposerAction =
@@ -63,13 +70,17 @@ type RoomComposerAction =
   | { type: "cancelReply" }
   | { type: "sent" };
 
-const EMPTY_COMPOSER: RoomComposerState = { text: "", cursor: 0, replyToMessageId: null };
+const EMPTY_COMPOSER: RoomComposerState = {
+  text: "",
+  cursor: 0,
+  replyToMessageId: null,
+  inputRevision: 0,
+};
+const ROOM_ATTACHMENTS: ComposerAttachment[] = [];
+const ROOM_ATTACHMENT_MENU_ITEMS: AttachmentMenuItem[] = [];
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedMessageSquare = withUnistyles(MessageSquare);
 const ThemedReply = withUnistyles(Reply);
-const ThemedTextInput = withUnistyles(TextInput, (theme) => ({
-  placeholderTextColor: theme.colors.foregroundMuted,
-}));
 const ThemedUserRound = withUnistyles(UserRound);
 const foregroundMutedMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const roomIconMapping = (theme: Theme) => ({
@@ -91,7 +102,12 @@ function reduceRoomComposer(
   }
   if (action.type === "mention") {
     const inserted = insertRoomMention(state.text, state.cursor, action.agentId);
-    return { ...state, text: inserted.text, cursor: inserted.cursor };
+    return {
+      ...state,
+      text: inserted.text,
+      cursor: inserted.cursor,
+      inputRevision: state.inputRevision + 1,
+    };
   }
   if (action.type === "reply") {
     return { ...state, replyToMessageId: action.messageId };
@@ -99,7 +115,7 @@ function reduceRoomComposer(
   if (action.type === "cancelReply") {
     return { ...state, replyToMessageId: null };
   }
-  return EMPTY_COMPOSER;
+  return { ...EMPTY_COMPOSER, inputRevision: state.inputRevision + 1 };
 }
 
 export function RoomsScreen({ serverId, selectedRoomId }: RoomsScreenProps) {
@@ -200,6 +216,7 @@ export function RoomsScreen({ serverId, selectedRoomId }: RoomsScreenProps) {
       {content}
       <CreateRoomSheet
         client={roomsQuery.client}
+        serverId={serverId}
         visible={isCreateSheetVisible}
         onClose={closeCreateSheet}
         onCreated={handleCreated}
@@ -282,6 +299,8 @@ function RoomRow({
   room: ChatRoomDetail;
   selected: boolean;
 }) {
+  const workspace = useWorkspace(serverId, room.workspaceId ?? null);
+  const placement = useMemo(() => describeRoomPlacement(room, workspace), [room, workspace]);
   const handlePress = useCallback(() => {
     router.push(buildHostRoomRoute(serverId, room.id));
   }, [room.id, serverId]);
@@ -307,6 +326,13 @@ function RoomRow({
         <Text style={styles.roomName} numberOfLines={1}>
           {room.name}
         </Text>
+        <Text
+          style={[styles.roomMeta, placement.legacy && styles.roomMetaLegacy]}
+          numberOfLines={1}
+          testID={`room-row-placement-${room.id}`}
+        >
+          {placement.text}
+        </Text>
         <Text style={styles.roomMeta} numberOfLines={1}>
           {room.purpose || `${room.messageCount} messages`}
         </Text>
@@ -329,6 +355,11 @@ function RoomDetail({
 }) {
   const queryClient = useQueryClient();
   const [composerState, composerDispatch] = useReducer(reduceRoomComposer, EMPTY_COMPOSER);
+  const workspace = useWorkspace(serverId, room?.workspaceId ?? null);
+  const placement = useMemo(
+    () => (room ? describeRoomPlacement(room, workspace) : null),
+    [room, workspace],
+  );
   const messagesQuery = useRoomMessagesQuery(serverId, room?.id ?? null);
   const messages = messagesQuery.data ?? [];
   const liveMessages = useRoomLiveMessages({
@@ -414,6 +445,14 @@ function RoomDetail({
       ) : (
         <ScreenHeader left={detailTitle} right={deleteButton} />
       )}
+      {placement ? (
+        <Text
+          style={[styles.placement, placement.legacy && styles.roomMetaLegacy]}
+          testID="room-detail-placement"
+        >
+          {placement.text}
+        </Text>
+      ) : null}
       {room.purpose ? <Text style={styles.purpose}>{room.purpose}</Text> : null}
       {deleteMutation.error ? (
         <View style={styles.inlineAlert}>
@@ -525,12 +564,13 @@ function RoomMessageRow({
   agentsById: ReadonlyMap<string, AggregatedAgent>;
   onReply: (messageId: string) => void;
 }) {
+  const isManual = message.authorAgentId === "manual";
   const authorLabel = resolveAuthorLabel(message.authorAgentId, agentsById);
   const handleAuthorPress = useCallback(() => {
-    if (message.authorAgentId !== "manual") {
+    if (!isManual) {
       router.push(buildHostAgentDetailRoute(serverId, message.authorAgentId));
     }
-  }, [message.authorAgentId, serverId]);
+  }, [isManual, message.authorAgentId, serverId]);
   const handleReply = useCallback(() => onReply(message.id), [message.id, onReply]);
 
   return (
@@ -540,26 +580,50 @@ function RoomMessageRow({
           Reply to {resolveAuthorLabel(replyTarget.authorAgentId, agentsById)}: {replyTarget.body}
         </Text>
       ) : null}
-      <View style={styles.messageHeader}>
-        <Pressable
-          onPress={handleAuthorPress}
-          disabled={message.authorAgentId === "manual"}
-          accessibilityRole={message.authorAgentId === "manual" ? undefined : "button"}
-        >
-          <Text style={styles.messageAuthor}>{authorLabel}</Text>
-        </Pressable>
-        <Text style={styles.messageTime}>{formatMessageTime(message.createdAt)}</Text>
-      </View>
-      <Text style={styles.messageBody}>{message.body}</Text>
-      <Button
-        variant="ghost"
-        size="xs"
-        leftIcon={Reply}
-        onPress={handleReply}
-        style={styles.replyButton}
-      >
-        Reply
-      </Button>
+      {isManual ? (
+        <View style={styles.manualMessageContainer}>
+          <View style={styles.manualMessageContent}>
+            <View style={styles.manualBubble}>
+              <Text selectable style={styles.manualMessageText}>
+                {message.body}
+              </Text>
+            </View>
+            <View style={styles.manualTrailingRow}>
+              <Text style={styles.messageTime}>{formatMessageTime(message.createdAt)}</Text>
+              <Button
+                variant="ghost"
+                size="xs"
+                leftIcon={Reply}
+                onPress={handleReply}
+                style={styles.replyButton}
+              >
+                Reply
+              </Button>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <>
+          <View style={styles.messageHeader}>
+            <Pressable onPress={handleAuthorPress} accessibilityRole="button">
+              <Text style={styles.messageAuthor}>{authorLabel}</Text>
+            </Pressable>
+            <Text style={styles.messageTime}>{formatMessageTime(message.createdAt)}</Text>
+          </View>
+          <Text selectable style={styles.messageBody}>
+            {message.body}
+          </Text>
+          <Button
+            variant="ghost"
+            size="xs"
+            leftIcon={Reply}
+            onPress={handleReply}
+            style={styles.replyButton}
+          >
+            Reply
+          </Button>
+        </>
+      )}
     </View>
   );
 }
@@ -578,7 +642,7 @@ function RoomComposer({
   dispatch: Dispatch<RoomComposerAction>;
 }) {
   const queryClient = useQueryClient();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<MessageInputRef>(null);
   const restoreInputFocusRef = useRef(false);
   const roomsQuery = useRoomsQuery(serverId);
   const { agents } = useAggregatedAgents();
@@ -604,13 +668,13 @@ function RoomComposer({
   );
 
   const postMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (body: string) => {
       if (!roomsQuery.client) {
         throw new Error("Room client unavailable");
       }
       const response = await roomsQuery.client.postChatMessage({
         room: room.id,
-        body: state.text.trim(),
+        body,
         authorAgentId: "manual",
         replyToMessageId: state.replyToMessageId ?? undefined,
       });
@@ -628,17 +692,23 @@ function RoomComposer({
       dispatch({ type: "sent" });
     },
   });
-  const handleSend = useCallback(() => {
-    postMutation.reset();
-    postMutation.mutate();
-  }, [postMutation]);
+  const handleSubmit = useCallback(
+    (payload: MessagePayload) => {
+      if (!payload.text.trim()) {
+        return;
+      }
+      postMutation.reset();
+      postMutation.mutate(payload.text);
+    },
+    [postMutation],
+  );
   const handleTextChange = useCallback(
     (text: string) => dispatch({ type: "text", text }),
     [dispatch],
   );
   const handleSelectionChange = useCallback(
-    (event: Parameters<NonNullable<ComponentProps<typeof TextInput>["onSelectionChange"]>>[0]) => {
-      dispatch({ type: "cursor", cursor: event.nativeEvent.selection.start });
+    (selection: { start: number; end: number }) => {
+      dispatch({ type: "cursor", cursor: selection.start });
     },
     [dispatch],
   );
@@ -646,13 +716,14 @@ function RoomComposer({
   const handleMentionSelect = useCallback(
     (agentId: string) => {
       restoreInputFocusRef.current = true;
+      const inserted = insertRoomMention(state.text, state.cursor, agentId);
+      inputRef.current?.replaceText(inserted.text, {
+        start: inserted.cursor,
+        end: inserted.cursor,
+      });
       dispatch({ type: "mention", agentId });
     },
-    [dispatch],
-  );
-  const inputSelection = useMemo(
-    () => ({ start: state.cursor, end: state.cursor }),
-    [state.cursor],
+    [dispatch, state.cursor, state.text],
   );
   useEffect(() => {
     if (!restoreInputFocusRef.current) {
@@ -664,12 +735,7 @@ function RoomComposer({
       return;
     }
     node.focus();
-    if (isWeb && (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement)) {
-      node.setSelectionRange(inputSelection.start, inputSelection.end);
-    } else if (!isWeb) {
-      node.setNativeProps({ selection: inputSelection });
-    }
-  }, [inputSelection]);
+  }, [state.cursor]);
 
   return (
     <View style={styles.composer}>
@@ -701,30 +767,26 @@ function RoomComposer({
         </Text>
       ) : null}
       <View style={styles.composerRow}>
-        <ThemedTextInput
+        <MessageInput
           ref={inputRef}
           value={state.text}
-          selection={inputSelection}
           onChangeText={handleTextChange}
           onSelectionChange={handleSelectionChange}
+          onSubmit={handleSubmit}
           placeholder="Message room. Type @ to mention an agent"
-          multiline
-          editable={!postMutation.isPending}
-          style={styles.composerInput}
-          testID="room-composer-input"
-          accessibilityLabel="Message room"
+          disabled={postMutation.isPending}
+          isSubmitLoading={postMutation.isPending}
+          attachments={ROOM_ATTACHMENTS}
+          attachmentMenuItems={ROOM_ATTACHMENT_MENU_ITEMS}
+          client={roomsQuery.client}
+          cwd=""
+          defaultSendBehavior="interrupt"
+          isAgentRunning={false}
+          inputMode="room"
+          textReplacementKey={String(state.inputRevision)}
+          submitButtonTestID="room-send"
+          inputTestID="room-composer-input"
         />
-        <Button
-          variant="default"
-          size="md"
-          leftIcon={Send}
-          onPress={handleSend}
-          loading={postMutation.isPending}
-          disabled={!state.text.trim()}
-          testID="room-send"
-        >
-          Send
-        </Button>
       </View>
     </View>
   );
@@ -872,6 +934,9 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.xs,
   },
+  roomMetaLegacy: {
+    fontStyle: "italic",
+  },
   roomCount: {
     minWidth: 18,
     textAlign: "right",
@@ -882,6 +947,12 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minHeight: 0,
     backgroundColor: theme.colors.surface0,
+  },
+  placement: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+    paddingHorizontal: theme.spacing[4],
+    paddingTop: theme.spacing[2],
   },
   purpose: {
     color: theme.colors.foregroundMuted,
@@ -905,7 +976,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   messageList: {
     width: "100%",
-    maxWidth: 880,
+    maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[4],
@@ -930,7 +1001,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   messageBody: {
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
+    fontSize: theme.fontSize.content,
     lineHeight: 22,
   },
   replyPreview: {
@@ -943,9 +1014,36 @@ const styles = StyleSheet.create((theme) => ({
   replyButton: {
     alignSelf: "flex-start",
   },
+  manualMessageContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  manualMessageContent: {
+    alignItems: "flex-end",
+    maxWidth: "100%",
+  },
+  manualBubble: {
+    backgroundColor: theme.colors.surface3,
+    borderRadius: theme.borderRadius["2xl"],
+    borderTopRightRadius: theme.borderRadius.sm,
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  manualMessageText: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.content,
+  },
+  manualTrailingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    marginTop: theme.spacing[1],
+  },
   composer: {
     width: "100%",
-    maxWidth: 880,
+    maxWidth: MAX_CONTENT_WIDTH,
     alignSelf: "center",
     paddingHorizontal: theme.spacing[4],
     paddingVertical: theme.spacing[3],
@@ -954,23 +1052,7 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
   },
   composerRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: theme.spacing[2],
-  },
-  composerInput: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 144,
-    color: theme.colors.foreground,
-    backgroundColor: theme.colors.surface2,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: theme.spacing[4],
-    paddingVertical: theme.spacing[3],
-    fontSize: theme.fontSize.sm,
-    textAlignVertical: "top",
+    width: "100%",
   },
   composerReply: {
     flexDirection: "row",

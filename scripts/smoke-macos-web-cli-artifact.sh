@@ -57,7 +57,7 @@ if (manifest.beadsCentralClientIncluded !== true) process.exit(1);
 if (manifest.beadsCentralRequiredVersion !== "1.2.0") process.exit(1);
 if (manifest.beadsCentralSidecarIncluded !== true) process.exit(1);
 if (manifest.bundledBeadsBinary !== true) process.exit(1);
-if (manifest.internalPackages?.["@paseo/plugin"] !== manifest.version) process.exit(1);
+if (manifest.internalPackages?.["@getpaseo/plugin"] !== manifest.version) process.exit(1);
 ' "$SMOKE_ROOT/install/current/manifest.json"
 
 HOME="$SMOKE_ROOT/home" PASEO_HOME="$SMOKE_ROOT/home/.paseo" \
