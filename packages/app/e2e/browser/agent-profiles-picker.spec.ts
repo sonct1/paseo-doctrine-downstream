@@ -8,10 +8,13 @@ import {
   expectComposerMode,
   expectComposerModel,
   expectModelRowSelected,
+  expectAgentProfile,
   expectProfileEditIsPencilOnly,
   expectProfileVisibleForProvider,
   openModelPicker,
+  openAgentProfileSettings,
   openAgentProfilesFromEmptyPrompt,
+  profilePickerRow,
   seedAgentProfiles,
 } from "../support/helpers/agent-profiles";
 import { expectWorkspaceAgentConfiguration } from "../support/helpers/command-center-agent-controls";
@@ -28,7 +31,16 @@ const PROFILE = {
   notes: "Use for UI work.",
 };
 
-const PROFILE_SUMMARY = "Mock Load Test · One minute stream · Approval test";
+const MOCK_PROVIDER_LABEL = "Mock Load Test";
+const PROFILE_SUMMARY = `${MOCK_PROVIDER_LABEL} · One minute stream · Approval test`;
+
+const PEER_ROUTING_PROFILE = {
+  ...PROFILE,
+  id: "agent_profile_e2e_peer_engineer",
+  name: "Peer Engineer — Mock",
+  notes: "Lead-only route for a bounded engineering Peer.",
+  peerSubrole: "engineer" as const,
+};
 
 test.describe("Agent profiles in the model picker", () => {
   test("an empty host still exposes agent profile settings from the picker", async ({ page }) => {
@@ -109,6 +121,34 @@ test.describe("Agent profiles in the model picker", () => {
         });
         await expectModelRowSelected(page, { provider: "mock", modelId: "one-minute-stream" });
         await closeModelPicker(page);
+      });
+    } finally {
+      await workspace.cleanup();
+      await seed.restore();
+    }
+  });
+
+  test("keeps Peer routing profiles in settings and out of Human model pickers", async ({
+    page,
+  }) => {
+    const seed = await seedAgentProfiles([PEER_ROUTING_PROFILE]);
+    const workspace = await seedMockAgentWorkspace({
+      repoPrefix: "agent-profiles-peer-routing-",
+      title: "Peer routing profile visibility",
+    });
+
+    try {
+      await openAgentRoute(page, workspace);
+      await expectComposerVisible(page);
+      await openModelPicker(page);
+      await expect(profilePickerRow(page, PEER_ROUTING_PROFILE.name)).toHaveCount(0);
+      await closeModelPicker(page);
+
+      await openAgentProfileSettings(page);
+      await expectAgentProfile(page, {
+        name: PEER_ROUTING_PROFILE.name,
+        tags: ["Peer Engineer", MOCK_PROVIDER_LABEL, "One minute stream", "Approval test"],
+        notes: PEER_ROUTING_PROFILE.notes,
       });
     } finally {
       await workspace.cleanup();

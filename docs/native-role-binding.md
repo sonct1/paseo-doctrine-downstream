@@ -83,6 +83,10 @@ Không có silent fallback. Provider có model phù hợp nhưng thiếu native 
 Lead-to-Peer routing có Human-configured allowlist, provider priority và optional global default subrole.
 Agent Profile có thể mang `peerSubrole=scout|engineer|reviewer|architect` như routing metadata; field này
 không phải ExecutionSpecialization và không cấp role, instruction, lease hoặc acceptance authority.
+WebUI không đưa profile có `peerSubrole` vào Human model picker. Khi draft đã chọn một native role,
+toàn bộ Agent Profiles surface trong model picker bị tắt và Human chọn provider/model trực tiếp; Human
+vẫn quản lý inventory trong Settings, còn Lead dùng `list_profiles` rồi pin exact `launchProfileId` khi
+gọi `create_agent`. Đây là downstream role boundary có chủ ý, khác reusable-profile UX của upstream.
 `list_profiles` trả exact profiles, priority và default hiện hành. Exact `launchProfileId` luôn thắng. Khi
 Lead bỏ field đó, daemon dùng specialization/disposition đã explicit nếu nó map được sang Reviewer hoặc
 Architect; nếu không thì dùng global default. Resolver chỉ chọn profile cùng subrole từ provider sớm nhất,

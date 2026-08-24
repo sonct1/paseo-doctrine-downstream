@@ -2110,8 +2110,8 @@ export function DraftAgentControls({
     [models],
   );
 
-  // The draft form is the one surface that can switch provider, so every profile
-  // the host can actually run is offered here.
+  // Ordinary drafts can apply Human-selectable profiles. Role-bound drafts use
+  // explicit launch contracts; Peer routing profiles stay in Lead orchestration.
   const profileProviders = useMemo(
     () => modelSelectorProviders.map((entry) => entry.id),
     [modelSelectorProviders],
@@ -2119,11 +2119,12 @@ export function DraftAgentControls({
   const profileTarget = useMemo<AgentProfileApplyTarget>(
     () => ({
       kind: "draft",
+      roleBound: selectedRole !== null,
       controls: {
         applyProfile: onApplyAgentProfile,
       },
     }),
-    [onApplyAgentProfile],
+    [onApplyAgentProfile, selectedRole],
   );
   const agentProfiles = useAgentProfilePicker({
     serverId: modelSelectorServerId,
