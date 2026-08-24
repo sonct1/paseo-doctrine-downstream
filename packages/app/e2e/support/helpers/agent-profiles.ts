@@ -325,7 +325,7 @@ export async function expectAgentProfileForm(
   await expect(modal.getByRole("textbox", { name: "Name", exact: true })).toHaveValue(name);
   const notesHint = modal.getByTestId("agent-profile-notes-field-hint");
   await expect(notesHint).toHaveText(
-    "Helps agents choose this profile when starting another agent.",
+    "Returned by list_profiles. Describe routing fit only; notes never grant authority.",
   );
   expect(await notesHint.evaluate((element) => getComputedStyle(element).webkitLineClamp)).not.toBe(
     "1",

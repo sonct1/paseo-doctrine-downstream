@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatRoomDetail } from "@getpaseo/protocol/chat/types";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
-import { connectSeedClient } from "../support/helpers/seed-client";
+import { seedWorkspace } from "../support/helpers/seed-client";
 import { getServerId } from "../support/helpers/server-id";
 import { buildHostRoomsRoute } from "../../src/utils/host-routes";
 
@@ -29,7 +29,8 @@ test.describe("Rooms", () => {
   test("creates, posts, receives live messages, replies, and deletes in the WebUI", async ({
     page,
   }) => {
-    const seedClient = await connectSeedClient();
+    const workspace = await seedWorkspace({ repoPrefix: "release-room-" });
+    const seedClient = workspace.client;
     const roomClient = seedClient as unknown as RoomSeedClient;
     const serverId = getServerId();
     const roomName = `Release room ${Date.now()}`;
@@ -51,7 +52,7 @@ test.describe("Rooms", () => {
       await expect(page.getByTestId("create-room-name")).toHaveValue("");
       await page.getByTestId("create-room-name").fill(roomName);
       await page.getByTestId("create-room-purpose").fill("Coordinate the release handoff");
-      const workspaceOption = page.locator('[data-testid^="create-room-workspace-"]').first();
+      const workspaceOption = page.getByTestId(`create-room-workspace-${workspace.workspaceId}`);
       await expect(workspaceOption).toBeVisible({ timeout: 30_000 });
       await workspaceOption.click();
       await page.getByTestId("create-room-submit").click();
@@ -61,6 +62,9 @@ test.describe("Rooms", () => {
       roomId = (await roomDetail.getAttribute("data-testid"))?.replace("room-detail-", "") ?? null;
       expect(roomId).toBeTruthy();
       await expect(page.getByText(roomName, { exact: true }).first()).toBeVisible();
+      await expect(page.getByTestId("room-detail-placement")).toContainText(
+        `/ ${workspace.workspaceName}`,
+      );
 
       const composer = page.getByTestId("room-composer-input");
       await composer.fill("@eve");
@@ -109,16 +113,19 @@ test.describe("Rooms", () => {
       const reply = replyRead.messages.find((message) => message.body === "Acknowledged");
       expect(reply?.replyToMessageId).toBe(kickoff!.id);
 
+      const deletedRoomId = roomId!;
       page.once("dialog", async (dialog) => dialog.accept());
       await page.getByTestId("room-delete").click();
       await expect(page).toHaveURL(buildHostRoomsRoute(serverId));
-      await expect(page.getByText("No rooms yet", { exact: true }).first()).toBeVisible();
+      await expect(page.getByTestId(`room-row-${deletedRoomId}`)).toHaveCount(0);
+      await expect(page.getByTestId(`room-detail-${deletedRoomId}`)).toHaveCount(0);
+      await expect(page.getByText(roomName, { exact: true })).toHaveCount(0);
       roomId = null;
     } finally {
       if (roomId) {
         await roomClient.deleteChatRoom({ room: roomId }).catch(() => undefined);
       }
-      await seedClient.close().catch(() => undefined);
+      await workspace.cleanup();
     }
   });
 });

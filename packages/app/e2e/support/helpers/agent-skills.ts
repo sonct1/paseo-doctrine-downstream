@@ -165,7 +165,7 @@ export async function chooseAllSkills(page: Page): Promise<void> {
 }
 
 export async function saveSkillSelection(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByTestId("skill-selection-save").click();
 }
 
 export async function cancelSkillSelection(page: Page): Promise<void> {
