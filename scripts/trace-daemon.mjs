@@ -59,6 +59,10 @@ const additionalInputs = [
   "packages/server/dist/server/server/speech/providers/local/sherpa/assets/silero_vad.onnx",
   // Server runtime config files (read by path, not require)
   "packages/server/.env.example",
+  // Foundation workspace-protocol contract and fixtures, read by path
+  // at runtime rather than required.
+  "packages/server/dist/server/utils/foundation-workspace-protocol-contract.json",
+  "packages/server/dist/server/utils/foundation-workspace-protocol-fixtures.json",
   // CLI shebang script wrapping dist/index.js
   "packages/cli/bin/paseo",
   // node-pty's compiled native addon. nft can't trace it because

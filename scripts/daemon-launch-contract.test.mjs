@@ -80,3 +80,17 @@ test("every executable daemon entrypoint enters the supervisor", async () => {
   assert.doesNotMatch(nixModule, /\bNODE_ENV\b\s*=/);
   assert.doesNotMatch(nixModule, /\bPASEO_NODE_ENV\b/);
 });
+
+test("trace-daemon closure lists both Foundation workspace-protocol JSON assets", async () => {
+  const traceDaemonSource = await readFile(join(repoRoot, "scripts/trace-daemon.mjs"), "utf8");
+
+  for (const assetPath of [
+    "packages/server/dist/server/utils/foundation-workspace-protocol-contract.json",
+    "packages/server/dist/server/utils/foundation-workspace-protocol-fixtures.json",
+  ]) {
+    assert.ok(
+      traceDaemonSource.includes(assetPath),
+      `trace-daemon.mjs additionalInputs must list ${assetPath}`,
+    );
+  }
+});
