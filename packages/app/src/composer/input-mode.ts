@@ -7,7 +7,7 @@
  * Callers pick a mode and nothing else. What a mode implies lives here, so the
  * two presentations cannot drift apart one prop at a time.
  */
-export type ComposerInputMode = "chat" | "terminal";
+export type ComposerInputMode = "chat" | "terminal" | "room";
 
 export interface ComposerInputModePresentation {
   /** Attachments, dictation/voice, slash-and-@ autocomplete, and the model/mode
@@ -38,6 +38,16 @@ const PRESENTATION_BY_MODE: Record<ComposerInputMode, ComposerInputModePresentat
     showAgentControls: false,
     isMonospace: true,
     accessibilityLabelKey: "composer.input.terminalAccessibilityLabel",
+  },
+  // A Room/Council message has no agent to attach files/voice to and no
+  // slash-and-@ agent autocomplete; the caller owns its own @mention popover.
+  room: {
+    showAttachments: false,
+    showVoice: false,
+    showAutocomplete: false,
+    showAgentControls: false,
+    isMonospace: false,
+    accessibilityLabelKey: "composer.input.accessibilityLabel",
   },
 };
 

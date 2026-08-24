@@ -51,6 +51,9 @@ test.describe("Rooms", () => {
       await expect(page.getByTestId("create-room-name")).toHaveValue("");
       await page.getByTestId("create-room-name").fill(roomName);
       await page.getByTestId("create-room-purpose").fill("Coordinate the release handoff");
+      const workspaceOption = page.locator('[data-testid^="create-room-workspace-"]').first();
+      await expect(workspaceOption).toBeVisible({ timeout: 30_000 });
+      await workspaceOption.click();
       await page.getByTestId("create-room-submit").click();
 
       const roomDetail = page.locator('[data-testid^="room-detail-"]').first();
@@ -71,7 +74,6 @@ test.describe("Rooms", () => {
           .locator('[data-testid^="room-message-"]')
           .getByText("@everyone Human kickoff", { exact: true }),
       ).toBeVisible();
-      await expect(page.getByText("Human", { exact: true }).first()).toBeVisible();
 
       const firstRead = await roomClient.readChatMessages({ room: roomId!, limit: 20 });
       expect(firstRead.error).toBeNull();

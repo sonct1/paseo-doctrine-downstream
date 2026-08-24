@@ -174,6 +174,8 @@ export interface MessageInputProps {
   textReplacementKey: string;
   /** Replaces the submit icon with this label, still inside the composer's own toolbar row. */
   submitLabel?: string;
+  /** testID for the underlying text input, for callers that assert against it directly. */
+  inputTestID?: string;
 }
 
 export interface MessageInputRef {
@@ -649,6 +651,7 @@ interface ComposerTextSurfaceProps {
   focusHintVisible: boolean;
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
+  testID: string | undefined;
 }
 
 /**
@@ -671,6 +674,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
       <ComposerTextInput
         ref={props.textInputRef}
         dataSet={COMPOSER_INPUT_DATASET}
+        testID={props.testID}
         initialValue={props.value}
         onChangeText={props.onChangeText}
         placeholder={props.placeholder}
@@ -1088,6 +1092,7 @@ interface ResolvedMessageInputProps {
   readOnly: boolean;
   textReplacementKey: string;
   submitLabel: string | undefined;
+  inputTestID: string | undefined;
 }
 
 function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInputProps {
@@ -1135,6 +1140,7 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     readOnly: props.readOnly ?? false,
     textReplacementKey: props.textReplacementKey,
     submitLabel: props.submitLabel,
+    inputTestID: props.inputTestID,
   };
 }
 
@@ -1190,6 +1196,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       readOnly,
       textReplacementKey,
       submitLabel,
+      inputTestID,
     } = resolveMessageInputProps(props);
     const mode = resolveComposerInputMode(inputMode);
     const { t } = useTranslation();
@@ -1793,6 +1800,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           <RenderProfile id="ComposerTextSurface">
             <ComposerTextSurface
               readOnly={readOnly}
+              testID={inputTestID}
               value={value}
               textInputRef={textInputRef}
               textInputStyle={textInputStyle}

@@ -835,6 +835,122 @@ test("sends new-agent run options when creating schedules", async () => {
   });
 });
 
+test("surfaces the chat room workspace scoping capability only when the host advertises it", async () => {
+  const capableTransport = createMockTransport();
+  const capableClient = new DaemonClient({
+    url: "ws://test",
+    clientId: "room_scoping_capable",
+    transportFactory: () => capableTransport.transport,
+    reconnect: { enabled: false },
+  });
+  const legacyTransport = createMockTransport();
+  const legacyClient = new DaemonClient({
+    url: "ws://test",
+    clientId: "room_scoping_legacy",
+    transportFactory: () => legacyTransport.transport,
+    reconnect: { enabled: false },
+  });
+  clients.push(capableClient, legacyClient);
+
+  const capableConnect = capableClient.connect();
+  capableTransport.triggerOpen({ features: { chatRooms: true, chatRoomWorkspaceScoping: true } });
+  await capableConnect;
+  const legacyConnect = legacyClient.connect();
+  legacyTransport.triggerOpen({ features: { chatRooms: true } });
+  await legacyConnect;
+
+  expect(capableClient.getLastServerInfoMessage()?.features?.chatRoomWorkspaceScoping).toBe(true);
+  expect(
+    legacyClient.getLastServerInfoMessage()?.features?.chatRoomWorkspaceScoping,
+  ).toBeUndefined();
+});
+
+test("sends workspaceId when creating a chat room and omits it when unscoped", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const scopedPromise = client.createChatRoom({
+    requestId: "request-1",
+    name: "release",
+    workspaceId: "wks_1",
+  });
+
+  const scopedRequest = parseSentFrame(mock.sent[0]);
+  expect(scopedRequest).toEqual({
+    type: "chat/create",
+    requestId: "request-1",
+    name: "release",
+    workspaceId: "wks_1",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "chat/create/response",
+      payload: {
+        requestId: "request-1",
+        room: {
+          id: "r1",
+          name: "release",
+          purpose: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          workspaceId: "wks_1",
+          projectId: "prj_1",
+          messageCount: 0,
+          lastMessageAt: null,
+        },
+        error: null,
+      },
+    }),
+  );
+  await scopedPromise;
+
+  const legacyPromise = client.createChatRoom({
+    requestId: "request-2",
+    name: "legacy",
+  });
+
+  const legacyRequest = parseSentFrame(mock.sent[1]);
+  expect(legacyRequest).toEqual({
+    type: "chat/create",
+    requestId: "request-2",
+    name: "legacy",
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "chat/create/response",
+      payload: {
+        requestId: "request-2",
+        room: {
+          id: "r2",
+          name: "legacy",
+          purpose: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          messageCount: 0,
+          lastMessageAt: null,
+        },
+        error: null,
+      },
+    }),
+  );
+  await legacyPromise;
+});
+
 test("sends new-agent run options when updating schedules", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

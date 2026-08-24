@@ -144,6 +144,26 @@ describe("wire schema compatibility", () => {
     expect(parsed.features?.chatRooms).toBe(true);
   });
 
+  test("server info parses a daemon predating workspace-scoped room creation as absent", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "legacy-room-server",
+      features: { chatRooms: true },
+    });
+
+    expect(parsed.features?.chatRoomWorkspaceScoping).toBeUndefined();
+  });
+
+  test("server info accepts the optional chat room workspace scoping feature flag", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "room-workspace-server",
+      features: { chatRooms: true, chatRoomWorkspaceScoping: true },
+    });
+
+    expect(parsed.features?.chatRoomWorkspaceScoping).toBe(true);
+  });
+
   test("server info accepts the Beads Central issue capability flag", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",

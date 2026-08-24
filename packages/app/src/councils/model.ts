@@ -4,6 +4,8 @@ import {
   COUNCIL_REPORT_RECEIPT_VERSION,
   COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
 } from "@getpaseo/protocol/council-labels";
+import type { WorkspaceDescriptor } from "@/stores/session-store";
+import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
 
 export const COUNCIL_TIERS = ["lens", "debate", "debate-with-proof", "high-risk"] as const;
 export const COUNCIL_PHASES = ["sealed", "review", "audit", "verdict"] as const;
@@ -75,6 +77,37 @@ export interface CouncilCase {
 
 export function councilCaseScopeIdentity(council: CouncilCase): string {
   return council.scopeId;
+}
+
+export interface CouncilPlacement {
+  text: string;
+  legacy: boolean;
+}
+
+const COUNCIL_PLACEMENT_LEGACY: CouncilPlacement = { text: "Host-level (legacy)", legacy: true };
+
+export function describeCouncilPlacement(
+  council: Pick<CouncilCase, "workspaceId">,
+  workspace: WorkspaceDescriptor | null,
+): CouncilPlacement {
+  if (!council.workspaceId) {
+    return COUNCIL_PLACEMENT_LEGACY;
+  }
+  if (!workspace) {
+    // The workspace record is gone (or not yet hydrated), but the council's
+    // own scope ID is still authoritative persisted state. Surface it exactly
+    // with an explicit unavailable marker rather than a bare "unknown".
+    return {
+      text: `Unavailable workspace (workspace: ${council.workspaceId})`,
+      legacy: true,
+    };
+  }
+  const projectName =
+    workspace.projectCustomName ??
+    workspace.projectDisplayName ??
+    projectDisplayNameFromProjectId(workspace.projectId);
+  const workspaceName = workspace.title ?? workspace.name;
+  return { text: `${projectName} / ${workspaceName}`, legacy: false };
 }
 
 const PHASE_ORDER: Record<CouncilPhase, number> = {

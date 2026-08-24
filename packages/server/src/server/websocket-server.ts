@@ -1801,6 +1801,10 @@ export class VoiceAssistantWebSocketServer {
         projectCustomIcon: true,
         // COMPAT(chatRooms): added in v0.2.6, remove gate after 2027-02-04.
         chatRooms: true,
+        // COMPAT(chatRoomWorkspaceScoping): added in v0.5.0-paseo.37, remove gate after
+        // 2027-08-24. A daemon without this flag ignores chat/create's workspaceId field
+        // and silently creates a host-level room, so the client must not send it.
+        chatRoomWorkspaceScoping: true,
         // COMPAT(beadsIssues): added in v0.3.1-paseo.2, remove gate after 2027-02-10.
         beadsIssues: true,
         // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.

@@ -6,6 +6,7 @@ import type { AgentManager, ManagedAgent } from "../agent-manager.js";
 import type { AgentStorage, StoredAgentRecord } from "../agent-storage.js";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
+import type { WorkspaceRegistry } from "../../workspace-registry.js";
 import { createPaseoToolCatalog } from "./paseo-tools.js";
 
 class RoomAgentManagerFake {
@@ -116,12 +117,28 @@ class RoomChatServiceFake {
   }
 }
 
+function createAuthoritativeWorkspaceRegistry(
+  records: Record<string, { projectId: string; archivedAt: string | null }> = {
+    "workspace-room": { projectId: "project-room", archivedAt: null },
+  },
+) {
+  return {
+    get: async (workspaceId: string) => {
+      const record = records[workspaceId];
+      return record ? { workspaceId, ...record } : null;
+    },
+    list: async () => [],
+    upsert: async () => {},
+  };
+}
+
 function createCatalog(options: {
   callerAgentId?: string;
   roleId?: "lead" | "peer" | "supervisor";
   agentManager?: RoomAgentManagerFake;
   chatService?: RoomChatServiceFake;
   enablePosting?: boolean;
+  workspaceRegistry?: ReturnType<typeof createAuthoritativeWorkspaceRegistry>;
 }) {
   return createPaseoToolCatalog({
     agentManager: (options.agentManager ??
@@ -130,6 +147,8 @@ function createCatalog(options: {
     providerSnapshotManager: {} as ProviderSnapshotManager,
     callerAgentId: options.callerAgentId,
     chatService: options.chatService as unknown as FileBackedChatService,
+    workspaceRegistry: (options.workspaceRegistry ??
+      createAuthoritativeWorkspaceRegistry()) as unknown as WorkspaceRegistry,
     ...(options.enablePosting
       ? {
           resolveAgentIdentifier: async (identifier: string) => ({
@@ -192,11 +211,113 @@ describe("Paseo room tools", () => {
     });
 
     expect(chatService.created).toEqual([
-      { name: "council-case", purpose: "One bounded challenge and response" },
+      {
+        name: "council-case",
+        purpose: "One bounded challenge and response",
+        workspaceId: "workspace-room",
+        projectId: "project-room",
+      },
     ]);
     expect(result.structuredContent).toEqual({
       room: expect.objectContaining({ id: "room-1", name: "council-case" }),
     });
+  });
+
+  test("binds a created room to the caller's authoritative project via the workspace registry", async () => {
+    const chatService = new RoomChatServiceFake();
+    const workspaceRegistry = {
+      get: async (workspaceId: string) =>
+        workspaceId === "workspace-room" ? { workspaceId, projectId: "project-room" } : null,
+      list: async () => [],
+      upsert: async () => {},
+    };
+    const lead = createPaseoToolCatalog({
+      agentManager: new RoomAgentManagerFake("lead") as unknown as AgentManager,
+      agentStorage: new RoomAgentStorageFake() as unknown as AgentStorage,
+      providerSnapshotManager: {} as ProviderSnapshotManager,
+      callerAgentId: "agent-caller",
+      chatService: chatService as unknown as FileBackedChatService,
+      workspaceRegistry: workspaceRegistry as unknown as WorkspaceRegistry,
+      logger: pino({ level: "silent" }),
+    });
+
+    await lead.executeTool("create_room", { name: "council-case" });
+
+    expect(chatService.created).toEqual([
+      {
+        name: "council-case",
+        purpose: undefined,
+        workspaceId: "workspace-room",
+        projectId: "project-room",
+      },
+    ]);
+  });
+
+  test("fails closed instead of creating a room when the caller has no workspace", async () => {
+    const chatService = new RoomChatServiceFake();
+    const agentManager = {
+      getRoleBindingForToolCatalog: () => ({ roleId: "lead" as const }),
+      getAgent: () =>
+        ({
+          id: "agent-caller",
+          cwd: "/tmp/room-agent",
+          workspaceId: undefined,
+          internal: false,
+          lifecycle: "idle",
+          currentModeId: null,
+          availableModes: [],
+          config: { title: "Room caller" },
+          labels: {},
+        }) as unknown as ManagedAgent,
+      listAgents: () => [],
+      updateAgentMetadata: async () => {},
+    };
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      agentManager: agentManager as unknown as RoomAgentManagerFake,
+      chatService,
+    });
+
+    await expect(lead.executeTool("create_room", { name: "council-case" })).rejects.toThrow(
+      "Caller has no active workspace to bind this room to",
+    );
+    expect(chatService.created).toEqual([]);
+  });
+
+  test("fails closed instead of creating a room when the caller's workspace is archived", async () => {
+    const chatService = new RoomChatServiceFake();
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      chatService,
+      workspaceRegistry: createAuthoritativeWorkspaceRegistry({
+        "workspace-room": { projectId: "project-room", archivedAt: "2026-08-01T00:00:00.000Z" },
+      }),
+    });
+
+    await expect(lead.executeTool("create_room", { name: "council-case" })).rejects.toThrow(
+      "Caller workspace 'workspace-room' is unavailable or archived",
+    );
+    expect(chatService.created).toEqual([]);
+  });
+
+  test("fails closed instead of starting a Council when the caller's workspace does not resolve", async () => {
+    const chatService = new RoomChatServiceFake();
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      chatService,
+      workspaceRegistry: createAuthoritativeWorkspaceRegistry({}),
+    });
+
+    await expect(
+      lead.executeTool("start_council", {
+        title: "Choose the implementation boundary",
+        question: "Which change is smallest and still technically enforced?",
+      }),
+    ).rejects.toThrow("Caller workspace 'workspace-room' is unavailable or archived");
+    expect(chatService.created).toEqual([]);
   });
 
   test("starts a Lead-owned Council with one Room and canonical Peer seat plans", async () => {

@@ -761,6 +761,9 @@ export type ProjectListOptions = Omit<ProjectListRequest, "type" | "requestId"> 
 export interface CreateChatRoomOptions {
   name: string;
   purpose?: string | null;
+  // Existing workspace this room is scoped to. Optional: omitting it creates
+  // a legacy host-level room with no workspace/project placement.
+  workspaceId?: string;
   requestId?: string;
 }
 export interface InspectChatRoomOptions {
@@ -5591,6 +5594,7 @@ export class DaemonClient {
         type: "chat/create",
         name: options.name,
         ...(options.purpose ? { purpose: options.purpose } : {}),
+        ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
       },
       responseType: "chat/create/response",
     });

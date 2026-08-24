@@ -2068,12 +2068,28 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
 
   if (callerAgentId && options.chatService) {
     if (callerRoleId === "lead") {
+      const resolveCallerRoomScope = async (): Promise<{
+        workspaceId: string;
+        projectId: string;
+      }> => {
+        const callerAgent = resolveCallerAgent();
+        const workspaceId = callerAgent?.workspaceId;
+        if (!workspaceId || !options.workspaceRegistry) {
+          throw new Error("Caller has no active workspace to bind this room to");
+        }
+        const workspace = await options.workspaceRegistry.get(workspaceId);
+        if (!workspace || workspace.archivedAt) {
+          throw new Error(`Caller workspace '${workspaceId}' is unavailable or archived`);
+        }
+        return { workspaceId, projectId: workspace.projectId };
+      };
+
       registerTool(
         "create_room",
         {
           title: "Create room",
           description:
-            "Lead-only: create a Paseo room for bounded coordination and return its exact identity.",
+            "Lead-only: create a Paseo room for bounded coordination and return its exact identity. Automatically bound to the caller's current workspace and project.",
           inputSchema: {
             name: z.string().trim().min(1),
             purpose: z.string().trim().min(1).optional(),
@@ -2083,7 +2099,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           },
         },
         async ({ name, purpose }) => {
-          const room = await options.chatService!.createRoom({ name, purpose });
+          const { workspaceId, projectId } = await resolveCallerRoomScope();
+          const room = await options.chatService!.createRoom({
+            name,
+            purpose,
+            workspaceId,
+            projectId,
+          });
           return {
             content: [],
             structuredContent: ensureValidJson({ room }),
@@ -2154,9 +2176,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             throw new Error("Council seat roles must be unique");
           }
           const caseId = `case_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+          const { workspaceId, projectId } = await resolveCallerRoomScope();
           const room = await options.chatService!.createRoom({
             name: roomName ?? `council-${caseId}`,
             purpose: `${title}: ${question}`,
+            workspaceId,
+            projectId,
           });
           const kickoff = await options.chatService!.dispatchMessage({
             room: room.id,

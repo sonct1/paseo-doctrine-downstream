@@ -94,6 +94,36 @@ describe("FileBackedChatService", () => {
     expect(detail.room.lastMessageAt).toBeTruthy();
   });
 
+  test("persists workspace/project scope when supplied and leaves legacy rooms unscoped", async () => {
+    const scoped = await service.createRoom({
+      name: "scoped-room",
+      workspaceId: "wks_abc",
+      projectId: "prj_abc",
+    });
+    expect(scoped.workspaceId).toBe("wks_abc");
+    expect(scoped.projectId).toBe("prj_abc");
+
+    const legacy = await service.createRoom({ name: "legacy-room" });
+    expect(legacy.workspaceId).toBeUndefined();
+    expect(legacy.projectId).toBeUndefined();
+
+    const raw = await readFile(path.join(paseoHome, "chat", "rooms.json"), "utf8");
+    const stored = JSON.parse(raw) as { rooms: Array<Record<string, unknown>> };
+    const storedScoped = stored.rooms.find((room) => room.name === "scoped-room");
+    const storedLegacy = stored.rooms.find((room) => room.name === "legacy-room");
+    expect(storedScoped?.workspaceId).toBe("wks_abc");
+    expect(storedLegacy?.workspaceId).toBeUndefined();
+
+    const reloaded = new FileBackedChatService({
+      paseoHome,
+      logger: pino({ level: "silent" }),
+    });
+    await reloaded.initialize();
+    const rooms = await reloaded.listRooms();
+    expect(rooms.find((room) => room.name === "scoped-room")?.workspaceId).toBe("wks_abc");
+    expect(rooms.find((room) => room.name === "legacy-room")?.workspaceId).toBeUndefined();
+  });
+
   test("lists unique agents who have posted to a room", async () => {
     const room = await service.createRoom({ name: "incident-room" });
     const otherRoom = await service.createRoom({ name: "other-room" });

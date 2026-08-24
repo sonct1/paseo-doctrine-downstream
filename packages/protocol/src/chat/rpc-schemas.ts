@@ -8,6 +8,9 @@ export const ChatCreateRequestSchema = z.object({
   requestId: z.string(),
   name: z.string(),
   purpose: z.string().optional(),
+  // Existing workspace to bind the new room to. Optional so old clients keep
+  // creating unscoped, host-level rooms. The daemon never guesses this value.
+  workspaceId: z.string().optional(),
 });
 
 export const ChatListRequestSchema = z.object({

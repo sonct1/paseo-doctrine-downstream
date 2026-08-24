@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { CouncilAgentSource, CouncilCase } from "./model";
 import {
   councilCaseScopeIdentity,
   councilRoleLabel,
+  describeCouncilPlacement,
   groupCouncilCases,
   isCouncilSeatReportReady,
 } from "./model";
@@ -70,6 +72,22 @@ const leadRoleBinding = {
   },
   createdAt: "2026-08-10T09:00:00.000Z",
 } as const;
+
+const workspace: WorkspaceDescriptor = {
+  id: "wks_1",
+  projectId: "project",
+  projectDisplayName: "Project",
+  projectRootPath: "/repo",
+  workspaceDirectory: "/repo",
+  projectKind: "git",
+  workspaceKind: "local_checkout",
+  name: "main",
+  status: "done",
+  statusEnteredAt: null,
+  archivingAt: null,
+  diffStat: null,
+  scripts: [],
+};
 
 function summarizeCouncilWorkspace(council: CouncilCase) {
   return {
@@ -389,5 +407,32 @@ describe("groupCouncilCases", () => {
       "shared-lead-workspace",
       undefined,
     ]);
+  });
+});
+
+describe("describeCouncilPlacement", () => {
+  it("labels a legacy host-level council without guessing a workspace", () => {
+    expect(describeCouncilPlacement({}, null)).toEqual({
+      text: "Host-level (legacy)",
+      legacy: true,
+    });
+    expect(describeCouncilPlacement({}, workspace)).toEqual({
+      text: "Host-level (legacy)",
+      legacy: true,
+    });
+  });
+
+  it("flags a scoped council whose workspace no longer resolves, preserving the exact workspace id", () => {
+    expect(describeCouncilPlacement({ workspaceId: "wks_1" }, null)).toEqual({
+      text: "Unavailable workspace (workspace: wks_1)",
+      legacy: true,
+    });
+  });
+
+  it("shows human-readable project / workspace placement for a scoped council", () => {
+    expect(describeCouncilPlacement({ workspaceId: "wks_1" }, workspace)).toEqual({
+      text: "Project / main",
+      legacy: false,
+    });
   });
 });

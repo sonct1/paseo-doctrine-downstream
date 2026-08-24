@@ -177,6 +177,7 @@ import { ScheduleSession } from "./session/schedule/schedule-session.js";
 import {
   ChatScheduleSession,
   type ChatScheduleSessionHost,
+  type ChatScheduleSessionOptions,
 } from "./session/chat/chat-schedule-session.js";
 import { ProviderCatalogSession } from "./session/provider/provider-catalog-session.js";
 import { WorkspaceFilesSession } from "./session/files/workspace-files-session.js";
@@ -470,6 +471,7 @@ function createChatScheduleSession(options: {
   host: ChatScheduleSessionHost;
   chatService: FileBackedChatService | undefined;
   scheduleService: ScheduleService;
+  workspaceRegistry: ChatScheduleSessionOptions["workspaceRegistry"];
   clientId: string;
   logger: pino.Logger;
 }): ChatScheduleSession | null {
@@ -478,6 +480,7 @@ function createChatScheduleSession(options: {
     host: options.host,
     chatService: options.chatService,
     scheduleService: options.scheduleService,
+    workspaceRegistry: options.workspaceRegistry,
     clientId: options.clientId,
     logger: options.logger,
   });
@@ -987,6 +990,7 @@ export class Session {
       },
       chatService,
       scheduleService,
+      workspaceRegistry: this.workspaceRegistry,
       clientId: this.clientId,
       logger: this.sessionLogger,
     });

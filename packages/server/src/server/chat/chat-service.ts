@@ -66,6 +66,11 @@ interface Waiter {
 export interface CreateChatRoomInput {
   name: string;
   purpose?: string | null;
+  // Authoritative scope resolved by the caller (RPC session or Lead tool
+  // handler) from the daemon's own workspace registry. The chat service never
+  // resolves or validates these itself; it only persists what it is given.
+  workspaceId?: string | null;
+  projectId?: string | null;
 }
 
 export interface InspectChatRoomInput {
@@ -140,12 +145,16 @@ export class FileBackedChatService {
     }
 
     const now = new Date().toISOString();
+    const workspaceId = trimToNull(input.workspaceId);
+    const projectId = trimToNull(input.projectId);
     const room = ChatRoomSchema.parse({
       id: randomUUID(),
       name,
       purpose: trimToNull(input.purpose),
       createdAt: now,
       updatedAt: now,
+      ...(workspaceId ? { workspaceId } : {}),
+      ...(projectId ? { projectId } : {}),
     });
     this.rooms.set(room.id, room);
     await this.enqueuePersist();
