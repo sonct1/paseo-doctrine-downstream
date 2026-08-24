@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.5.0-paseo.37 - 2026-08-25
+
+Bản follow-up này đóng gap placement của Room/Council sau stable `v0.5.0`: coordination surface giờ
+giữ authoritative project/workspace scope thay vì chỉ tồn tại ở host level, đồng thời Room chat dùng
+cùng visual language với workspace chat.
+
+### Added
+
+- Room record persist `workspaceId` và `projectId`; Room tạo từ UI bắt buộc chọn một workspace đang
+  available, còn `create_room` và `start_council` của Lead tự bind vào workspace/project của caller.
+- Protocol quảng bá optional capability `chatRoomWorkspaceScoping` để app mới fail closed khi kết nối
+  daemon cũ chưa hỗ trợ scoped Room creation.
+
+### Changed
+
+- Rooms và Councils list/detail hiển thị human-readable `Project / Workspace`; unresolved placement
+  giữ exact IDs để operator audit thay vì che mất provenance.
+- Room transcript dùng workspace composer surface: Human message là bubble bên phải, agent message giữ
+  authored metadata/reply rail bên trái; Room mode không mở attachment, voice hoặc agent autocomplete.
+- UI không cho chọn workspace unavailable/archiving và không tạo Room khi scope thiếu hoặc daemon
+  không quảng bá capability tương ứng.
+
+### Compatibility
+
+- Existing Room chưa có placement vẫn đọc được dưới nhãn `Host-level (legacy)`; wire fields mới là
+  optional để app/daemon mixed-version tiếp tục parse dữ liệu cũ.
+- Room/Council vẫn dùng host routes hiện tại; placement là record data, không tạo route hierarchy hoặc
+  authority/membership semantics mới.
+- Council giữ đúng ba specialist seats `Scout`, `Architect`, `Reviewer`; generic Engineer tiếp tục là
+  Room participant, không phải Council seat.
+
+### Qualified
+
+- Focused protocol/client/server/app suites pass `194/194`; feature commit pre-commit hook pass format,
+  lint và all-workspace typecheck.
+- Local candidate activation và in-app Browser canary trên cùng feature bytes đã xác nhận workspace
+  selector, readable placement, Human bubble và shared composer; canary Room được cleanup sau journey.
+- Clean release-commit activation, exact-commit CI và bốn host-native portable preflight leg vẫn là
+  release gates riêng trước annotated tag `paseo-v0.5.0-paseo.37`.
+
 ## 0.5.0-paseo.35 - 2026-08-24
 
 Bản follow-up này không nhận thêm upstream bytes. Nó close một read-only governance gap do Browser
