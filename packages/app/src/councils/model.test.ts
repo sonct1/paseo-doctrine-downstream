@@ -175,7 +175,7 @@ describe("projectCouncilCases", () => {
     expect(projectCouncilCases([], [forged], "local")).toEqual([]);
   });
 
-  it("requires a canonical receipt and a terminal healthy agent before counting a report", () => {
+  it("counts only canonical valid receipts without depending on the agent directory replica", () => {
     const record = makeCase([
       makeSeat("scout", {
         integrity: "valid",
@@ -187,18 +187,15 @@ describe("projectCouncilCases", () => {
         reportReceipt: makeReceipt("reviewer"),
       }),
     ]);
-    const agents = [
-      makeAgent("scout"),
-      makeAgent("architect"),
-      makeAgent("reviewer", { status: "running" }),
-    ];
+    const agents = [makeAgent("scout"), makeAgent("architect")];
 
     const council = projectCouncilCases([record], agents, "local")[0]!;
 
-    expect(council.readyCount).toBe(1);
+    expect(council.readyCount).toBe(2);
     expect(isCouncilSeatReportReady(council.seats[0]!)).toBe(true);
     expect(isCouncilSeatReportReady(council.seats[1]!)).toBe(false);
-    expect(isCouncilSeatReportReady(council.seats[2]!)).toBe(false);
+    expect(isCouncilSeatReportReady(council.seats[2]!)).toBe(true);
+    expect(council.unavailableCount).toBe(0);
   });
 
   it("surfaces an assigned seat whose agent record disappeared as unavailable", () => {
@@ -240,17 +237,12 @@ describe("projectCouncilCases", () => {
     });
   });
 
-  it("only calls a verdict Lead-linked when the canonical owner has a daemon role receipt", () => {
+  it("keeps canonical Lead ownership authoritative when its agent replica is unavailable", () => {
     const record = makeCase([makeSeat("scout")], { phase: "verdict" });
-    const unbound = makeAgent("lead-1", { parentAgentId: null });
-    const bound = makeAgent("lead-1", { parentAgentId: null, roleBinding: leadRoleBinding });
-
-    expect(projectCouncilCases([record], [unbound], "local")[0]?.verdictProvenance).toBe(
-      "unverified",
-    );
-    expect(projectCouncilCases([record], [bound], "local")[0]?.verdictProvenance).toBe(
-      "lead-linked",
-    );
+    expect(projectCouncilCases([record], [], "local")[0]?.verdictProvenance).toBe("lead-linked");
+    expect(
+      projectCouncilCases([{ ...record, parentAgentId: null }], [], "local")[0]?.verdictProvenance,
+    ).toBe("unverified");
   });
 
   it("keeps a repeated legacy case ID isolated by canonical scope", () => {

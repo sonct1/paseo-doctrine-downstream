@@ -116,10 +116,10 @@ function compareSeats(left: CouncilSeat, right: CouncilSeat): number {
 
 function councilVerdictProvenance(
   phase: CouncilPhase,
-  lead: CouncilAgentSource | null,
+  parentAgentId: string | null,
 ): CouncilCase["verdictProvenance"] {
   if (phase !== "verdict") return "pending";
-  return lead ? "lead-linked" : "unverified";
+  return parentAgentId ? "lead-linked" : "unverified";
 }
 
 function latestDisposition(seats: readonly CouncilSeat[]): string | null {
@@ -132,18 +132,13 @@ function latestDisposition(seats: readonly CouncilSeat[]): string | null {
 }
 
 export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
-  return (
-    seat.integrity === "valid" &&
-    seat.reportReceipt !== null &&
-    seat.agent !== null &&
-    (seat.agent.status === "idle" || seat.agent.status === "closed") &&
-    seat.agent.attentionReason !== "error"
-  );
+  return seat.integrity === "valid" && seat.reportReceipt !== null;
 }
 
 export function isCouncilSeatUnavailable(seat: CouncilSeat): boolean {
   if (seat.integrity === "redundant") return false;
   if (seat.integrity === "compromised" || seat.integrity === "missing") return true;
+  if (isCouncilSeatReportReady(seat)) return false;
   if (seat.agentId && !seat.agent) return true;
   return seat.agent?.status === "error" || seat.agent?.attentionReason === "error";
 }
@@ -200,7 +195,7 @@ export function projectCouncilCases(
         workspaceId: record.workspaceId ?? undefined,
         parentAgentId: record.parentAgentId,
         lead,
-        verdictProvenance: councilVerdictProvenance(record.phase, lead),
+        verdictProvenance: councilVerdictProvenance(record.phase, record.parentAgentId),
         disposition: latestDisposition(seats),
         seats,
         reportSeatCount: reportSeats.length,

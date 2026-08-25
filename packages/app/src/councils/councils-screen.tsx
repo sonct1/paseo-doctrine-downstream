@@ -547,6 +547,9 @@ function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
   if (seat.integrity === "redundant") {
     return "Not counted";
   }
+  if (ready) {
+    return "Report ready";
+  }
   if (!seat.agentId) {
     return "Awaiting launch";
   }
@@ -555,9 +558,6 @@ function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
   }
   if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "Seat failed";
-  }
-  if (ready) {
-    return "Report ready";
   }
   if (
     seat.integrity === "unspecified" &&
@@ -585,6 +585,9 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
   if (seat.integrity === "redundant") {
     return "This replacement is preserved for audit but is not counted in the Council report total.";
   }
+  if (ready) {
+    return "The Lead recorded a daemon-validated Peer-authored Room receipt. Open the Room or agent timeline to inspect the complete evidence.";
+  }
   if (!seat.agentId) {
     return "The Lead has not launched this canonical Council seat yet.";
   }
@@ -593,9 +596,6 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
   }
   if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
-  }
-  if (ready) {
-    return "The Lead recorded a daemon-validated Peer-authored Room receipt. Open the Room and agent timeline to inspect the complete evidence.";
   }
   if (
     seat.integrity === "unspecified" &&
@@ -629,11 +629,11 @@ function councilSeatStatusIcon(input: {
   if (input.failed) {
     return <ThemedCircleAlert size={15} uniProps={statusDangerMapping} />;
   }
-  if (input.unavailable || input.redundant) {
-    return <ThemedCircleAlert size={15} uniProps={statusWarningMapping} />;
-  }
   if (input.ready) {
     return <ThemedCheck size={16} uniProps={statusSuccessMapping} strokeWidth={2.5} />;
+  }
+  if (input.unavailable || input.redundant) {
+    return <ThemedCircleAlert size={15} uniProps={statusWarningMapping} />;
   }
   return <ThemedClock size={15} uniProps={foregroundMutedMapping} />;
 }
@@ -741,7 +741,7 @@ function councilVerdictCopy(council: CouncilCase): { title: string; text: string
     const disposition = council.disposition?.replaceAll("-", " ");
     return {
       title: disposition ? `Lead-linked verdict · ${disposition}` : "Lead-linked verdict marker",
-      text: `${disposition ? `The Lead recorded a ${disposition} disposition. ` : ""}The canonical case is in verdict phase and its owner resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.`,
+      text: `${disposition ? `The Lead recorded a ${disposition} disposition. ` : ""}The canonical case entered verdict through its daemon-authorized Lead owner. Open the case owner or Room to inspect the binding decision and handoff evidence.`,
     };
   }
   if (council.phase === "verdict") {

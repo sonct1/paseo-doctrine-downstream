@@ -27,7 +27,7 @@ export function useCouncilCasesQuery(serverId: string) {
     enabled: Boolean(serverId && client && isConnected && supportsCouncilCases),
     retry: false,
     dataShape: "list",
-    staleTimeMs: Infinity,
+    staleTimeMs: 5_000,
   });
 
   return { ...query, supportsCouncilCases, isConnected };

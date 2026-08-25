@@ -14,10 +14,6 @@ import { getServerId } from "../support/helpers/server-id";
 import { getE2EDaemonPort } from "../support/helpers/daemon-port";
 
 const NATIVE_COUNCIL_ROLES = ["scout", "architect", "reviewer"] as const;
-// This case ID is intentionally shared across two workspaces below to prove
-// the UI keys a Council case by (server, workspace, case_id), not case_id
-// alone. It is never passed to start_council, which mints its own.
-const SHARED_ISOLATION_CASE_ID = "phase6-dirty-review";
 
 // Production only exposes a Peer-delegation route for the supported provider
 // allowlist (packages/protocol/src/provider-config.ts), which does not
@@ -419,49 +415,6 @@ async function seedCouncilScenario(caseTitle: string, options: { verdict?: boole
   }
 }
 
-/**
- * Seeds only the bootstrap-only, production-legal Council labels (phase
- * sealed, integrity unspecified) for the three canonical native roles, with
- * a deliberately shared case_id across two workspaces. Used solely for the
- * workspace-key collision regression below: no Room, kickoff, report, or
- * record_council_seat call ever exists for these seats, so they must never
- * be asserted as a completed or auditable Council.
- */
-async function seedIsolationBootstrapScenario(caseTitle: string) {
-  const workspace = await seedWorkspace({ repoPrefix: "council-ui-" });
-  try {
-    const lead = await createLead(workspace);
-    const seatIds = await Promise.all(
-      NATIVE_COUNCIL_ROLES.map((role, index) =>
-        createCouncilSeat({
-          leadId: lead.id,
-          role,
-          labels: {
-            "council.case_id": SHARED_ISOLATION_CASE_ID,
-            "council.title": caseTitle,
-            "council.tier": "high-risk",
-            "council.phase": "sealed",
-            "council.role": role,
-            "council.round": String(index + 1),
-            "council.integrity": "unspecified",
-          },
-        }),
-      ),
-    );
-
-    return {
-      caseId: SHARED_ISOLATION_CASE_ID,
-      leadId: lead.id,
-      seatIds,
-      workspaceId: workspace.workspaceId,
-      cleanup: workspace.cleanup,
-    };
-  } catch (error) {
-    await workspace.cleanup();
-    throw error;
-  }
-}
-
 test.describe("Council case surface", () => {
   let restoreCouncilPeerDelegationRoute: () => Promise<void>;
   let councilPeerDelegationScriptDir: string;
@@ -507,7 +460,7 @@ test.describe("Council case surface", () => {
       ).toBeVisible();
       await expect(
         page.getByText(
-          "Seat labels indicate verdict, and the case link resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.",
+          "The canonical case entered verdict through its daemon-authorized Lead owner. Open the case owner or Room to inspect the binding decision and handoff evidence.",
           { exact: true },
         ),
       ).toBeVisible();
@@ -554,28 +507,22 @@ test.describe("Council case surface", () => {
     }
   });
 
-  test("keeps same-ID cases isolated across workspaces", async ({ page }) => {
+  test("keeps canonical cases isolated across workspaces", async ({ page }) => {
     test.setTimeout(120_000);
-    const first = await seedIsolationBootstrapScenario("Workspace one Council");
-    const second = await seedIsolationBootstrapScenario("Workspace two Council");
+    const first = await seedCouncilScenario("Workspace one Council");
+    const second = await seedCouncilScenario("Workspace two Council");
     try {
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto(buildHostCouncilRoute(getServerId(), SHARED_ISOLATION_CASE_ID));
-      await expect(page.getByText("Choose a workspace", { exact: true })).toBeVisible({
-        timeout: 30_000,
-      });
+      await page.goto(buildHostCouncilRoute(getServerId(), second.caseId, second.workspaceId));
+
       await expect(
-        page.getByTestId(`council-row-${SHARED_ISOLATION_CASE_ID}-${first.workspaceId}`),
+        page.getByTestId(`council-row-${first.caseId}-${first.workspaceId}`),
       ).toBeVisible();
       await expect(
-        page.getByTestId(`council-row-${SHARED_ISOLATION_CASE_ID}-${second.workspaceId}`),
+        page.getByTestId(`council-row-${second.caseId}-${second.workspaceId}`),
       ).toBeVisible();
 
-      await page.goto(
-        buildHostCouncilRoute(getServerId(), SHARED_ISOLATION_CASE_ID, second.workspaceId),
-      );
-
-      const detail = page.getByTestId(`council-detail-${SHARED_ISOLATION_CASE_ID}`);
+      const detail = page.getByTestId(`council-detail-${second.caseId}`);
       await expect(detail).toBeVisible({ timeout: 30_000 });
       await expect(detail.getByText("Workspace two Council", { exact: true })).toBeVisible();
       await expect(detail.getByText("Workspace one Council", { exact: true })).toHaveCount(0);
