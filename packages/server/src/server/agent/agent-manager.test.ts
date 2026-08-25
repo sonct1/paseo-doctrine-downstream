@@ -49,6 +49,7 @@ import type {
 } from "./agent-sdk-types.js";
 import type { PaseoToolCatalog } from "./tools/types.js";
 import type { ProviderDefinition } from "./provider-registry.js";
+import { ROLE_DEFAULT_TOOLS } from "./role-profiles.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import { writeJsonFileAtomic } from "../atomic-file.js";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
@@ -11609,7 +11610,9 @@ test("role-bound create persists immutable binding and passes only launch instru
         "record_council_seat",
       ]),
     });
-    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(32);
+    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toHaveLength(
+      ROLE_DEFAULT_TOOLS.lead.length,
+    );
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.config.modeId).toBe("read-only");
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
@@ -11937,7 +11940,9 @@ test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", a
         { kind: "mcp", server: "paseo", tool: "record_council_seat" },
       ]),
     );
-    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(32);
+    expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(
+      ROLE_DEFAULT_TOOLS.lead.length,
+    );
     expect(created.config.toolPolicy).toBeUndefined();
   } finally {
     await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));

@@ -204,9 +204,12 @@ describe("native Antigravity provider", () => {
       const unsubscribe = session.subscribe((event) => events.push(event));
       try {
         await session.startTurn("fail without stderr");
-        await vi.waitFor(() => {
-          expect(findTurnFailure(events)).toBeDefined();
-        });
+        await vi.waitFor(
+          () => {
+            expect(findTurnFailure(events)).toBeDefined();
+          },
+          { timeout: 5_000 },
+        );
         const failure = findTurnFailure(events);
         expect(failure?.diagnostic).toContain("Native AGY exited without writing stderr");
         expect(failure?.diagnostic).toContain(`Executable: ${binary}`);
