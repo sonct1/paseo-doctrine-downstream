@@ -58,3 +58,15 @@ Installed acceptance là gate riêng: fresh idle readback, `./scripts/local-stac
 fingerprint, CLI/daemon `0.6.0-paseo.44`, healthy `/api/health`, WebUI HTTP success, Beads Central
 readback và browser journey cho Explorer plus downstream role/Room/Council surfaces. Không suy ra live
 PASS từ source hoặc artifact.
+
+## Source receipts
+
+- Merge commit `2d92e10965bb784b1cc8c5b7ecc6bd205bdcd453` có đúng hai parent:
+  downstream `1684854d0b24be593807a054a93c018e14ee1fd2` và upstream
+  `6da9fa43fa97629af365c280b2ad7d0e7692c025`.
+- Focused unit suites pass `677` unique assertions; focused Browser Playwright pass `3/3` cho
+  Explorer placement, Explorer lifecycle và workspace restart với isolated daemon/Beads sidecar.
+- Full lint, format check và all-workspace typecheck pass; Server/CLI, daemon WebUI và macOS Desktop
+  ZIP/DMG đều build thành công.
+- Lockfile completeness pass. Exact pinned `prefetch-npm-deps` tính lại
+  `sha256-43VSgJglb7fbyZmjeNdRM4WVV9i/JM7BKRk4ZloLThc=` với fetcher version `2`.
