@@ -155,10 +155,7 @@ async function smokeDegradedBeadsLifecycle(runtimeNode, cliEntry) {
     }
     return health;
   } finally {
-    if (daemon.exitCode === null) {
-      daemon.kill();
-      await waitForExit(daemon);
-    }
+    await terminateChild(daemon);
     closeSync(degradedLog);
   }
 }
@@ -177,11 +174,19 @@ async function waitForBeadsCentral() {
 }
 
 async function waitForExit(child, timeoutMs = 5_000) {
-  if (child.exitCode !== null) return;
-  await Promise.race([
-    new Promise((resolve) => child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return await Promise.race([
+    new Promise((resolve) => child.once("exit", () => resolve(true))),
+    new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
   ]);
+}
+
+async function terminateChild(child) {
+  if (await waitForExit(child, 0)) return;
+  child.kill();
+  if (await waitForExit(child)) return;
+  child.kill("SIGKILL");
+  if (!(await waitForExit(child))) fail(`spawned process ${child.pid ?? "unknown"} did not exit`);
 }
 
 async function smokeTerminal() {
@@ -389,15 +394,18 @@ async function main() {
     await smokeTerminal();
     const degradedHealth = await smokeDegradedBeadsLifecycle(runtimeNode, cliEntry);
     runCli("paseo", ["daemon", "stop"]);
-    await waitForExit(daemon);
+    if (!(await waitForExit(daemon))) {
+      fail(`daemon process ${daemon.pid ?? "unknown"} remained after a graceful stop`);
+    }
     success = `SMOKE_OK platform=${process.platform} arch=${
       process.arch
-    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok beads_central=${beadsReady.central} bd=${componentManifest.beadsVersion} degraded_beads=${degradedHealth.components.beads.status} health=${JSON.stringify(health)}\n`;
+    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok beads_central=${
+      beadsReady.central
+    } bd=${componentManifest.beadsVersion} degraded_beads=${
+      degradedHealth.components.beads.status
+    } health=${JSON.stringify(health)}\n`;
   } finally {
-    if (daemon.exitCode === null) {
-      daemon.kill();
-      await waitForExit(daemon);
-    }
+    await terminateChild(daemon);
     closeSync(log);
   }
   uninstallWindowsArtifact(bundle);
@@ -429,7 +437,12 @@ for ($attempt = 1; $attempt -le 40; $attempt++) {
       { timeoutMs: 30_000 },
     );
   } else {
-    rmSync(ownedRoot, { recursive: true, force: true });
+    rmSync(ownedRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 40,
+      retryDelay: 250,
+    });
   }
   if (existsSync(ownedRoot)) fail(`cleanup target still exists: ${ownedRoot}`);
 }

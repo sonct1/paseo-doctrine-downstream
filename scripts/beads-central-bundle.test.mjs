@@ -86,7 +86,7 @@ test("portable smoke requires and starts the real installed Central component", 
   assert.match(smokeSource, /componentManifest\.sidecarBinarySha256 !== sha256/);
   assert.match(smokeSource, /componentManifest\.beadsBinarySha256 !== sha256/);
   assert.match(smokeSource, /await waitForBeadsCentral\(\)/);
-  assert.match(smokeSource, /beads_central=\$\{beadsReady\.central\}/);
+  assert.match(smokeSource, /beads_central=\$\{\s*beadsReady\.central\s*\}/u);
 });
 
 test("Nix daemon package owns the immutable Central and bd bundle", () => {
