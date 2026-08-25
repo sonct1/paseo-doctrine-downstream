@@ -16,6 +16,7 @@ test("portable artifact smoke binds every CLI probe to its isolated daemon", () 
   assert.match(source, /await waitForBeadsCentral\(\)/);
   assert.match(source, /manifest\.bundledBeadsBinary !== true/);
   assert.match(source, /await waitForExit\(daemon\)/);
+  assert.match(source, /await terminateChild\(daemon\)/);
 });
 
 test("portable artifact smoke fails closed when an installed command hangs", () => {
@@ -37,6 +38,7 @@ test("portable artifact smoke only reports success after bounded cleanup", () =>
   assert.match(source, /\$attempt -le 40/);
   assert.match(source, /SMOKE_CLEANUP_RETRY/);
   assert.match(source, /Start-Sleep -Milliseconds 250/);
+  assert.match(source, /maxRetries:\s*40,\s*retryDelay:\s*250/);
   assert.match(source, /if \(existsSync\(ownedRoot\)\) fail/);
   assert.match(
     source,
