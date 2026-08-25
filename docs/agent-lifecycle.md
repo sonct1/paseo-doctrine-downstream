@@ -96,6 +96,8 @@ Current branch có candidate implementation cho durable coordination signal. Sig
 trên target record và chờ idle boundary nếu agent đang chạy. Nó không replace active run, chuyển
 authority, detach hoặc archive agent. Native attention dùng context telemetry, compaction event và
 repeated terminal failure; missing telemetry fail closed.
+Candidate signal/handoff tools nằm trong role ceiling nhưng default-off trong standing Lead/Supervisor
+profiles; chỉ exact Human-configured Role Profile mới project chúng vào session.
 
 Adjacent-Lead handoff là workflow riêng. Frozen packet phải tồn tại trước Human authorization; designated
 successor phải ACK trước Human predecessor release. Các receipt trước final release không mutate role

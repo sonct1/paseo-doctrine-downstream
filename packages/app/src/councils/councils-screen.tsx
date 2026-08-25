@@ -21,6 +21,7 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useAggregatedAgents } from "@/hooks/use-aggregated-agents";
 import { useWorkspace } from "@/stores/session-store-hooks";
 import type { Theme } from "@/styles/theme";
+import { toErrorMessage } from "@/utils/error-messages";
 import {
   buildHostAgentDetailRoute,
   buildHostCouncilRoute,
@@ -32,13 +33,14 @@ import {
   councilRoleLabel,
   councilTierLabel,
   describeCouncilPlacement,
-  groupCouncilCases,
+  projectCouncilCases,
   isCouncilSeatReportReady,
   isCouncilSeatUnavailable,
   type CouncilCase,
   type CouncilPhase,
   type CouncilSeat,
 } from "./model";
+import { useCouncilCasesQuery } from "./data";
 
 interface CouncilsScreenProps {
   serverId: string;
@@ -73,9 +75,14 @@ export function CouncilsScreen({
 }: CouncilsScreenProps) {
   const isCompact = useIsCompactFormFactor();
   const agentsResult = useAggregatedAgents({ includeArchived: true });
-  const councils = useMemo(
-    () => groupCouncilCases(agentsResult.agents, serverId),
+  const hostAgents = useMemo(
+    () => agentsResult.agents.filter((agent) => agent.serverId === serverId),
     [agentsResult.agents, serverId],
+  );
+  const casesQuery = useCouncilCasesQuery(serverId);
+  const councils = useMemo(
+    () => projectCouncilCases(casesQuery.data ?? [], hostAgents, serverId),
+    [casesQuery.data, hostAgents, serverId],
   );
   const matchingCases = useMemo(
     () => councils.filter((council) => council.id === selectedCaseId),
@@ -104,8 +111,21 @@ export function CouncilsScreen({
   }, [serverId]);
 
   let content: ReactNode;
-  if (agentsResult.isInitialLoad) {
+  if (!casesQuery.supportsCouncilCases) {
+    content = (
+      <CouncilEmpty
+        text="Councils require a newer host"
+        description="Update this Paseo host to read daemon-owned Council cases."
+      />
+    );
+  } else if (!casesQuery.isConnected) {
+    content = <CouncilEmpty text="Host offline" description="Reconnect the host to use Council." />;
+  } else if (agentsResult.isInitialLoad || casesQuery.isPending) {
     content = <CouncilLoading />;
+  } else if (casesQuery.isError) {
+    content = (
+      <CouncilEmpty text="Unable to load councils" description={toErrorMessage(casesQuery.error)} />
+    );
   } else if (isCompact) {
     if (isAmbiguous) {
       content = (
@@ -351,7 +371,7 @@ function CouncilDetail({
           <View style={styles.seatGrid}>
             {council.seats.map((seat) => (
               <CouncilSeatCard
-                key={seat.agent.id}
+                key={`${seat.role}:${seat.round}:${seat.agentId ?? "unassigned"}`}
                 seat={seat}
                 casePhase={council.phase}
                 compact={compact}
@@ -527,6 +547,12 @@ function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
   if (seat.integrity === "redundant") {
     return "Not counted";
   }
+  if (!seat.agentId) {
+    return "Awaiting launch";
+  }
+  if (!seat.agent) {
+    return "Agent unavailable";
+  }
   if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "Seat failed";
   }
@@ -545,13 +571,7 @@ function councilSeatStatusLabel(seat: CouncilSeat, ready: boolean): string {
   return "In progress";
 }
 
-function councilSeatBodyLabel(seat: CouncilSeat): string {
-  if (seat.role === "verifier") {
-    return "VERIFICATION";
-  }
-  if (seat.role === "auditor") {
-    return "AUDIT";
-  }
+function councilSeatBodyLabel(_seat: CouncilSeat): string {
   return "REPORT";
 }
 
@@ -564,6 +584,12 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
   }
   if (seat.integrity === "redundant") {
     return "This replacement is preserved for audit but is not counted in the Council report total.";
+  }
+  if (!seat.agentId) {
+    return "The Lead has not launched this canonical Council seat yet.";
+  }
+  if (!seat.agent) {
+    return "The canonical case references this seat, but its agent record is unavailable.";
   }
   if (seat.agent.status === "error" || seat.agent.attentionReason === "error") {
     return "This seat ended with an error. Open the agent to inspect the failure before using its work.";
@@ -583,6 +609,73 @@ function councilSeatBodyText(seat: CouncilSeat, casePhase: CouncilPhase, ready: 
   return "This seat is still working. Its complete report will remain in the agent timeline.";
 }
 
+function isCouncilSeatFailed(seat: CouncilSeat): boolean {
+  if (seat.integrity === "compromised") return true;
+  if (!seat.agent) return false;
+  return seat.agent.status === "error" || seat.agent.attentionReason === "error";
+}
+
+function councilSeatModelLabel(seat: CouncilSeat): string {
+  if (!seat.agent) return "Not launched";
+  return seat.agent.model?.trim() || seat.agent.provider;
+}
+
+function councilSeatStatusIcon(input: {
+  failed: boolean;
+  unavailable: boolean;
+  redundant: boolean;
+  ready: boolean;
+}): ReactNode {
+  if (input.failed) {
+    return <ThemedCircleAlert size={15} uniProps={statusDangerMapping} />;
+  }
+  if (input.unavailable || input.redundant) {
+    return <ThemedCircleAlert size={15} uniProps={statusWarningMapping} />;
+  }
+  if (input.ready) {
+    return <ThemedCheck size={16} uniProps={statusSuccessMapping} strokeWidth={2.5} />;
+  }
+  return <ThemedClock size={15} uniProps={foregroundMutedMapping} />;
+}
+
+function CouncilSeatFooter({ seat, roleLabel }: { seat: CouncilSeat; roleLabel: string }) {
+  const handleOpenAgent = useCallback(() => {
+    if (!seat.agent) return;
+    router.push(
+      buildHostAgentDetailRoute(seat.agent.serverId, seat.agent.id, seat.agent.workspaceId),
+    );
+  }, [seat.agent]);
+  const footerStyle = useCallback(
+    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.seatFooter,
+      (hovered || pressed) && styles.seatFooterHovered,
+    ],
+    [],
+  );
+
+  if (!seat.agent) {
+    return (
+      <View style={styles.seatFooter}>
+        <Text style={styles.seatFooterText}>
+          {seat.agentId ? "Agent unavailable" : "Awaiting launch"}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <Pressable
+      onPress={handleOpenAgent}
+      style={footerStyle}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${roleLabel} agent`}
+      testID={`council-open-agent-${seat.agent.id}`}
+    >
+      <Text style={styles.seatFooterText}>Open agent</Text>
+      <ThemedChevronRight size={18} uniProps={foregroundMutedMapping} />
+    </Pressable>
+  );
+}
+
 function CouncilSeatCard({
   seat,
   casePhase,
@@ -595,36 +688,14 @@ function CouncilSeatCard({
   const ready = isCouncilSeatReportReady(seat);
   const unavailable = isCouncilSeatUnavailable(seat);
   const redundant = seat.integrity === "redundant";
-  const failed =
-    seat.agent.status === "error" ||
-    seat.agent.attentionReason === "error" ||
-    seat.integrity === "compromised";
+  const failed = isCouncilSeatFailed(seat);
   const roleLabel = councilRoleLabel(seat.role);
   const roundLabel = councilSeatRoundLabel(seat.round);
-  const modelLabel = seat.agent.model?.trim() || seat.agent.provider;
+  const modelLabel = councilSeatModelLabel(seat);
   const statusLabel = councilSeatStatusLabel(seat, ready);
   const bodyLabel = councilSeatBodyLabel(seat);
   const bodyText = councilSeatBodyText(seat, casePhase, ready);
-  let statusIcon: ReactNode = <ThemedClock size={15} uniProps={foregroundMutedMapping} />;
-  if (failed) {
-    statusIcon = <ThemedCircleAlert size={15} uniProps={statusDangerMapping} />;
-  } else if (unavailable || redundant) {
-    statusIcon = <ThemedCircleAlert size={15} uniProps={statusWarningMapping} />;
-  } else if (ready) {
-    statusIcon = <ThemedCheck size={16} uniProps={statusSuccessMapping} strokeWidth={2.5} />;
-  }
-  const handleOpenAgent = useCallback(() => {
-    router.push(
-      buildHostAgentDetailRoute(seat.agent.serverId, seat.agent.id, seat.agent.workspaceId),
-    );
-  }, [seat.agent.id, seat.agent.serverId, seat.agent.workspaceId]);
-  const footerStyle = useCallback(
-    ({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [
-      styles.seatFooter,
-      (hovered || pressed) && styles.seatFooterHovered,
-    ],
-    [],
-  );
+  const statusIcon = councilSeatStatusIcon({ failed, unavailable, redundant, ready });
 
   return (
     <View style={[styles.seatCard, compact ? styles.seatCardCompact : styles.seatCardDesktop]}>
@@ -660,16 +731,7 @@ function CouncilSeatCard({
         <Text style={styles.eyebrow}>{bodyLabel}</Text>
         <Text style={styles.seatBodyText}>{bodyText}</Text>
       </View>
-      <Pressable
-        onPress={handleOpenAgent}
-        style={footerStyle}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${roleLabel} agent`}
-        testID={`council-open-agent-${seat.agent.id}`}
-      >
-        <Text style={styles.seatFooterText}>Open agent</Text>
-        <ThemedChevronRight size={18} uniProps={foregroundMutedMapping} />
-      </Pressable>
+      <CouncilSeatFooter seat={seat} roleLabel={roleLabel} />
     </View>
   );
 }
@@ -679,13 +741,13 @@ function councilVerdictCopy(council: CouncilCase): { title: string; text: string
     const disposition = council.disposition?.replaceAll("-", " ");
     return {
       title: disposition ? `Lead-linked verdict · ${disposition}` : "Lead-linked verdict marker",
-      text: `${disposition ? `The Lead recorded a ${disposition} disposition. ` : ""}Seat labels indicate verdict, and the case link resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.`,
+      text: `${disposition ? `The Lead recorded a ${disposition} disposition. ` : ""}The canonical case is in verdict phase and its owner resolves to a daemon-bound Lead. Open the Lead timeline to verify the binding decision and handoff contract before relying on it.`,
     };
   }
   if (council.phase === "verdict") {
     return {
       title: "Unverified verdict marker",
-      text: "Seat labels indicate verdict, but their linked owner does not have a daemon-issued Lead role binding. Do not treat this marker as a binding decision.",
+      text: "The canonical case is in verdict phase, but its linked owner does not have a daemon-issued Lead role binding. Do not treat this marker as a binding decision.",
     };
   }
   return {

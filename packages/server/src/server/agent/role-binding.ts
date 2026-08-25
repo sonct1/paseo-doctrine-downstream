@@ -27,7 +27,11 @@ import {
 } from "./foundation-execution-profiles.js";
 import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
 import { loadFoundationSkillPolicy } from "./foundation-skill-policy.js";
-import { materializeRoleProfileBindingReceipt, ROLE_TOOL_CEILINGS } from "./role-profiles.js";
+import {
+  materializeRoleProfileBindingReceipt,
+  ROLE_DEFAULT_TOOLS,
+  ROLE_TOOL_CEILINGS,
+} from "./role-profiles.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
 import {
   buildAssignmentInstruction,
@@ -545,7 +549,7 @@ export function applyRolePaseoToolPolicy(
   const ceiling = ROLE_TOOL_CEILINGS[roleId];
   const selected = roleAllowedTools
     ? ceiling.filter((tool) => roleAllowedTools.includes(tool))
-    : ceiling;
+    : ROLE_DEFAULT_TOOLS[roleId];
   return {
     enabled: true,
     allowedTools: intersectRoleTools(selected, providerPolicy),

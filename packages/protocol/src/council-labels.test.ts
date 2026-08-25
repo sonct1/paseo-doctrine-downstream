@@ -37,6 +37,12 @@ describe("Council label authority", () => {
         [COUNCIL_REPORT_RECEIPT_VERSION_LABEL]: "1",
       }),
     ).toContain("is daemon-managed");
+    expect(
+      validateCouncilSeatBootstrapLabels({
+        ...bootstrapLabels,
+        "council.role": "auditor",
+      }),
+    ).toBe("Council seat creation requires council.role=scout|architect|reviewer");
   });
 
   test("finds only Council-owned labels", () => {

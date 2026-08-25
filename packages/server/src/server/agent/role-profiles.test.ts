@@ -36,10 +36,27 @@ describe("Foundation role profiles", () => {
       catalog.profiles.find((profile) => profile.roleId === "supervisor")?.toolCeiling,
     ).toEqual(expect.arrayContaining(["create_agent", "send_agent_prompt"]));
     for (const profile of catalog.profiles) {
-      expect(profile.effective.allowedTools).toEqual(profile.toolCeiling);
+      if (profile.roleId === "peer") {
+        expect(profile.effective.allowedTools).toEqual(profile.toolCeiling);
+      } else {
+        expect(profile.effective.allowedTools).not.toEqual(profile.toolCeiling);
+      }
       expect(profile.effective.allowedSkills).toEqual(profile.skillCeiling);
       expect(profile.instructions).toContain("Paseo");
     }
+    expect(
+      catalog.profiles.find((profile) => profile.roleId === "lead")?.effective.allowedTools,
+    ).toEqual(
+      expect.not.arrayContaining([
+        "signal_agent",
+        "prepare_lead_handoff",
+        "transition_lead_handoff",
+        "resolve_agent_signal",
+      ]),
+    );
+    expect(
+      catalog.profiles.find((profile) => profile.roleId === "supervisor")?.effective.allowedTools,
+    ).toEqual(expect.not.arrayContaining(["create_agent", "send_agent_prompt", "signal_agent"]));
   });
 
   test("materializes a deterministic, narrower immutable receipt", () => {

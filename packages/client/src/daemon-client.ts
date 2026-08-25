@@ -537,6 +537,10 @@ type ChatDeletePayload = Extract<
 type ChatPostPayload = Extract<SessionOutboundMessage, { type: "chat/post/response" }>["payload"];
 type ChatReadPayload = Extract<SessionOutboundMessage, { type: "chat/read/response" }>["payload"];
 type ChatWaitPayload = Extract<SessionOutboundMessage, { type: "chat/wait/response" }>["payload"];
+export type CouncilCaseListPayload = Extract<
+  SessionOutboundMessage,
+  { type: "council.case.list.response" }
+>["payload"];
 type BeadsIssuesListPayload = Extract<
   SessionOutboundMessage,
   { type: "beads.issues.list.response" }
@@ -5663,6 +5667,16 @@ export class DaemonClient {
         type: "chat/list",
       },
       responseType: "chat/list/response",
+    });
+  }
+
+  async listCouncilCases(requestId?: string): Promise<CouncilCaseListPayload> {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "council.case.list.request",
+      },
+      responseType: "council.case.list.response",
     });
   }
 

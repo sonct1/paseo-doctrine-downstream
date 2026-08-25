@@ -56,6 +56,9 @@ function createHarness(
     const url = String(input);
     const request = init ?? {};
     calls.push({ url, init: request });
+    if (request.signal?.aborted) {
+      throw request.signal.reason;
+    }
     const parsed = new URL(url);
     if (parsed.pathname === "/health/ready") {
       return json({
@@ -125,6 +128,20 @@ describe("BeadsCentralService", () => {
     expect(new Headers(harness.calls[1]?.init.headers).get("x-paseo-actor")).toBe(
       "paseo-daemon-status",
     );
+  });
+
+  it("applies a caller health deadline to every Central qualification request", async () => {
+    const harness = createHarness();
+    const controller = new AbortController();
+    controller.abort(new Error("health deadline reached"));
+    await expect(harness.service.status(controller.signal)).resolves.toMatchObject({
+      available: false,
+      reason: expect.stringContaining("health deadline reached"),
+    });
+    expect(harness.calls).toHaveLength(1);
+    const call = harness.calls[0];
+    if (!call) throw new Error("Expected one Central request");
+    expect((call.init.signal as AbortSignal).aborted).toBe(true);
   });
 
   it("fails closed for a missing credential or wrong Central version", async () => {

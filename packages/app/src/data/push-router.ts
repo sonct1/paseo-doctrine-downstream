@@ -4,6 +4,7 @@ import type {
   MutableDaemonConfig,
   SessionOutboundMessage,
 } from "@getpaseo/protocol/messages";
+import type { CouncilCaseRecord } from "@getpaseo/protocol/council/types";
 import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import { orderCheckoutDiffFiles } from "@/git/diff-order";
 import { daemonConfigQueryKey } from "@/data/daemon-config";
@@ -14,6 +15,7 @@ import {
   providersSnapshotQueryKey,
   providersSnapshotQueryRoot,
 } from "@/data/providers-snapshot";
+import { councilQueryKeys } from "@/councils/data";
 
 type ProvidersSnapshotUpdateMessage = Extract<
   SessionOutboundMessage,
@@ -26,12 +28,14 @@ type SubscribeCheckoutDiffResponseMessage = Extract<
 >;
 type StatusMessage = Extract<SessionOutboundMessage, { type: "status" }>;
 type TerminalsChangedMessage = Extract<SessionOutboundMessage, { type: "terminals_changed" }>;
+type CouncilCaseUpdatedMessage = Extract<SessionOutboundMessage, { type: "council.case.updated" }>;
 type ServerDataEventType =
   | "providers_snapshot_update"
   | "checkout_diff_update"
   | "subscribe_checkout_diff_response"
   | "status"
-  | "terminals_changed";
+  | "terminals_changed"
+  | "council.case.updated";
 type CheckoutDiffResponsePayload = SubscribeCheckoutDiffResponseMessage["payload"];
 type CheckoutDiffCachePayload = Omit<CheckoutDiffResponsePayload, "subscriptionId">;
 type ListTerminalsPayload = ListTerminalsResponse["payload"];
@@ -133,6 +137,12 @@ const RECONNECT_REPAIR_POLICIES: ReconnectRepairPolicy[] = [
       });
     },
   },
+  {
+    domain: "councilCases",
+    invalidate: ({ queryClient, serverId }) => {
+      void queryClient.invalidateQueries({ queryKey: councilQueryKeys.list(serverId) });
+    },
+  },
 ];
 const reconnectSubscriptionRepairsByServerId = new Map<string, Set<() => void>>();
 
@@ -214,6 +224,26 @@ export function applyProvidersSnapshotUpdate(input: {
     queryKey: agentCommandsQueryRoot(input.serverId),
     exact: false,
   });
+}
+
+export function applyCouncilCaseUpdated(input: {
+  serverId: string;
+  queryClient: QueryClient;
+  message: CouncilCaseUpdatedMessage;
+}): void {
+  input.queryClient.setQueriesData<CouncilCaseRecord[]>(
+    { queryKey: councilQueryKeys.list(input.serverId) },
+    (current) => {
+      if (!current) return current;
+      const updated = input.message.payload.case;
+      return [
+        ...current.filter(
+          (council) => council.scopeId !== updated.scopeId || council.id !== updated.id,
+        ),
+        updated,
+      ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    },
+  );
 }
 
 export function mountServerDataPushRouter(input: PushRouterInput): () => void {
@@ -320,6 +350,13 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
       message,
     });
   });
+  const unsubscribeCouncilCaseUpdated = input.client.on("council.case.updated", (message) => {
+    applyCouncilCaseUpdated({
+      queryClient: input.queryClient,
+      serverId: input.serverId,
+      message,
+    });
+  });
   let reconnectSubscriptionRepairs = reconnectSubscriptionRepairsByServerId.get(input.serverId);
   if (!reconnectSubscriptionRepairs) {
     reconnectSubscriptionRepairs = new Set();
@@ -341,6 +378,7 @@ export function mountServerDataPushRouter(input: PushRouterInput): () => void {
     unsubscribeCheckoutDiffUpdate();
     unsubscribeCheckoutDiffResponse();
     unsubscribeTerminalsChanged();
+    unsubscribeCouncilCaseUpdated();
     for (const subscriptionId of activeCheckoutDiffSubscriptions.keys()) {
       unsubscribeCheckoutDiff(input.client, subscriptionId);
     }

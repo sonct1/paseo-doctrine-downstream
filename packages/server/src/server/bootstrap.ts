@@ -158,6 +158,7 @@ import {
   type WorkspaceArchiveContext,
 } from "./workspace-registry.js";
 import { FileBackedChatService } from "./chat/chat-service.js";
+import { CouncilCaseStore } from "./council/council-case-store.js";
 import { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { ScheduleService } from "./schedule/service.js";
 import { DaemonConfigStore, type MutableDaemonConfig } from "./daemon-config-store.js";
@@ -720,6 +721,7 @@ export async function createPaseoDaemon(
   });
   let boundListenTarget: ListenTarget | null = null;
   let workspaceRegistry: FileBackedWorkspaceRegistry | null = null;
+  let beadsService: BeadsCentralService | null = null;
   const terminalManager = createConfiguredTerminalManager({
     getTerminalActivityUrl: () => createTerminalActivityUrl(boundListenTarget),
   });
@@ -847,8 +849,42 @@ export async function createPaseoDaemon(
   app.use("/public", express.static(staticDir));
 
   // Health check endpoint
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.get("/api/health", async (_req, res) => {
+    const unavailable = {
+      available: false as const,
+      version: "unknown",
+      reason: "Beads service has not initialized",
+    };
+    let beads: Awaited<ReturnType<BeadsCentralService["status"]>> = unavailable;
+    if (beadsService) {
+      const controller = new AbortController();
+      let healthDeadline: NodeJS.Timeout | undefined;
+      const deadline = new Promise<typeof unavailable>((resolve) => {
+        healthDeadline = setTimeout(() => {
+          controller.abort(new Error("Beads health check exceeded 250ms"));
+          resolve({
+            available: false,
+            version: "unknown",
+            reason: "Beads health check exceeded 250ms",
+          });
+        }, 250);
+      });
+      try {
+        beads = await Promise.race([beadsService.status(controller.signal), deadline]);
+      } finally {
+        if (healthDeadline) clearTimeout(healthDeadline);
+        controller.abort();
+      }
+    }
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      components: {
+        beads: beads.available
+          ? { status: "ready", version: beads.version }
+          : { status: "degraded", version: beads.version, reason: beads.reason },
+      },
+    });
   });
 
   app.get("/api/status", (_req, res) => {
@@ -936,7 +972,7 @@ export async function createPaseoDaemon(
     path.join(config.paseoHome, "projects", "projects.json"),
     logger,
   );
-  const beadsService = new BeadsCentralService({
+  beadsService = new BeadsCentralService({
     logger,
     getConfig: () =>
       config.beadsCentral ?? {
@@ -953,6 +989,18 @@ export async function createPaseoDaemon(
   const chatService = new FileBackedChatService({
     paseoHome: config.paseoHome,
     logger,
+  });
+  const councilCaseStore = new CouncilCaseStore({
+    paseoHome: config.paseoHome,
+    logger,
+    onCaseUpdated: (council) => {
+      wsServer?.broadcast(
+        wrapSessionMessage({
+          type: "council.case.updated",
+          payload: { case: council },
+        }),
+      );
+    },
   });
   const workspaceLabelService = createWorkspaceLabelService({
     paseoHome: config.paseoHome,
@@ -1407,6 +1455,18 @@ export async function createPaseoDaemon(
   logger.info({ elapsed: elapsed() }, "Schedule service initialized");
   logger.info({ elapsed: elapsed() }, "Loading persisted agent registry");
   const persistedRecords = await agentStorage.list();
+  const persistedWorkspaces = await workspaceRegistry.list();
+  try {
+    await councilCaseStore.migrateLegacyAgentLabels(
+      persistedRecords,
+      new Map(persistedWorkspaces.map((workspace) => [workspace.workspaceId, workspace.projectId])),
+    );
+  } catch (error) {
+    logger.error(
+      { error },
+      "Council case migration failed; Council RPCs remain unavailable until the store is repaired",
+    );
+  }
   logger.info(
     { elapsed: elapsed() },
     `Agent registry loaded (${persistedRecords.length} record${
@@ -1464,6 +1524,7 @@ export async function createPaseoDaemon(
     getDaemonTcpPort: () => (boundListenTarget?.type === "tcp" ? boundListenTarget.port : null),
     scheduleService,
     chatService,
+    councilCaseStore,
     resolveAgentIdentifier: (identifier) =>
       resolveAgentIdentifier({ identifier, agentManager, agentStorage }),
     sendAgentMessage: async (agentId, text) => {
@@ -1808,6 +1869,7 @@ export async function createPaseoDaemon(
               chatService,
               orchestrationSkills,
               workspaceLabelService,
+              councilCaseStore,
             );
             pluginRuntime.bindPaseoSessionHost(wsServer);
             await pluginRuntime.start();

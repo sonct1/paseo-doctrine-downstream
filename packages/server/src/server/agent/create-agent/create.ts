@@ -115,7 +115,7 @@ export interface CreateAgentFromMcpInput {
   onCreated?: (created: {
     agentId: string;
     createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
-  }) => void;
+  }) => void | Promise<void>;
   onWorktreeCreated?: (createdWorktree: CreatePaseoWorktreeWorkflowResult) => void;
   callerAgentId?: string;
   callerContext?: {
@@ -210,7 +210,10 @@ export async function createAgentCommand(
   let initialPromptStarted = false;
   let initialPromptError: unknown | null = null;
   if (input.kind === "mcp") {
-    input.onCreated?.({ agentId: snapshot.id, createdWorktree: resolved.createdWorktree ?? null });
+    await input.onCreated?.({
+      agentId: snapshot.id,
+      createdWorktree: resolved.createdWorktree ?? null,
+    });
   }
   if (resolved.prompt !== undefined) {
     const sendResult = await sendInitialPrompt(dependencies, resolved, snapshot);

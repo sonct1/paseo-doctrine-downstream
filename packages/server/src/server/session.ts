@@ -186,6 +186,8 @@ import { ProjectConfigSession } from "./session/project-config/project-config-se
 import { WorkspaceProtocolSession } from "./session/workspace-protocol/workspace-protocol-session.js";
 import { BeadsSession, type BeadsSessionOptions } from "./session/beads/beads-session.js";
 import type { BeadsService } from "./beads/beads-service.js";
+import { CouncilSession } from "./session/council/council-session.js";
+import type { CouncilCaseStore } from "./council/council-case-store.js";
 import { DaemonSession, type DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import type { DaemonWebSocketRuntimeDiagnosticSnapshot } from "./session/daemon/diagnostics.js";
 import type { HubRelationshipManagement } from "./hub/relationship-controller.js";
@@ -291,6 +293,14 @@ type ProviderSubagentManagerEvent = Extract<
 const LEGACY_PROVIDER_IDS = new Set(["claude", "codex", "opencode"]);
 const MIN_VERSION_ALL_PROVIDERS = "0.1.45";
 const MIN_VERSION_EXPLICIT_WORKSPACE_RECOVERY = "0.1.105";
+
+function createCouncilSession(
+  store: CouncilCaseStore | undefined,
+  emit: (message: SessionOutboundMessage) => void,
+): CouncilSession | null {
+  if (!store) return null;
+  return new CouncilSession({ emit }, store);
+}
 function errorToFriendlyMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -512,6 +522,7 @@ export interface SessionOptions {
   workspaceLabelService?: WorkspaceLabelService;
   filesystem?: SessionFileSystem;
   chatService?: FileBackedChatService;
+  councilCaseStore?: CouncilCaseStore;
   scheduleService: ScheduleService;
   checkoutDiffManager: CheckoutDiffManager;
   github?: ForgeService;
@@ -786,6 +797,7 @@ export class Session {
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
   private readonly chatScheduleSession: ChatScheduleSession | null;
+  private readonly councilSession: CouncilSession | null;
   private readonly scheduleSession: ScheduleSession;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
@@ -825,6 +837,7 @@ export class Session {
       workspaceLabelService,
       filesystem,
       chatService,
+      councilCaseStore,
       scheduleService,
       checkoutDiffManager,
       github,
@@ -994,6 +1007,7 @@ export class Session {
       clientId: this.clientId,
       logger: this.sessionLogger,
     });
+    this.councilSession = createCouncilSession(councilCaseStore, (msg) => this.emit(msg));
     this.providerCatalogSession = new ProviderCatalogSession({
       host: {
         emit: (msg) => this.emit(msg),
@@ -2026,6 +2040,7 @@ export class Session {
       this.dispatchPluginDirectoryMessage(msg) ??
       this.dispatchPluginMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
+      this.dispatchCouncilMessage(msg) ??
       this.dispatchChatAndScheduleMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
@@ -2798,6 +2813,11 @@ export class Session {
       default:
         return undefined;
     }
+  }
+
+  private dispatchCouncilMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (msg.type !== "council.case.list.request") return undefined;
+    return this.councilSession?.handleListRequest(msg);
   }
 
   private dispatchChatAndScheduleMessage(msg: SessionInboundMessage): Promise<void> | undefined {

@@ -143,6 +143,12 @@ bind role. Provider `allowedTools` hoặc `disabledTools` vẫn có thể thu h�
 Supervisor nhưng không thể mở rộng role authority. Global `daemon.mcp.injectIntoAgents=false` vẫn tắt
 toàn bộ projection.
 
+Role ceiling và default projection là hai khái niệm khác nhau. Candidate SLP tools
+`signal_agent`, `resolve_agent_signal`, `prepare_lead_handoff`, `transition_lead_handoff` nằm trong
+ceiling để Human có thể bật explicit, nhưng không nằm trong default Lead profile. Supervisor cũng không
+nhận mặc định `create_agent`, `send_agent_prompt` hoặc coordination-signal tools; exact governance
+profile phải enable chúng có chủ đích. Provider policy không thể tự bật capability đã default-off.
+
 - Cả ba role phải có `beads_status` và `beads_get`; thiếu MCP/native Paseo-tool transport là launch
   blocker, không phải lý do bỏ checkpoint hoặc dùng direct Central.
 - Một successful `beads_status` receipt được bind với exact assignment digest; mọi Beads operation khác
@@ -150,8 +156,10 @@ toàn bộ projection.
 - Lead có Paseo delegation/lifecycle và Beads mutation tools trong Human lease.
 - Lead có `start_council` để tạo một Room thật và nhận canonical seat plan cho các Peer
   `scout|architect|reviewer`; Lead vẫn phải gọi `list_profiles` rồi `create_agent` cho từng seat, nên
-  Council không sinh orchestration runtime thứ hai. `record_council_seat` chỉ cho Lead cập nhật phase,
-  integrity và disposition của direct Peer child thuộc đúng case/workspace; nó không mở generic
+  Council không sinh orchestration runtime thứ hai. Daemon persist một canonical `CouncilCase` dưới
+  `$PASEO_HOME/councils/`; WebUI đọc record đó qua RPC thay vì dựng state từ labels.
+  `record_council_seat` chỉ cho Lead cập nhật phase, integrity và disposition của direct Peer child
+  thuộc đúng case/workspace; agent labels chỉ là compatibility receipt và tool không mở generic
   `update_agent`.
 - Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
   Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;

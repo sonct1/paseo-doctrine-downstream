@@ -16,6 +16,7 @@ import {
 } from "./role-binding.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
+import { MANDATORY_ROLE_TOOLS } from "./role-profiles.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -641,7 +642,15 @@ describe("native Foundation role materialization", () => {
         "record_council_seat",
       ]),
     });
-    expect(leadPolicy?.allowedTools).toHaveLength(32);
+    expect(leadPolicy?.allowedTools).toHaveLength(28);
+    expect(leadPolicy?.allowedTools).toEqual(
+      expect.not.arrayContaining([
+        "signal_agent",
+        "prepare_lead_handoff",
+        "transition_lead_handoff",
+        "resolve_agent_signal",
+      ]),
+    );
     expect(
       applyRolePaseoToolPolicy("lead", undefined, ["beads_status", "beads_get", "beads_prime"]),
     ).toEqual({
@@ -688,19 +697,20 @@ describe("native Foundation role materialization", () => {
     ).toEqual({ enabled: true, allowedTools: ["post_room", "beads_get"] });
     expect(applyRolePaseoToolPolicy("supervisor", { enabled: false })).toEqual({
       enabled: true,
-      allowedTools: expect.arrayContaining([
-        "get_agent_status",
-        "list_agents",
-        "create_agent",
-        "send_agent_prompt",
-        "beads_get",
-      ]),
+      allowedTools: expect.arrayContaining(["get_agent_status", "list_agents", "beads_get"]),
     });
     expect(
       applyRolePaseoToolPolicy("supervisor", {
         enabled: true,
         allowedTools: ["list_agents", "create_agent"],
       }),
+    ).toEqual({ enabled: true, allowedTools: ["list_agents"] });
+    expect(
+      applyRolePaseoToolPolicy(
+        "supervisor",
+        { enabled: true, allowedTools: ["list_agents", "create_agent"] },
+        ["create_agent", "list_agents", ...MANDATORY_ROLE_TOOLS],
+      ),
     ).toEqual({ enabled: true, allowedTools: ["create_agent", "list_agents"] });
     expect(
       applyRolePaseoToolPolicy("supervisor", {

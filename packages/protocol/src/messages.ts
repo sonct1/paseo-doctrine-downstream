@@ -38,6 +38,11 @@ import {
   ChatWaitResponseSchema,
 } from "./chat/rpc-schemas.js";
 import {
+  CouncilCaseListRequestSchema,
+  CouncilCaseListResponseSchema,
+} from "./council/rpc-schemas.js";
+import { CouncilCaseUpdatedSchema } from "./council/events.js";
+import {
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -3350,6 +3355,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ChatPostRequestSchema,
   ChatReadRequestSchema,
   ChatWaitRequestSchema,
+  CouncilCaseListRequestSchema,
   ScheduleCreateRequestSchema,
   ScheduleListRequestSchema,
   ScheduleInspectRequestSchema,
@@ -3665,6 +3671,10 @@ export const ServerInfoStatusPayloadSchema = z
         // 2027-08-24. A daemon without this flag ignores chat/create's workspaceId field
         // and silently creates a host-level room, so the client must not send it.
         chatRoomWorkspaceScoping: z.boolean().optional(),
+        // COMPAT(councilCases): added in v0.5.0-paseo.38, remove gate after 2027-08-25.
+        // New clients read canonical daemon-owned Council records instead of deriving cases
+        // from agent labels, so they must not request this RPC from an older daemon.
+        councilCases: z.boolean().optional(),
         // COMPAT(beadsIssues): added in v0.3.1-paseo.2, remove gate after 2027-02-10.
         beadsIssues: z.boolean().optional(),
         // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.
@@ -6709,6 +6719,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   ChatPostResponseSchema,
   ChatReadResponseSchema,
   ChatWaitResponseSchema,
+  CouncilCaseListResponseSchema,
+  CouncilCaseUpdatedSchema,
   ScheduleCreateResponseSchema,
   ScheduleListResponseSchema,
   ScheduleInspectResponseSchema,
@@ -6889,6 +6901,8 @@ export type ChatDeleteResponse = z.infer<typeof ChatDeleteResponseSchema>;
 export type ChatPostResponse = z.infer<typeof ChatPostResponseSchema>;
 export type ChatReadResponse = z.infer<typeof ChatReadResponseSchema>;
 export type ChatWaitResponse = z.infer<typeof ChatWaitResponseSchema>;
+export type CouncilCaseListResponse = z.infer<typeof CouncilCaseListResponseSchema>;
+export type CouncilCaseUpdated = z.infer<typeof CouncilCaseUpdatedSchema>;
 export type ScheduleCreateResponse = z.infer<typeof ScheduleCreateResponseSchema>;
 export type ScheduleListResponse = z.infer<typeof ScheduleListResponseSchema>;
 export type ScheduleInspectResponse = z.infer<typeof ScheduleInspectResponseSchema>;
@@ -6957,6 +6971,7 @@ export type ChatDeleteRequest = z.infer<typeof ChatDeleteRequestSchema>;
 export type ChatPostRequest = z.infer<typeof ChatPostRequestSchema>;
 export type ChatReadRequest = z.infer<typeof ChatReadRequestSchema>;
 export type ChatWaitRequest = z.infer<typeof ChatWaitRequestSchema>;
+export type CouncilCaseListRequest = z.infer<typeof CouncilCaseListRequestSchema>;
 export type ScheduleCreateRequest = z.infer<typeof ScheduleCreateRequestSchema>;
 export type ScheduleListRequest = z.infer<typeof ScheduleListRequestSchema>;
 export type ScheduleInspectRequest = z.infer<typeof ScheduleInspectRequestSchema>;

@@ -79,7 +79,7 @@ export interface BeadsRuntimeStatus {
 }
 
 export interface BeadsService {
-  status(): Promise<BeadsRuntimeStatus>;
+  status(signal?: AbortSignal): Promise<BeadsRuntimeStatus>;
   ready(context: BeadsProjectContext, limit?: number, signal?: AbortSignal): Promise<BeadsIssue[]>;
   list(
     context: BeadsProjectContext,

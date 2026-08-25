@@ -1,34 +1,22 @@
 import type { AgentLifecycleStatus } from "@getpaseo/protocol/agent-lifecycle";
 import type { RoleBindingReceipt } from "@getpaseo/protocol/role-binding";
 import {
-  COUNCIL_REPORT_RECEIPT_VERSION,
-  COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
-} from "@getpaseo/protocol/council-labels";
+  COUNCIL_PHASES,
+  COUNCIL_SEAT_ROLES,
+  COUNCIL_TIERS,
+  type CouncilCaseRecord,
+  type CouncilPhase,
+  type CouncilSeatIntegrity,
+  type CouncilSeatReportReceipt,
+  type CouncilSeatRole,
+  type CouncilTier,
+} from "@getpaseo/protocol/council/types";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
 
-export const COUNCIL_TIERS = ["lens", "debate", "debate-with-proof", "high-risk"] as const;
-export const COUNCIL_PHASES = ["sealed", "review", "audit", "verdict"] as const;
-export const COUNCIL_ROLES = [
-  "scout",
-  "architect",
-  "reviewer",
-  "independent",
-  "challenger",
-  "specialist",
-  "verifier",
-  "auditor",
-] as const;
-
-export type CouncilTier = (typeof COUNCIL_TIERS)[number];
-export type CouncilPhase = (typeof COUNCIL_PHASES)[number];
-export type CouncilRole = (typeof COUNCIL_ROLES)[number];
-export type CouncilSeatIntegrity =
-  | "unspecified"
-  | "valid"
-  | "compromised"
-  | "missing"
-  | "redundant";
+export { COUNCIL_PHASES, COUNCIL_SEAT_ROLES as COUNCIL_ROLES, COUNCIL_TIERS };
+export type { CouncilPhase, CouncilSeatIntegrity, CouncilTier };
+export type CouncilRole = CouncilSeatRole;
 
 export interface CouncilAgentSource {
   id: string;
@@ -48,20 +36,26 @@ export interface CouncilAgentSource {
 }
 
 export interface CouncilSeat {
-  agent: CouncilAgentSource;
+  agentId: string | null;
+  agent: CouncilAgentSource | null;
   role: CouncilRole;
   round: string;
   phase: CouncilPhase;
   integrity: CouncilSeatIntegrity;
+  disposition: string | null;
+  reportReceipt: CouncilSeatReportReceipt | null;
+  updatedAt: Date;
 }
 
 export interface CouncilCase {
   id: string;
   scopeId: string;
   title: string;
+  question: string;
   tier: CouncilTier;
   phase: CouncilPhase;
   serverId: string;
+  projectId?: string;
   workspaceId?: string;
   parentAgentId: string | null;
   lead: CouncilAgentSource | null;
@@ -94,9 +88,6 @@ export function describeCouncilPlacement(
     return COUNCIL_PLACEMENT_LEGACY;
   }
   if (!workspace) {
-    // The workspace record is gone (or not yet hydrated), but the council's
-    // own scope ID is still authoritative persisted state. Surface it exactly
-    // with an explicit unavailable marker rather than a bare "unknown".
     return {
       text: `Unavailable workspace (workspace: ${council.workspaceId})`,
       legacy: true,
@@ -110,230 +101,123 @@ export function describeCouncilPlacement(
   return { text: `${projectName} / ${workspaceName}`, legacy: false };
 }
 
-const PHASE_ORDER: Record<CouncilPhase, number> = {
-  sealed: 0,
-  review: 1,
-  audit: 2,
-  verdict: 3,
-};
-
 const ROLE_ORDER: Record<CouncilRole, number> = {
   scout: 0,
   architect: 1,
   reviewer: 2,
-  independent: 3,
-  challenger: 4,
-  specialist: 5,
-  verifier: 6,
-  auditor: 7,
 };
-
-function isCouncilTier(value: string): value is CouncilTier {
-  return (COUNCIL_TIERS as readonly string[]).includes(value);
-}
-
-function isCouncilPhase(value: string): value is CouncilPhase {
-  return (COUNCIL_PHASES as readonly string[]).includes(value);
-}
-
-function isCouncilRole(value: string): value is CouncilRole {
-  return (COUNCIL_ROLES as readonly string[]).includes(value);
-}
-
-function readLabel(labels: Readonly<Record<string, string>>, key: string): string {
-  return labels[key]?.trim() ?? "";
-}
-
-function councilSeatIntegrity(agent: CouncilAgentSource): CouncilSeatIntegrity {
-  const integrity = readLabel(agent.labels, "council.integrity").toLowerCase();
-  if (integrity.startsWith("valid")) return "valid";
-  if (integrity.startsWith("compromised")) return "compromised";
-  if (integrity.startsWith("missing")) return "missing";
-  if (integrity.startsWith("redundant")) return "redundant";
-  return "unspecified";
-}
-
-function councilDisposition(agent: CouncilAgentSource): string | null {
-  return readLabel(agent.labels, "council.disposition") || null;
-}
-
-function hasCouncilReportReceipt(agent: CouncilAgentSource): boolean {
-  const reportDigest = readLabel(agent.labels, "council.report_digest");
-  const reportCreatedAt = readLabel(agent.labels, "council.report_created_at");
-  return (
-    readLabel(agent.labels, COUNCIL_REPORT_RECEIPT_VERSION_LABEL) ===
-      COUNCIL_REPORT_RECEIPT_VERSION &&
-    readLabel(agent.labels, "council.room_id").length > 0 &&
-    readLabel(agent.labels, "council.kickoff_message_id").length > 0 &&
-    readLabel(agent.labels, "council.report_message_id").length > 0 &&
-    readLabel(agent.labels, "council.report_start_sentinel").length > 0 &&
-    readLabel(agent.labels, "council.report_end_sentinel").length > 0 &&
-    /^[a-f0-9]{64}$/u.test(reportDigest) &&
-    Number.isFinite(Date.parse(reportCreatedAt))
-  );
-}
-
-function parseCouncilSeat(agent: CouncilAgentSource): CouncilSeat | null {
-  const caseId = readLabel(agent.labels, "council.case_id");
-  const tier = readLabel(agent.labels, "council.tier");
-  const phase = readLabel(agent.labels, "council.phase");
-  const role = readLabel(agent.labels, "council.role");
-  if (!caseId || !isCouncilTier(tier) || !isCouncilPhase(phase) || !isCouncilRole(role)) {
-    return null;
-  }
-  return {
-    agent,
-    role,
-    phase,
-    round: readLabel(agent.labels, "council.round") || "1",
-    integrity: councilSeatIntegrity(agent),
-  };
-}
 
 function compareSeats(left: CouncilSeat, right: CouncilSeat): number {
   const roleDifference = ROLE_ORDER[left.role] - ROLE_ORDER[right.role];
-  if (roleDifference !== 0) {
-    return roleDifference;
-  }
-  return left.round.localeCompare(right.round, undefined, { numeric: true });
-}
-
-function latestSeat(seats: readonly CouncilSeat[]): CouncilSeat {
-  return seats.reduce((latest, seat) =>
-    seat.agent.lastActivityAt.getTime() > latest.agent.lastActivityAt.getTime() ? seat : latest,
-  );
-}
-
-export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
-  return (
-    seat.integrity === "valid" &&
-    hasCouncilReportReceipt(seat.agent) &&
-    (seat.agent.status === "idle" || seat.agent.status === "closed") &&
-    seat.agent.attentionReason !== "error"
-  );
-}
-
-export function isCouncilSeatUnavailable(seat: CouncilSeat): boolean {
-  return (
-    seat.integrity !== "redundant" &&
-    (seat.integrity === "compromised" ||
-      seat.integrity === "missing" ||
-      seat.agent.status === "error" ||
-      seat.agent.attentionReason === "error")
-  );
-}
-
-function isCouncilSeatReportExpected(seat: CouncilSeat): boolean {
-  return seat.integrity !== "redundant";
+  return roleDifference !== 0
+    ? roleDifference
+    : left.round.localeCompare(right.round, undefined, { numeric: true });
 }
 
 function councilVerdictProvenance(
   phase: CouncilPhase,
   lead: CouncilAgentSource | null,
 ): CouncilCase["verdictProvenance"] {
-  if (phase !== "verdict") {
-    return "pending";
-  }
+  if (phase !== "verdict") return "pending";
   return lead ? "lead-linked" : "unverified";
 }
 
-function councilAgentScopeIdentity(agent: CouncilAgentSource): string {
-  if (agent.workspaceId) return `workspace:${agent.workspaceId}`;
-  if (agent.parentAgentId) return `parent:${agent.parentAgentId}`;
-  return `agent:${agent.id}`;
+function latestDisposition(seats: readonly CouncilSeat[]): string | null {
+  return (
+    [...seats]
+      .filter((seat) => seat.disposition)
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0]
+      ?.disposition ?? null
+  );
 }
 
-function councilCaseKey(agent: CouncilAgentSource, caseId: string): string {
-  return JSON.stringify([agent.serverId, councilAgentScopeIdentity(agent), caseId]);
+export function isCouncilSeatReportReady(seat: CouncilSeat): boolean {
+  return (
+    seat.integrity === "valid" &&
+    seat.reportReceipt !== null &&
+    seat.agent !== null &&
+    (seat.agent.status === "idle" || seat.agent.status === "closed") &&
+    seat.agent.attentionReason !== "error"
+  );
 }
 
-export function groupCouncilCases(
+export function isCouncilSeatUnavailable(seat: CouncilSeat): boolean {
+  if (seat.integrity === "redundant") return false;
+  if (seat.integrity === "compromised" || seat.integrity === "missing") return true;
+  if (seat.agentId && !seat.agent) return true;
+  return seat.agent?.status === "error" || seat.agent?.attentionReason === "error";
+}
+
+function isCouncilSeatReportExpected(seat: CouncilSeat): boolean {
+  return seat.integrity !== "redundant";
+}
+
+export function projectCouncilCases(
+  records: readonly CouncilCaseRecord[],
   agents: readonly CouncilAgentSource[],
-  serverId?: string,
+  serverId: string,
 ): CouncilCase[] {
-  const agentByKey = new Map(agents.map((agent) => [`${agent.serverId}:${agent.id}`, agent]));
-  const seatsByCase = new Map<string, CouncilSeat[]>();
+  const agentById = new Map(
+    agents.filter((agent) => agent.serverId === serverId).map((agent) => [agent.id, agent]),
+  );
 
-  for (const agent of agents) {
-    if (serverId && agent.serverId !== serverId) {
-      continue;
-    }
-    const seat = parseCouncilSeat(agent);
-    if (!seat) {
-      continue;
-    }
-    const caseId = readLabel(agent.labels, "council.case_id");
-    const key = councilCaseKey(agent, caseId);
-    const seats = seatsByCase.get(key);
-    if (seats) {
-      seats.push(seat);
-    } else {
-      seatsByCase.set(key, [seat]);
-    }
-  }
-
-  const cases: CouncilCase[] = [];
-  for (const seats of seatsByCase.values()) {
-    seats.sort(compareSeats);
-    const newest = latestSeat(seats);
-    const caseId = readLabel(newest.agent.labels, "council.case_id");
-    const title = readLabel(newest.agent.labels, "council.title") || `Council ${caseId}`;
-    const tier = readLabel(newest.agent.labels, "council.tier") as CouncilTier;
-    const phase = seats.reduce(
-      (latest, seat) => (PHASE_ORDER[seat.phase] > PHASE_ORDER[latest] ? seat.phase : latest),
-      "sealed" as CouncilPhase,
-    );
-    const ownerSeat = [...seats]
-      .sort(
-        (left, right) => right.agent.lastActivityAt.getTime() - left.agent.lastActivityAt.getTime(),
-      )
-      .find((seat) => seat.agent.parentAgentId);
-    const parentAgentIds = new Set(seats.map((seat) => seat.agent.parentAgentId ?? null));
-    const soleParentAgentId = parentAgentIds.size === 1 ? [...parentAgentIds][0] : null;
-    const parentAgentId = soleParentAgentId || null;
-    const caseServerId = newest.agent.serverId;
-    const linkedOwner = parentAgentId
-      ? (agentByKey.get(`${caseServerId}:${parentAgentId}`) ?? null)
-      : null;
-    const lead =
-      linkedOwner?.roleBinding?.roleId === "lead" &&
-      linkedOwner.roleBinding.qualification === "implementation-supported"
-        ? linkedOwner
+  return records
+    .map((record): CouncilCase => {
+      const leadCandidate = record.parentAgentId
+        ? (agentById.get(record.parentAgentId) ?? null)
         : null;
-    const verdictProvenance = councilVerdictProvenance(phase, lead);
-    const reportSeats = seats.filter(isCouncilSeatReportExpected);
+      const lead =
+        leadCandidate?.roleBinding?.roleId === "lead" &&
+        leadCandidate.roleBinding.qualification === "implementation-supported"
+          ? leadCandidate
+          : null;
+      const seats = record.seats
+        .map(
+          (seat): CouncilSeat => ({
+            agentId: seat.agentId,
+            agent: seat.agentId ? (agentById.get(seat.agentId) ?? null) : null,
+            role: seat.role,
+            round: seat.round,
+            phase: seat.phase,
+            integrity: seat.integrity,
+            disposition: seat.disposition,
+            reportReceipt: seat.reportReceipt,
+            updatedAt: new Date(seat.updatedAt),
+          }),
+        )
+        .sort(compareSeats);
+      const reportSeats = seats.filter(isCouncilSeatReportExpected);
 
-    cases.push({
-      id: caseId,
-      scopeId: councilAgentScopeIdentity(newest.agent),
-      title,
-      tier,
-      phase,
-      serverId: caseServerId,
-      workspaceId:
-        ownerSeat?.agent.workspaceId ?? linkedOwner?.workspaceId ?? newest.agent.workspaceId,
-      parentAgentId,
-      lead,
-      verdictProvenance,
-      disposition: councilDisposition(newest.agent),
-      seats,
-      reportSeatCount: reportSeats.length,
-      readyCount: reportSeats.filter(isCouncilSeatReportReady).length,
-      unavailableCount: reportSeats.filter(isCouncilSeatUnavailable).length,
-      redundantCount: seats.length - reportSeats.length,
-      updatedAt: newest.agent.lastActivityAt,
+      return {
+        id: record.id,
+        scopeId: record.scopeId,
+        title: record.title,
+        question: record.question,
+        tier: record.tier,
+        phase: record.phase,
+        serverId,
+        projectId: record.projectId ?? undefined,
+        workspaceId: record.workspaceId ?? undefined,
+        parentAgentId: record.parentAgentId,
+        lead,
+        verdictProvenance: councilVerdictProvenance(record.phase, lead),
+        disposition: latestDisposition(seats),
+        seats,
+        reportSeatCount: reportSeats.length,
+        readyCount: reportSeats.filter(isCouncilSeatReportReady).length,
+        unavailableCount: reportSeats.filter(isCouncilSeatUnavailable).length,
+        redundantCount: seats.length - reportSeats.length,
+        updatedAt: new Date(record.updatedAt),
+      };
+    })
+    .sort((left, right) => {
+      const activityDifference = right.updatedAt.getTime() - left.updatedAt.getTime();
+      return activityDifference !== 0 ? activityDifference : left.title.localeCompare(right.title);
     });
-  }
-
-  return cases.sort((left, right) => {
-    const activityDifference = right.updatedAt.getTime() - left.updatedAt.getTime();
-    return activityDifference !== 0 ? activityDifference : left.title.localeCompare(right.title);
-  });
 }
 
 export function councilRoleLabel(role: CouncilRole): string {
   if (role === "architect") return "Solution Architect";
-  if (role === "challenger") return "Premise Challenger";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
@@ -350,9 +234,7 @@ export function councilPhaseLabel(phase: CouncilPhase): string {
 export function councilCasePhaseLabel(
   council: Pick<CouncilCase, "phase" | "verdictProvenance">,
 ): string {
-  if (council.phase !== "verdict") {
-    return councilPhaseLabel(council.phase);
-  }
+  if (council.phase !== "verdict") return councilPhaseLabel(council.phase);
   return council.verdictProvenance === "lead-linked"
     ? "Lead-linked verdict marker"
     : "Unverified verdict marker";

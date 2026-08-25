@@ -100,6 +100,7 @@ import { BeadsCentralService } from "./beads/beads-central-service.js";
 import type { BeadsService } from "./beads/beads-service.js";
 import { FoundationCredentialStore } from "./foundation-credential-store.js";
 import type { FileBackedChatService } from "./chat/chat-service.js";
+import type { CouncilCaseStore } from "./council/council-case-store.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
 import type { WorkspaceLabelService } from "./workspace-labels/index.js";
@@ -535,6 +536,10 @@ function resolveBeadsService(
   });
 }
 
+function optionalCouncilCaseStore(store: CouncilCaseStore | undefined): CouncilCaseStore | null {
+  return store ?? null;
+}
+
 interface RequiredWebSocketServices {
   scheduleService: ScheduleService;
   checkoutDiffManager: CheckoutDiffManager;
@@ -574,6 +579,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly chatService: FileBackedChatService | null;
+  private readonly councilCaseStore: CouncilCaseStore | null;
   private readonly workspaceLabelService: WorkspaceLabelService | null;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
@@ -677,6 +683,7 @@ export class VoiceAssistantWebSocketServer {
     chatService?: FileBackedChatService,
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
+    councilCaseStore?: CouncilCaseStore,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -694,6 +701,7 @@ export class VoiceAssistantWebSocketServer {
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     this.workspaceLabelService = workspaceLabelService ?? null;
     this.chatService = chatService ?? null;
+    this.councilCaseStore = optionalCouncilCaseStore(councilCaseStore);
     this.beadsService = resolveBeadsService(
       beadsService,
       logger,
@@ -1467,6 +1475,7 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       beadsService: this.beadsService,
       chatService: this.chatService ?? undefined,
+      councilCaseStore: this.councilCaseStore ?? undefined,
       workspaceLabelService: this.workspaceLabelService ?? undefined,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
@@ -1805,6 +1814,8 @@ export class VoiceAssistantWebSocketServer {
         // 2027-08-24. A daemon without this flag ignores chat/create's workspaceId field
         // and silently creates a host-level room, so the client must not send it.
         chatRoomWorkspaceScoping: true,
+        // COMPAT(councilCases): added in v0.5.0-paseo.38, remove gate after 2027-08-25.
+        councilCases: true,
         // COMPAT(beadsIssues): added in v0.3.1-paseo.2, remove gate after 2027-02-10.
         beadsIssues: true,
         // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.

@@ -84,6 +84,9 @@ describe("product role skill policy", () => {
     expect(councilSkill).toContain("bare `council.integrity` label alone is not a valid report");
     expect(councilSkill).toContain("at most one targeted challenge and permit one");
     expect(councilSkill).toContain("Lead issues one binding decision packet");
+    expect(councilSkill).toContain("exactly three canonical seat identities");
+    expect(councilSkill).not.toContain("council.role=verifier");
+    expect(councilSkill).not.toContain("council.role=auditor");
     expect(councilSkill).toContain("Do not create a Council\ndaemon, database, queue");
     expect(councilSkill).not.toContain("no file operation is permitted");
     expect(councilSkill).not.toContain("the only tool operations permitted");

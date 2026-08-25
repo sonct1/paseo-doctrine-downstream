@@ -10,12 +10,15 @@ Beads Central là bundled sidecar component của Paseo Product, không phải s
 phải deploy riêng. Artifact CLI/WebUI và Desktop chứa executable Central `1.2.0` cùng `bd 1.1.2` đã
 pin; source checkout `beads-central` chỉ là canonical build input.
 
-Daemon worker sở hữu toàn bộ lifecycle:
+Daemon worker sở hữu toàn bộ lifecycle nhưng Central không sở hữu daemon availability:
 
-- start sidecar trên `127.0.0.1:6769` và chờ `/health/ready` trước khi mở Paseo daemon;
-- fail closed khi thiếu bundle, sai version, sai `bd`, hoặc port đang bị một Central cũ chiếm;
+- start sidecar trên `127.0.0.1:6769` song song với Paseo daemon; Central tự qualify qua
+  `/health/ready`, nhưng startup timeout của nó không giữ daemon/WebUI làm con tin;
+- nếu thiếu bundle, sai version, sai `bd`, port conflict hoặc sidecar chết ngoài dự kiến, daemon/WebUI
+  tiếp tục chạy và `/api/health` trả `components.beads.status=degraded` cùng exact reason;
 - dừng sidecar khi daemon stop, bootstrap fail, supervisor mất, hoặc process shutdown;
-- shutdown daemon với exit lỗi nếu sidecar chết ngoài dự kiến sau readiness.
+- chỉ operation phụ thuộc Beads/Central fail closed; agent observation, local lifecycle, workspace,
+  Room và read-only Product surfaces không bị sidecar kéo sập.
 
 Data của component nằm dưới `$PASEO_HOME/beads-central/`; credential nội bộ nằm trong private Paseo
 credential store. Sidecar chỉ nhận một environment allowlist tối thiểu cùng exact Central settings,

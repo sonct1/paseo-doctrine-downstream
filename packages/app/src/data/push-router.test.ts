@@ -1,11 +1,13 @@
 import { QueryClient, QueryObserver, skipToken } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import type { MutableDaemonConfig, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { CouncilCaseRecord } from "@getpaseo/protocol/council/types";
 import { checkoutDiffQueryKey } from "@/git/query-keys";
 import { buildTerminalsQueryKey } from "@/screens/workspace/terminals/state";
 import { daemonConfigQueryKey } from "@/data/daemon-config";
 import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { providersSnapshotQueryKey } from "@/data/providers-snapshot";
+import { councilQueryKeys } from "@/councils/data";
 import {
   checkoutDiffPushRoute,
   invalidateServerDataQueriesAfterReconnect,
@@ -24,12 +26,14 @@ type SubscribeCheckoutDiffResponseMessage = Extract<
 >;
 type StatusMessage = Extract<SessionOutboundMessage, { type: "status" }>;
 type TerminalsChangedMessage = Extract<SessionOutboundMessage, { type: "terminals_changed" }>;
+type CouncilCaseUpdatedMessage = Extract<SessionOutboundMessage, { type: "council.case.updated" }>;
 type RouterMessage =
   | ProvidersSnapshotUpdateMessage
   | CheckoutDiffUpdateMessage
   | SubscribeCheckoutDiffResponseMessage
   | StatusMessage
-  | TerminalsChangedMessage;
+  | TerminalsChangedMessage
+  | CouncilCaseUpdatedMessage;
 type RouterMessageType = RouterMessage["type"];
 type RouterHandler = (message: RouterMessage) => void;
 type RouterClient = Parameters<typeof mountServerDataPushRouter>[0]["client"];
@@ -64,6 +68,7 @@ function createFakeClient(config: { rejectCheckoutDiffSubscribe?: boolean } = {}
     subscribe_checkout_diff_response: [],
     status: [],
     terminals_changed: [],
+    "council.case.updated": [],
   };
   const subscribeCheckoutDiffCalls: Array<{
     cwd: string;
@@ -143,6 +148,38 @@ function providerUpdate(generatedAt: string): ProvidersSnapshotUpdateMessage {
   };
 }
 
+function councilCase(updatedAt: string, phase: "sealed" | "review" = "sealed"): CouncilCaseRecord {
+  return {
+    schemaVersion: 1,
+    id: "case-1",
+    title: "Canonical boundary",
+    question: "Who owns this state?",
+    tier: "lens",
+    phase,
+    roomId: "room-1",
+    kickoffMessageId: "kickoff-1",
+    scopeId: "workspace:workspace-1",
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    parentAgentId: "lead-1",
+    seats: [
+      {
+        role: "reviewer",
+        round: "1",
+        agentId: null,
+        phase,
+        integrity: "unspecified",
+        disposition: null,
+        reportReceipt: null,
+        createdAt: "2026-08-25T00:00:00.000Z",
+        updatedAt,
+      },
+    ],
+    createdAt: "2026-08-25T00:00:00.000Z",
+    updatedAt,
+  };
+}
+
 describe("server data push router", () => {
   it("routes provider snapshot and daemon config payloads until detached", () => {
     const queryClient = new QueryClient();
@@ -174,6 +211,25 @@ describe("server data push router", () => {
       generatedAt: "2026-01-01T00:00:00.000Z",
       requestId: "providers_snapshot_update",
     });
+  });
+
+  it("updates canonical Council query data from its own push event", () => {
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "server-1";
+    const queryKey = [...councilQueryKeys.list(serverId), 1] as const;
+    queryClient.setQueryData(queryKey, [councilCase("2026-08-25T00:00:00.000Z")]);
+    const unmount = mountServerDataPushRouter({ client: fake.client, queryClient, serverId });
+
+    fake.emit({
+      type: "council.case.updated",
+      payload: { case: councilCase("2026-08-25T00:01:00.000Z", "review") },
+    });
+    expect(queryClient.getQueryData<CouncilCaseRecord[]>(queryKey)).toMatchObject([
+      { id: "case-1", phase: "review", updatedAt: "2026-08-25T00:01:00.000Z" },
+    ]);
+
+    unmount();
   });
 
   it("subscribes active checkout diff queries and writes matching diff events", () => {

@@ -486,9 +486,17 @@ test("mcp create exposes the created worktree before dispatching the initial pro
         lifecycle: ManagedAgent["lifecycle"] | null;
       }
     | undefined;
+  let markCallbackStarted!: () => void;
+  let releaseCallback!: () => void;
+  const callbackStarted = new Promise<void>((resolve) => {
+    markCallbackStarted = resolve;
+  });
+  const callbackGate = new Promise<void>((resolve) => {
+    releaseCallback = resolve;
+  });
 
   try {
-    await createAgentCommand(
+    const createPromise = createAgentCommand(
       {
         agentManager,
         agentStorage: storage,
@@ -509,16 +517,21 @@ test("mcp create exposes the created worktree before dispatching the initial pro
         background: true,
         notifyOnFinish: false,
         worktree: { worktreeName: "feature", baseBranch: "main" },
-        onCreated: ({ agentId, createdWorktree: callbackWorktree }) => {
+        onCreated: async ({ agentId, createdWorktree: callbackWorktree }) => {
           observed = {
             createdWorktree: callbackWorktree,
             lifecycle: agentManager.getAgent(agentId)?.lifecycle ?? null,
           };
+          markCallbackStarted();
+          await callbackGate;
         },
       },
     );
 
+    await callbackStarted;
     expect(observed).toEqual({ createdWorktree, lifecycle: "idle" });
+    releaseCallback();
+    await createPromise;
   } finally {
     await removeRealAgentManagerWorkdir({ agentManager, storage, workdir });
   }

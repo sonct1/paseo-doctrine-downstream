@@ -74,6 +74,11 @@ describe("paseo daemon bootstrap", () => {
       const payload = await response.json();
       expect(payload.status).toBe("ok");
       expect(typeof payload.timestamp).toBe("string");
+      expect(payload.components?.beads).toMatchObject({
+        status: "degraded",
+        version: expect.any(String),
+        reason: expect.any(String),
+      });
     } finally {
       await daemonHandle.close();
     }

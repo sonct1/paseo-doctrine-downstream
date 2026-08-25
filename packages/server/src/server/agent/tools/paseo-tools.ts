@@ -8,6 +8,15 @@ import {
   COUNCIL_REPORT_RECEIPT_VERSION,
   COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
 } from "@getpaseo/protocol/council-labels";
+import {
+  CouncilPhaseSchema,
+  CouncilSeatIntegritySchema,
+  CouncilSeatReportReceiptSchema,
+  CouncilSeatRoleSchema,
+  CouncilTierSchema,
+  type CouncilSeatReportReceipt,
+  type CouncilSeatRole,
+} from "@getpaseo/protocol/council/types";
 import { ensureValidJson } from "../../json-utils.js";
 import type { Logger } from "pino";
 
@@ -163,6 +172,7 @@ import {
   PrepareLeadHandoffInputSchema,
 } from "@getpaseo/protocol/lead-handoff";
 import { prepareLeadHandoff, transitionLeadHandoff } from "../lead-handoffs.js";
+import type { CouncilCaseStore } from "../../council/council-case-store.js";
 
 export interface PaseoToolHostDependencies {
   agentManager: AgentManager;
@@ -171,6 +181,10 @@ export interface PaseoToolHostDependencies {
   getDaemonTcpPort?: () => number | null;
   scheduleService?: ScheduleService | null;
   chatService?: FileBackedChatService | null;
+  councilCaseStore?: Pick<
+    CouncilCaseStore,
+    "create" | "assertSeatLaunch" | "assignSeat" | "recordSeat"
+  > | null;
   resolveAgentIdentifier?: (
     identifier: string,
   ) => Promise<{ ok: true; agentId: string } | { ok: false; error: string }>;
@@ -227,21 +241,7 @@ export interface PaseoToolHostDependencies {
 
 type LaunchableAgentProfile = AgentProfile & { model: string };
 
-const NativeCouncilSeatRoleSchema = z.enum(["scout", "architect", "reviewer"]);
-type NativeCouncilSeatRole = z.infer<typeof NativeCouncilSeatRoleSchema>;
-
-interface CouncilSeatReportReceipt {
-  roomId: string;
-  kickoffMessageId: string;
-  reportMessageId: string;
-  reportDigest: string;
-  authorAgentId: string;
-  startSentinel: string;
-  endSentinel: string;
-  createdAt: string;
-}
-
-function councilReportSentinels(role: NativeCouncilSeatRole): {
+function councilReportSentinels(role: CouncilSeatRole): {
   startSentinel: string;
   endSentinel: string;
 } {
@@ -250,6 +250,15 @@ function councilReportSentinels(role: NativeCouncilSeatRole): {
     startSentinel: `${prefix}_COUNCIL_REPORT_V1`,
     endSentinel: `${prefix}_COUNCIL_REPORT_END`,
   };
+}
+
+function councilSeatLaunch(
+  labels: Readonly<Record<string, string>> | undefined,
+): { caseId: string; role: CouncilSeatRole } | null {
+  const caseId = labels?.["council.case_id"]?.trim();
+  if (!caseId) return null;
+  const role = CouncilSeatRoleSchema.parse(labels?.["council.role"]);
+  return { caseId, role };
 }
 
 function requireCouncilReportContext(
@@ -263,7 +272,7 @@ function requireCouncilReportContext(
 } {
   const roomId = labels["council.room_id"]?.trim();
   const kickoffMessageId = labels["council.kickoff_message_id"]?.trim();
-  const seatRole = NativeCouncilSeatRoleSchema.safeParse(labels["council.role"]);
+  const seatRole = CouncilSeatRoleSchema.safeParse(labels["council.role"]);
   if (!roomId || !kickoffMessageId || !seatRole.success) {
     throw new Error(
       `Council seat '${agentId}' is missing daemon-issued Room, kickoff, or role labels`,
@@ -393,6 +402,129 @@ async function validateCouncilSeatReportReceipt(input: {
     startSentinel: context.startSentinel,
     endSentinel: context.endSentinel,
     createdAt: report.createdAt,
+  };
+}
+
+function assertCouncilSeatRecordAuthority(input: {
+  target: Pick<ManagedAgent | StoredAgentRecord, "labels" | "roleBinding" | "workspaceId">;
+  callerAgentId: string;
+  callerWorkspaceId: string | undefined;
+  caseId: string;
+  agentId: string;
+}): void {
+  if (input.target.roleBinding?.roleId !== "peer") {
+    throw new Error("A Council seat must be a role-bound Peer");
+  }
+  if (getParentAgentIdFromLabels(input.target.labels) !== input.callerAgentId) {
+    throw new Error("A Lead may record only its own direct Peer child");
+  }
+  if (
+    input.callerWorkspaceId &&
+    input.target.workspaceId &&
+    input.target.workspaceId !== input.callerWorkspaceId
+  ) {
+    throw new Error("A Council seat must belong to the Lead workspace");
+  }
+  if (input.target.labels["council.case_id"] !== input.caseId) {
+    throw new Error(`Peer '${input.agentId}' is not a seat in Council '${input.caseId}'`);
+  }
+}
+
+async function updateCouncilCompatibilityReceipt(input: {
+  agentManager: AgentManager;
+  logger: Logger;
+  agentId: string;
+  caseId: string;
+  phase: "sealed" | "review" | "audit" | "verdict";
+  integrity: "unspecified" | "valid" | "compromised" | "missing" | "redundant";
+  disposition?: string;
+  reportReceipt?: CouncilSeatReportReceipt;
+}): Promise<void> {
+  const labels: Record<string, string> = {
+    "council.phase": input.phase,
+    "council.integrity": input.integrity,
+  };
+  if (input.disposition) labels["council.disposition"] = input.disposition;
+  if (input.reportReceipt) {
+    labels["council.report_message_id"] = input.reportReceipt.reportMessageId;
+    labels["council.report_digest"] = input.reportReceipt.reportDigest;
+    labels["council.report_created_at"] = input.reportReceipt.createdAt;
+    labels[COUNCIL_REPORT_RECEIPT_VERSION_LABEL] = COUNCIL_REPORT_RECEIPT_VERSION;
+  }
+
+  try {
+    const result = await updateAgentCommand(
+      { agentManager: input.agentManager },
+      { agentId: input.agentId, labels },
+      { allowCouncilLabels: true },
+    );
+    if (!result.accepted) {
+      throw new Error(result.error ?? "Council compatibility label update was rejected");
+    }
+  } catch (error) {
+    input.logger.warn(
+      { agentId: input.agentId, caseId: input.caseId, error },
+      "Canonical Council seat recorded but compatibility labels were not updated",
+    );
+  }
+}
+
+async function assertCanonicalCouncilSeatLaunch(input: {
+  launch: { caseId: string; role: CouncilSeatRole } | null;
+  store: PaseoToolHostDependencies["councilCaseStore"];
+  callerAgentId: string | undefined;
+  workspaceId: string | null;
+}): Promise<void> {
+  if (!input.launch) return;
+  if (!input.callerAgentId || !input.store) {
+    throw new Error("Council seat launch requires a Lead-owned canonical Council case");
+  }
+  await input.store.assertSeatLaunch(
+    input.launch.caseId,
+    input.launch.role,
+    input.callerAgentId,
+    input.workspaceId,
+  );
+}
+
+function createCouncilSeatAssignmentHooks(input: {
+  launch: { caseId: string; role: CouncilSeatRole } | null;
+  store: PaseoToolHostDependencies["councilCaseStore"];
+  callerAgentId: string | undefined;
+  workspaceId: string | null;
+  agentManager: AgentManager;
+  agentStorage: AgentStorage;
+  logger: Logger;
+}): Pick<CreateAgentFromMcpInput, "onCreated"> {
+  const { launch, callerAgentId, store } = input;
+  if (!launch || !callerAgentId || !store) return {};
+  return {
+    onCreated: async ({ agentId }) => {
+      try {
+        await store.assignSeat({
+          caseId: launch.caseId,
+          role: launch.role,
+          agentId,
+          parentAgentId: callerAgentId,
+          workspaceId: input.workspaceId,
+        });
+      } catch (error) {
+        await archiveAgentCommand(
+          {
+            agentManager: input.agentManager,
+            agentStorage: input.agentStorage,
+            logger: input.logger,
+          },
+          agentId,
+        ).catch((archiveError) => {
+          input.logger.error(
+            { archiveError, agentId, caseId: launch.caseId },
+            "Failed to archive an unassigned Council seat",
+          );
+        });
+        throw error;
+      }
+    },
   };
 }
 
@@ -2113,26 +2245,6 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         },
       );
 
-      const CouncilTierSchema = z.enum(["lens", "debate", "debate-with-proof", "high-risk"]);
-      const CouncilPhaseSchema = z.enum(["sealed", "review", "audit", "verdict"]);
-      const CouncilSeatRoleSchema = NativeCouncilSeatRoleSchema;
-      const CouncilSeatIntegritySchema = z.enum([
-        "unspecified",
-        "valid",
-        "compromised",
-        "missing",
-        "redundant",
-      ]);
-      const CouncilSeatReportReceiptSchema = z.object({
-        roomId: z.string(),
-        kickoffMessageId: z.string(),
-        reportMessageId: z.string(),
-        reportDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-        authorAgentId: z.string(),
-        startSentinel: z.string(),
-        endSentinel: z.string(),
-        createdAt: z.string(),
-      });
       const CouncilSeatPlanSchema = z.object({
         role: CouncilSeatRoleSchema,
         peerSubrole: PeerSubroleSchema,
@@ -2171,8 +2283,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           },
         },
         async ({ title, question, tier, roles, roomName }) => {
-          const uniqueRoles = Array.from(new Set(roles));
-          if (uniqueRoles.length !== roles.length) {
+          if (!options.councilCaseStore) {
+            throw new Error("Canonical Council case store is unavailable");
+          }
+          const validatedRoles = CouncilSeatRoleSchema.array().parse(roles);
+          const uniqueRoles = Array.from(new Set(validatedRoles));
+          if (uniqueRoles.length !== validatedRoles.length) {
             throw new Error("Council seat roles must be unique");
           }
           const caseId = `case_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -2183,16 +2299,34 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             workspaceId,
             projectId,
           });
-          const kickoff = await options.chatService!.dispatchMessage({
-            room: room.id,
-            authorAgentId: callerAgentId,
-            body: [
-              `Council ${caseId}: ${title}`,
-              `Question: ${question}`,
-              `Tier: ${tier}. Sealed seats: ${uniqueRoles.join(", ")}.`,
-              "Each seat must report independently in this Room before the Lead records integrity.",
-            ].join("\n"),
-          });
+          let kickoff;
+          try {
+            kickoff = await options.chatService!.dispatchMessage({
+              room: room.id,
+              authorAgentId: callerAgentId,
+              body: [
+                `Council ${caseId}: ${title}`,
+                `Question: ${question}`,
+                `Tier: ${tier}. Sealed seats: ${uniqueRoles.join(", ")}.`,
+                "Each seat must report independently in this Room before the Lead records integrity.",
+              ].join("\n"),
+            });
+            await options.councilCaseStore.create({
+              id: caseId,
+              title,
+              question,
+              tier,
+              roomId: room.id,
+              kickoffMessageId: kickoff.id,
+              workspaceId,
+              projectId,
+              parentAgentId: callerAgentId,
+              roles: uniqueRoles,
+            });
+          } catch (error) {
+            await options.chatService!.deleteRoom({ room: room.id }).catch(() => undefined);
+            throw error;
+          }
           const seats = uniqueRoles.map((role) => {
             const seatRole = CouncilSeatRoleSchema.parse(role);
             let executionProfile: FoundationExecutionProfileId | undefined;
@@ -2245,7 +2379,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         {
           title: "Record council seat",
           description:
-            "Lead-only: audit one direct Peer child in this Council and update only its canonical Council lifecycle labels. integrity=valid requires a terminal seat and the exact Peer-authored Room report message returned by post_room.",
+            "Lead-only: audit one direct Peer child and update the daemon-owned canonical Council case. integrity=valid requires a terminal seat and the exact Peer-authored Room report message returned by post_room; agent labels are compatibility receipts only.",
           inputSchema: {
             caseId: z.string().trim().min(1),
             agentId: z.string().trim().min(1),
@@ -2273,24 +2407,15 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           if (!target) {
             throw new Error(`Council seat agent '${agentId}' is unavailable`);
           }
-          if (target.roleBinding?.roleId !== "peer") {
-            throw new Error("A Council seat must be a role-bound Peer");
-          }
-          if (getParentAgentIdFromLabels(target.labels) !== callerAgentId) {
-            throw new Error("A Lead may record only its own direct Peer child");
-          }
           const caller = resolveCallerAgent();
-          if (
-            caller?.workspaceId &&
-            target.workspaceId &&
-            target.workspaceId !== caller.workspaceId
-          ) {
-            throw new Error("A Council seat must belong to the Lead workspace");
-          }
-          if (target.labels["council.case_id"] !== caseId) {
-            throw new Error(`Peer '${agentId}' is not a seat in Council '${caseId}'`);
-          }
-          let reportReceipt: z.infer<typeof CouncilSeatReportReceiptSchema> | undefined;
+          assertCouncilSeatRecordAuthority({
+            target,
+            callerAgentId,
+            callerWorkspaceId: caller?.workspaceId,
+            caseId,
+            agentId,
+          });
+          let reportReceipt: CouncilSeatReportReceipt | undefined;
           if (integrity === "valid") {
             reportReceipt = await validateCouncilSeatReportReceipt({
               agentManager,
@@ -2303,29 +2428,27 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
               reportMessageId,
             });
           }
-          const result = await updateAgentCommand(
-            { agentManager },
-            {
-              agentId,
-              labels: {
-                "council.phase": phase,
-                "council.integrity": integrity,
-                ...(disposition ? { "council.disposition": disposition } : {}),
-                ...(reportReceipt
-                  ? {
-                      "council.report_message_id": reportReceipt.reportMessageId,
-                      "council.report_digest": reportReceipt.reportDigest,
-                      "council.report_created_at": reportReceipt.createdAt,
-                      [COUNCIL_REPORT_RECEIPT_VERSION_LABEL]: COUNCIL_REPORT_RECEIPT_VERSION,
-                    }
-                  : {}),
-              },
-            },
-            { allowCouncilLabels: true },
-          );
-          if (!result.accepted) {
-            throw new Error(result.error ?? "Council seat update was not accepted");
+          if (!options.councilCaseStore) {
+            throw new Error("Canonical Council case store is unavailable");
           }
+          await options.councilCaseStore.recordSeat({
+            caseId,
+            agentId,
+            phase,
+            integrity,
+            ...(disposition ? { disposition } : {}),
+            ...(reportReceipt ? { reportReceipt } : {}),
+          });
+          await updateCouncilCompatibilityReceipt({
+            agentManager,
+            logger: childLogger,
+            agentId,
+            caseId,
+            phase,
+            integrity,
+            ...(disposition ? { disposition } : {}),
+            ...(reportReceipt ? { reportReceipt } : {}),
+          });
           return {
             content: [],
             structuredContent: ensureValidJson({
@@ -2622,6 +2745,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     async (args: unknown) => {
       const resolvedArgs = await resolveCreateAgentToolArgs(args);
       const { parsedArgs, worktree } = resolvedArgs;
+      const councilLaunch = councilSeatLaunch(parsedArgs.labels);
+      await assertCanonicalCouncilSeatLaunch({
+        launch: councilLaunch,
+        store: options.councilCaseStore,
+        callerAgentId,
+        workspaceId: resolvedArgs.workspaceId ?? null,
+      });
+      const councilSeatAssignmentHooks = createCouncilSeatAssignmentHooks({
+        launch: councilLaunch,
+        store: options.councilCaseStore,
+        callerAgentId,
+        workspaceId: resolvedArgs.workspaceId ?? null,
+        agentManager,
+        agentStorage,
+        logger: childLogger,
+      });
       const launchSettings = resolveCreateLaunchSettings(resolvedArgs);
       const { launchProfile } = launchSettings;
       const launchProfileReceipt = projectLaunchProfileReceipt(launchProfile);
@@ -2689,6 +2828,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           callerAgentId,
           callerContext,
           worktree,
+          ...councilSeatAssignmentHooks,
         },
       );
 

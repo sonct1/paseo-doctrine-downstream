@@ -9,10 +9,7 @@ Human.
 | Solution Architect | `council.architect` | `council.reasoning` |
 | Reviewer | `council.reviewer` | `council.challengerReasoning`, then `council.reasoning` |
 | High-risk Architect | `council.highRiskArchitect` | `council.highRiskReasoning`, then Architect route |
-| Evidence Verifier | `council.verifier` | none |
-| Deep semantic Verifier | `council.deepVerifier` | Architect route |
-| Draft-verdict Reviewer | `council.auditor` | Reviewer route |
-| High-risk draft Reviewer | `council.deepAuditor` | `council.deepVerifier`, then Reviewer route |
+| Scout | `council.scout` | none |
 
 The legacy keys (`council.reasoning`, `council.challengerReasoning`, `council.highRiskReasoning`) are
 compatibility fallbacks only; the other fallbacks in the column are canonical routes reused as
@@ -42,13 +39,10 @@ Family diversity reduces shared blind spots but creates no authority and is not 
 weak provider only to manufacture diversity. The Human controls the current Lead route; Council does
 not inspect or replace it.
 
-In high-risk mode, only the drafting seats upgrade: `highRiskArchitect` replaces the Architect route,
-and `deepAuditor` replaces the draft-verdict Reviewer route. The plain Reviewer and Verifier seats
-keep their configured cross-family routes — upgrading every seat to the same strongest model would
-collapse the family split that makes their agreement meaningful. Note the fallback chain does not
-preserve that split by itself: an unconfigured `deepVerifier` inherits the Architect route, which in
-high-risk mode resolves to the same model as the drafting seat. Configure `deepVerifier` (and
-`deepAuditor`) cross-family explicitly when high-risk work matters.
+In high-risk mode, `highRiskArchitect` replaces the Architect route. Scout and Reviewer keep their
+configured cross-family routes; upgrading every seat to the same strongest model would collapse the
+family split that makes correlated blind spots visible. There are no Verifier or Auditor seat routes:
+verification is Scout's method, and falsification/draft-risk review is Reviewer's method.
 
 Core law: cheap workers buy coverage; strong seats buy deliberation; the Lead adjudicates. Worker
 count never converts into decision weight.

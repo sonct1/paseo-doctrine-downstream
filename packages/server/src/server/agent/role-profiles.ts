@@ -93,6 +93,29 @@ export const ROLE_TOOL_CEILINGS = {
   ],
 } as const satisfies Record<PaseoRoleId, readonly string[]>;
 
+const DEFAULT_DISABLED_ROLE_TOOLS = {
+  lead: new Set([
+    "signal_agent",
+    "prepare_lead_handoff",
+    "transition_lead_handoff",
+    "resolve_agent_signal",
+  ]),
+  peer: new Set<string>(),
+  supervisor: new Set([
+    "create_agent",
+    "send_agent_prompt",
+    "signal_agent",
+    "resolve_agent_signal",
+  ]),
+} as const satisfies Record<PaseoRoleId, ReadonlySet<string>>;
+
+export const ROLE_DEFAULT_TOOLS = Object.fromEntries(
+  PASEO_ROLE_IDS.map((roleId) => [
+    roleId,
+    ROLE_TOOL_CEILINGS[roleId].filter((tool) => !DEFAULT_DISABLED_ROLE_TOOLS[roleId].has(tool)),
+  ]),
+) as Record<PaseoRoleId, string[]>;
+
 export const MANDATORY_ROLE_TOOLS = ["beads_status", "beads_get", "beads_prime"] as const;
 export const MANDATORY_ROLE_SKILLS = ["beads-issue-tracker"] as const;
 
@@ -149,7 +172,7 @@ export function materializeRoleProfileBindingReceipt(
   const preferences = RoleProfilePreferencesSchema.parse(input ?? {});
   const toolCeiling = ROLE_TOOL_CEILINGS[roleId];
   const skillCeiling = roleSkillCeiling(roleId);
-  const allowedTools = canonicalSelection(preferences.allowedTools, toolCeiling);
+  const allowedTools = canonicalSelection(preferences.allowedTools, ROLE_DEFAULT_TOOLS[roleId]);
   const allowedSkills = canonicalSelection(preferences.allowedSkills, skillCeiling);
 
   assertSelectionWithinCeiling({

@@ -7,7 +7,31 @@ import type { AgentStorage, StoredAgentRecord } from "../agent-storage.js";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
 import type { FileBackedChatService } from "../../chat/chat-service.js";
 import type { WorkspaceRegistry } from "../../workspace-registry.js";
+import type { CouncilCaseStore } from "../../council/council-case-store.js";
 import { createPaseoToolCatalog } from "./paseo-tools.js";
+
+class CouncilCaseStoreFake {
+  public readonly created: unknown[] = [];
+  public readonly assigned: unknown[] = [];
+  public readonly recorded: unknown[] = [];
+
+  public async create(input: unknown): Promise<unknown> {
+    this.created.push(input);
+    return input;
+  }
+
+  public async assertSeatLaunch(): Promise<void> {}
+
+  public async assignSeat(input: unknown): Promise<unknown> {
+    this.assigned.push(input);
+    return input;
+  }
+
+  public async recordSeat(input: unknown): Promise<unknown> {
+    this.recorded.push(input);
+    return input;
+  }
+}
 
 class RoomAgentManagerFake {
   public readonly metadataUpdates: Array<{
@@ -69,8 +93,12 @@ class RoomAgentStorageFake {
 class RoomChatServiceFake {
   public readonly created: Array<Parameters<FileBackedChatService["createRoom"]>[0]> = [];
   public readonly dispatched: Array<Parameters<FileBackedChatService["dispatchMessage"]>[0]> = [];
+  public readonly deleted: Array<Parameters<FileBackedChatService["deleteRoom"]>[0]> = [];
 
-  public constructor(public readonly messages: ChatMessage[] = []) {}
+  public constructor(
+    public readonly messages: ChatMessage[] = [],
+    private readonly dispatchError: Error | null = null,
+  ) {}
 
   public async createRoom(
     input: Parameters<FileBackedChatService["createRoom"]>[0],
@@ -105,6 +133,7 @@ class RoomChatServiceFake {
     input: Parameters<FileBackedChatService["dispatchMessage"]>[0],
   ): Promise<ChatMessage> {
     this.dispatched.push(input);
+    if (this.dispatchError) throw this.dispatchError;
     return {
       id: "message-1",
       roomId: input.room,
@@ -114,6 +143,12 @@ class RoomChatServiceFake {
       mentionAgentIds: [],
       createdAt: "2026-08-04T00:00:00.000Z",
     };
+  }
+
+  public async deleteRoom(
+    input: Parameters<FileBackedChatService["deleteRoom"]>[0],
+  ): Promise<void> {
+    this.deleted.push(input);
   }
 }
 
@@ -139,6 +174,7 @@ function createCatalog(options: {
   chatService?: RoomChatServiceFake;
   enablePosting?: boolean;
   workspaceRegistry?: ReturnType<typeof createAuthoritativeWorkspaceRegistry>;
+  councilCaseStore?: CouncilCaseStoreFake;
 }) {
   return createPaseoToolCatalog({
     agentManager: (options.agentManager ??
@@ -149,6 +185,8 @@ function createCatalog(options: {
     chatService: options.chatService as unknown as FileBackedChatService,
     workspaceRegistry: (options.workspaceRegistry ??
       createAuthoritativeWorkspaceRegistry()) as unknown as WorkspaceRegistry,
+    councilCaseStore: (options.councilCaseStore ??
+      new CouncilCaseStoreFake()) as unknown as CouncilCaseStore,
     ...(options.enablePosting
       ? {
           resolveAgentIdentifier: async (identifier: string) => ({
@@ -322,10 +360,12 @@ describe("Paseo room tools", () => {
 
   test("starts a Lead-owned Council with one Room and canonical Peer seat plans", async () => {
     const chatService = new RoomChatServiceFake();
+    const councilCaseStore = new CouncilCaseStoreFake();
     const lead = createCatalog({
       callerAgentId: "agent-caller",
       roleId: "lead",
       chatService,
+      councilCaseStore,
     });
 
     const result = await lead.executeTool("start_council", {
@@ -339,6 +379,15 @@ describe("Paseo room tools", () => {
         room: "room-1",
         authorAgentId: "agent-caller",
         body: expect.stringContaining("Sealed seats: scout, architect, reviewer"),
+      }),
+    ]);
+    expect(councilCaseStore.created).toEqual([
+      expect.objectContaining({
+        title: "Choose the implementation boundary",
+        workspaceId: "workspace-room",
+        projectId: "project-room",
+        parentAgentId: "agent-caller",
+        roles: ["scout", "architect", "reviewer"],
       }),
     ]);
     expect(result.structuredContent).toEqual(
@@ -372,6 +421,23 @@ describe("Paseo room tools", () => {
         ],
       }),
     );
+  });
+
+  test("removes the Room when canonical Council kickoff fails", async () => {
+    const chatService = new RoomChatServiceFake([], new Error("kickoff write failed"));
+    const lead = createCatalog({
+      callerAgentId: "agent-caller",
+      roleId: "lead",
+      chatService,
+    });
+
+    await expect(
+      lead.executeTool("start_council", {
+        title: "Rollback partial Council",
+        question: "Does a failed kickoff leave an orphan Room?",
+      }),
+    ).rejects.toThrow("kickoff write failed");
+    expect(chatService.deleted).toEqual([{ room: "room-1" }]);
   });
 
   test("supports a one-seat lens Council without inventing a second seat", async () => {
@@ -429,6 +495,7 @@ describe("Paseo room tools", () => {
       roleBinding: { roleId: "peer" },
     } as ManagedAgent;
     const agentManager = new RoomAgentManagerFake("lead", child);
+    const councilCaseStore = new CouncilCaseStoreFake();
     const chatService = new RoomChatServiceFake([
       {
         id: "kickoff-1",
@@ -454,6 +521,7 @@ describe("Paseo room tools", () => {
       roleId: "lead",
       agentManager,
       chatService,
+      councilCaseStore,
     });
 
     const result = await lead.executeTool("record_council_seat", {
@@ -480,6 +548,15 @@ describe("Paseo room tools", () => {
           },
         },
       },
+    ]);
+    expect(councilCaseStore.recorded).toEqual([
+      expect.objectContaining({
+        caseId: "case_123456789abc",
+        agentId: "peer-seat",
+        phase: "review",
+        integrity: "valid",
+        reportReceipt: expect.objectContaining({ reportMessageId: "report-1" }),
+      }),
     ]);
     expect(result.structuredContent).toEqual({
       agentId: "peer-seat",

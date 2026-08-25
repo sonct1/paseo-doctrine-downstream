@@ -124,8 +124,11 @@ step-by-step:
 6. Sau mọi terminal notification, Lead audit activity + Room và gọi `record_council_seat` với exact
    `reportMessageId`. Daemon verify parent/workspace/case/kickoff, terminal lifecycle, Peer author,
    timestamp, sentinels và SHA-256 trước khi ghi receipt.
-7. Chỉ receipt-valid seat mới được UI tính `Report ready`; Lead mới issue verdict/dissent/unknown và
-   handoff. Existing record từ runtime cũ thiếu receipt phải hiện fail-closed, không backfill bằng label.
+7. Daemon persist canonical `CouncilCase`; WebUI đọc case qua RPC và nhận `council.case.updated` từ
+   cùng boundary, không poll hoặc group agent labels. Labels cũ được migrate một lần rồi chỉ còn là
+   compatibility receipt.
+8. Chỉ receipt-valid seat mới được UI tính `Report ready`; Lead mới issue verdict/dissent/unknown và
+   handoff. Existing record từ runtime cũ thiếu receipt phải hiện fail-closed, không tự bịa receipt.
 
 Seat không spawn seat khác, generic Engineer không được giả làm Council seat, và trạng thái
 idle/completed hay bare `council.integrity=valid` không thay literal seat report cùng native receipt.

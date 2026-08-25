@@ -89,7 +89,7 @@ IF PROPOSITION IS FALSE, RECOMMENDATION IMPACT
 
 New material factual claims return to verification; they do not expand free-form debate.
 
-## Draft-verdict audit
+## Reviewer draft-risk check
 
 ```text
 AUDIT RESULT: CLEAR | REVISE | STOP
@@ -105,4 +105,5 @@ FINDINGS
 UNCHECKED LIMITATIONS
 ```
 
-The Auditor identifies defects but does not issue or replace the binding verdict.
+Reviewer identifies defects but does not issue or replace the binding verdict. This is a method for
+the canonical Reviewer seat, not a separate Auditor role.

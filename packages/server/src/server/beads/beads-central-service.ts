@@ -131,9 +131,9 @@ export class BeadsCentralService implements BeadsService {
     this.requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   }
 
-  public async status(): Promise<BeadsRuntimeStatus> {
+  public async status(signal?: AbortSignal): Promise<BeadsRuntimeStatus> {
     try {
-      const ready = ReadyResponseSchema.parse(await this.requestJson("/health/ready"));
+      const ready = ReadyResponseSchema.parse(await this.requestJson("/health/ready", { signal }));
       if (ready.central !== PASEO_BEADS_CENTRAL_VERSION) {
         throw new Error(
           `Paseo requires Beads Central ${PASEO_BEADS_CENTRAL_VERSION}; received ${ready.central}`,
@@ -142,7 +142,7 @@ export class BeadsCentralService implements BeadsService {
       if (!ready.bd.startsWith("bd version 1.1.2")) {
         throw new Error(`Beads Central returned an unsupported runtime: ${ready.bd}`);
       }
-      await this.requestJson("/v1/projects", { actor: "paseo-daemon-status" });
+      await this.requestJson("/v1/projects", { actor: "paseo-daemon-status", signal });
       return { available: true, version: PASEO_BEADS_CENTRAL_VERSION };
     } catch (error) {
       return {
@@ -428,7 +428,11 @@ export class BeadsCentralService implements BeadsService {
       this.requestTimeoutMs,
     );
     const abort = () => controller.abort(options.signal?.reason);
-    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) {
+      abort();
+    } else {
+      options.signal?.addEventListener("abort", abort, { once: true });
+    }
     try {
       const response = await this.fetchImpl(`${endpoint}${path}`, {
         method: options.method ?? "GET",

@@ -1,3 +1,5 @@
+import { CouncilSeatRoleSchema } from "./council/types.js";
+
 export const COUNCIL_LABEL_PREFIX = "council.";
 
 export const COUNCIL_REPORT_RECEIPT_VERSION_LABEL = "council.report_receipt_version";
@@ -42,6 +44,9 @@ export function validateCouncilSeatBootstrapLabels(
   }
   if (labels?.["council.integrity"] !== "unspecified") {
     return "Council seat creation requires council.integrity=unspecified";
+  }
+  if (!CouncilSeatRoleSchema.safeParse(labels?.["council.role"]).success) {
+    return "Council seat creation requires council.role=scout|architect|reviewer";
   }
   return null;
 }

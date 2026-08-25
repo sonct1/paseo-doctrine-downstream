@@ -13,6 +13,10 @@ Nó không thay thế role contracts, Human lease hoặc repository protocol.
 
 Không được gọi ba slice này là shipped production capability chỉ vì focused tests xanh.
 
+Các tool candidate không được project vào standing role profile mặc định. Human phải enable exact tool
+trong Role Profiles sau khi chấp nhận use case và evidence boundary; việc tool còn nằm trong Foundation
+ceiling chỉ cho phép opt-in, không phải production endorsement.
+
 ## Coordination signal
 
 Coordination signal là durable advisory attention. Nó không phải prompt điều khiển và không chuyển

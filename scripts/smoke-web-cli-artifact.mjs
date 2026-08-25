@@ -19,6 +19,8 @@ const prefix = path.join(smokeRoot, "install");
 const binDir = path.join(smokeRoot, "bin");
 const port = process.env.PASEO_RELEASE_SMOKE_PORT ?? "17677";
 const listen = `127.0.0.1:${port}`;
+const degradedPort = process.env.PASEO_RELEASE_SMOKE_DEGRADED_PORT ?? "17678";
+const degradedListen = `127.0.0.1:${degradedPort}`;
 const beadsCentralPort = process.env.PASEO_RELEASE_SMOKE_BEADS_PORT ?? "17679";
 const beadsCentralEndpoint = `http://127.0.0.1:${beadsCentralPort}`;
 const installedBeadsCentralRoot = path.join(prefix, "current", "components", "beads-central");
@@ -98,17 +100,67 @@ function runCli(name, args, options) {
   return run(cli.command, [...cli.prefix, ...args], options);
 }
 
-async function waitForHealth() {
+async function waitForHealth(target = listen) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
-      const response = await fetch(`http://${listen}/api/health`);
-      if (response.ok) return await response.text();
+      const response = await fetch(`http://${target}/api/health`);
+      if (response.ok) return await response.json();
     } catch {
       // The daemon is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   fail("daemon health endpoint did not become ready");
+}
+
+async function waitForBeadsHealthStatus(target, status) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const health = await waitForHealth(target);
+    if (health.components?.beads?.status === status) return health;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  fail(`daemon Beads health did not reach ${status}`);
+}
+
+async function smokeDegradedBeadsLifecycle(runtimeNode, cliEntry) {
+  const degradedLog = openSync(path.join(smokeRoot, "daemon-degraded.log"), "w");
+  const degradedEnv = {
+    ...env,
+    PASEO_HOME: path.join(home, ".paseo-degraded"),
+    PASEO_LISTEN: degradedListen,
+    PASEO_BEADS_CENTRAL_SIDECAR: path.join(smokeRoot, "missing-beads-central-sidecar"),
+  };
+  const daemon = spawn(
+    runtimeNode,
+    [
+      cliEntry,
+      "daemon",
+      "start",
+      "--foreground",
+      "--listen",
+      degradedListen,
+      "--web-ui",
+      "--no-relay",
+    ],
+    { env: degradedEnv, stdio: ["ignore", degradedLog, degradedLog] },
+  );
+  try {
+    const health = await waitForHealth(degradedListen);
+    if (health.status !== "ok" || health.components?.beads?.status !== "degraded") {
+      fail(`Daemon did not isolate Beads startup failure: ${JSON.stringify(health)}`);
+    }
+    const index = await (await fetch(`http://${degradedListen}/`)).text();
+    if (!index.includes("<title>Paseo</title>")) {
+      fail("Degraded daemon did not serve the WebUI");
+    }
+    return health;
+  } finally {
+    if (daemon.exitCode === null) {
+      daemon.kill();
+      await waitForExit(daemon);
+    }
+    closeSync(degradedLog);
+  }
 }
 
 async function waitForBeadsCentral() {
@@ -323,7 +375,7 @@ async function main() {
   );
   let success;
   try {
-    const health = await waitForHealth();
+    await waitForHealth();
     const beadsReady = await waitForBeadsCentral();
     if (
       beadsReady.central !== componentManifest.version ||
@@ -331,14 +383,16 @@ async function main() {
     ) {
       fail(`Bundled Beads readiness mismatch: ${JSON.stringify(beadsReady)}`);
     }
+    const health = await waitForBeadsHealthStatus(listen, "ready");
     const index = await (await fetch(`http://${listen}/`)).text();
     if (!index.includes("<title>Paseo</title>")) fail("WebUI title was not served");
     await smokeTerminal();
+    const degradedHealth = await smokeDegradedBeadsLifecycle(runtimeNode, cliEntry);
     runCli("paseo", ["daemon", "stop"]);
     await waitForExit(daemon);
     success = `SMOKE_OK platform=${process.platform} arch=${
       process.arch
-    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok beads_central=${beadsReady.central} bd=${componentManifest.beadsVersion} health=${health.trim()}\n`;
+    } cli=ok foundation=ok terminal=ok daemon=ok webui=ok beads_central=${beadsReady.central} bd=${componentManifest.beadsVersion} degraded_beads=${degradedHealth.components.beads.status} health=${JSON.stringify(health)}\n`;
   } finally {
     if (daemon.exitCode === null) {
       daemon.kill();

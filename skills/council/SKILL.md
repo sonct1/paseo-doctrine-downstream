@@ -36,10 +36,10 @@ Choose one tier and state the reason in one sentence:
   artifact/proposition review.
 - `debate` (default for a difficult Council): one Solution Architect and one Reviewer with distinct
   mandates and sealed reports.
-- `debate-with-proof`: the default pair, bounded verification of decision-changing claims, and a
-  fresh draft-verdict Reviewer by default.
-- `high-risk`: the default pair, optional second Architect only with a genuinely distinct mandate,
-  bounded verification, and a mandatory fresh draft-verdict Reviewer.
+- `debate-with-proof`: Scout + Solution Architect + Reviewer. Scout verifies decision-changing
+  evidence; Architect frames the solution; Reviewer falsifies the candidate and its assumptions.
+- `high-risk`: the same three canonical seats with stricter source/snapshot bounds, mandatory proof
+  for decision-changing claims, and explicit STOP conditions.
 
 Do not duplicate prompts, create seats for provider count, or turn agreement into votes. When two
 qualified providers are configured, route Architect and Reviewer across providers. Same-provider
@@ -185,6 +185,12 @@ Council. When Agent Profile routing is configured, also omit `provider` and `set
 objects. Launch required Round 1 seats in parallel where the tool surface permits, keep every returned
 agent ID, and wait for finish notifications rather than polling.
 
+### Scout
+
+Use no execution profile and set `labels.council.role: scout`. Give Scout a narrow evidence mandate:
+locate authoritative sources, reproduce decision-changing facts, identify unknowns, and return exact
+provenance. Scout does not propose the binding architecture and does not audit a sibling report.
+
 The native execution profile already supplies the role-specific identity. Do not paste or override
 that profile in `initialPrompt`. The prompt adds only the case brief, exact seat method, source/snapshot
 boundary, output contract, and these seat-local rules:
@@ -224,14 +230,15 @@ Then use `get_agent_activity` for each seat, read the exact Council Room as Lead
 For a usable report, call `record_council_seat` with `phase=review`, `integrity=valid`, and the exact
 `reportMessageId` returned by that Peer. The daemon must validate terminal lifecycle, direct-child and
 workspace ownership, case/kickoff identity, Room author, sentinels, timestamp, and report digest before
-writing the receipt labels. Mark a provenance/boundary violation `compromised`, no usable report
-`missing`, and a preserved superseded retry `redundant`; those classifications do not accept a report
-message. Never use `update_agent` to forge Council integrity. Terminal status, plausible prose, or a
-bare `council.integrity` label alone is not a valid report.
+writing the canonical case receipt; labels are compatibility output only. Mark a provenance/boundary
+violation `compromised` and no usable report `missing`; those classifications do not accept a report
+message. `redundant` is reserved for migrated legacy evidence, not a reason to spawn another identity.
+Never use `update_agent` to forge Council integrity. Terminal status and plausible prose are not enough.
+A bare `council.integrity` label alone is not a valid report.
 
-Allow at most one fresh replacement for infrastructure, provenance, or output-contract failure.
-Keep the same brief and snapshot. `debate` may continue with one missing core seat only as explicitly
-`DEGRADED`; `high-risk` cannot issue a normal verdict without both core methods.
+Do not replace a failed canonical seat with a fresh retry. Record the failure and preserve the bounded
+topology. `debate` may continue with one missing core seat only as explicitly `DEGRADED`; `high-risk`
+cannot issue a normal verdict without all required methods.
 
 ## Lead convergence
 
@@ -250,15 +257,12 @@ tới đúng seat bằng `send_agent_prompt`. Seat chỉ dùng `post_room` với
 không gọi `read_room` và không inspect Room history hoặc sibling positions. Missing `post_room` là
 missing native evidence, không được chữa bằng shell/CLI fallback hoặc biến Room thành authority store.
 
-Use [references/report-format.md](references/report-format.md) only as adaptable output patterns. A
-Verifier receives one proposition, one evidence mandate, one fresh child issue, a read-only Peer
-assignment, and label `council.role=verifier`; it does not receive authority to reopen the whole case.
-
-For `debate-with-proof` or `high-risk`, create a fresh `reviewer`-profile Peer that did not participate
-earlier. Give it the neutral brief, role-attributed reports without provider/agent identity, verified
-evidence, material dissent, and the Lead's draft. Set method `draft-verdict audit`, label
-`council.role=auditor`, round `audit`, and use a separate child issue. The Auditor may return
-`CLEAR`, `REVISE`, or `STOP`; it never replaces Lead's verdict.
+Use [references/report-format.md](references/report-format.md) only as adaptable output patterns.
+Council has exactly three canonical seat identities: `scout`, `architect`, and `reviewer`. Bounded
+verification belongs to Scout; independent falsification and draft-risk review belong to Reviewer.
+Do not invent Verifier, Auditor, Challenger, Specialist, or additional Architect identities. If the
+evidence is insufficient after one targeted challenge, Lead records the unknown or stops; it does not
+grow a second role registry.
 
 ## Binding verdict and stop
 
@@ -271,8 +275,9 @@ Lead issues one binding decision packet containing:
 - material dissent and Lead's ruling;
 - limitations, degraded/correlated coverage, and reopen conditions.
 
-Update verdict-contributing seat labels to `council.phase=verdict` while preserving their integrity
-classification. Append the binding disposition and handoff boundary to the parent case issue and read
+Use `record_council_seat` to move verdict-contributing seats to `phase=verdict` while preserving their
+integrity and daemon-issued report receipts. Agent labels are compatibility receipts, not the Council
+case authority. Append the binding disposition and handoff boundary to the parent case issue and read
 it back. Do not close, defer, reopen, or otherwise change issue lifecycle unless the Human/assignment
 authorized that exact transition.
 

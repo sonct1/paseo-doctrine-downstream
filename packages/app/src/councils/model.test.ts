@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
+import type {
+  CouncilCaseRecord,
+  CouncilCaseSeat,
+  CouncilSeatRole,
+} from "@getpaseo/protocol/council/types";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type { CouncilAgentSource, CouncilCase } from "./model";
 import {
   councilCaseScopeIdentity,
   councilRoleLabel,
   describeCouncilPlacement,
-  groupCouncilCases,
   isCouncilSeatReportReady,
+  projectCouncilCases,
 } from "./model";
 
-function makeAgent(
-  id: string,
-  agentLabels: Record<string, string>,
-  overrides: Partial<CouncilAgentSource> = {},
-): CouncilAgentSource {
+const NOW = "2026-08-10T10:00:00.000Z";
+
+function makeAgent(id: string, overrides: Partial<CouncilAgentSource> = {}): CouncilAgentSource {
   return {
     id,
     serverId: "local",
@@ -23,36 +26,63 @@ function makeAgent(
     provider: "codex",
     workspaceId: "workspace-1",
     parentAgentId: "lead-1",
-    labels: agentLabels,
-    lastActivityAt: new Date("2026-08-10T10:00:00.000Z"),
+    labels: {},
+    lastActivityAt: new Date(NOW),
     ...overrides,
   };
 }
 
-function councilLabels(
-  role: string,
-  overrides: Partial<Record<string, string>> = {},
-): Record<string, string> {
-  const hasValidIntegrity = overrides["council.integrity"]?.startsWith("valid") === true;
+function makeSeat(
+  role: CouncilSeatRole,
+  overrides: Partial<CouncilCaseSeat> = {},
+): CouncilCaseSeat {
   return {
-    "council.case_id": "case-1",
-    "council.title": "Choose the migration boundary",
-    "council.tier": "debate-with-proof",
-    "council.phase": "sealed",
-    "council.role": role,
-    "council.round": "1",
-    ...(hasValidIntegrity
-      ? {
-          "council.room_id": "room-1",
-          "council.kickoff_message_id": "kickoff-1",
-          "council.report_message_id": `report-${role}`,
-          "council.report_digest": "c".repeat(64),
-          "council.report_created_at": "2026-08-10T10:00:00.000Z",
-          "council.report_receipt_version": "1",
-          "council.report_start_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_V1`,
-          "council.report_end_sentinel": `${role.toUpperCase()}_COUNCIL_REPORT_END`,
-        }
-      : {}),
+    role,
+    round: "1",
+    agentId: role,
+    phase: "sealed",
+    integrity: "unspecified",
+    disposition: null,
+    reportReceipt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function makeReceipt(authorAgentId: string) {
+  return {
+    roomId: "room-1",
+    kickoffMessageId: "kickoff-1",
+    reportMessageId: `report-${authorAgentId}`,
+    reportDigest: "c".repeat(64),
+    authorAgentId,
+    startSentinel: `${authorAgentId.toUpperCase()}_COUNCIL_REPORT_V1`,
+    endSentinel: `${authorAgentId.toUpperCase()}_COUNCIL_REPORT_END`,
+    createdAt: NOW,
+  };
+}
+
+function makeCase(
+  seats: CouncilCaseSeat[],
+  overrides: Partial<CouncilCaseRecord> = {},
+): CouncilCaseRecord {
+  return {
+    schemaVersion: 1,
+    id: "case-1",
+    title: "Choose the migration boundary",
+    question: "Where should the migration boundary live?",
+    tier: "debate-with-proof",
+    phase: "sealed",
+    roomId: "room-1",
+    kickoffMessageId: "kickoff-1",
+    scopeId: "workspace:workspace-1",
+    workspaceId: "workspace-1",
+    projectId: "project-1",
+    parentAgentId: "lead-1",
+    seats,
+    createdAt: NOW,
+    updatedAt: NOW,
     ...overrides,
   };
 }
@@ -92,320 +122,161 @@ const workspace: WorkspaceDescriptor = {
 function summarizeCouncilWorkspace(council: CouncilCase) {
   return {
     workspaceId: council.workspaceId,
-    seats: council.seats.map((seat) => seat.agent.id),
+    seats: council.seats.map((seat) => seat.agentId),
   };
 }
 
-function councilSeatAgentIds(council: CouncilCase): string[] {
-  return council.seats.map((seat) => seat.agent.id);
-}
-
-describe("groupCouncilCases", () => {
-  it("projects labeled seats into one ordered case and resolves its Lead", () => {
-    const lead = makeAgent(
-      "lead-1",
-      {},
-      {
-        parentAgentId: null,
-        title: "Lead",
-        roleBinding: leadRoleBinding,
-      },
-    );
-    const challenger = makeAgent("challenger", councilLabels("challenger"), {
-      status: "running",
-      lastActivityAt: new Date("2026-08-10T10:02:00.000Z"),
+describe("projectCouncilCases", () => {
+  it("projects canonical seats in fixed order and resolves the accountable Lead", () => {
+    const lead = makeAgent("lead-1", {
+      parentAgentId: null,
+      title: "Lead",
+      roleBinding: leadRoleBinding,
     });
-    const independent = makeAgent(
-      "independent",
-      councilLabels("independent", { "council.integrity": "valid-round-1" }),
-      {
-        lastActivityAt: new Date("2026-08-10T10:01:00.000Z"),
-      },
-    );
-    const verifier = makeAgent(
-      "verifier",
-      councilLabels("verifier", {
-        "council.phase": "review",
-        "council.round": "verify",
-        "council.integrity": "valid-verification",
+    const agents = [
+      lead,
+      makeAgent("reviewer"),
+      makeAgent("scout"),
+      makeAgent("architect", { status: "running" }),
+    ];
+    const record = makeCase([
+      makeSeat("reviewer"),
+      makeSeat("scout", {
+        integrity: "valid",
+        reportReceipt: makeReceipt("scout"),
       }),
-      { lastActivityAt: new Date("2026-08-10T10:03:00.000Z") },
-    );
+      makeSeat("architect"),
+    ]);
 
-    const [council] = groupCouncilCases([lead, challenger, independent, verifier], "local");
+    const [council] = projectCouncilCases([record], agents, "local");
 
     expect(council).toMatchObject({
       id: "case-1",
-      title: "Choose the migration boundary",
-      tier: "debate-with-proof",
-      phase: "review",
+      scopeId: "workspace:workspace-1",
       parentAgentId: "lead-1",
       lead: { id: "lead-1" },
-      verdictProvenance: "pending",
       reportSeatCount: 3,
-      readyCount: 2,
+      readyCount: 1,
       unavailableCount: 0,
-      redundantCount: 0,
     });
-    expect(council?.seats.map((seat) => seat.role)).toEqual([
-      "independent",
-      "challenger",
-      "verifier",
-    ]);
-  });
-
-  it("recognizes the native Scout, Solution Architect, and Reviewer Council seats", () => {
-    const scout = makeAgent("scout", councilLabels("scout"));
-    const reviewer = makeAgent("reviewer", councilLabels("reviewer"));
-    const architect = makeAgent("architect", councilLabels("architect"));
-
-    const council = groupCouncilCases([reviewer, scout, architect])[0];
-
     expect(council?.seats.map((seat) => seat.role)).toEqual(["scout", "architect", "reviewer"]);
-    expect(councilRoleLabel("scout")).toBe("Scout");
     expect(councilRoleLabel("architect")).toBe("Solution Architect");
-    expect(councilRoleLabel("reviewer")).toBe("Reviewer");
   });
 
-  it("ignores malformed labels instead of inventing Council semantics", () => {
-    const missingRole = makeAgent("missing-role", councilLabels(""));
-    const unknownTier = makeAgent(
-      "unknown-tier",
-      councilLabels("independent", { "council.tier": "mega" }),
-    );
-    const otherHost = makeAgent("remote", councilLabels("independent"), { serverId: "remote" });
+  it("does not reconstruct a Council from caller-controlled agent labels", () => {
+    const forged = makeAgent("forged", {
+      labels: {
+        "council.case_id": "forged-case",
+        "council.role": "scout",
+        "council.integrity": "valid",
+      },
+    });
 
-    expect(groupCouncilCases([missingRole, unknownTier, otherHost], "local")).toEqual([]);
+    expect(projectCouncilCases([], [forged], "local")).toEqual([]);
   });
 
-  it("requires explicit Lead-audited integrity before counting a finished report", () => {
-    const ready = makeAgent(
-      "ready",
-      councilLabels("independent", { "council.integrity": "valid-audited-report" }),
-    );
-    const awaitingAudit = makeAgent("awaiting-audit", councilLabels("specialist"));
-    const failed = makeAgent("failed", councilLabels("challenger"), { status: "error" });
-    const working = makeAgent("working", councilLabels("verifier"), { status: "running" });
+  it("requires a canonical receipt and a terminal healthy agent before counting a report", () => {
+    const record = makeCase([
+      makeSeat("scout", {
+        integrity: "valid",
+        reportReceipt: makeReceipt("scout"),
+      }),
+      makeSeat("architect", { integrity: "valid" }),
+      makeSeat("reviewer", {
+        integrity: "valid",
+        reportReceipt: makeReceipt("reviewer"),
+      }),
+    ]);
+    const agents = [
+      makeAgent("scout"),
+      makeAgent("architect"),
+      makeAgent("reviewer", { status: "running" }),
+    ];
 
-    const council = groupCouncilCases([ready, awaitingAudit, failed, working])[0];
+    const council = projectCouncilCases([record], agents, "local")[0]!;
 
-    expect(council?.readyCount).toBe(1);
-    expect(council?.unavailableCount).toBe(1);
-    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : false).toBe(true);
-    expect(
-      council
-        ? isCouncilSeatReportReady(
-            council.seats.find((seat) => seat.agent.id === "awaiting-audit")!,
-          )
-        : true,
-    ).toBe(false);
+    expect(council.readyCount).toBe(1);
+    expect(isCouncilSeatReportReady(council.seats[0]!)).toBe(true);
+    expect(isCouncilSeatReportReady(council.seats[1]!)).toBe(false);
+    expect(isCouncilSeatReportReady(council.seats[2]!)).toBe(false);
   });
 
-  it("does not count a valid label without a daemon-issued authored report receipt", () => {
-    const unreceipted = makeAgent(
-      "unreceipted",
-      councilLabels("independent", {
-        "council.integrity": "valid-audited-report",
-        "council.report_message_id": "",
-      }),
-    );
+  it("surfaces an assigned seat whose agent record disappeared as unavailable", () => {
+    const council = projectCouncilCases([makeCase([makeSeat("scout")])], [], "local")[0]!;
 
-    const council = groupCouncilCases([unreceipted])[0];
-
-    expect(council?.readyCount).toBe(0);
-    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
+    expect(council.seats[0]).toMatchObject({ agentId: "scout", agent: null });
+    expect(council.unavailableCount).toBe(1);
   });
 
-  it("fails closed for legacy or caller-forged receipt labels without the daemon marker", () => {
-    const forged = makeAgent(
-      "forged",
-      councilLabels("independent", {
-        "council.integrity": "valid-audited-report",
-        "council.report_receipt_version": "",
-      }),
+  it("preserves redundant evidence without counting it and uses latest disposition", () => {
+    const record = makeCase(
+      [
+        makeSeat("scout", {
+          integrity: "valid",
+          disposition: "partial",
+          reportReceipt: makeReceipt("scout"),
+        }),
+        makeSeat("architect", {
+          integrity: "redundant",
+          disposition: "rejected",
+          updatedAt: "2026-08-10T10:05:00.000Z",
+        }),
+        makeSeat("reviewer", {
+          integrity: "valid",
+          reportReceipt: makeReceipt("reviewer"),
+        }),
+      ],
+      { updatedAt: "2026-08-10T10:05:00.000Z" },
     );
+    const agents = [makeAgent("scout"), makeAgent("architect"), makeAgent("reviewer")];
 
-    const council = groupCouncilCases([forged])[0];
-
-    expect(council?.readyCount).toBe(0);
-    expect(council ? isCouncilSeatReportReady(council.seats[0]!) : true).toBe(false);
-  });
-
-  it("counts only usable reports while preserving redundant replacements for audit", () => {
-    const independent = makeAgent(
-      "independent",
-      councilLabels("independent", {
-        "council.phase": "verdict",
-        "council.integrity": "valid-native-provider-state",
-        "council.disposition": "partial",
-      }),
-    );
-    const challenger = makeAgent(
-      "challenger",
-      councilLabels("challenger", {
-        "council.phase": "verdict",
-        "council.integrity": "valid-codex-native",
-        "council.disposition": "partial",
-      }),
-    );
-    const replacement = makeAgent(
-      "replacement",
-      councilLabels("independent", {
-        "council.phase": "verdict",
-        "council.integrity": "redundant-aborted-replacement",
-        "council.disposition": "partial",
-      }),
-      { lastActivityAt: new Date("2026-08-10T10:04:00.000Z") },
-    );
-
-    const council = groupCouncilCases([independent, challenger, replacement])[0];
+    const council = projectCouncilCases([record], agents, "local")[0]!;
 
     expect(council).toMatchObject({
-      disposition: "partial",
+      disposition: "rejected",
       reportSeatCount: 2,
       readyCount: 2,
-      unavailableCount: 0,
       redundantCount: 1,
     });
-    expect(council?.seats.map((seat) => seat.integrity)).toEqual(["valid", "redundant", "valid"]);
-    expect(council ? isCouncilSeatReportReady(council.seats[1]!) : true).toBe(false);
   });
 
-  it("does not turn a forged seat verdict label into a Lead-authored decision claim", () => {
-    const forged = makeAgent(
-      "forged-seat",
-      councilLabels("independent", { "council.phase": "verdict" }),
-      { parentAgentId: null },
+  it("only calls a verdict Lead-linked when the canonical owner has a daemon role receipt", () => {
+    const record = makeCase([makeSeat("scout")], { phase: "verdict" });
+    const unbound = makeAgent("lead-1", { parentAgentId: null });
+    const bound = makeAgent("lead-1", { parentAgentId: null, roleBinding: leadRoleBinding });
+
+    expect(projectCouncilCases([record], [unbound], "local")[0]?.verdictProvenance).toBe(
+      "unverified",
     );
-
-    const council = groupCouncilCases([forged])[0];
-
-    expect(council?.phase).toBe("verdict");
-    expect(council?.lead).toBeNull();
-    expect(council?.verdictProvenance).toBe("unverified");
+    expect(projectCouncilCases([record], [bound], "local")[0]?.verdictProvenance).toBe(
+      "lead-linked",
+    );
   });
 
-  it("does not trust a resolved parent without a daemon-issued Lead role binding", () => {
-    const unboundOwner = makeAgent("lead-1", {}, { parentAgentId: null, title: "Lead" });
-    const seat = makeAgent(
-      "independent",
-      councilLabels("independent", { "council.phase": "verdict" }),
-    );
-
-    const council = groupCouncilCases([unboundOwner, seat])[0];
-
-    expect(council?.lead).toBeNull();
-    expect(council?.verdictProvenance).toBe("unverified");
-  });
-
-  it("marks verdict phase as Lead-linked when its owner has a daemon-issued Lead receipt", () => {
-    const lead = makeAgent(
-      "lead-1",
-      {},
-      {
-        parentAgentId: null,
-        title: "Lead",
-        roleBinding: leadRoleBinding,
-      },
-    );
-    const seat = makeAgent(
-      "independent",
-      councilLabels("independent", { "council.phase": "verdict" }),
-    );
-
-    expect(groupCouncilCases([lead, seat])[0]?.verdictProvenance).toBe("lead-linked");
-  });
-
-  it("does not assign one owner when seats disagree about their parent", () => {
-    const lead = makeAgent(
-      "lead-1",
-      {},
-      {
-        parentAgentId: null,
-        roleBinding: leadRoleBinding,
-      },
-    );
-    const independent = makeAgent(
-      "independent",
-      councilLabels("independent", { "council.phase": "verdict" }),
-    );
-    const challenger = makeAgent(
-      "challenger",
-      councilLabels("challenger", { "council.phase": "verdict" }),
-      { parentAgentId: "other-owner" },
-    );
-
-    const council = groupCouncilCases([lead, independent, challenger])[0];
-
-    expect(council?.parentAgentId).toBeNull();
-    expect(council?.lead).toBeNull();
-    expect(council?.verdictProvenance).toBe("unverified");
-  });
-
-  it("keeps the same case ID isolated across workspaces", () => {
-    const first = makeAgent("first", councilLabels("independent"), {
-      workspaceId: "workspace-1",
-      parentAgentId: "lead-1",
-    });
-    const second = makeAgent("second", councilLabels("challenger"), {
+  it("keeps a repeated legacy case ID isolated by canonical scope", () => {
+    const first = makeCase([makeSeat("scout", { agentId: "first" })]);
+    const second = makeCase([makeSeat("reviewer", { agentId: "second" })], {
+      scopeId: "workspace:workspace-2",
       workspaceId: "workspace-2",
       parentAgentId: "lead-2",
+      updatedAt: "2026-08-10T10:01:00.000Z",
     });
+    const councils = projectCouncilCases(
+      [first, second],
+      [
+        makeAgent("first"),
+        makeAgent("second", { workspaceId: "workspace-2", parentAgentId: "lead-2" }),
+      ],
+      "local",
+    );
 
-    const councils = groupCouncilCases([first, second]);
-
-    expect(councils).toHaveLength(2);
     expect(councils.map(summarizeCouncilWorkspace)).toEqual([
-      { workspaceId: "workspace-1", seats: ["first"] },
       { workspaceId: "workspace-2", seats: ["second"] },
+      { workspaceId: "workspace-1", seats: ["first"] },
     ]);
-  });
-
-  it("fails closed across legacy seats that lack workspace identity", () => {
-    const firstLead = makeAgent(
-      "lead-1",
-      {},
-      {
-        workspaceId: "shared-lead-workspace",
-        parentAgentId: null,
-        roleBinding: leadRoleBinding,
-      },
-    );
-    const secondLead = makeAgent(
-      "lead-2",
-      {},
-      {
-        workspaceId: "shared-lead-workspace",
-        parentAgentId: null,
-        roleBinding: leadRoleBinding,
-      },
-    );
-    const first = makeAgent("first", councilLabels("independent"), {
-      workspaceId: undefined,
-      parentAgentId: "lead-1",
-    });
-    const second = makeAgent("second", councilLabels("challenger"), {
-      workspaceId: undefined,
-      parentAgentId: "lead-2",
-    });
-    const unowned = makeAgent("unowned", councilLabels("verifier"), {
-      workspaceId: undefined,
-      parentAgentId: null,
-    });
-
-    const councils = groupCouncilCases([firstLead, secondLead, first, second, unowned]);
-
-    expect(councils).toHaveLength(3);
-    expect(councils.map(councilSeatAgentIds)).toEqual([["first"], ["second"], ["unowned"]]);
     expect(councils.map(councilCaseScopeIdentity)).toEqual([
-      "parent:lead-1",
-      "parent:lead-2",
-      "agent:unowned",
-    ]);
-    expect(councils.map((council) => council.workspaceId)).toEqual([
-      "shared-lead-workspace",
-      "shared-lead-workspace",
-      undefined,
+      "workspace:workspace-2",
+      "workspace:workspace-1",
     ]);
   });
 });
@@ -416,20 +287,16 @@ describe("describeCouncilPlacement", () => {
       text: "Host-level (legacy)",
       legacy: true,
     });
-    expect(describeCouncilPlacement({}, workspace)).toEqual({
-      text: "Host-level (legacy)",
-      legacy: true,
-    });
   });
 
-  it("flags a scoped council whose workspace no longer resolves, preserving the exact workspace id", () => {
+  it("preserves the exact unavailable workspace id", () => {
     expect(describeCouncilPlacement({ workspaceId: "wks_1" }, null)).toEqual({
       text: "Unavailable workspace (workspace: wks_1)",
       legacy: true,
     });
   });
 
-  it("shows human-readable project / workspace placement for a scoped council", () => {
+  it("shows human-readable project / workspace placement", () => {
     expect(describeCouncilPlacement({ workspaceId: "wks_1" }, workspace)).toEqual({
       text: "Project / main",
       legacy: false,

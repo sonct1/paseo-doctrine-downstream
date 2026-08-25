@@ -137,6 +137,7 @@ async function main() {
   const { paseoHome, logger, config } = bootstrapFromEnvironment();
   let daemon: Awaited<ReturnType<typeof createPaseoDaemon>> | null = null;
   let beadsCentralSidecar: BeadsCentralSidecar | null = null;
+  let beadsCentralStartup: Promise<void> | null = null;
   let shutdownPromise: Promise<number> | null = null;
   let exitHookInstalled = false;
 
@@ -193,6 +194,7 @@ async function main() {
           } catch (error) {
             shutdownErrors.push(error);
           }
+          await beadsCentralStartup?.catch(() => undefined);
           if (shutdownErrors.length > 0) {
             throw new AggregateError(shutdownErrors, "Paseo worker shutdown completed with errors");
           }
@@ -226,22 +228,6 @@ async function main() {
       logger.error({ err, message }, "Failed to send lifecycle IPC message to supervisor");
       return false;
     }
-  };
-
-  const sendSupervisorLifecycleMessageAndWait = async (
-    message: SupervisorLifecycleMessage,
-  ): Promise<boolean> => {
-    if (typeof process.send !== "function") return false;
-    return await new Promise<boolean>((resolve) => {
-      process.send?.(message, (error) => {
-        if (error) {
-          logger.error({ err: error, message }, "Failed to send lifecycle IPC message");
-          resolve(false);
-          return;
-        }
-        resolve(true);
-      });
-    });
   };
 
   const handleLifecycleIntent = (intent: DaemonLifecycleIntent) => {
@@ -354,23 +340,19 @@ async function main() {
     credentialStore: new FoundationCredentialStore(paseoHome),
     logger,
     onUnexpectedExit: ({ code, signal }) => {
-      beginShutdown("beads central sidecar exit", {
-        reason: `beads_central_sidecar_exit:${String(code)}:${String(signal)}`,
-        successExitCode: 1,
-      });
+      logger.error(
+        { code, signal },
+        "Bundled Beads Central sidecar exited; daemon continuing with Beads degraded",
+      );
     },
   });
-  try {
-    await beadsCentralSidecar.start();
-  } catch (err) {
-    logger.fatal({ err }, "Bundled Beads Central sidecar failed to start");
-    await sendSupervisorLifecycleMessageAndWait({
-      type: "paseo:shutdown",
-      reason: "bundled_beads_central_startup_failed",
-    });
-    await beadsCentralSidecar.stop().catch(() => undefined);
-    throw err;
-  }
+  beadsCentralStartup = beadsCentralSidecar.start().catch(async (err) => {
+    logger.error(
+      { err },
+      "Bundled Beads Central sidecar failed to start; daemon continuing with Beads degraded",
+    );
+    await beadsCentralSidecar?.stop().catch(() => undefined);
+  });
 
   try {
     daemon = await createPaseoDaemon(

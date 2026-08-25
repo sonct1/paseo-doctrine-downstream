@@ -6291,3 +6291,63 @@ test("waitForFinish with timeout=0 omits timeoutMs and has no client deadline", 
     vi.useRealTimers();
   }
 });
+
+test("lists canonical Council cases through a correlated RPC", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const responsePromise = client.listCouncilCases("req-council-list");
+  const request = parseSentFrame(mock.sent[0]);
+  expect(request).toEqual({
+    type: "council.case.list.request",
+    requestId: "req-council-list",
+  });
+
+  const now = "2026-08-10T10:00:00.000Z";
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "council.case.list.response",
+      payload: {
+        requestId: "req-council-list",
+        cases: [
+          {
+            schemaVersion: 1,
+            id: "case-1",
+            title: "Boundary",
+            question: "Where?",
+            tier: "lens",
+            phase: "sealed",
+            roomId: "room-1",
+            kickoffMessageId: "kickoff-1",
+            scopeId: "parent:lead-1",
+            workspaceId: null,
+            projectId: null,
+            parentAgentId: "lead-1",
+            seats: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        error: null,
+      },
+    }),
+  );
+
+  await expect(responsePromise).resolves.toMatchObject({
+    requestId: "req-council-list",
+    cases: [{ id: "case-1", scopeId: "parent:lead-1" }],
+    error: null,
+  });
+});

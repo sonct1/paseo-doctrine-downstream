@@ -104,8 +104,9 @@ nào mà topology nhỏ hơn không giảm được.
 Doctrine yêu cầu event-driven attention thay cho polling. Current notification surfaces có thể đánh thức
 authority holder; durable manual coordination signal là một experimental slice. Signal chỉ mang advisory
 evidence và không tự quyết safe checkpoint, handoff, detach hoặc lifecycle action. Automatic native
-continuity attention chưa được implement. Xem
-[agent lifecycle](agent-lifecycle.md#experimental-coordination-signals--manual-only).
+continuity attention là candidate flag-gated, default-off; standing role profile cũng không nhận các
+signal/handoff tools nếu Human chưa enable explicit. Xem
+[SLP coordination/handoff](slp-coordination-handoff.md).
 
 ### Role và transport tách rời
 
