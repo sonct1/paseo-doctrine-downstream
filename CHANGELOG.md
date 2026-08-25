@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0-paseo.38 - 2026-08-25
+
+Bản follow-up này tiếp tục giữ exact upstream `v0.5.0` và gỡ các đường ownership bị phân mảnh khi
+đưa Deep Dive/Foundation vào Product: Council có một aggregate chuẩn; Central chỉ sở hữu nghiệp vụ
+issue, không sở hữu availability của daemon/WebUI.
+
+### Added
+
+- Council có canonical file-backed `CouncilCase` aggregate, correlated list RPC và push event riêng;
+  đúng ba seat identity `Scout`, `Architect`, `Reviewer` cùng receipt-bound report state.
+- `/api/health` công bố Beads Central là component `ready` hoặc `degraded`; artifact smoke xác nhận
+  daemon/WebUI vẫn healthy khi sidecar thiếu hoặc không trả lời.
+
+### Changed
+
+- WebUI đọc Council từ canonical RPC/cache/event, không poll hoặc reconstruct case từ agent labels;
+  report readiness và Lead-owned verdict giữ canonical record làm authority, còn agent directory chỉ
+  phục vụ live status và navigation.
+- Seat assignment được commit trước initial prompt; store enforce same-workspace launch, unique role,
+  monotonic phase và report receipt khớp Room/kickoff/author.
+- Lead mặc định không nhận signal/handoff tools; Supervisor mặc định không nhận create/prompt/signal
+  tools. Human-configured role profile vẫn có thể opt in trong Foundation ceiling.
+- Beads sidecar startup chạy độc lập với daemon startup; Central operations tiếp tục fail closed khi
+  component degraded.
+
+### Compatibility
+
+- Legacy Council labels được migrate một lần theo canonical role/scope; duplicate role giữ bản mới
+  nhất, malformed case bị skip và legacy `valid` thiếu canonical receipt bị hạ về `unspecified`.
+- Agent labels chỉ còn compatibility receipt; không tạo thêm service, process, database hoặc polling
+  loop cho Council/Central.
+- Release vẫn có upstream base đúng `b8a31034ca36301067edadc2d622f42f4a4f7a37` (`v0.5.0`), không
+  nhận `v0.5.1`, `v0.5.2` hoặc upstream `main`.
+
+### Qualified
+
+- Focused Protocol/Client/Server/App suites, full Server unit `5,518/5,518`, full App unit
+  `4,817/4,817`, Council Playwright `3/3`, all-workspace typecheck, lint, format và server/WebUI builds
+  đều pass trên feature bytes.
+- Exact feature commit `646e70c005de37dcdd928af92587a836fbabf300` pass toàn bộ downstream CI
+  run `32813251618`, gồm Server/App/SDK/CLI/Desktop và bốn Playwright shards.
+- Clean release-commit activation và bốn host-native portable preflight leg vẫn là release gates riêng
+  trước annotated tag `paseo-v0.5.0-paseo.38`.
+
 ## 0.5.0-paseo.37 - 2026-08-25
 
 Bản follow-up này đóng gap placement của Room/Council sau stable `v0.5.0`: coordination surface giờ
