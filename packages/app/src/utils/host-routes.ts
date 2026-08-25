@@ -563,6 +563,7 @@ export function resolveKnownHostRoute(input: {
 export const SETTINGS_SECTION_SLUGS = [
   "general",
   "appearance",
+  "layout",
   "editor",
   "shortcuts",
   "integrations",

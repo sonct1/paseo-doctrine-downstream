@@ -4,10 +4,9 @@ import {
   Text,
   useWindowDimensions,
   NativeSyntheticEvent,
-  TextInputContentSizeChangeEventData,
   TextInputKeyPressEventData,
-  TextInputScrollEventData,
   TextInputSelectionChangeEventData,
+  type LayoutChangeEvent,
 } from "react-native";
 import {
   useState,
@@ -642,8 +641,6 @@ interface ComposerTextSurfaceProps {
   editable: boolean;
   scrollEnabled: boolean;
   autoFocus: boolean;
-  onContentSizeChange: (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => void;
-  onScroll: (event: NativeSyntheticEvent<TextInputScrollEventData>) => void;
   onKeyPress: ((event: WebTextInputKeyPressEvent) => void) | undefined;
   onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
   onPasteImages: ((files: readonly NativePastedFile[]) => void) | undefined;
@@ -684,8 +681,6 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         style={props.textInputStyle}
         multiline
         scrollEnabled={props.scrollEnabled}
-        onContentSizeChange={props.onContentSizeChange}
-        onScroll={props.onScroll}
         editable={props.editable}
         onKeyPress={props.onKeyPress}
         onSelectionChange={props.onSelectionChange}
@@ -1223,20 +1218,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const selectionRef = useRef({ start: value.length, end: value.length });
     const appliedTextReplacementKeyRef = useRef(textReplacementKey);
     const webTextareaRef = useRef<HTMLElement | null>(null);
-    const {
-      style: composerHeightStyle,
-      scrollEnabled: isComposerScrollEnabled,
-      onTextChange: updateComposerHeightForText,
-      onContentSizeChange: handleComposerContentSizeChange,
-      onScroll: handleComposerScroll,
-      reset: resetComposerHeight,
-    } = useComposerHeight({
+    const composerHeight = useComposerHeight({
       value,
       textareaRef: webTextareaRef,
       minHeight: MIN_INPUT_HEIGHT,
       maxHeight: maxInputHeight,
-      onHeightChange,
     });
+    const { style: composerHeightStyle, scrollEnabled: isComposerScrollEnabled } = composerHeight;
+    const measuredComposerHeight = composerHeight.mode === "measured" ? composerHeight : undefined;
+    const updateComposerHeightForText = measuredComposerHeight?.onTextChange;
+    const resetComposerHeight = measuredComposerHeight?.reset;
+
+    const handleComposerLayout = useCallback(
+      (event: LayoutChangeEvent) => onHeightChange?.(event.nativeEvent.layout.height),
+      [onHeightChange],
+    );
 
     const updateLiveTextPresence = useCallback((text: string) => {
       const nextHasLiveText = text.trim().length > 0;
@@ -1247,7 +1243,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const replaceText = useCallback(
       (nextText: string, selection?: { start: number; end: number }) => {
-        updateComposerHeightForText(valueRef.current, nextText);
+        updateComposerHeightForText?.(valueRef.current, nextText);
         valueRef.current = nextText;
         updateLiveTextPresence(nextText);
         selectionRef.current = selection ?? { start: nextText.length, end: nextText.length };
@@ -1300,7 +1296,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     useEffect(() => {
       if (appliedTextReplacementKeyRef.current === textReplacementKey) return;
       appliedTextReplacementKeyRef.current = textReplacementKey;
-      updateComposerHeightForText(valueRef.current, value);
+      updateComposerHeightForText?.(valueRef.current, value);
       valueRef.current = value;
       updateLiveTextPresence(value);
       textInputRef.current?.replaceText(value);
@@ -1501,7 +1497,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     ]);
 
     const minimizeInputHeight = useCallback(() => {
-      resetComposerHeight();
+      resetComposerHeight?.();
     }, [resetComposerHeight]);
 
     const handleSendMessage = useCallback(() => {
@@ -1671,7 +1667,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
 
     const handleInputChange = useCallback(
       (nextValue: string) => {
-        updateComposerHeightForText(valueRef.current, nextValue);
+        updateComposerHeightForText?.(valueRef.current, nextValue);
         valueRef.current = nextValue;
         updateLiveTextPresence(nextValue);
         onChangeText(nextValue);
@@ -1783,7 +1779,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     );
 
     return (
-      <View ref={rootRef} style={styles.container} testID="message-input-root">
+      <View
+        ref={rootRef}
+        style={styles.container}
+        testID="message-input-root"
+        onLayout={handleComposerLayout}
+      >
         <MessageInputAutoFocus
           enabled={autoFocus}
           autoFocusKey={autoFocusKey}
@@ -1813,8 +1814,6 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
               editable={!isDictating && !isRealtimeVoiceForCurrentAgent && !disabled}
               scrollEnabled={isComposerScrollEnabled}
               autoFocus={false}
-              onContentSizeChange={handleComposerContentSizeChange}
-              onScroll={handleComposerScroll}
               onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : undefined}
               onSelectionChange={handleSelectionChange}
               onPasteImages={onPasteImages}

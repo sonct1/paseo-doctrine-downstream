@@ -150,6 +150,7 @@ function TopologyPanel() {
 
 export const topologyPanelRegistration: PanelRegistration<"topology"> = {
   kind: "topology",
+  supportedHosts: ["main"],
   resourceKey: () => "topology",
   component: TopologyPanel,
   useDescriptor: useTopologyPanelDescriptor,

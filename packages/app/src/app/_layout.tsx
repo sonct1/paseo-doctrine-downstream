@@ -37,6 +37,7 @@ import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
 import { AppDiagnosticHost } from "@/components/app-diagnostic-host";
 import { LeftSidebar } from "@/components/left-sidebar";
 import { WindowSidebarMenuToggle } from "@/components/headers/menu-header";
+import { DesktopWindowControls } from "@/components/desktop/window-controls";
 import { SidebarModelProvider } from "@/components/sidebar/sidebar-model";
 import { WorkspacePinShortcutHandler } from "@/components/workspace-pin-shortcut-handler";
 import { CompactExplorerSidebarHost } from "@/components/compact-explorer-sidebar-host";
@@ -80,7 +81,7 @@ import {
   roleDefaultProfileMigration,
 } from "@/agent-profiles/migration";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
-import { updateDesktopWindowControls } from "@/desktop/electron/window";
+import { updateDesktopWindowChrome } from "@/desktop/electron/window";
 import { getDesktopHost } from "@/desktop/host";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
@@ -89,6 +90,7 @@ import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-ac
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
 import { useFaviconStatus } from "@/hooks/use-favicon-status";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { resolveExplorerSidebarPresentation } from "@/workspace-tabs/explorer-sidebar";
 import { KeyboardShiftProvider } from "@/hooks/use-keyboard-shift-style";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { useOpenProject } from "@/hooks/use-open-project";
@@ -489,6 +491,10 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
   }, [settings.theme, updateSettings]);
 
   const isCompactLayout = useIsCompactFormFactor();
+  const explorerSidebarPresentation = resolveExplorerSidebarPresentation({
+    isCompact: isCompactLayout,
+  });
+  const usesCompactExplorerHost = explorerSidebarPresentation !== "pane";
   useCompactWebViewportZoomLock(isCompactLayout);
   const pathname = usePathname();
   const isWorkspaceRoute = parseHostWorkspaceRouteFromPathname(pathname) !== null;
@@ -566,8 +572,11 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
           {sidebarChrome}
         </WindowChromeRegion>
       ) : null}
-      {isCompactLayout ? (
-        <CompactExplorerSidebarHost enabled={chromeEnabled}>
+      {usesCompactExplorerHost ? (
+        <CompactExplorerSidebarHost
+          enabled={chromeEnabled}
+          presentation={explorerSidebarPresentation === "dock" ? "dock" : "overlay"}
+        >
           <WindowChromeRegion corners={chromeEnabled ? "both" : appChromeLayout.contentCorners}>
             <View style={flexStyle}>{children}</View>
           </WindowChromeRegion>
@@ -595,6 +604,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
           </WindowChromeSafeArea>
         </WindowChromeRegion>
       ) : null}
+      <DesktopWindowControls />
       <FloatingPanelPortalHost />
       {isCompactLayout ? sidebarChrome : null}
       <DownloadToast />
@@ -686,18 +696,16 @@ function DesktopWindowControlsSync() {
   const { isLoading } = useAppSettings();
   const { theme } = useUnistyles();
   const surface0 = theme.colors.surface0;
-  const foreground = theme.colors.foreground;
 
   useEffect(() => {
     if (isLoading || isNative) return;
-    void updateDesktopWindowControls({
+    void updateDesktopWindowChrome({
       backgroundColor: surface0,
-      foregroundColor: foreground,
-      trafficLightOffsetY: -5,
+      trafficLightOffsetY: -4,
     }).catch((error) => {
       console.warn("[DesktopWindow] Failed to update window controls overlay", error);
     });
-  }, [isLoading, surface0, foreground]);
+  }, [isLoading, surface0]);
 
   return null;
 }
