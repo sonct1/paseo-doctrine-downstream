@@ -11869,7 +11869,7 @@ test("Council specialization persists exact bytes through create and resume", as
   }
 });
 
-test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", async () => {
+test("preapproves the exact Paseo role-tool ceiling and trusted Semble tools", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-role-tool-preapproval-"));
   writeFileSync(
     join(workdir, "WORKSPACE_PROTOCOL.md"),
@@ -11915,6 +11915,11 @@ test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", a
     logger,
     idFactory: () => "00000000-0000-4000-8000-000000000118",
     mcpBaseUrl: "http://127.0.0.1:6767/mcp/agents",
+    trustedSembleRuntime: {
+      uvxPath: "/opt/homebrew/bin/uvx",
+      proxyPath: "/opt/paseo/trusted-semble-proxy.mjs",
+      paseoHome: join(workdir, "paseo-home"),
+    },
   });
 
   try {
@@ -11932,18 +11937,30 @@ test("preapproves the exact Paseo role-tool ceiling on provider MCP launches", a
       type: "http",
       url: expect.stringContaining(`callerAgentId=${created.id}`),
     });
+    expect(client.launchConfigs[0]?.mcpServers?.semble).toMatchObject({
+      type: "stdio",
+      command: process.execPath,
+      args: ["/opt/paseo/trusted-semble-proxy.mjs"],
+      env: {
+        PASEO_TRUSTED_SEMBLE_REPO_ROOT: workdir,
+        PASEO_TRUSTED_SEMBLE_UVX_PATH: "/opt/homebrew/bin/uvx",
+      },
+    });
     expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toEqual(
       expect.arrayContaining([
         { kind: "mcp", server: "paseo", tool: "list_profiles" },
         { kind: "mcp", server: "paseo", tool: "beads_status" },
         { kind: "mcp", server: "paseo", tool: "start_council" },
         { kind: "mcp", server: "paseo", tool: "record_council_seat" },
+        { kind: "mcp", server: "semble", tool: "search" },
+        { kind: "mcp", server: "semble", tool: "find_related" },
       ]),
     );
     expect(client.launchConfigs[0]?.toolPolicy?.preapproved).toHaveLength(
-      ROLE_DEFAULT_TOOLS.lead.length,
+      ROLE_DEFAULT_TOOLS.lead.length + 2,
     );
     expect(created.config.toolPolicy).toBeUndefined();
+    expect(created.config.mcpServers?.semble).toBeUndefined();
   } finally {
     await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
     rmSync(workdir, { recursive: true, force: true });

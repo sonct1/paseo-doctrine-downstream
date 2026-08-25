@@ -83,7 +83,13 @@ import {
 } from "./agent-run-state.js";
 import { invokeRewindCapability, type RewindMode } from "./rewind/rewind.js";
 import { isSystemInjectedEnvelope } from "./agent-prompt.js";
-import { stripInternalPaseoMcpServer, withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import {
+  stripInternalPaseoMcpServer,
+  stripInternalTrustedSembleMcpServer,
+  withRuntimePaseoMcpServer,
+  withRuntimeTrustedSembleMcpServer,
+  type TrustedSembleRuntime,
+} from "./runtime-mcp-config.js";
 import { resolveCreateAgentTitles } from "./create-agent-title.js";
 import type { PaseoToolCatalogFactory } from "./tools/types.js";
 import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
@@ -379,6 +385,7 @@ export interface AgentManagerOptions {
   mcpBaseUrl?: string;
   mcpAuthToken?: string;
   mcpRuntimeId?: string;
+  trustedSembleRuntime?: TrustedSembleRuntime | null;
   paseoToolsEnabled?: boolean;
   paseoToolCatalogFactory?: PaseoToolCatalogFactory;
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
@@ -407,6 +414,12 @@ export type RoleResourceGrantVerifier = (
 
 function resolveAgentIdFactory(idFactory: AgentManagerOptions["idFactory"]): () => string {
   return idFactory ?? randomUUID;
+}
+
+function resolveTrustedSembleRuntimeOption(
+  runtime: TrustedSembleRuntime | null | undefined,
+): TrustedSembleRuntime | null {
+  return runtime ?? null;
 }
 
 export type ActiveTurnSteerDispatchResult =
@@ -831,6 +844,7 @@ export class AgentManager {
     roleId: PaseoRoleId,
   ) => RoleProfilePreferences | undefined;
   private readonly verifyRoleResourceGrants?: RoleResourceGrantVerifier;
+  private readonly trustedSembleRuntime: TrustedSembleRuntime | null;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
   private onAgentArchived?: AgentArchivedCallback;
@@ -849,6 +863,7 @@ export class AgentManager {
     this.mcpBaseUrl = options?.mcpBaseUrl ?? null;
     this.mcpAuthToken = options?.mcpAuthToken ?? null;
     this.mcpRuntimeId = options?.mcpRuntimeId;
+    this.trustedSembleRuntime = resolveTrustedSembleRuntimeOption(options.trustedSembleRuntime);
     this.configurePaseoTools(options);
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.resolveRoleProfilePreferences = options.resolveRoleProfilePreferences ?? (() => undefined);
@@ -5388,7 +5403,10 @@ export class AgentManager {
   ): Promise<PreparedSessionConfig> {
     assertRoleSessionInput(config, role);
     const requestedModel = config.model;
-    let storedConfig = await this.normalizeConfig(stripInternalPaseoMcpServer(config), { env });
+    let storedConfig = await this.normalizeConfig(
+      stripInternalTrustedSembleMcpServer(stripInternalPaseoMcpServer(config)),
+      { env },
+    );
     const client = this.requireClient(storedConfig.provider);
     const providerBaseId = this.providerBaseIds.get(storedConfig.provider) ?? null;
     let launchContract = role?.launchContract;
@@ -5433,21 +5451,29 @@ export class AgentManager {
       roleBinding,
       client,
     );
+    const supportsExactMcpPreapproval =
+      this.providerDefinitions.get(storedConfig.provider)?.supportsExactMcpPreapproval === true;
+    const withPaseoMcp = withRuntimePaseoMcpServer({
+      config: storedConfig,
+      agentId,
+      mcpBaseUrl: isPaseoToolPolicyEnabled(paseoToolPolicy) ? this.mcpBaseUrl : null,
+      mcpAuthToken: this.mcpAuthToken,
+      mcpRuntimeId: this.mcpRuntimeId,
+      preapprovedTools: resolveRuntimePaseoPreapprovedTools({
+        roleBound: roleBinding !== undefined,
+        supportsNativePaseoTools: client.capabilities.supportsNativePaseoTools === true,
+        supportsExactMcpPreapproval,
+        allowedTools: paseoToolPolicy?.allowedTools,
+      }),
+    });
     const launchConfig = this.applyDaemonAppendSystemPrompt(
-      withRuntimePaseoMcpServer({
-        config: storedConfig,
+      withRuntimeTrustedSembleMcpServer({
+        config: withPaseoMcp,
         agentId,
-        mcpBaseUrl: isPaseoToolPolicyEnabled(paseoToolPolicy) ? this.mcpBaseUrl : null,
-        mcpAuthToken: this.mcpAuthToken,
-        mcpRuntimeId: this.mcpRuntimeId,
-        preapprovedTools: resolveRuntimePaseoPreapprovedTools({
-          roleBound: roleBinding !== undefined,
-          supportsNativePaseoTools: client.capabilities.supportsNativePaseoTools === true,
-          supportsExactMcpPreapproval:
-            this.providerDefinitions.get(storedConfig.provider)?.supportsExactMcpPreapproval ===
-            true,
-          allowedTools: paseoToolPolicy?.allowedTools,
-        }),
+        runtime: this.trustedSembleRuntime,
+        roleBound: roleBinding !== undefined,
+        supportsMcpServers: client.capabilities.supportsMcpServers === true,
+        supportsExactMcpPreapproval,
       }),
     );
     return {
@@ -5471,6 +5497,7 @@ export class AgentManager {
       roleBinding?.roleId,
       this.resolvePaseoToolPolicy(provider),
       roleBinding?.roleProfile?.allowedTools,
+      roleBinding?.assignmentContract?.envelope.effectClass,
     );
   }
 

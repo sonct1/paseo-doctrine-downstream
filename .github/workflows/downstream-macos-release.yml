@@ -62,6 +62,7 @@ jobs:
             scripts/beads-central-bundle.test.mjs \
             scripts/build-daemon-web-ui.test.mjs \
             scripts/ci-workflow.test.mjs \
+            scripts/create-paseo-update-manifest.test.mjs \
             scripts/daemon-launch-contract.test.mjs \
             scripts/downstream-publish-guard.test.mjs \
             scripts/smoke-web-cli-artifact.test.mjs
@@ -125,6 +126,10 @@ jobs:
               --prerelease \
               --notes "Host-native WebUI + CLI + Foundation distribution for macOS, Linux, and Windows."
           fi
+          # A rerun must become unqualified before any platform asset is replaced.
+          gh release delete-asset "$RELEASE_TAG" paseo-update-manifest.json \
+            --yes \
+            --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || true
 
   build:
     needs: [qualification, create-release]
@@ -223,3 +228,40 @@ jobs:
           path: |
             artifacts/paseo-web-cli-*-${{ matrix.platform_name }}-${{ matrix.arch }}${{ matrix.extension }}
             artifacts/paseo-web-cli-*-${{ matrix.platform_name }}-${{ matrix.arch }}${{ matrix.extension }}.sha256
+
+  qualify-release:
+    name: downstream-qualified-update-manifest
+    needs: [qualification, build]
+    if: ${{ always() && needs.qualification.result == 'success' && needs.build.result == 'success' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.SOURCE_REF }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paseo-web-cli-*
+          path: artifacts/qualified
+
+      - name: Create final qualified update manifest
+        run: |
+          node scripts/create-paseo-update-manifest.mjs \
+            --artifacts artifacts/qualified \
+            --output artifacts/paseo-update-manifest.json
+
+      - name: Publish final update qualification sentinel
+        if: env.SHOULD_PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            artifacts/paseo-update-manifest.json \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paseo-qualified-update-manifest
+          path: artifacts/paseo-update-manifest.json

@@ -5,16 +5,22 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readlinkSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { installerScript as renderArtifactInstaller } from "./build-macos-web-cli-artifact.mjs";
+import {
+  installerScript as renderArtifactInstaller,
+  linuxInstallerScript,
+  windowsInstallerScript,
+} from "./build-macos-web-cli-artifact.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const installer = path.join(scriptDir, "install-macos.sh");
@@ -43,7 +49,11 @@ function createFixture() {
   );
   writeFileSync(
     path.join(bundle, "manifest.json"),
-    `${JSON.stringify({ product: "Paseo WebUI + CLI", platform: "darwin", arch: "arm64" }, null, 2)}\n`,
+    `${JSON.stringify(
+      { product: "Paseo WebUI + CLI", platform: "darwin", arch: "arm64" },
+      null,
+      2,
+    )}\n`,
   );
   const archive = `${bundleName}.tar.gz`;
   execFileSync("/usr/bin/tar", ["-czf", path.join(fixtures, archive), "-C", root, bundleName]);
@@ -103,6 +113,7 @@ function createArtifactFixture(existingPaseoSource) {
   const bundle = path.join(root, "bundle");
   const oldBin = path.join(root, "old-bin");
   mkdirSync(path.join(bundle, "bin"), { recursive: true });
+  mkdirSync(path.join(bundle, "runtime", "bin"), { recursive: true });
   mkdirSync(oldBin);
   writeExecutable(path.join(bundle, "install.sh"), renderArtifactInstaller());
   writeExecutable(path.join(bundle, "uninstall.sh"), "#!/bin/sh\nexit 0\n");
@@ -118,6 +129,10 @@ exit 0
   writeExecutable(
     path.join(bundle, "bin", "paseo-foundation"),
     '#!/bin/sh\n[ "${1:-}" != inspect ] || echo \'{"status":"inactive"}\'\nexit 0\n',
+  );
+  writeExecutable(
+    path.join(bundle, "runtime", "bin", "node"),
+    '#!/bin/sh\ncase "$*" in *process.stdout.write*) printf "127.0.0.1:6767" ;; esac\nexit 0\n',
   );
   writeExecutable(path.join(oldBin, "paseo"), existingPaseoSource);
   return {
@@ -262,6 +277,9 @@ test("artifact --no-start stages the downstream without inspecting or stopping P
 printf '%s\\n' "$*" >> "$EXISTING_PASEO_MARKER"
 exit 99
 `);
+  const bundledNode = path.join(fixture.bundle, "runtime", "bin", "node");
+  rmSync(bundledNode);
+  symlinkSync(process.execPath, bundledNode);
   try {
     const result = runArtifactFixture(fixture, [
       "--prefix",
@@ -274,9 +292,73 @@ exit 99
     assert.equal(result.status, 0, result.stderr);
     assert.equal(existsSync(fixture.marker), false);
     assert.equal(existsSync(path.join(fixture.prefix, "current", "bin", "paseo")), true);
+    assert.equal(existsSync(path.join(fixture.prefix, "current", "install.sh")), true);
+    assert.deepEqual(
+      JSON.parse(readFileSync(path.join(fixture.prefix, "install-config.json"), "utf8")),
+      { schemaVersion: 1, prefix: fixture.prefix, binDir: fixture.binDir },
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
+});
+
+test("artifact installer restores the previous release when a post-switch gate fails", () => {
+  const fixture = createArtifactFixture("#!/bin/sh\nexit 99\n");
+  const previous = path.join(fixture.prefix, "releases", "0.5.0-paseo.37");
+  mkdirSync(previous, { recursive: true });
+  writeExecutable(path.join(previous, "install.sh"), "#!/bin/sh\nexit 0\n");
+  symlinkSync(previous, path.join(fixture.prefix, "current"));
+  writeExecutable(
+    path.join(fixture.bundle, "bin", "paseo-foundation"),
+    `#!/bin/sh
+case "\${1:-}" in
+  inspect) echo '{"status": "inactive"}' ;;
+  install) exit 17 ;;
+esac
+exit 0
+`,
+  );
+  try {
+    const result = runArtifactFixture(fixture, [
+      "--prefix",
+      fixture.prefix,
+      "--bin-dir",
+      fixture.binDir,
+      "--no-start",
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /restoring the previous Paseo release/);
+    assert.equal(readlinkSync(path.join(fixture.prefix, "current")), previous);
+    assert.equal(existsSync(path.join(fixture.prefix, "releases", "0.5.0-paseo.41")), false);
+    assert.equal(existsSync(path.join(previous, "install.sh")), true);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("all generated platform installers preserve service config and gate the transaction", () => {
+  const macos = renderArtifactInstaller();
+  const linux = linuxInstallerScript();
+  const windows = windowsInstallerScript();
+
+  assert.match(macos, /if \[ ! -f "\$PLIST" \]/);
+  assert.match(linux, /if \[ ! -f "\$UNIT" \]/);
+  assert.match(windows, /if \(-not \$RunDaemonExisted\)/);
+  assert.match(windows, /if \(-not \$TaskExisted\)/);
+  for (const source of [macos, linux, windows]) {
+    assert.match(source, /api\/health/);
+    assert.match(source, /6769\/health\/ready/);
+    assert.match(source, /restoring the previous Paseo release/i);
+  }
+  for (const source of [macos, linux]) {
+    assert.match(source, /HEALTHY=0[\s\S]*6769\/health\/ready[\s\S]*sleep 1/);
+    assert.match(source, /if \[ "\$HEALTHY" -ne 1 \]/);
+  }
+  assert.match(windows, /\$Healthy = \$false[\s\S]*foreach \(\$attempt in 1\.\.30\)/);
+  assert.match(
+    windows,
+    /if \(-not \$Healthy\) \{ throw "Installed release failed health, WebUI, or Beads Central readback\." \}/,
+  );
 });
 
 test("artifact installer prefers a compatible host Node for the launchd daemon", () => {

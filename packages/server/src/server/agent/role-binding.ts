@@ -15,6 +15,7 @@ import type { RoleProfilePreferences } from "@getpaseo/protocol/role-profile";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import type {
   AssignmentAssignerReceipt,
+  AssignmentEffectClass,
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
 import { z } from "zod";
@@ -538,10 +539,29 @@ function intersectRoleTools(
   return roleTools;
 }
 
+const PEER_MUTATING_BEADS_TOOLS = new Set([
+  "beads_create",
+  "beads_claim",
+  "beads_update",
+  "beads_add_dependency",
+]);
+
+function projectRoleToolsForAssignment(
+  roleId: PaseoRoleId,
+  tools: readonly string[],
+  assignmentEffectClass: AssignmentEffectClass | undefined,
+): string[] {
+  if (roleId !== "peer" || assignmentEffectClass !== "read-only") {
+    return [...tools];
+  }
+  return tools.filter((tool) => !PEER_MUTATING_BEADS_TOOLS.has(tool));
+}
+
 export function applyRolePaseoToolPolicy(
   roleId: PaseoRoleId | undefined,
   providerPolicy: ProviderPaseoToolsPolicy | undefined,
   roleAllowedTools?: readonly string[],
+  assignmentEffectClass?: AssignmentEffectClass,
 ): ProviderPaseoToolsPolicy | undefined {
   if (!roleId) {
     return providerPolicy;
@@ -552,7 +572,10 @@ export function applyRolePaseoToolPolicy(
     : ROLE_DEFAULT_TOOLS[roleId];
   return {
     enabled: true,
-    allowedTools: intersectRoleTools(selected, providerPolicy),
+    allowedTools: intersectRoleTools(
+      projectRoleToolsForAssignment(roleId, selected, assignmentEffectClass),
+      providerPolicy,
+    ),
   };
 }
 

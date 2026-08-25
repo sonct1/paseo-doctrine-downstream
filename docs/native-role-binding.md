@@ -143,6 +143,17 @@ bind role. Provider `allowedTools` hoặc `disabledTools` vẫn có thể thu h�
 Supervisor nhưng không thể mở rộng role authority. Global `daemon.mcp.injectIntoAgents=false` vẫn tắt
 toàn bộ projection.
 
+Paseo chỉ auto-approve exact MCP tools do Product quản lý, không blanket-approve global MCP config.
+Runtime hiện inject `paseo` theo role/assignment tool projection và `semble.search` cùng
+`semble.find_related` theo trusted manifest. Semble được pin `semble[mcp]==0.5.4`, chạy qua
+Paseo-owned stdio proxy với uv-managed Python 3.12: `repo` phải canonical-equal assignment workspace
+root, remote URL và symlink escape bị từ chối, còn Python/index/model/uv/temp cache nằm dưới
+`$PASEO_HOME/tool-cache/semble/`. Daemon prepare exact Python/package/model trước khi nhận role-bound
+session; injected proxy sau đó chạy `uvx` và Hugging Face ở offline mode để cold bootstrap không chặn
+Codex MCP inventory hoặc tạo network effect từ assignment. Nếu `uvx`
+hoặc packaged proxy thiếu thì trusted Semble không được inject; daemon không đổi assignment sang
+`full-access` và không auto-approve một Semble server cùng tên do caller cung cấp.
+
 Role ceiling và default projection là hai khái niệm khác nhau. Candidate SLP tools
 `signal_agent`, `resolve_agent_signal`, `prepare_lead_handoff`, `transition_lead_handoff` nằm trong
 ceiling để Human có thể bật explicit, nhưng không nằm trong default Lead profile. Supervisor cũng không
@@ -161,7 +172,9 @@ profile phải enable chúng có chủ đích. Provider policy không thể tự
   `record_council_seat` chỉ cho Lead cập nhật phase, integrity và disposition của direct Peer child
   thuộc đúng case/workspace; agent labels chỉ là compatibility receipt và tool không mở generic
   `update_agent`.
-- Peer không có orchestration tools nhưng có role-scoped Beads tools trong exact assignment grant.
+- Peer không có orchestration tools. Assignment `read-only` chỉ project Beads read tools và có thể
+  `beads_get` issue liên quan mà không cần mutation grant; assignment `mutating` mới project mutation
+  tools và vẫn bắt buộc exact daemon-verified issue grant.
   Peer có `post_room` như một communication capability để trả lời exact Lead-relayed Council challenge;
   Peer không có `read_room`, nên sealed seat không tự đọc Room history hoặc sibling positions.
 - Supervisor chỉ có observation/governance và Beads read-only subset. Exact governance mandate cho

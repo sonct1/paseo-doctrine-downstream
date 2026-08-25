@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   AgentSnapshotPayloadSchema,
   AgentTimelineItemPayloadSchema,
+  SessionInboundMessageSchema,
+  SessionOutboundMessageSchema,
   ServerInfoStatusPayloadSchema,
   WSHelloMessageSchema,
 } from "./messages.js";
@@ -172,6 +174,40 @@ describe("wire schema compatibility", () => {
     });
 
     expect(parsed.features?.beadsIssues).toBe(true);
+  });
+
+  test("distribution update capability and RPCs remain optional for older peers", () => {
+    const legacy = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "legacy-update-server",
+      features: {},
+    });
+    const capable = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "distribution-update-server",
+      features: { distributionUpdate: true },
+    });
+    const request = SessionInboundMessageSchema.parse({
+      type: "distribution.update.check.request",
+      requestId: "check-1",
+      intent: "automatic",
+    });
+    const response = SessionOutboundMessageSchema.parse({
+      type: "distribution.update.check.response",
+      payload: {
+        requestId: "check-1",
+        currentVersion: "0.5.0-paseo.38",
+        update: null,
+        checkedAt: "2026-08-25T00:00:00.000Z",
+        source: "cache",
+        error: null,
+      },
+    });
+
+    expect(legacy.features?.distributionUpdate).toBeUndefined();
+    expect(capable.features?.distributionUpdate).toBe(true);
+    expect(request.type).toBe("distribution.update.check.request");
+    expect(response.type).toBe("distribution.update.check.response");
   });
 
   test("assistant timeline message ids are optional on the wire", () => {

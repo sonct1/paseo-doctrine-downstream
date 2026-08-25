@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0-paseo.43 - 2026-08-25
+
+Bản follow-up này sửa boundary giữa assignment authority và provider execution: `read-only` tiếp tục
+được enforce bằng provider no-write mode, trong khi exact read tools do Paseo quản lý không còn rơi vào
+approval deadlock hoặc mutation ACL không liên quan.
+
+### Added
+
+- Role-bound provider có trusted Semble MCP manifest cho đúng `search` và `find_related`, với exact
+  per-tool auto-approval thay vì blanket approval.
+- Paseo-owned Semble proxy pin `semble[mcp]==0.5.4` và uv-managed Python 3.12; canonical workspace root,
+  remote URL, symlink escape và toàn bộ Python/index/model/uv/temp cache đều có explicit boundary.
+- Daemon prepare pinned Semble package/model trước role launch; assignment-side proxy chạy offline để
+  cold bootstrap không làm timeout Codex MCP inventory.
+
+### Fixed
+
+- Peer `read-only` có thể gọi `beads_get` mà không cần issue mutation grant, đúng assignment contract;
+  Peer `mutating` vẫn bắt buộc exact daemon-verified Beads issue grant.
+- Effective Peer tool projection loại `beads_create`, `beads_claim`, `beads_update` và
+  `beads_add_dependency` khỏi read-only launch thay vì chỉ chờ handler từ chối mutation.
+
+### Compatibility
+
+- Trusted Semble chỉ được inject khi provider hỗ trợ MCP và exact per-tool preapproval, đồng thời host
+  có `uvx`; thiếu runtime thì giữ assignment mode hiện tại, không fallback sang `full-access`.
+- Caller-supplied MCP server tên `semble` không được nhận trusted status hoặc auto-approval; namespace
+  này được reserve khi Product inject trusted runtime.
+
 ## 0.5.0-paseo.38 - 2026-08-25
 
 Bản follow-up này tiếp tục giữ exact upstream `v0.5.0` và gỡ các đường ownership bị phân mảnh khi

@@ -349,6 +349,29 @@ describe("Beads Central Paseo tools", () => {
     expect(peer.service.update).not.toHaveBeenCalled();
   });
 
+  it("allows a read-only Peer to inspect an issue without a mutation grant", async () => {
+    const peer = createHarness({
+      roleId: "peer",
+      assignment: assignment("read-only", "denied"),
+      assignee: null,
+    });
+
+    await expect(
+      tool(peer, "beads_get").handler({ issueId: "ps123-abc", view: "checkpoint" }, {}),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        projectId: "project-1",
+        view: "checkpoint",
+        issue: { id: "ps123-abc" },
+      },
+    });
+    expect(peer.service.get).toHaveBeenCalledWith(
+      { projectId: "project-1", actor: "paseo-agent-peer-1" },
+      "ps123-abc",
+      undefined,
+    );
+  });
+
   it("omits binding closure for a Peer and requires discoveries to retain provenance", async () => {
     const peer = createHarness({ roleId: "peer", assignee: "paseo-agent-peer-1" });
 

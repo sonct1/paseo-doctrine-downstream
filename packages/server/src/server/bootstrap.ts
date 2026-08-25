@@ -90,6 +90,21 @@ function formatListenTarget(listenTarget: ListenTarget | null): string | null {
   return listenTarget.path;
 }
 
+async function resolveTrustedSembleRuntimeForDaemon(
+  paseoHome: string,
+  logger: Logger,
+): ReturnType<typeof resolveTrustedSembleRuntime> {
+  const runtime = await resolveTrustedSembleRuntime({ paseoHome });
+  if (runtime) {
+    logger.info({ uvxPath: runtime.uvxPath }, "Paseo trusted Semble MCP runtime is available");
+  } else {
+    logger.warn(
+      "Paseo trusted Semble MCP runtime is unavailable because uvx, the packaged proxy, or pinned runtime preparation failed",
+    );
+  }
+  return runtime;
+}
+
 export async function fanOutReconciledWorkspaceUpdates(input: {
   sessions: Iterable<{
     syncWorkspaceGitObserversForExternalWorkspaceIds(workspaceIds: Iterable<string>): Promise<void>;
@@ -130,6 +145,7 @@ import type { LocalSpeechProviderConfig } from "./speech/providers/local/config.
 import type { RequestedSpeechProviders } from "./speech/speech-types.js";
 import { createSpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
+import { resolveTrustedSembleRuntime } from "./agent/runtime-mcp-config.js";
 import { FileAgentTimelineStore } from "./agent/file-agent-timeline-store.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { resolveAgentIdentifier } from "./agent/identifier.js";
@@ -1047,6 +1063,7 @@ export async function createPaseoDaemon(
     if (git) configureGitProcessPolicy(git);
   });
   const initialAgentManagerState = providerSnapshotManager.getAgentManagerProviderState();
+  const trustedSembleRuntime = await resolveTrustedSembleRuntimeForDaemon(config.paseoHome, logger);
   const agentManager = new AgentManager({
     durableTimelineStore: timelineStore,
     clients: initialAgentManagerState.clients,
@@ -1058,6 +1075,7 @@ export async function createPaseoDaemon(
     },
     mcpAuthToken: agentMcpAuthToken,
     mcpRuntimeId: randomUUID(),
+    trustedSembleRuntime,
     resolvePaseoToolPolicy: (provider) =>
       resolvePaseoToolPolicy(provider, daemonConfigStore.get().providers),
     resolveRoleProfilePreferences: (roleId) => daemonConfigStore.get().roleProfiles?.[roleId],

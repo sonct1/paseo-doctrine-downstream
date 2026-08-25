@@ -1,5 +1,5 @@
 import { Gift } from "lucide-react-native";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useUnistyles } from "react-native-unistyles";
 import {
@@ -16,7 +16,6 @@ import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater"
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { openExternalUrl } from "@/utils/open-external-url";
 
-const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const CHANGELOG_URL = "https://paseo.sh/changelog";
 
 function renderBody(body: UpdateCalloutBody, t: ReturnType<typeof useTranslation>["t"]): ReactNode {
@@ -50,7 +49,6 @@ export function UpdateCalloutSource() {
     installUpdate,
     isInstalling,
   } = useDesktopAppUpdater();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const openChangelog = useStableEvent(() => {
     void openExternalUrl(CHANGELOG_URL);
@@ -61,22 +59,6 @@ export function UpdateCalloutSource() {
   const retry = useStableEvent(() => {
     void checkForUpdates();
   });
-  useEffect(() => {
-    if (!isDesktopApp) return;
-
-    void checkForUpdates({ intent: "automatic", silent: true });
-
-    intervalRef.current = setInterval(() => {
-      void checkForUpdates({ intent: "automatic", silent: true });
-    }, CHECK_INTERVAL_MS);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [isDesktopApp, checkForUpdates]);
-
   useEffect(() => {
     const descriptor = resolveUpdateCalloutDescriptor({
       isDesktopApp,

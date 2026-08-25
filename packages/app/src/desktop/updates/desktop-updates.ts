@@ -1,6 +1,4 @@
-import { isElectronRuntime } from "@/desktop/host";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
-import { isWeb } from "@/constants/platform";
 import { i18n } from "@/i18n/i18next";
 
 export interface DesktopAppUpdateCheckResult {
@@ -38,7 +36,8 @@ export interface LocalDaemonVersionResult {
   error: string | null;
 }
 
-const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/getpaseo/paseo/releases/download";
+const RELEASE_DOWNLOAD_BASE_URL =
+  "https://github.com/webplode/paseo-doctrine-downstream/releases/download";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -62,7 +61,10 @@ function toNumberOr(defaultValue: number, value: unknown): number {
 }
 
 export function shouldShowDesktopUpdateSection(): boolean {
-  return isWeb && isElectronRuntime();
+  // The downstream channel currently publishes the portable local stack, not
+  // Electron installer metadata. Keep the upstream desktop updater unreachable
+  // until equivalent downstream desktop assets are qualified.
+  return false;
 }
 
 export function parseLocalDaemonVersionResult(raw: unknown): LocalDaemonVersionResult {
@@ -131,7 +133,9 @@ export async function installDesktopAppUpdate({
 }: {
   releaseChannel: DesktopReleaseChannel;
 }): Promise<DesktopAppUpdateInstallResult> {
-  const result = await invokeDesktopCommand<unknown>("install_app_update", { releaseChannel });
+  const result = await invokeDesktopCommand<unknown>("install_app_update", {
+    releaseChannel,
+  });
   if (!isRecord(result)) {
     throw new Error("Unexpected response while installing desktop update.");
   }

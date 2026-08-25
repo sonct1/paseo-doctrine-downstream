@@ -30,6 +30,7 @@ import { PluginCommandCenterActions } from "@/plugins/command-center/registratio
 import { AddProjectFlowHost } from "@/components/add-project-flow-host";
 import { AppearanceStyleBoundary } from "@/components/appearance-style-boundary";
 import { WorktreeSetupCalloutSource } from "@/components/worktree-setup-callout-source";
+import { DistributionUpdateCalloutSource } from "@/components/distribution-update-callout-source";
 import { DownloadToast } from "@/components/download-toast";
 import { QuittingOverlay } from "@/components/quitting-overlay";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
@@ -83,7 +84,6 @@ import { updateDesktopWindowControls } from "@/desktop/electron/window";
 import { getDesktopHost } from "@/desktop/host";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { RosettaCalloutSource } from "@/desktop/updates/rosetta-callout-source";
-import { UpdateCalloutSource } from "@/desktop/updates/update-callout-source";
 import { useActiveWorktreeNewAction } from "@/hooks/use-active-worktree-new-action";
 import { useGlobalNewWorkspaceAction } from "@/hooks/use-global-new-workspace-action";
 import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
@@ -419,8 +419,12 @@ function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
   }, [shouldRunGiveUpTimer]);
 
   const retry = useCallback(() => {
-    const daemonStartService = getDaemonStartService({ store: getHostRuntimeStore() });
-    void daemonStartService.startIfEnabled({ shouldStart: shouldStartBuiltInDaemon });
+    const daemonStartService = getDaemonStartService({
+      store: getHostRuntimeStore(),
+    });
+    void daemonStartService.startIfEnabled({
+      shouldStart: shouldStartBuiltInDaemon,
+    });
   }, []);
 
   const splashError =
@@ -428,7 +432,13 @@ function HostRuntimeBootstrapProvider({ children }: { children: ReactNode }) {
   const storeReady = resolveStartupNavigationReady({ startupBlocker });
 
   const state = useMemo<HostRuntimeBootstrapState>(
-    () => ({ splashError, retry, hasGivenUpWaitingForHost, storeReady, startupBlocker }),
+    () => ({
+      splashError,
+      retry,
+      hasGivenUpWaitingForHost,
+      storeReady,
+      startupBlocker,
+    }),
     [splashError, retry, hasGivenUpWaitingForHost, storeReady, startupBlocker],
   );
 
@@ -491,7 +501,12 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
     // only correct answer to "is the explorer open". Let it decide when there is
     // one: the pathname alone cannot identify the active workspace, because
     // desktop cold-starts at "/" and restores the workspace from route params.
-    if (keyboardActionDispatcher.dispatch({ id: "sidebar.toggle.both", scope: "sidebar" })) {
+    if (
+      keyboardActionDispatcher.dispatch({
+        id: "sidebar.toggle.both",
+        scope: "sidebar",
+      })
+    ) {
       return;
     }
     // Off a workspace route there is no explorer — only the agent list.
@@ -584,7 +599,7 @@ function AppContainer({ children, chromeEnabled: chromeEnabledOverride }: AppCon
       {isCompactLayout ? sidebarChrome : null}
       <DownloadToast />
       <RosettaCalloutSource />
-      <UpdateCalloutSource />
+      <DistributionUpdateCalloutSource />
       <LegacyAgentSkillsMigration />
       <WorktreeSetupCalloutSource />
       <CommandCenterRootActions />

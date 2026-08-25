@@ -62,6 +62,35 @@ receipts mới. Không được claim local stack mới nhất chỉ từ semver
 Không dùng `release:publish` hoặc upstream `vX.Y.Z` tag cho distribution này. Các lệnh stable/beta npm
 ở phần dưới chỉ áp dụng cho upstream release track.
 
+### Update portable downstream
+
+Updater chỉ đọc GitHub Releases của `webplode/paseo-doctrine-downstream`. Client thử check đúng một lần
+khi WebUI process mở và kết nối host; daemon cache kết quả automatic trong 24 giờ, gộp request đồng
+thời, dùng `ETag`, và giữ cooldown manual 5 phút. Reconnect, focus, resume hoặc timer không tạo thêm
+GitHub request.
+
+Release chỉ được discover sau khi job cuối upload `paseo-update-manifest.json`. Khi rerun cùng tag,
+workflow xóa manifest cũ trước khi thay platform assets; vì vậy client không bao giờ coi matrix đang
+upload dở là qualified. Manifest khóa đủ bốn archive/checksum macOS `arm64`/`x64`, Linux `x64` và
+Windows `x64`.
+
+Người dùng portable có thể apply từ WebUI callout hoặc CLI:
+
+```bash
+paseo update check
+paseo update apply
+paseo update status
+paseo update rollback
+```
+
+Installer chạy lại idle gate ngay trước switch, giữ service config hiện hữu, verify daemon, WebUI và
+Beads Central, rồi mới commit Foundation. Failure sau switch trả `current` về local release cũ. Mỗi
+release updater-enabled giữ installer của chính nó để `rollback` không phụ thuộc GitHub.
+
+`0.5.0-paseo.41` là bootstrap boundary: release cũ hơn chưa có protocol updater nên cần chạy portable
+installer downstream một lần. Từ release này trở đi WebUI/CLI dùng update flow ở trên. Electron updater
+upstream bị ẩn tới khi downstream publish đủ Electron metadata riêng.
+
 ## Two steps
 
 A release has exactly two steps. The agent does the first, the user authorizes the second.

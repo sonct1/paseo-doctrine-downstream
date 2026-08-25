@@ -281,7 +281,10 @@ export const FoundationCredentialRefSchema = z.string().regex(/^[a-z][a-z0-9-]{0
 export const BeadsCentralEndpointSchema = z.url().superRefine((value, context) => {
   const endpoint = new URL(value);
   if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
-    context.addIssue({ code: "custom", message: "Beads Central endpoint must use http or https" });
+    context.addIssue({
+      code: "custom",
+      message: "Beads Central endpoint must use http or https",
+    });
   }
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
     context.addIssue({
@@ -365,7 +368,9 @@ export const MutableDaemonConfigSchema = z
     // COMPAT(peerDelegationDefaultSubrole): added in v0.4.0-paseo.27,
     // remove the gate after 2027-08-20. Null preserves exact-profile routing.
     peerDelegationDefaultSubrole: PeerSubroleSchema.nullable().optional(),
-    metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
+    metadataGeneration: MutableMetadataGenerationConfigSchema.default({
+      providers: [],
+    }),
     autoArchiveAfterMerge: z.boolean().default(false),
     enableTerminalAgentHooks: z.boolean().default(false),
     appendSystemPrompt: z.string().default(""),
@@ -1587,7 +1592,11 @@ export const PluginDirectoryInspectRequestSchema = z.object({
 });
 
 function pluginIdRequest<const Type extends string>(type: Type) {
-  return z.object({ type: z.literal(type), requestId: z.string(), pluginId: PluginIdSchema });
+  return z.object({
+    type: z.literal(type),
+    requestId: z.string(),
+    pluginId: PluginIdSchema,
+  });
 }
 
 export const PluginReloadRequestSchema = pluginIdRequest("plugin.reload.request");
@@ -1912,6 +1921,34 @@ export const ShutdownServerRequestMessageSchema = z.object({
 
 export const DaemonUpdateRequestMessageSchema = z.object({
   type: z.literal("daemon.update.request"),
+  requestId: z.string(),
+});
+
+export const DistributionUpdateCheckRequestMessageSchema = z.object({
+  type: z.literal("distribution.update.check.request"),
+  intent: z.enum(["automatic", "manual"]).optional(),
+  requestId: z.string(),
+});
+
+export const DistributionUpdatePrepareRequestMessageSchema = z.object({
+  type: z.literal("distribution.update.prepare.request"),
+  tag: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const DistributionUpdateApplyRequestMessageSchema = z.object({
+  type: z.literal("distribution.update.apply.request"),
+  tag: z.string().optional(),
+  requestId: z.string(),
+});
+
+export const DistributionUpdateGetStatusRequestMessageSchema = z.object({
+  type: z.literal("distribution.update.get_status.request"),
+  requestId: z.string(),
+});
+
+export const DistributionUpdateRollbackRequestMessageSchema = z.object({
+  type: z.literal("distribution.update.rollback.request"),
   requestId: z.string(),
 });
 
@@ -3257,6 +3294,11 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   ShutdownServerRequestMessageSchema,
   RestartServerRequestMessageSchema,
   DaemonUpdateRequestMessageSchema,
+  DistributionUpdateCheckRequestMessageSchema,
+  DistributionUpdatePrepareRequestMessageSchema,
+  DistributionUpdateApplyRequestMessageSchema,
+  DistributionUpdateGetStatusRequestMessageSchema,
+  DistributionUpdateRollbackRequestMessageSchema,
   FetchAgentTimelineRequestMessageSchema,
   AgentTimelineListPromptsRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
@@ -3675,6 +3717,9 @@ export const ServerInfoStatusPayloadSchema = z
         // New clients read canonical daemon-owned Council records instead of deriving cases
         // from agent labels, so they must not request this RPC from an older daemon.
         councilCases: z.boolean().optional(),
+        // COMPAT(distributionUpdate): added in v0.5.0-paseo.41, remove gate after
+        // 2027-08-25. Older daemons only expose the npm-global daemon updater.
+        distributionUpdate: z.boolean().optional(),
         // COMPAT(beadsIssues): added in v0.3.1-paseo.2, remove gate after 2027-02-10.
         beadsIssues: z.boolean().optional(),
         // COMPAT(fsEntryOps): added in v0.3.0, remove gate after 2027-02-08.
@@ -4828,11 +4873,17 @@ export const HubRelationshipStatusSchema = z.object({
 });
 export const HubManagementDaemonConnectResponseSchema = z.object({
   type: z.literal("hub.management.daemon.connect.response"),
-  payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
+  payload: z.object({
+    requestId: z.string(),
+    status: HubRelationshipStatusSchema,
+  }),
 });
 export const HubManagementDaemonGetStatusResponseSchema = z.object({
   type: z.literal("hub.management.daemon.get_status.response"),
-  payload: z.object({ requestId: z.string(), status: HubRelationshipStatusSchema }),
+  payload: z.object({
+    requestId: z.string(),
+    status: HubRelationshipStatusSchema,
+  }),
 });
 export const HubManagementDaemonDisconnectResponseSchema = z.object({
   type: z.literal("hub.management.daemon.disconnect.response"),
@@ -6310,6 +6361,78 @@ export const DaemonUpdateProgressMessageSchema = z.object({
   }),
 });
 
+export const DistributionUpdateReleaseSchema = z.object({
+  version: z.string(),
+  tag: z.string(),
+  releaseUrl: z.string(),
+  publishedAt: z.string().nullable(),
+});
+
+export const DistributionUpdateCheckResponseSchema = z.object({
+  type: z.literal("distribution.update.check.response"),
+  payload: z.object({
+    requestId: z.string(),
+    currentVersion: z.string().nullable(),
+    update: DistributionUpdateReleaseSchema.nullable(),
+    checkedAt: z.string(),
+    source: z.enum(["cache", "network"]),
+    error: z.string().nullable(),
+  }),
+});
+
+export const DistributionUpdatePrepareResponseSchema = z.object({
+  type: z.literal("distribution.update.prepare.response"),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean(),
+    version: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const DistributionUpdateApplyResponseSchema = z.object({
+  type: z.literal("distribution.update.apply.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    version: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const DistributionUpdateStatusSchema = z.object({
+  phase: z.enum(["idle", "checking", "downloading", "prepared", "installing", "failed"]),
+  version: z.string().nullable(),
+  message: z.string().nullable(),
+  updatedAt: z.string(),
+});
+
+export const DistributionUpdateGetStatusResponseSchema = z.object({
+  type: z.literal("distribution.update.get_status.response"),
+  payload: z.object({
+    requestId: z.string(),
+    status: DistributionUpdateStatusSchema,
+  }),
+});
+
+export const DistributionUpdateRollbackResponseSchema = z.object({
+  type: z.literal("distribution.update.rollback.response"),
+  payload: z.object({
+    requestId: z.string(),
+    accepted: z.boolean(),
+    version: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+});
+
+export const DistributionUpdateProgressMessageSchema = z.object({
+  type: z.literal("distribution.update.progress"),
+  payload: z.object({
+    requestId: z.string(),
+    status: DistributionUpdateStatusSchema,
+  }),
+});
+
 export const HubExecutionAgentCreateResponseSchema = z.object({
   type: z.literal("hub.execution.agent.create.response"),
   payload: z.object({
@@ -6448,7 +6571,10 @@ export type PluginLogEntry = z.infer<typeof PluginLogEntrySchema>;
 
 export const PluginListResponseSchema = z.object({
   type: z.literal("plugin.list.response"),
-  payload: z.object({ requestId: z.string(), plugins: z.array(PluginListItemSchema) }),
+  payload: z.object({
+    requestId: z.string(),
+    plugins: z.array(PluginListItemSchema),
+  }),
 });
 
 export const PluginLogsGetResponseSchema = z.object({
@@ -6741,6 +6867,12 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   BeadsIssueCloseResponseSchema,
   DaemonUpdateProgressMessageSchema,
   DaemonUpdateResponseSchema,
+  DistributionUpdateCheckResponseSchema,
+  DistributionUpdatePrepareResponseSchema,
+  DistributionUpdateApplyResponseSchema,
+  DistributionUpdateGetStatusResponseSchema,
+  DistributionUpdateRollbackResponseSchema,
+  DistributionUpdateProgressMessageSchema,
 ]);
 
 export type SessionOutboundMessage = z.infer<typeof SessionOutboundMessageSchema>;

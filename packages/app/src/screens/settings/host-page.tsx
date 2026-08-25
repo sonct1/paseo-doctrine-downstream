@@ -97,8 +97,12 @@ function DynamicProviderIcon({ iconKey, size, color = "" }: DynamicProviderIconP
 
 const ThemedDynamicProviderIcon = withUnistyles(DynamicProviderIcon);
 
-const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const destructiveColorMapping = (theme: Theme) => ({ color: theme.colors.destructive });
+const mutedColorMapping = (theme: Theme) => ({
+  color: theme.colors.foregroundMuted,
+});
+const destructiveColorMapping = (theme: Theme) => ({
+  color: theme.colors.destructive,
+});
 
 const moveUpIcon = <ThemedArrowUp size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
 const moveDownIcon = <ThemedArrowDown size={ICON_SIZE.sm} uniProps={mutedColorMapping} />;
@@ -630,7 +634,9 @@ function RestartDaemonCard({ host }: { host: HostProfile }) {
         if (!reconnected) {
           Alert.alert(
             t("settings.host.daemon.restart.unableToReconnectTitle"),
-            t("settings.host.daemon.restart.unableToReconnectMessage", { name: host.label }),
+            t("settings.host.daemon.restart.unableToReconnectMessage", {
+              name: host.label,
+            }),
           );
         }
       }
@@ -655,7 +661,9 @@ function RestartDaemonCard({ host }: { host: HostProfile }) {
     }
 
     void confirmDialog({
-      title: t("settings.host.daemon.restart.confirmTitle", { name: host.label }),
+      title: t("settings.host.daemon.restart.confirmTitle", {
+        name: host.label,
+      }),
       message: t("settings.host.daemon.restart.confirmMessage"),
       confirmLabel: t("settings.host.daemon.restart.confirm"),
       cancelLabel: t("common.actions.cancel"),
@@ -727,15 +735,17 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
   const daemonClient = useHostRuntimeClient(host.serverId);
   const isConnected = useHostRuntimeIsConnected(host.serverId);
   const runtime = getHostRuntimeStore();
-  const [updateState, setUpdateState] = useState<DaemonUpdateState>({ status: "idle" });
+  const [updateState, setUpdateState] = useState<DaemonUpdateState>({
+    status: "idle",
+  });
   const isMountedRef = useRef(true);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const daemonVersion = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.version ?? null,
   );
-  const supportsSelfUpdate = useSessionStore(
-    (state) => state.sessions[host.serverId]?.serverInfo?.features?.daemonSelfUpdate === true,
+  const supportsDistributionUpdate = useSessionStore(
+    (state) => state.sessions[host.serverId]?.serverInfo?.features?.distributionUpdate === true,
   );
   const desktopManaged = useSessionStore(
     (state) => state.sessions[host.serverId]?.serverInfo?.desktopManaged === true,
@@ -823,7 +833,9 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
     }
 
     void confirmDialog({
-      title: t("settings.host.daemon.update.confirmTitle", { name: host.label }),
+      title: t("settings.host.daemon.update.confirmTitle", {
+        name: host.label,
+      }),
       message: t("settings.host.daemon.update.confirmMessage"),
       confirmLabel: t("settings.host.daemon.update.confirm"),
       cancelLabel: t("common.actions.cancel"),
@@ -844,11 +856,11 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
         });
         const requestId = `settings_daemon_update_${host.serverId}`;
 
-        const unsubscribe = daemonClient.on("daemon.update.progress", (message) => {
+        const unsubscribe = daemonClient.on("distribution.update.progress", (message) => {
           if (message.payload.requestId !== requestId) return;
           if (!isMountedRef.current) return;
-          const { phase } = message.payload;
-          if (phase === "starting")
+          const { phase } = message.payload.status;
+          if (phase === "checking")
             setUpdateState({
               status: "updating",
               phase: t("settings.host.daemon.update.phaseStarting"),
@@ -863,7 +875,7 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
               status: "updating",
               phase: t("settings.host.daemon.update.phaseInstalling"),
             });
-          else if (phase === "complete")
+          else if (phase === "prepared")
             setUpdateState({
               status: "updating",
               phase: t("settings.host.daemon.update.phaseComplete"),
@@ -872,11 +884,11 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
         unsubscribeRef.current = unsubscribe;
 
         void daemonClient
-          .updateDaemon(requestId)
+          .applyDistributionUpdate({ requestId })
           .then((response) => {
             unsubscribeRef.current = null;
             unsubscribe();
-            if (!response.success) {
+            if (!response.accepted) {
               if (!isMountedRef.current) return undefined;
               setUpdateState({
                 status: "failed",
@@ -922,7 +934,7 @@ function UpdateDaemonCard({ host }: { host: HostProfile }) {
     [theme.iconSize.sm, theme.colors.foreground],
   );
 
-  const shouldShowUpdate = hasVersionMismatch && (supportsSelfUpdate || desktopManaged);
+  const shouldShowUpdate = hasVersionMismatch && supportsDistributionUpdate;
   if (!shouldShowUpdate) {
     return null;
   }
@@ -1384,7 +1396,9 @@ function RemoveHostSection({
           <Text style={styles.confirmText}>
             {isLocalDaemon
               ? t("settings.host.daemon.remove.localConfirmMessage")
-              : t("settings.host.daemon.remove.confirmMessage", { name: host.label })}
+              : t("settings.host.daemon.remove.confirmMessage", {
+                  name: host.label,
+                })}
           </Text>
           <View style={styles.confirmActions}>
             <Button

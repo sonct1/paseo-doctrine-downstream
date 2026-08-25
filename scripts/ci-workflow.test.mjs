@@ -188,6 +188,20 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /beads-central\.lock\.json'\)\.uvVersion/);
   assert.match(source, /needs: \[qualification, create-release\]/);
   assert.match(source, /needs\.qualification\.result == 'success'/);
+  assert.match(source, /^  qualify-release:\s*$/m);
+  assert.match(source, /name: downstream-qualified-update-manifest/);
+  assert.match(source, /needs: \[qualification, build\]/);
+  assert.match(source, /scripts\/create-paseo-update-manifest\.mjs/);
+  assert.match(source, /artifacts\/paseo-update-manifest\.json/);
+  assert.match(source, /gh release delete-asset "\$RELEASE_TAG" paseo-update-manifest\.json/);
+  assert.ok(
+    source.indexOf('gh release delete-asset "$RELEASE_TAG" paseo-update-manifest.json') <
+      source.indexOf("Upload verified release assets"),
+  );
+  assert.ok(
+    source.indexOf("Create final qualified update manifest") <
+      source.indexOf("Publish final update qualification sentinel"),
+  );
   assert.doesNotMatch(source, /build:desktop|android:release|release:publish|npm publish/);
 });
 
