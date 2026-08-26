@@ -1,267 +1,30 @@
-name: Downstream Portable Release
+name: Downstream Portable Qualification / Prerelease
 
 on:
-  push:
-    tags:
-      - "paseo-v*"
   workflow_dispatch:
     inputs:
       ref:
-        description: "Commit, branch, or paseo-v* tag to qualify"
+        description: "Exact commit to qualify, or annotated paseo-v* tag to publish as prerelease"
         required: true
         default: "main"
         type: string
       publish:
-        description: "Publish assets to the matching paseo-v* GitHub Release"
+        description: "Publish the annotated tag as a GitHub prerelease"
         required: true
         default: false
         type: boolean
 
-concurrency:
-  group: downstream-portable-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
-  cancel-in-progress: false
-
 permissions:
   contents: write
 
-env:
-  SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
-  SHOULD_PUBLISH: ${{ github.event_name == 'push' || inputs.publish == true }}
-  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
-
 jobs:
-  qualification:
-    name: downstream-release-contracts
-    runs-on: ubuntu-22.04
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ env.SOURCE_REF }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24.11.0"
-          cache: npm
-
-      - name: Install pinned downstream release toolchain
-        run: npm install --global npm@11.17.0
-
-      - name: Verify frozen dependency install
-        run: npm ci
-
-      - name: Verify deterministic downstream contracts
-        run: |
-          npm run release:toolchain:check
-          npm run acp:pin-consistency:check
-          node --test \
-            scripts/acp-catalog-pin-consistency.test.mjs \
-            scripts/agent-instructions.test.mjs \
-            scripts/beads-central-bundle.test.mjs \
-            scripts/build-daemon-web-ui.test.mjs \
-            scripts/ci-workflow.test.mjs \
-            scripts/create-paseo-update-manifest.test.mjs \
-            scripts/daemon-launch-contract.test.mjs \
-            scripts/downstream-publish-guard.test.mjs \
-            scripts/smoke-web-cli-artifact.test.mjs
-          git diff --exit-code
-
-      - name: Check shipped source quality
-        run: npm run format:check && npm run lint
-
-      - name: Build shared server dependencies
-        run: npm run build:server
-
-      - name: Verify downstream role-bound workspace creation
-        run: |
-          npx vitest run \
-            packages/app/src/composer/draft/create-flow.test.ts \
-            packages/app/src/composer/draft/input-draft.live.test.tsx \
-            packages/app/src/utils/agent-snapshots.test.ts \
-            --bail=1
-
-      - name: Typecheck downstream shipped packages
-        run: |
-          npm run typecheck --workspace=@getpaseo/highlight
-          npm run typecheck --workspace=@getpaseo/plugin
-          npm run typecheck --workspace=@getpaseo/protocol
-          npm run typecheck --workspace=@getpaseo/client
-          npm run typecheck --workspace=@getpaseo/relay
-          npm run typecheck --workspace=@getpaseo/server
-          npm run typecheck --workspace=@getpaseo/app
-          npm run typecheck --workspace=@getpaseo/cli
-          npm run typecheck --workspace=@getpaseo/foundation-cli
-
-  create-release:
-    needs: qualification
-    if: ${{ github.event_name == 'push' || inputs.publish == true }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ env.SOURCE_REF }}
-
-      - name: Validate release identity
-        shell: bash
-        run: |
-          case "$RELEASE_TAG" in
-            paseo-v*) ;;
-            *) echo "Expected paseo-v* tag, got $RELEASE_TAG" >&2; exit 1 ;;
-          esac
-          package_version=$(node -p "require('./package.json').version")
-          test "${RELEASE_TAG#paseo-v}" = "$package_version"
-
-      - name: Create release if needed
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Paseo Foundation Downstream ${RELEASE_TAG#paseo-v}" \
-              --prerelease \
-              --notes "Host-native WebUI + CLI + Foundation distribution for macOS, Linux, and Windows."
-          fi
-          # A rerun must become unqualified before any platform asset is replaced.
-          gh release delete-asset "$RELEASE_TAG" paseo-update-manifest.json \
-            --yes \
-            --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || true
-
-  build:
-    needs: [qualification, create-release]
-    if: ${{ always() && needs.qualification.result == 'success' && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-14
-            platform_name: macos
-            arch: arm64
-            extension: .tar.gz
-          - runner: macos-15-intel
-            platform_name: macos
-            arch: x64
-            extension: .tar.gz
-          - runner: ubuntu-22.04
-            platform_name: linux
-            arch: x64
-            extension: .tar.gz
-          - runner: windows-2025
-            platform_name: windows
-            arch: x64
-            extension: .zip
-    runs-on: ${{ matrix.runner }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ env.SOURCE_REF }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24.11.0"
-          cache: npm
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13.15"
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26.2"
-          cache: false
-
-      - name: Install pinned Beads Central build toolchain
-        shell: bash
-        run: |
-          uv_version=$(node -p "require('./components/beads-central.lock.json').uvVersion")
-          python -m pip install "uv==$uv_version"
-
-      - name: Validate host architecture
-        shell: bash
-        run: test "$(node -p process.arch)" = "${{ matrix.arch }}"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Test macOS bootstrap compatibility
-        if: runner.os == 'macOS'
-        run: npm run test:install-macos
-
-      - name: Parse Windows bootstrap installer
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path scripts/install-windows.ps1),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
-
-      - name: Build host-native WebUI + CLI artifact
-        run: npm run build:web-cli-artifact
-
-      - name: Smoke installed artifact
-        run: npm run test:web-cli-artifact
-
-      - name: Upload verified release assets
-        if: env.SHOULD_PUBLISH == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          version=$(node -p "require('./package.json').version")
-          base="artifacts/paseo-web-cli-$version-${{ matrix.platform_name }}-${{ matrix.arch }}${{ matrix.extension }}"
-          gh release upload "$RELEASE_TAG" "$base" "$base.sha256" --clobber --repo "$GITHUB_REPOSITORY"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: paseo-web-cli-${{ matrix.platform_name }}-${{ matrix.arch }}
-          path: |
-            artifacts/paseo-web-cli-*-${{ matrix.platform_name }}-${{ matrix.arch }}${{ matrix.extension }}
-            artifacts/paseo-web-cli-*-${{ matrix.platform_name }}-${{ matrix.arch }}${{ matrix.extension }}.sha256
-
-  qualify-release:
-    name: downstream-qualified-update-manifest
-    needs: [qualification, build]
-    if: ${{ always() && needs.qualification.result == 'success' && needs.build.result == 'success' }}
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ env.SOURCE_REF }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: paseo-web-cli-*
-          path: artifacts/qualified
-
-      - name: Create final qualified update manifest
-        run: |
-          node scripts/create-paseo-update-manifest.mjs \
-            --artifacts artifacts/qualified \
-            --output artifacts/paseo-update-manifest.json
-
-      - name: Publish final update qualification sentinel
-        if: env.SHOULD_PUBLISH == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "$RELEASE_TAG" \
-            artifacts/paseo-update-manifest.json \
-            --clobber \
-            --repo "$GITHUB_REPOSITORY"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: paseo-qualified-update-manifest
-          path: artifacts/paseo-update-manifest.json
+  portable:
+    name: qualify-or-publish-prerelease
+    uses: ./.github/workflows/downstream-portable-release-core.yml
+    with:
+      source_ref: ${{ inputs.ref }}
+      release_tag: ${{ inputs.ref }}
+      publish: ${{ inputs.publish }}
+      prerelease: true
+    permissions:
+      contents: write

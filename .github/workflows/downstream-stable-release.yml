@@ -1,0 +1,24 @@
+name: Downstream Stable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing annotated paseo-v* tag to publish as the stable/latest release"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  stable:
+    name: qualify-and-publish-stable
+    uses: ./.github/workflows/downstream-portable-release-core.yml
+    with:
+      source_ref: ${{ inputs.tag }}
+      release_tag: ${{ inputs.tag }}
+      publish: true
+      prerelease: false
+    permissions:
+      contents: write
