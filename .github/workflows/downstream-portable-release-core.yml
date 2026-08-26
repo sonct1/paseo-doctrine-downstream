@@ -301,7 +301,9 @@ jobs:
 
       - name: Create final qualified update manifest
         run: |
-          node scripts/create-paseo-update-manifest.mjs \
+          # Historical candidates may still read GITHUB_SHA. Rebind it to the
+          # exact checked-out candidate instead of the workflow/tooling commit.
+          GITHUB_SHA="$(git rev-parse HEAD)" node scripts/create-paseo-update-manifest.mjs \
             --artifacts artifacts/qualified \
             --output artifacts/paseo-update-manifest.json
 

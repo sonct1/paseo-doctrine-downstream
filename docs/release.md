@@ -46,6 +46,9 @@ build nguyên trạng; sau bước build, lane checkout smoke harness từ exact
 đã được activate. Harness đọc artifact qua `PASEO_RELEASE_ARTIFACT_ROOT`, giữ startup budget `120s` trên
 cả bốn native host để chịu được cold start dưới runner load. Daemon exit hoặc quá budget vẫn fail
 closed và phải in state cùng log tail; timeout dài hơn không được biến health failure thành pass.
+Final update manifest luôn lấy `sourceCommit` từ exact candidate checkout, không lấy event
+`GITHUB_SHA` của stable/prerelease wrapper hoặc `tooling_ref`; mismatch hai identity này là hard
+blocker trước khi release được public.
 
 ### Boundary của downstream release gate
 

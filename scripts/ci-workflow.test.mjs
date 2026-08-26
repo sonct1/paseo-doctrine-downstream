@@ -216,6 +216,7 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /name: downstream-qualified-update-manifest/);
   assert.match(source, /needs: \[qualification, build\]/);
   assert.match(source, /scripts\/create-paseo-update-manifest\.mjs/);
+  assert.match(source, /GITHUB_SHA="\$\(git rev-parse HEAD\)"/);
   assert.match(source, /artifacts\/paseo-update-manifest\.json/);
   assert.match(source, /gh release delete-asset "\$RELEASE_TAG" paseo-update-manifest\.json/);
   assert.ok(
