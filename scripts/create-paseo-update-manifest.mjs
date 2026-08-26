@@ -77,12 +77,13 @@ async function main() {
     };
   }
 
-  const sourceCommit =
-    process.env.GITHUB_SHA ??
-    execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-    }).trim();
+  const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  }).trim();
+  if (!/^[0-9a-f]{40}$/u.test(sourceCommit)) {
+    throw new Error(`Expected exact checked-out source commit, got ${sourceCommit}`);
+  }
   const manifest = {
     schemaVersion: 1,
     version,

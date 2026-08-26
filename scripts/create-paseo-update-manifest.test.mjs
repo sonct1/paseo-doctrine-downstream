@@ -41,14 +41,21 @@ test("creates the final manifest only from all four exact downstream checksums",
       ],
       {
         cwd: new URL(".", repoRoot).pathname,
-        env: { ...process.env, GITHUB_SHA: "abc123" },
+        env: { ...process.env, GITHUB_SHA: "f".repeat(40) },
       },
     );
     const manifest = JSON.parse(readFileSync(output, "utf8"));
     assert.equal(manifest.schemaVersion, 1);
     assert.equal(manifest.version, version);
     assert.equal(manifest.tag, `paseo-v${version}`);
-    assert.equal(manifest.sourceCommit, "abc123");
+    assert.equal(
+      manifest.sourceCommit,
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: new URL(".", repoRoot).pathname,
+        encoding: "utf8",
+      }).trim(),
+    );
+    assert.notEqual(manifest.sourceCommit, "f".repeat(40));
     assert.deepEqual(
       Object.keys(manifest.assets),
       targets.map(([target]) => target),

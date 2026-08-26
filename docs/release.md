@@ -21,16 +21,19 @@ Quy trình downstream:
    artifact build/install/smoke trên macOS `arm64`/`x64`, Linux `x64`, Windows `x64`. Docker/Nix là
    distribution channels độc lập và chỉ là hard gate khi release đó tuyên bố ship hoặc thay đổi các
    channel này.
-5. Push release line vào `main`, rồi dispatch `Downstream Stable Release` với exact 40-character
-   release source commit và target tag `paseo-v<package-version>`. Stable lane chỉ nhận source đã nằm
-   trong `main`, tự create hoặc validate annotated tag bằng `GITHUB_TOKEN`, rồi chạy lại cùng portable
+5. Push release line vào `main`. Release operator dùng credential có repository `Contents: write` và
+   `Workflows: write` (classic PAT tương đương cần `repo` + `workflow`) để tạo rồi push annotated tag
+   `paseo-v<package-version>` trỏ đúng exact release source commit. Sau đó dispatch workflow
+   `Downstream Stable Release` với exact 40-character source commit và tag vừa tạo. Stable lane chỉ nhận source đã nằm
+   trong `main`, validate tag tồn tại, là annotated tag và peel đúng source, rồi chạy lại cùng portable
    core với `publish=true`, `prerelease=false`. Release được stage ở draft, upload đủ assets + final
    manifest, rồi mới publish non-draft GitHub Release và đánh dấu `Latest`.
 
 Stable và prerelease là hai entrypoint riêng, không suy release mode từ tag push và không flip mode
-sau khi release đã tồn tại. Stable tag được push bên trong lane bằng `GITHUB_TOKEN`, nên không đánh
-thức một tag-push workflow khác; release intent vẫn là exact stable dispatch. `Downstream Stable
-Release` luôn stable; muốn publish prerelease thì dispatch `Downstream Portable Qualification /
+sau khi release đã tồn tại. `GITHUB_TOKEN` không có repository `Workflows` permission cần để tạo ref
+trỏ vào history có thay đổi dưới `.github/workflows`; vì vậy operator tạo annotated tag trước và stable
+lane chỉ validate, không nhận PAT dài hạn qua repository secret. `Downstream Stable Release` luôn
+stable; muốn publish prerelease thì dispatch `Downstream Portable Qualification /
 Prerelease` với exact annotated tag và `publish=true`. Core fail closed nếu tag không annotated,
 tag/version/checkout không khớp hoặc existing release có `prerelease` mode khác lane được chọn. Draft
 đúng mode được reuse khi rerun; release chỉ thành public sau khi job cuối upload
@@ -43,6 +46,9 @@ build nguyên trạng; sau bước build, lane checkout smoke harness từ exact
 đã được activate. Harness đọc artifact qua `PASEO_RELEASE_ARTIFACT_ROOT`, giữ startup budget `120s` trên
 cả bốn native host để chịu được cold start dưới runner load. Daemon exit hoặc quá budget vẫn fail
 closed và phải in state cùng log tail; timeout dài hơn không được biến health failure thành pass.
+Final update manifest luôn lấy `sourceCommit` từ exact candidate checkout, không lấy event
+`GITHUB_SHA` của stable/prerelease wrapper hoặc `tooling_ref`; mismatch hai identity này là hard
+blocker trước khi release được public.
 
 ### Boundary của downstream release gate
 
