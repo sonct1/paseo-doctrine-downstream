@@ -25,7 +25,7 @@ const roleSourcePath = resolve(
 );
 const roleOutputPath = resolve(
   packageRoot,
-  "dist/server/server/agent/foundation-role-definitions.json",
+  "dist/server/server/policy/bundled/slp/role-definitions.json",
 );
 const executionSpecializationSourcePath = resolve(
   repositoryRoot,
@@ -33,13 +33,13 @@ const executionSpecializationSourcePath = resolve(
 );
 const executionSpecializationOutputPath = resolve(
   packageRoot,
-  "dist/server/server/agent/foundation-execution-specializations.json",
+  "dist/server/server/policy/bundled/slp/execution-specializations.json",
 );
 const foundationSkillsSourceRoot = resolve(repositoryRoot, "foundation/dist/skills");
 const foundationSkillAdmissionSourcePath = resolve(foundationSkillsSourceRoot, "role-bundles.json");
 const foundationSkillsOutputRoot = resolve(
   packageRoot,
-  "dist/server/server/agent/foundation-skills",
+  "dist/server/server/policy/bundled/slp/skills",
 );
 const productSkillsSourceRoot = resolve(repositoryRoot, "skills");
 const productSkillAdmissionSourcePath = resolve(productSkillsSourceRoot, "role-admission.json");

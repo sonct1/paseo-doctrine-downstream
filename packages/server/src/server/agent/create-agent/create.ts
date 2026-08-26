@@ -21,7 +21,6 @@ import type {
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
 import type { ProviderSnapshotManager } from "../provider-snapshot-manager.js";
-import type { FoundationExecutionProfileId } from "../foundation-execution-profiles.js";
 import { setupFinishNotification, startCreatedAgentInitialPrompt } from "../agent-prompt.js";
 import { resolveCreateAgentTitles } from "../create-agent-title.js";
 import { buildAgentPrompt } from "../prompt-attachments.js";
@@ -56,6 +55,12 @@ export interface CreateAgentCommandDependencies {
   createPaseoWorktree?: CreatePaseoWorktreeWorkflowFn;
   // Mints a fresh directory workspace for a cwd and returns its id.
   ensureWorkspaceForCreate?: EnsureWorkspaceForCreate;
+  // Archives a directory workspace minted by ensureWorkspaceForCreate when
+  // admission or provider launch fails before an agent exists.
+  rollbackWorkspaceAfterFailedCreate?: (workspaceId: string) => Promise<void>;
+  rollbackWorktreeAfterFailedCreate?: (
+    createdWorktree: CreatePaseoWorktreeWorkflowResult,
+  ) => Promise<void>;
 }
 
 export type EnsureWorkspaceForCreate = (
@@ -93,7 +98,7 @@ export interface CreateAgentFromMcpInput {
   kind: "mcp";
   provider: string;
   roleId?: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
+  executionProfileId?: string;
   assignment?: AssignmentEnvelope;
   title: string;
   initialPrompt?: string;
@@ -186,61 +191,141 @@ interface ResolvedCreateAgent {
   createdWorktree?: CreatePaseoWorktreeWorkflowResult;
 }
 
+interface CreateAgentTransaction {
+  createdDirectoryWorkspaceId: string | null;
+  createdWorktree: CreatePaseoWorktreeWorkflowResult | null;
+}
+
 export async function createAgentCommand(
   dependencies: CreateAgentCommandDependencies,
   input: CreateAgentCommandInput,
 ): Promise<CreateAgentCommandResult> {
   assertCouncilCreateAuthority(input);
-  const resolved =
-    input.kind === "session"
-      ? await resolveSessionCreateAgent(dependencies, input)
-      : await resolveMcpCreateAgent(dependencies, input);
-
-  const snapshot = await dependencies.agentManager.createAgent(
-    resolved.config,
-    undefined,
-    resolved.createOptions,
-  );
-
-  resolved.setupContinuation?.startAfterAgentCreate({
-    agentId: snapshot.id,
-  });
-
-  let liveSnapshot = snapshot;
-  let initialPromptStarted = false;
-  let initialPromptError: unknown | null = null;
-  if (input.kind === "mcp") {
-    await input.onCreated?.({
-      agentId: snapshot.id,
-      createdWorktree: resolved.createdWorktree ?? null,
-    });
-  }
-  if (resolved.prompt !== undefined) {
-    const sendResult = await sendInitialPrompt(dependencies, resolved, snapshot);
-    initialPromptStarted = sendResult.started;
-    liveSnapshot = sendResult.liveSnapshot;
-    initialPromptError = sendResult.error ?? null;
-  }
-
-  if (input.kind === "mcp" && input.notifyOnFinish && input.callerAgentId && initialPromptStarted) {
-    setupFinishNotification({
-      agentManager: dependencies.agentManager,
-      agentStorage: dependencies.agentStorage,
-      childAgentId: snapshot.id,
-      callerAgentId: input.callerAgentId,
-      requireParentOwnership: true,
-      logger: dependencies.logger,
-    });
-  }
-
-  return {
-    snapshot,
-    liveSnapshot,
-    background: resolved.background,
-    initialPromptStarted,
-    initialPromptError,
-    ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
+  preflightRoleCreate(dependencies.agentManager, input);
+  const transaction = {
+    createdDirectoryWorkspaceId: null as string | null,
+    createdWorktree: null as CreatePaseoWorktreeWorkflowResult | null,
   };
+  let createdAgentId: string | null = null;
+  try {
+    const resolved =
+      input.kind === "session"
+        ? await resolveSessionCreateAgent(dependencies, input)
+        : await resolveMcpCreateAgent(dependencies, input, transaction);
+
+    const snapshot = await dependencies.agentManager.createAgent(
+      resolved.config,
+      undefined,
+      resolved.createOptions,
+    );
+    createdAgentId = snapshot.id;
+
+    resolved.setupContinuation?.startAfterAgentCreate({
+      agentId: snapshot.id,
+    });
+
+    let liveSnapshot = snapshot;
+    let initialPromptStarted = false;
+    let initialPromptError: unknown | null = null;
+    if (input.kind === "mcp") {
+      await input.onCreated?.({
+        agentId: snapshot.id,
+        createdWorktree: resolved.createdWorktree ?? null,
+      });
+    }
+    if (resolved.prompt !== undefined) {
+      const sendResult = await sendInitialPrompt(dependencies, resolved, snapshot);
+      initialPromptStarted = sendResult.started;
+      liveSnapshot = sendResult.liveSnapshot;
+      initialPromptError = sendResult.error ?? null;
+    }
+
+    if (
+      input.kind === "mcp" &&
+      input.notifyOnFinish &&
+      input.callerAgentId &&
+      initialPromptStarted
+    ) {
+      setupFinishNotification({
+        agentManager: dependencies.agentManager,
+        agentStorage: dependencies.agentStorage,
+        childAgentId: snapshot.id,
+        callerAgentId: input.callerAgentId,
+        requireParentOwnership: true,
+        logger: dependencies.logger,
+      });
+    }
+
+    return {
+      snapshot,
+      liveSnapshot,
+      background: resolved.background,
+      initialPromptStarted,
+      initialPromptError,
+      ...(resolved.createdWorktree ? { createdWorktree: resolved.createdWorktree } : {}),
+    };
+  } catch (error) {
+    if (
+      !createdAgentId &&
+      transaction.createdWorktree &&
+      dependencies.rollbackWorktreeAfterFailedCreate
+    ) {
+      await dependencies
+        .rollbackWorktreeAfterFailedCreate(transaction.createdWorktree)
+        .catch((rollbackError) => {
+          dependencies.logger.warn(
+            {
+              err: rollbackError,
+              workspaceId: transaction.createdWorktree?.workspace.workspaceId,
+            },
+            "Failed to roll back worktree after agent create failed",
+          );
+        });
+    }
+    if (
+      !createdAgentId &&
+      transaction.createdDirectoryWorkspaceId &&
+      dependencies.rollbackWorkspaceAfterFailedCreate
+    ) {
+      await dependencies
+        .rollbackWorkspaceAfterFailedCreate(transaction.createdDirectoryWorkspaceId)
+        .catch((rollbackError) => {
+          dependencies.logger.warn(
+            {
+              err: rollbackError,
+              workspaceId: transaction.createdDirectoryWorkspaceId,
+            },
+            "Failed to roll back directory workspace after agent create failed",
+          );
+        });
+    }
+    throw error;
+  }
+}
+
+function preflightRoleCreate(agentManager: AgentManager, input: CreateAgentCommandInput): void {
+  if (!input.roleId) return;
+  if (input.kind === "session") {
+    agentManager.preflightRoleCreate({
+      provider: input.config.provider,
+      roleId: input.roleId,
+      assignment: input.assignment,
+      systemPrompt: input.config.systemPrompt ?? undefined,
+      ...(!input.worktreeName && !input.git ? { cwd: input.config.cwd } : {}),
+    });
+    return;
+  }
+  const parentAgent = input.callerAgentId
+    ? requireParentAgent(agentManager, input.callerAgentId)
+    : null;
+  agentManager.preflightRoleCreate({
+    provider: resolveProviderModel(input.provider).provider,
+    roleId: input.roleId,
+    executionProfileId: input.executionProfileId,
+    assignment: input.assignment,
+    systemPrompt: input.config?.systemPrompt ?? undefined,
+    ...(!input.worktree ? { cwd: resolveMcpInitialCwd(input, parentAgent) } : {}),
+  });
 }
 
 function assertCouncilCreateAuthority(input: CreateAgentCommandInput): void {
@@ -357,12 +442,11 @@ async function resolveSessionCreateAgent(
 async function resolveMcpCreateAgent(
   dependencies: CreateAgentCommandDependencies,
   input: CreateAgentFromMcpInput,
+  transaction: CreateAgentTransaction,
 ): Promise<ResolvedCreateAgent> {
   const resolvedProviderModel = resolveProviderModel(input.provider);
   const provider = resolvedProviderModel.provider;
-  const parentAgent = input.callerAgentId
-    ? requireParentAgent(dependencies.agentManager, input.callerAgentId)
-    : null;
+  const parentAgent = resolveMcpParentAgent(dependencies.agentManager, input.callerAgentId);
   assertCouncilMcpParentAuthority(input, parentAgent);
   const cwd = resolveMcpInitialCwd(input, parentAgent);
   const { resolvedCwd, setupContinuation, createdWorkspaceId, createdWorktree } =
@@ -372,7 +456,14 @@ async function resolveMcpCreateAgent(
       worktree: input.worktree,
       initialPrompt: input.initialPrompt ?? "",
     });
-  if (createdWorktree) input.onWorktreeCreated?.(createdWorktree);
+  recordMcpWorktreeProvision({
+    dependencies,
+    input,
+    transaction,
+    provider,
+    resolvedCwd,
+    createdWorktree,
+  });
 
   const intent = await resolveCreateAgentIntent({
     explicitWorkspaceId: setupContinuation ? createdWorkspaceId : input.workspaceId,
@@ -383,12 +474,13 @@ async function resolveMcpCreateAgent(
     childAgentDefaultLabels: input.callerContext?.childAgentDefaultLabels,
     legacyDetached: input.detached ?? false,
     resolveWorkspace: async (workspaceId) => ({ workspaceId, cwd: resolvedCwd }),
-    createWorkspace: async () => ({
-      workspaceId: requireResolvedWorkspaceId(
+    createWorkspace: async () => {
+      const workspaceId = requireResolvedWorkspaceId(
         await ensureWorkspaceForMcpCreate(dependencies, resolvedCwd, input.initialPrompt ?? ""),
-      ),
-      cwd: resolvedCwd,
-    }),
+      );
+      transaction.createdDirectoryWorkspaceId = workspaceId;
+      return { workspaceId, cwd: resolvedCwd };
+    },
   });
   const resolvedCreateConfig = await resolveMcpProviderCreateConfig({
     dependencies,
@@ -431,6 +523,34 @@ async function resolveMcpCreateAgent(
     background: input.background,
     promptFailure: input.promptFailure ?? "log",
   };
+}
+
+function resolveMcpParentAgent(
+  agentManager: AgentManager,
+  callerAgentId: string | undefined,
+): ManagedAgent | null {
+  return callerAgentId ? requireParentAgent(agentManager, callerAgentId) : null;
+}
+
+function recordMcpWorktreeProvision(input: {
+  dependencies: CreateAgentCommandDependencies;
+  input: CreateAgentFromMcpInput;
+  transaction: CreateAgentTransaction;
+  provider: string;
+  resolvedCwd: string;
+  createdWorktree: CreatePaseoWorktreeWorkflowResult | undefined;
+}): void {
+  input.transaction.createdWorktree = input.createdWorktree ?? null;
+  if (input.createdWorktree) input.input.onWorktreeCreated?.(input.createdWorktree);
+  if (!input.input.roleId || !input.createdWorktree) return;
+  input.dependencies.agentManager.preflightRoleCreate({
+    provider: input.provider,
+    roleId: input.input.roleId,
+    executionProfileId: input.input.executionProfileId,
+    assignment: input.input.assignment,
+    systemPrompt: input.input.config?.systemPrompt ?? undefined,
+    cwd: input.resolvedCwd,
+  });
 }
 
 function resolveMcpInitialCwd(

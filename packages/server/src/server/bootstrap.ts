@@ -1317,6 +1317,16 @@ export async function createPaseoDaemon(
     providerSnapshotManager,
     createPaseoWorktree: createPaseoWorktreeForTools,
     ensureWorkspaceForCreate: ensureWorkspaceForCreateAndBroadcastExternal,
+    rollbackWorkspaceAfterFailedCreate: async (workspaceId) => {
+      await archiveWorkspaceRecordExternal(workspaceId);
+      await emitWorkspaceUpdatesExternal([workspaceId]);
+    },
+    rollbackWorktreeAfterFailedCreate: async (createdWorktree) => {
+      await archiveWorkspaceByIdExternal(
+        createdWorktree.workspace.workspaceId,
+        `failed-create-${createdWorktree.workspace.workspaceId}`,
+      );
+    },
   };
   const createAgent = (input: Parameters<typeof createAgentCommand>[1]) =>
     createAgentCommand(createAgentCommandDependencies, input);
@@ -1596,6 +1606,10 @@ export async function createPaseoDaemon(
     markWorkspaceArchiving: markWorkspaceArchivingExternal,
     clearWorkspaceArchiving: clearWorkspaceArchivingExternal,
     ensureWorkspaceForCreate: createAgentCommandDependencies.ensureWorkspaceForCreate,
+    rollbackWorkspaceAfterFailedCreate:
+      createAgentCommandDependencies.rollbackWorkspaceAfterFailedCreate,
+    rollbackWorktreeAfterFailedCreate:
+      createAgentCommandDependencies.rollbackWorktreeAfterFailedCreate,
     createPaseoWorktree: createAgentCommandDependencies.createPaseoWorktree,
     browserToolsEnabled: browserToolsPolicy.isEnabled(),
     browserToolsBroker,

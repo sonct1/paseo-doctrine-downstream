@@ -12,6 +12,7 @@ export interface PostChatMessageWithMentionsInput {
   chatService: FileBackedChatService;
   room: string;
   authorAgentId: string;
+  authorKind: "agent" | "client";
   body: string;
   replyToMessageId?: string | null;
   logger: pino.Logger;
@@ -41,6 +42,7 @@ export async function postChatMessageWithMentions(input: PostChatMessageWithMent
   const message = await input.chatService.dispatchMessage({
     room: input.room,
     authorAgentId: input.authorAgentId,
+    authorKind: input.authorKind,
     body: input.body,
     replyToMessageId: input.replyToMessageId,
   });

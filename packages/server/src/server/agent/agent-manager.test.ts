@@ -53,6 +53,13 @@ import { ROLE_DEFAULT_TOOLS } from "./role-profiles.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import { writeJsonFileAtomic } from "../atomic-file.js";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
+import { materializeRoleBinding } from "./legacy-role-binding.js";
+import { materializeLaunchContract } from "./launch-contract.js";
+import { BundledPolicyPackRegistry } from "../policy/bundled-policy-pack.js";
+import {
+  createDefaultSlpBundledPolicyRegistry,
+  type SlpBundledPolicyContribution,
+} from "../policy/bundled/slp.js";
 
 function leadAssignment(
   effectClass: AssignmentEnvelope["effectClass"] = "read-only",
@@ -11566,8 +11573,10 @@ test("role-bound create persists immutable binding and passes only launch instru
 
   const client = new RoleCaptureClient("codex");
   const preCatalogRoleIds: Array<string | undefined> = [];
+  const bundledPolicyPacks = createDefaultSlpBundledPolicyRegistry();
   manager = new AgentManager({
     clients: { codex: client },
+    bundledPolicyPacks,
     registry: storage,
     logger,
     idFactory: () => "00000000-0000-4000-8000-000000000116",
@@ -11615,6 +11624,12 @@ test("role-bound create persists immutable binding and passes only launch instru
     );
     expect(created.config.systemPrompt).toBeUndefined();
     expect(created.config.modeId).toBe("read-only");
+    expect(created.roleBinding?.policyOwner).toMatchObject({
+      kind: "plugin",
+      pluginId: "slp",
+      policyVersion: "1.0.0",
+      generationDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
     expect(created.roleBinding?.instructions).toContain("Role: Lead");
     expect(client.launchContexts[0]?.providerLaunchBinding).toMatchObject({
       providerId: "codex",
@@ -11643,6 +11658,7 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(toAgentPayload(created).launchContract).not.toHaveProperty("providerBinding");
 
     const stored = await storage.get(created.id);
+    expect(stored?.roleBinding?.policyOwner).toEqual(created.roleBinding?.policyOwner);
     expect(stored?.roleBinding?.instructions).toContain("Role: Lead");
     expect(stored?.launchContract?.providerBinding).toMatchObject({
       routeKind: "codex-subscription",
@@ -11657,8 +11673,33 @@ test("role-bound create persists immutable binding and passes only launch instru
     expect(rawStoredWire).not.toContain("Return exact focused test evidence");
     expect(rawStoredWire).not.toContain("Stop after evidence handback");
 
+    await expect(
+      manager.createAgent(
+        { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+        "00000000-0000-4000-8000-000000000128",
+        {
+          workspaceId: "workspace-role-binding",
+          roleId: "lead",
+          launchContract: stored?.launchContract,
+        },
+      ),
+    ).rejects.toThrow("Cannot provide both roleId and an existing launch contract");
+    expect(client.launchContexts).toHaveLength(1);
+
     const exactInstructions = created.roleBinding?.instructions;
+    const exactAllowedTools = manager.getPaseoToolPolicy(created.id)?.allowedTools;
+    const originalPolicyOwner = created.roleBinding?.policyOwner;
+    const firstGeneration = bundledPolicyPacks.resolveActive("slp");
+    const secondGeneration = bundledPolicyPacks.registerGeneration({
+      manifest: { id: "slp", abiVersion: 1, policyVersion: "2.0.0-test" },
+      artifactBytes: "second test-only SLP generation",
+      contribution: firstGeneration.contribution,
+    });
+    bundledPolicyPacks.activate(secondGeneration.owner);
+    expect(bundledPolicyPacks.resolveActive("slp").owner).toEqual(secondGeneration.owner);
     await manager.reloadAgentSession(created.id);
+    expect(manager.getAgent(created.id)?.roleBinding?.policyOwner).toEqual(originalPolicyOwner);
+    expect(manager.getPaseoToolPolicy(created.id)?.allowedTools).toEqual(exactAllowedTools);
     expect(client.preRegistrationRoleIds[1]).toBe("lead");
     expect(preCatalogRoleIds[1]).toBe("lead");
     expect(client.launchContexts[1]?.roleBinding).toEqual({
@@ -11700,6 +11741,179 @@ test("role-bound create persists immutable binding and passes only launch instru
       "workspace_protocol_admission_required: stale_digest",
     );
     expect(client.launchContexts).toHaveLength(2);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("plugin-owned launch fails closed when its pinned generation is unavailable", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-missing-policy-generation-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
+  const legacyBinding = await materializeRoleBinding({
+    roleId: "lead",
+    provider: "codex",
+    cwd: workdir,
+    workspaceId: "workspace-missing-policy-generation",
+    assignment: leadAssignment(),
+    assignmentAssigner: { kind: "human-session" },
+  });
+  const roleBinding = {
+    ...legacyBinding,
+    policyOwner: {
+      kind: "plugin",
+      pluginId: "slp",
+      generationDigest: "f".repeat(64),
+      policyVersion: "missing-generation",
+    } as const,
+  };
+  const launchContract = materializeLaunchContract(roleBinding, {
+    providerId: "codex",
+    providerFamily: "codex",
+    model: "gpt-5.4",
+    credentialConfigured: true,
+    routeKind: "codex-subscription",
+    modelProviderId: "openai",
+    authMethod: "codex-native",
+  });
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient("codex") },
+    bundledPolicyPacks: new BundledPolicyPackRegistry<SlpBundledPolicyContribution>(),
+    logger,
+  });
+
+  try {
+    await expect(
+      manager.createAgent({ provider: "codex", cwd: workdir, model: "gpt-5.4" }, undefined, {
+        workspaceId: "workspace-missing-policy-generation",
+        launchContract,
+      }),
+    ).rejects.toThrow("bundled_policy_pack_missing");
+    expect(manager.listAgents()).toHaveLength(0);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("daemon-style reload preserves the pinned SLP owner and exact native instruction bytes", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-slp-daemon-reload-"));
+  writeFileSync(
+    join(workdir, "WORKSPACE_PROTOCOL.md"),
+    buildWorkspaceProtocolTemplate(workdir),
+    "utf8",
+  );
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const firstBundledPolicyPacks = createDefaultSlpBundledPolicyRegistry();
+
+  class RestartCaptureClient extends TestAgentClient {
+    readonly launchContexts: Array<AgentLaunchContext | undefined> = [];
+
+    async materializeProviderLaunchBinding(input: { config: AgentSessionConfig }) {
+      if (!input.config.model) throw new Error("missing test model");
+      return {
+        providerId: "codex",
+        providerFamily: "codex",
+        model: input.config.model,
+        credentialConfigured: true as const,
+        routeKind: "codex-subscription" as const,
+        modelProviderId: "openai" as const,
+        authMethod: "codex-native" as const,
+      };
+    }
+
+    override async createSession(
+      config: AgentSessionConfig,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return new TestAgentSession(config);
+    }
+
+    override async resumeSession(
+      handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+      launchContext?: AgentLaunchContext,
+    ): Promise<AgentSession> {
+      this.launchContexts.push(launchContext);
+      return super.resumeSession(handle, config, launchContext);
+    }
+  }
+
+  const firstClient = new RestartCaptureClient("codex");
+  const firstManager = new AgentManager({
+    clients: { codex: firstClient },
+    registry: storage,
+    bundledPolicyPacks: firstBundledPolicyPacks,
+    logger,
+  });
+
+  try {
+    const created = await firstManager.createAgent(
+      { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+      undefined,
+      {
+        workspaceId: "workspace-daemon-reload",
+        roleId: "lead",
+        assignment: leadAssignment(),
+      },
+    );
+    const exactOwner = created.roleBinding?.policyOwner;
+    const exactInstructions = created.roleBinding?.instructions;
+    const exactAllowedTools = firstManager.getPaseoToolPolicy(created.id)?.allowedTools;
+    const restartedClient = new RestartCaptureClient("codex");
+    const restartedBundledPolicyPacks = createDefaultSlpBundledPolicyRegistry();
+    expect(restartedBundledPolicyPacks.resolveActive("slp").owner).toEqual(exactOwner);
+    const restartedManager = new AgentManager({
+      clients: { codex: restartedClient },
+      registry: storage,
+      bundledPolicyPacks: restartedBundledPolicyPacks,
+      logger,
+    });
+    const restored = await ensureAgentLoaded(created.id, {
+      agentManager: restartedManager,
+      agentStorage: storage,
+      logger,
+    });
+
+    expect(restored.roleBinding?.policyOwner).toEqual(exactOwner);
+    expect(restored.roleBinding?.instructions).toBe(exactInstructions);
+    expect(restartedManager.getPaseoToolPolicy(restored.id)?.allowedTools).toEqual(
+      exactAllowedTools,
+    );
+    expect(restartedClient.launchContexts[0]?.roleBinding).toEqual({
+      roleId: "lead",
+      instructions: exactInstructions,
+      allowedSkills: created.roleBinding?.roleProfile?.allowedSkills,
+      noWrite: true,
+    });
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("ordinary non-SLP agents remain available when the bundled SLP artifact is unavailable", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-ordinary-without-slp-"));
+  const bundledPolicyPacks = new BundledPolicyPackRegistry<SlpBundledPolicyContribution>();
+  bundledPolicyPacks.recordLoadFailure("slp", new Error("invalid bundled SLP artifact"));
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient("codex") },
+    bundledPolicyPacks,
+    logger,
+  });
+
+  try {
+    const ordinary = await manager.createAgent(
+      { provider: "codex", cwd: workdir, model: "gpt-5.4" },
+      undefined,
+      { workspaceId: "workspace-ordinary" },
+    );
+    expect(ordinary.roleBinding).toBeUndefined();
+    expect(() => manager.preflightRoleCreate({ provider: "codex", roleId: "lead" })).toThrow(
+      "bundled_policy_pack_unavailable",
+    );
   } finally {
     rmSync(workdir, { recursive: true, force: true });
   }

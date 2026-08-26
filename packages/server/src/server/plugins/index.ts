@@ -9,6 +9,7 @@ import {
 import type { DaemonConfigStore } from "../daemon-config-store.js";
 import { readPluginManifest } from "./manifest.js";
 import { PluginRuntime } from "./runtime.js";
+import { assertLocalPluginIdAvailable } from "../policy/bundled-policy-pack.js";
 
 interface PluginRuntimePort {
   catalog(): Array<{ id: string; clientBundle: string }>;
@@ -106,6 +107,7 @@ export class PluginService {
       const directory = path.resolve(input.path);
       const manifest = await readPluginManifest(directory);
       const pluginId = PluginIdSchema.parse(input.id ?? manifest.id);
+      assertLocalPluginIdAvailable(pluginId);
       if (this.configStore.get().plugins?.[pluginId]) {
         throw new Error(
           `Plugin ID "${pluginId}" is already configured; choose another ID with --id`,
@@ -221,6 +223,7 @@ export class PluginService {
     if (!source || source.enabled === false || !this.canPublish(pluginId)) return;
     this.errors.delete(pluginId);
     try {
+      assertLocalPluginIdAvailable(pluginId);
       await this.runtime.startPlugin(pluginId, source.path, () => this.canPublish(pluginId));
     } catch (error) {
       if (this.canPublish(pluginId)) this.recordFailure(pluginId, error);
@@ -229,6 +232,7 @@ export class PluginService {
 
   private async startExplicit(pluginId: string, sourcePath: string): Promise<void> {
     try {
+      assertLocalPluginIdAvailable(pluginId);
       await this.runtime.startPlugin(pluginId, sourcePath, () => this.canPublish(pluginId));
     } catch (error) {
       if (this.canPublish(pluginId)) {

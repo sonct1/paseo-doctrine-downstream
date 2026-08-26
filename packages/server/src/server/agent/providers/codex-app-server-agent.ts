@@ -60,7 +60,7 @@ import {
   mergeCodexFoundationSkillConfig,
   narrowFoundationSkillPolicy,
   type FoundationSkillPolicy,
-} from "../foundation-skill-policy.js";
+} from "../../policy/bundled/slp/skill-policy.js";
 import {
   filterProductSkills,
   loadProductSkillPolicy,

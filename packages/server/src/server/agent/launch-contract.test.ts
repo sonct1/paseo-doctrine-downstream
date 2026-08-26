@@ -9,7 +9,7 @@ import {
   materializeLaunchContract,
   toLaunchContractReceipt,
 } from "./launch-contract.js";
-import { materializeRoleBinding } from "./role-binding.js";
+import { materializeRoleBinding } from "./legacy-role-binding.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 
 const temporaryDirectories: string[] = [];
@@ -114,6 +114,60 @@ describe("immutable launch contract", () => {
         baseUrl: "http://proxy.example/v1",
       }),
     ).toThrow("HTTPS /v1 endpoint");
+  });
+
+  test("preserves legacy digests while pinning plugin-owned generations", async () => {
+    const roleBinding = await createRoleBinding();
+    const providerBinding: ProviderLaunchBinding = {
+      providerId: "codex-proxy",
+      providerFamily: "codex",
+      model: "custom-model",
+      credentialConfigured: true,
+      routeKind: "openai-compatible",
+      modelProviderId: "codex-proxy",
+      authMethod: "credential-command",
+      baseUrl: "https://proxy.example/v1",
+      credentialRef: "codex-proxy",
+      credentialFile: "/private/paseo/credentials/codex-proxy.json",
+    };
+    const explicitLegacy = materializeLaunchContract(roleBinding, providerBinding);
+    const { policyOwner: _policyOwner, ...preOwnerBinding } = roleBinding;
+    const implicitLegacy = materializeLaunchContract(preOwnerBinding, providerBinding);
+    expect(implicitLegacy.receipt.contractDigest).toBe(explicitLegacy.receipt.contractDigest);
+
+    const pluginOwned = materializeLaunchContract(
+      {
+        ...roleBinding,
+        policyOwner: {
+          kind: "plugin",
+          pluginId: "slp",
+          generationDigest: "a".repeat(64),
+          policyVersion: "1.0.0",
+        },
+      },
+      providerBinding,
+    );
+    expect(pluginOwned.receipt.contractDigest).not.toBe(explicitLegacy.receipt.contractDigest);
+
+    const driftedGeneration = {
+      ...pluginOwned,
+      roleBinding: {
+        ...pluginOwned.roleBinding,
+        policyOwner: {
+          kind: "plugin" as const,
+          pluginId: "slp",
+          generationDigest: "b".repeat(64),
+          policyVersion: "1.0.0",
+        },
+      },
+    };
+    expect(() =>
+      assertPersistedLaunchContractMatches(driftedGeneration, {
+        provider: "codex-proxy",
+        model: "custom-model",
+        cwd: roleBinding.workspaceProtocol.path,
+      }),
+    ).toThrow("receipt does not match");
   });
 
   test("pins a Council specialization independently from its provider route", async () => {

@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { AgentProfile } from "@getpaseo/protocol/messages";
-import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import { PASEO_ROLE_IDS, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type {
   RoleProfileLaunchDefaults,
   RoleProfilePreferences,
@@ -10,6 +10,7 @@ import type {
 } from "@getpaseo/protocol/role-profile";
 import { FormPreferencesSchema } from "@/create-agent-preferences/preferences";
 import { readValidatedJson, readValidatedString } from "@/storage/validated-storage";
+import { legacyCoreRoleLabel } from "@/workspace-protocol/legacy-role-options";
 
 const PREFERENCES_KEY = "@paseo:create-agent-preferences";
 const COMPLETION_KEY_PREFIX = "@paseo:legacy-favorites-to-agent-profiles:v1:";
@@ -91,8 +92,7 @@ function migratedRoleDefaultProfile(input: {
   roleId: PaseoRoleId;
   defaults: RoleProfileLaunchDefaults;
 }): AgentProfile {
-  const label =
-    PASEO_ROLE_SUMMARIES.find((role) => role.id === input.roleId)?.label ?? input.roleId;
+  const label = legacyCoreRoleLabel(input.roleId);
   return {
     id: `legacy_role_default:${input.roleId}`,
     name: `${label} · migrated launch preset`,
@@ -139,17 +139,17 @@ export class RoleDefaultProfileMigration {
     const migratedProfiles: AgentProfile[] = [];
     const roleProfilesPatch: RoleProfilePreferencesMap = {};
 
-    for (const summary of PASEO_ROLE_SUMMARIES) {
-      const preferences = roleProfiles[summary.id];
+    for (const roleId of PASEO_ROLE_IDS) {
+      const preferences = roleProfiles[roleId];
       const defaults = preferences?.defaults;
       if (!preferences || !defaults?.provider) {
         continue;
       }
-      roleProfilesPatch[summary.id] = withoutRoleDefaults(preferences);
+      roleProfilesPatch[roleId] = withoutRoleDefaults(preferences);
       if (existingSelections.has(roleDefaultSelectionKey(defaults))) {
         continue;
       }
-      const profile = migratedRoleDefaultProfile({ roleId: summary.id, defaults });
+      const profile = migratedRoleDefaultProfile({ roleId, defaults });
       if (existingIds.has(profile.id)) {
         profile.id = `${profile.id}:migrated`;
       }

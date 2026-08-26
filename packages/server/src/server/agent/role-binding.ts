@@ -8,7 +8,6 @@ import {
   type ProviderRoleBindingSupport,
   type RoleBindingInjectionMethod,
   type RoleBindingReceipt,
-  type RoleProfileBindingReceipt,
   type WorkspaceProtocolBindingReceipt,
 } from "@getpaseo/protocol/role-binding";
 import type { RoleProfilePreferences } from "@getpaseo/protocol/role-profile";
@@ -18,30 +17,29 @@ import type {
   AssignmentEffectClass,
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
+import {
+  LEGACY_CORE_POLICY_OWNER,
+  PolicyOwnerSchema,
+  type PolicyOwner,
+} from "@getpaseo/protocol/policy-owner";
 import { z } from "zod";
 
-import {
-  ExecutionProfileBindingReceiptSchema,
-  foundationExecutionProfileDefinitionDigest,
-  getFoundationExecutionProfileDefinition,
-  type FoundationExecutionProfileId,
-} from "./foundation-execution-profiles.js";
-import { getFoundationRoleDefinition } from "./foundation-role-definitions.js";
-import { loadFoundationSkillPolicy } from "./foundation-skill-policy.js";
-import {
-  materializeRoleProfileBindingReceipt,
-  ROLE_DEFAULT_TOOLS,
-  ROLE_TOOL_CEILINGS,
-} from "./role-profiles.js";
+import { ROLE_DEFAULT_TOOLS } from "./role-profiles.js";
 import { inspectWorkspaceProtocol } from "../../utils/workspace-protocol-file.js";
 import {
-  buildAssignmentInstruction,
   materializeAssignmentContract,
   PersistedAssignmentContractSchema,
 } from "./assignment-contract.js";
+import type { RoleBindingPolicyContribution } from "../policy/role-binding-policy.js";
 
 export const WORKSPACE_PROTOCOL_ADMISSION_ERROR = "workspace_protocol_admission_required";
 export const ASSIGNMENT_CONTRACT_EXPIRED_ERROR = "assignment_contract_expired";
+
+const ExecutionProfileBindingReceiptSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  definitionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+});
 
 export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
   instructions: z.string().min(1),
@@ -51,9 +49,17 @@ export const PersistedRoleBindingSchema = RoleBindingReceiptSchema.extend({
 
 export type PersistedRoleBinding = z.infer<typeof PersistedRoleBindingSchema>;
 
-export interface MaterializeRoleBindingInput {
+export function policyOwnerForRoleBinding(
+  binding: Pick<PersistedRoleBinding, "policyOwner">,
+): PolicyOwner {
+  return PolicyOwnerSchema.parse(binding.policyOwner ?? LEGACY_CORE_POLICY_OWNER);
+}
+
+export interface MaterializeRoleBindingInput<TExecutionProfileId extends string = string> {
+  /** Kernel-owned compatibility callers omit this and remain legacy-core. */
+  policyOwner?: PolicyOwner;
   roleId: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
+  executionProfileId?: TExecutionProfileId;
   provider: string;
   providerBaseId?: string | null;
   providerSupport?: ProviderRoleBindingSupport;
@@ -265,15 +271,9 @@ export function resolveProviderRoleBindingSupport(
   };
 }
 
-function protocolReadership(roleId: PaseoRoleId): WorkspaceProtocolBindingReceipt["readership"] {
-  if (roleId === "lead") return "full";
-  if (roleId === "supervisor") return "governance-only";
-  return "assignment-only";
-}
-
 function requireWorkspaceProtocol(
   cwd: string,
-  roleId: PaseoRoleId,
+  readership: WorkspaceProtocolBindingReceipt["readership"],
   allowMissing: boolean,
 ): WorkspaceProtocolBindingReceipt {
   const snapshot = inspectWorkspaceProtocol(cwd);
@@ -283,7 +283,7 @@ function requireWorkspaceProtocol(
     }
     return {
       status: "missing",
-      readership: protocolReadership(roleId),
+      readership,
       path: snapshot.path,
     };
   }
@@ -298,60 +298,31 @@ function requireWorkspaceProtocol(
   }
   return {
     status: "bound",
-    readership: protocolReadership(roleId),
+    readership,
     path: snapshot.path,
     digest: snapshot.revision.sha256,
   };
 }
 
-function buildProtocolInstruction(
-  receipt: WorkspaceProtocolBindingReceipt,
-  hasProtocolException: boolean,
-): string {
-  if (receipt.status === "missing") {
-    if (!hasProtocolException) {
-      // Admitted because this assignment is read-only with no external effects. State the gap
-      // plainly so the agent reports it instead of inferring that the repository has no rules.
-      return `Workspace Protocol binding: not yet bootstrapped at ${receipt.path}. This assignment was admitted because it declares no write scope and no external effects. Treat the repository's coordination tactics as unknown rather than absent, stay non-mutating, and report that the protocol still needs bootstrapping at handback. Any write scope or external effect requires a bound protocol or an exact Human exception first.`;
-    }
-    if (receipt.readership === "assignment-only") {
-      return `Workspace Protocol binding: temporarily missing under an exact Human bootstrap exception at ${receipt.path}. Do not load that path; remain inside the read-only/bootstrap assignment and stop at its expiry.`;
-    }
-    if (receipt.readership === "governance-only") {
-      return `Workspace Protocol binding: temporarily missing under an exact Human governance exception at ${receipt.path}. Create, audit, or update it only inside that bounded mandate and stop at its expiry.`;
-    }
-    return `Workspace Protocol binding: temporarily missing under an exact Human bootstrap exception at ${receipt.path}. Bootstrap only the bounded governance artifact and stop at the assignment expiry.`;
-  }
-  if (receipt.readership === "assignment-only") {
-    return `Workspace Protocol binding: assignment-only. Do not load ${receipt.path}; receive only relevant constraints in the Lead assignment.`;
-  }
-  if (receipt.readership === "governance-only") {
-    return `Workspace Protocol binding: governance-only at ${receipt.path}. Read it only when the exact Human mandate requires protocol create/audit/update. Bound status: ${receipt.status}${receipt.digest ? `; sha256=${receipt.digest}` : ""}.`;
-  }
-  return `Workspace Protocol binding: full-read required at ${receipt.path}; sha256=${receipt.digest}. Read the exact current file before orchestration. If current bytes no longer match this digest, stop and request a fresh binding instead of relying on stale protocol state.`;
+/** Kernel-owned, read-only admission check used before workspace provisioning. */
+export function preflightWorkspaceProtocolAdmission(input: {
+  cwd: string;
+  readership: WorkspaceProtocolBindingReceipt["readership"];
+  assignment: AssignmentEnvelope;
+}): void {
+  const performsMaterialWork =
+    input.assignment.mutationBoundary.mode !== "no-write" ||
+    input.assignment.externalEffectBoundary.mode !== "denied";
+  requireWorkspaceProtocol(
+    input.cwd,
+    input.readership,
+    input.assignment.protocolException !== undefined || !performsMaterialWork,
+  );
 }
 
-function buildBeadsSkillAdmissionInstruction(
-  roleId: PaseoRoleId,
-  roleProfile: RoleProfileBindingReceipt,
-): string {
-  const policy = loadFoundationSkillPolicy(roleId);
-  const skillPath = policy.skillPaths.get("beads-issue-tracker");
-  if (
-    policy.status !== "bound" ||
-    !policy.enabledNames.has("beads-issue-tracker") ||
-    !roleProfile.allowedSkills.includes("beads-issue-tracker") ||
-    !skillPath
-  ) {
-    throw new Error(
-      "foundation_skill_admission_required: beads-issue-tracker is not bound for this role",
-    );
-  }
-  return "Role skill admission: `beads-issue-tracker` is active from the immutable Foundation bundle. Its assignment-start checkpoint, mutation boundary, and handback rule are projected in the Assignment Contract above; do not search for or load a second copy.";
-}
-
-export async function materializeRoleBinding(
-  input: MaterializeRoleBindingInput,
+export async function materializeRoleBindingWithPolicy<TExecutionProfileId extends string>(
+  input: MaterializeRoleBindingInput<TExecutionProfileId>,
+  policy: RoleBindingPolicyContribution<TExecutionProfileId>,
 ): Promise<PersistedRoleBinding> {
   const support =
     input.providerSupport ??
@@ -372,22 +343,29 @@ export async function materializeRoleBinding(
     );
   }
 
-  const definition = getFoundationRoleDefinition(input.roleId);
-  const roleProfile = materializeRoleProfileBindingReceipt(
-    input.roleId,
-    input.roleProfilePreferences,
-  );
   const createdAt = input.createdAt ?? new Date();
+  const validatedAssignment = policy.preflight({
+    roleId: input.roleId,
+    executionProfileId: input.executionProfileId,
+    assignment: input.assignment,
+    createdAt,
+  });
   const assignmentContract = materializeAssignmentContract({
     roleId: input.roleId,
     assigner: input.assignmentAssigner,
     workspaceId: input.workspaceId,
     cwd: input.cwd,
-    envelope: input.assignment,
+    envelope: validatedAssignment,
     createdAt,
   });
+  const definition = policy.getRoleDefinition(input.roleId);
+  const roleProfile = policy.materializeRoleProfile(
+    input.roleId,
+    input.roleProfilePreferences,
+    assignmentContract.envelope.effectClass,
+  );
   const executionProfile = input.executionProfileId
-    ? getFoundationExecutionProfileDefinition(input.executionProfileId)
+    ? policy.getExecutionProfile(input.executionProfileId)
     : null;
   if (executionProfile && executionProfile.authorityRoleId !== input.roleId) {
     throw new Error(
@@ -406,20 +384,20 @@ export async function materializeRoleBinding(
     envelope.externalEffectBoundary.mode !== "denied";
   const workspaceProtocol = requireWorkspaceProtocol(
     input.cwd,
-    input.roleId,
+    policy.workspaceProtocolReadership(input.roleId),
     hasProtocolException || !performsMaterialWork,
   );
-  const instructions = [
-    definition.instructions,
-    executionProfile?.instructions,
-    buildProtocolInstruction(workspaceProtocol, hasProtocolException),
-    buildAssignmentInstruction(assignmentContract),
-    buildBeadsSkillAdmissionInstruction(input.roleId, roleProfile),
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join("\n\n");
+  const instructions = policy.composeInstructions({
+    definition,
+    executionProfile,
+    workspaceProtocol,
+    hasProtocolException,
+    assignmentContract,
+    roleProfile,
+  });
 
   return {
+    policyOwner: PolicyOwnerSchema.parse(input.policyOwner ?? LEGACY_CORE_POLICY_OWNER),
     roleId: input.roleId,
     definitionVersion: definition.version,
     definitionDigest: sha256(definition.instructions),
@@ -438,7 +416,7 @@ export async function materializeRoleBinding(
           executionProfile: {
             id: executionProfile.id,
             version: executionProfile.version,
-            definitionDigest: foundationExecutionProfileDefinitionDigest(executionProfile),
+            definitionDigest: policy.executionProfileDefinitionDigest(executionProfile),
           },
         }
       : {}),
@@ -566,10 +544,10 @@ export function applyRolePaseoToolPolicy(
   if (!roleId) {
     return providerPolicy;
   }
-  const ceiling = ROLE_TOOL_CEILINGS[roleId];
-  const selected = roleAllowedTools
-    ? ceiling.filter((tool) => roleAllowedTools.includes(tool))
-    : ROLE_DEFAULT_TOOLS[roleId];
+  // Plugin-owned bindings already carry their immutable selected tools. Do not
+  // reinterpret them through the currently active generation: reload must not
+  // drift an existing agent. The default is compatibility-only for old records.
+  const selected = roleAllowedTools ? [...roleAllowedTools] : ROLE_DEFAULT_TOOLS[roleId];
   return {
     enabled: true,
     allowedTools: intersectRoleTools(

@@ -8990,6 +8990,38 @@ test("failed local create_agent_request does not schedule workspace title genera
   }
 });
 
+test("failed local create_agent_request archives the directory workspace minted for it", async () => {
+  const workspaces = new Map<string, PersistedWorkspaceRecord>();
+  const archivedWorkspaceIds: string[] = [];
+  const session = createSessionForWorkspaceTests({
+    workspaceRegistry: {
+      initialize: async () => {},
+      existsOnDisk: async () => true,
+      list: async () => [...workspaces.values()],
+      get: async (workspaceId) => workspaces.get(workspaceId) ?? null,
+      upsert: async (workspace) => {
+        workspaces.set(workspace.workspaceId, workspace);
+      },
+      archive: async (workspaceId, archivedAt) => {
+        archivedWorkspaceIds.push(workspaceId);
+        const workspace = workspaces.get(workspaceId);
+        if (workspace) workspaces.set(workspaceId, { ...workspace, archivedAt });
+      },
+      remove: async () => {},
+    },
+  });
+
+  await session.handleMessage({
+    type: "create_agent_request",
+    requestId: "req-failed-directory-rollback",
+    config: { provider: "codex", cwd: REPO_CWD },
+    attachments: [],
+  });
+
+  expect(workspaces.size).toBe(1);
+  expect(archivedWorkspaceIds).toEqual([[...workspaces.keys()][0]]);
+});
+
 test("workspace auto-name keeps a manual title written before the scheduled title lands", async () => {
   vi.useFakeTimers();
   const workspace = createPersistedWorkspaceRecord({

@@ -3,9 +3,12 @@ import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract"
 import {
   ASSIGNMENT_CONTRACT_INVALID_ERROR,
   ASSIGNMENT_CONTRACT_REQUIRED_ERROR,
-  buildAssignmentInstruction,
   materializeAssignmentContract,
 } from "./assignment-contract.js";
+import {
+  buildSlpAssignmentInstruction,
+  preflightSlpAssignmentEnvelope,
+} from "../policy/bundled/slp/assignment-policy.js";
 
 const now = new Date("2026-08-08T00:00:00.000Z");
 
@@ -28,12 +31,17 @@ function materialize(input: {
   assigner?: { kind: "human-session" } | { kind: "agent"; agentId: string };
   roleId?: "lead" | "peer" | "supervisor";
 }) {
+  const roleId = input.roleId ?? "lead";
   return materializeAssignmentContract({
-    roleId: input.roleId ?? "lead",
+    roleId,
     assigner: input.assigner ?? { kind: "human-session" },
     workspaceId: "workspace-1",
     cwd: "/repo",
-    envelope: input.envelope,
+    envelope: preflightSlpAssignmentEnvelope({
+      roleId,
+      envelope: input.envelope,
+      createdAt: now,
+    }),
     createdAt: now,
   });
 }
@@ -53,12 +61,12 @@ describe("immutable assignment contract", () => {
       createdAt: now.toISOString(),
     });
     expect(contract.receipt.assignmentDigest).toMatch(/^[a-f0-9]{64}$/u);
-    expect(buildAssignmentInstruction(contract)).toContain("Mutation boundary: no-write");
-    expect(buildAssignmentInstruction(contract)).toContain(
+    expect(buildSlpAssignmentInstruction(contract)).toContain("Mutation boundary: no-write");
+    expect(buildSlpAssignmentInstruction(contract)).toContain(
       "Paseo pins this session to a provider-enforced no-write mode",
     );
-    expect(buildAssignmentInstruction(contract)).toContain("Beads issue grants: ps123-abc");
-    expect(buildAssignmentInstruction(contract)).toContain(
+    expect(buildSlpAssignmentInstruction(contract)).toContain("Beads issue grants: ps123-abc");
+    expect(buildSlpAssignmentInstruction(contract)).toContain(
       "Mandatory Beads Central checkpoint: call beads_status",
     );
   });
@@ -88,15 +96,17 @@ describe("immutable assignment contract", () => {
       envelope: envelope({ disposition: "supervision", effectClass: "delegation" }),
     });
 
-    expect(buildAssignmentInstruction(peer)).toContain("Claim before owned mutation");
-    expect(buildAssignmentInstruction(peer)).toContain("never close");
-    expect(buildAssignmentInstruction(peer)).toContain("never guess or hard-code an MCP namespace");
-    expect(buildAssignmentInstruction(peer)).toContain(
+    expect(buildSlpAssignmentInstruction(peer)).toContain("Claim before owned mutation");
+    expect(buildSlpAssignmentInstruction(peer)).toContain("never close");
+    expect(buildSlpAssignmentInstruction(peer)).toContain(
+      "never guess or hard-code an MCP namespace",
+    );
+    expect(buildSlpAssignmentInstruction(peer)).toContain(
       "Only an authoritative Paseo tool receipt counts",
     );
-    expect(buildAssignmentInstruction(supervisor)).toContain("Remain read-only");
-    expect(buildAssignmentInstruction(supervisor)).toContain("material handoff");
-    expect(buildAssignmentInstruction(delegatingSupervisor)).toContain(
+    expect(buildSlpAssignmentInstruction(supervisor)).toContain("Remain read-only");
+    expect(buildSlpAssignmentInstruction(supervisor)).toContain("material handoff");
+    expect(buildSlpAssignmentInstruction(delegatingSupervisor)).toContain(
       "create and prompt only your own direct role-bound Lead children",
     );
   });

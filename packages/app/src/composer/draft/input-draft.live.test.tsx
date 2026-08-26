@@ -35,9 +35,16 @@ vi.mock("@/hooks/use-role-profiles", () => ({
   useRoleProfiles: () => ({
     catalog: {
       profiles: [
-        { roleId: "lead", preferences: {} },
+        {
+          roleId: "lead",
+          label: "Lead",
+          description: "Lead policy from the pinned SLP catalog.",
+          preferences: {},
+        },
         {
           roleId: "peer",
+          label: "Peer",
+          description: "Peer policy from the pinned SLP catalog.",
           preferences: {
             defaults: {
               provider: "gemini-antigravity",
@@ -46,7 +53,12 @@ vi.mock("@/hooks/use-role-profiles", () => ({
             },
           },
         },
-        { roleId: "supervisor", preferences: {} },
+        {
+          roleId: "supervisor",
+          label: "Supervisor",
+          description: "Supervisor policy from the pinned SLP catalog.",
+          preferences: {},
+        },
       ],
     },
     isLoading: false,

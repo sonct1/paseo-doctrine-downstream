@@ -8,7 +8,8 @@ import { PASEO_TOOL_MANIFEST } from "@getpaseo/protocol/paseo-tool-manifest";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import { loadFoundationSkillPolicy } from "./foundation-skill-policy.js";
 import { loadProductSkillPolicy } from "./product-skill-policy.js";
-import { applyRolePaseoToolPolicy, materializeRoleBinding } from "./role-binding.js";
+import { applyRolePaseoToolPolicy } from "./role-binding.js";
+import { materializeRoleBinding } from "./legacy-role-binding.js";
 
 const temporaryDirectories: string[] = [];
 

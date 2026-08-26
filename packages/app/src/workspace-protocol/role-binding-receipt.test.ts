@@ -34,11 +34,40 @@ describe("role binding receipt description", () => {
     });
 
     expect(description).toContain("Contract: 3.3.0-mandatory-protocol-webui");
+    expect(description).toContain("Policy owner: legacy-core");
     expect(description).toContain(`Binding: sha256:${"b".repeat(64)}`);
     expect(description).toContain(`Protocol: bound · full · sha256:${"c".repeat(64)}`);
     expect(description).toContain("Assignment: Work & coordinate · immutable");
     expect(description).toContain("Mutation: bounded-write · /repo");
     expect(description).toContain("Assigned by: Human session");
     expect(description).not.toContain("Role: Lead");
+  });
+
+  test("shows the exact bundled SLP generation owner", () => {
+    const generationDigest = "e".repeat(64);
+    const description = formatRoleBindingReceiptDescription("Peer summary", {
+      policyOwner: {
+        kind: "plugin",
+        pluginId: "slp",
+        generationDigest,
+        policyVersion: "1.0.0",
+      },
+      roleId: "peer",
+      definitionVersion: "3.2.0-topology-recovery",
+      definitionDigest: "a".repeat(64),
+      bindingDigest: "b".repeat(64),
+      provider: "claude",
+      injectionMethod: "claude-system-prompt",
+      qualification: "implementation-supported",
+      workspaceProtocol: {
+        status: "bound",
+        readership: "assignment-only",
+        path: "/repo/WORKSPACE_PROTOCOL.md",
+        digest: "c".repeat(64),
+      },
+      createdAt: "2026-08-27T00:00:00.000Z",
+    });
+
+    expect(description).toContain(`Policy owner: plugin:slp@sha256:${generationDigest} · 1.0.0`);
   });
 });

@@ -14,8 +14,11 @@ describe("FileBackedChatService", () => {
   let paseoHome: string;
   let service: FileBackedChatService;
 
-  async function sendChatMessage(input: PostChatMessageInput) {
-    return await service.dispatchMessage(input);
+  async function sendChatMessage(
+    input: Omit<PostChatMessageInput, "authorKind"> &
+      Partial<Pick<PostChatMessageInput, "authorKind">>,
+  ) {
+    return await service.dispatchMessage({ authorKind: "agent", ...input });
   }
 
   beforeEach(async () => {
@@ -79,6 +82,7 @@ describe("FileBackedChatService", () => {
 
     const all = await service.readMessages({ room: room.name, limit: 10 });
     expect(all).toHaveLength(2);
+    expect(all[0]?.authorKind).toBe("agent");
     expect(all[0]?.mentionAgentIds).toEqual(["agent-b", "agent-c"]);
 
     const byAuthor = await service.readMessages({

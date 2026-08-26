@@ -1,9 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
-import {
-  AssignmentEnvelopeSchema,
-  type AssignmentEnvelope,
-} from "@getpaseo/protocol/assignment-contract";
+import { AssignmentEnvelopeSchema } from "@getpaseo/protocol/assignment-contract";
 import {
   COUNCIL_REPORT_RECEIPT_VERSION,
   COUNCIL_REPORT_RECEIPT_VERSION_LABEL,
@@ -72,7 +69,10 @@ import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
 import { expandUserPath, isSameOrDescendantPath, resolvePathFromBase } from "../../path-utils.js";
 import type { TerminalManager } from "../../../terminal/terminal-manager.js";
-import type { CreatePaseoWorktreeWorkflowFn } from "../../worktree-session.js";
+import type {
+  CreatePaseoWorktreeWorkflowFn,
+  CreatePaseoWorktreeWorkflowResult,
+} from "../../worktree-session.js";
 import type { ScheduleService } from "../../schedule/service.js";
 import {
   ScheduleRunSchema,
@@ -155,12 +155,6 @@ import {
 } from "@getpaseo/protocol/role-binding";
 import { noWriteModeForInjectionMethod } from "../assignment-capability-boundary.js";
 import {
-  ExecutionProfileBindingReceiptSchema,
-  FoundationExecutionProfileIdSchema,
-  getFoundationExecutionProfileDefinition,
-  type FoundationExecutionProfileId,
-} from "../foundation-execution-profiles.js";
-import {
   ManualCoordinationSignalKindSchema,
   CoordinationSignalResolutionSchema,
   CoordinationSignalSchema,
@@ -217,6 +211,10 @@ export interface PaseoToolHostDependencies {
     cwd: string,
     firstAgentContext?: FirstAgentContext,
   ) => Promise<string>;
+  rollbackWorkspaceAfterFailedCreate?: (workspaceId: string) => Promise<void>;
+  rollbackWorktreeAfterFailedCreate?: (
+    createdWorktree: CreatePaseoWorktreeWorkflowResult,
+  ) => Promise<void>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
   beadsService?: BeadsService | null;
@@ -241,16 +239,11 @@ export interface PaseoToolHostDependencies {
 
 type LaunchableAgentProfile = AgentProfile & { model: string };
 
-function councilReportSentinels(role: CouncilSeatRole): {
-  startSentinel: string;
-  endSentinel: string;
-} {
-  const prefix = role.toUpperCase();
-  return {
-    startSentinel: `${prefix}_COUNCIL_REPORT_V1`,
-    endSentinel: `${prefix}_COUNCIL_REPORT_END`,
-  };
-}
+const ExecutionProfileBindingReceiptSchema = z.object({
+  id: z.string().min(1),
+  version: z.string().min(1),
+  definitionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+});
 
 function councilSeatLaunch(
   labels: Readonly<Record<string, string>> | undefined,
@@ -264,6 +257,10 @@ function councilSeatLaunch(
 function requireCouncilReportContext(
   labels: Readonly<Record<string, string>>,
   agentId: string,
+  reportSentinels: (role: CouncilSeatRole) => {
+    startSentinel: string;
+    endSentinel: string;
+  },
 ): {
   roomId: string;
   kickoffMessageId: string;
@@ -278,7 +275,7 @@ function requireCouncilReportContext(
       `Council seat '${agentId}' is missing daemon-issued Room, kickoff, or role labels`,
     );
   }
-  const sentinels = councilReportSentinels(seatRole.data);
+  const sentinels = reportSentinels(seatRole.data);
   if (
     labels["council.report_start_sentinel"] !== sentinels.startSentinel ||
     labels["council.report_end_sentinel"] !== sentinels.endSentinel
@@ -308,16 +305,18 @@ function requireCouncilKickoff(input: {
   kickoffMessageId: string;
   callerAgentId: string;
   caseId: string;
+  assertBody(body: string, caseId: string): void;
 }): ChatMessage {
   const kickoff = input.messages.find((message) => message.id === input.kickoffMessageId);
   if (
     !kickoff ||
     kickoff.roomId !== input.roomId ||
     kickoff.authorAgentId !== input.callerAgentId ||
-    !kickoff.body.includes(`Council ${input.caseId}:`)
+    kickoff.authorKind !== "agent"
   ) {
     throw new Error(`Council '${input.caseId}' kickoff receipt is unavailable or invalid`);
   }
+  input.assertBody(kickoff.body, input.caseId);
   return kickoff;
 }
 
@@ -331,7 +330,12 @@ function requireCouncilReport(input: {
   endSentinel: string;
 }): ChatMessage {
   const report = input.messages.find((message) => message.id === input.reportMessageId);
-  if (!report || report.roomId !== input.roomId || report.authorAgentId !== input.agentId) {
+  if (
+    !report ||
+    report.roomId !== input.roomId ||
+    report.authorAgentId !== input.agentId ||
+    report.authorKind !== "agent"
+  ) {
     throw new Error(
       `Council report '${input.reportMessageId}' is not authored by Peer '${input.agentId}' in Room '${input.roomId}'`,
     );
@@ -355,7 +359,7 @@ function requireCouncilReport(input: {
 async function validateCouncilSeatReportReceipt(input: {
   agentManager: AgentManager;
   chatService: FileBackedChatService;
-  target: { labels: Readonly<Record<string, string>> };
+  target: Pick<ManagedAgent | StoredAgentRecord, "labels" | "roleBinding">;
   callerAgentId: string;
   caseId: string;
   agentId: string;
@@ -376,13 +380,24 @@ async function validateCouncilSeatReportReceipt(input: {
     throw new Error("integrity=valid requires reportMessageId from the Peer post_room receipt");
   }
 
-  const context = requireCouncilReportContext(input.target.labels, input.agentId);
+  if (!input.target.roleBinding) {
+    throw new Error(`Council seat '${input.agentId}' has no pinned role policy`);
+  }
+  const councilPolicy = input.agentManager.resolveSlpPolicyForRoleBinding(
+    input.target.roleBinding,
+  ).councilPolicy;
+  const context = requireCouncilReportContext(
+    input.target.labels,
+    input.agentId,
+    councilPolicy.reportSentinels,
+  );
   const messages = await input.chatService.readMessages({ room: context.roomId, limit: 100 });
   const kickoff = requireCouncilKickoff({
     messages,
     callerAgentId: input.callerAgentId,
     ...context,
     caseId: input.caseId,
+    assertBody: (body, caseId) => councilPolicy.assertKickoffBody({ body, caseId }),
   });
   const report = requireCouncilReport({
     messages,
@@ -595,18 +610,6 @@ function selectPeerLaunchProfile(input: {
   return available[0];
 }
 
-function resolveRequestedPeerSubrole(input: {
-  executionProfile?: FoundationExecutionProfileId;
-  assignment?: AssignmentEnvelope;
-}): PeerSubrole | undefined {
-  if (input.executionProfile === "solution-architect") return "architect";
-  if (input.executionProfile === "review" || input.executionProfile === "reviewer") {
-    return "reviewer";
-  }
-  if (input.assignment?.disposition === "independent-review") return "reviewer";
-  return undefined;
-}
-
 function projectLaunchProfileReceipt(profile: LaunchableAgentProfile | undefined): {
   launchProfile?: { id: string; name: string };
 } {
@@ -707,6 +710,13 @@ function resolveCatalogRoleBinding(agentManager: AgentManager, agentId: string) 
     : agentManager.getAgent(agentId)?.roleBinding;
 }
 
+function resolveOptionalCatalogRoleBinding(
+  agentManager: AgentManager,
+  agentId: string | undefined,
+) {
+  return agentId ? resolveCatalogRoleBinding(agentManager, agentId) : undefined;
+}
+
 function projectFoundationLaunchReceipts(
   agent: Pick<ManagedAgent, "roleBinding" | "launchContract">,
   options?: { includeExecutionProfile?: boolean },
@@ -722,14 +732,36 @@ function projectFoundationLaunchReceipts(
   };
 }
 
-function resolveCallerRoleId(
+function resolveCoordinationDescriptions(
   agentManager: AgentManager,
-  callerAgentId: string | undefined,
-): string | undefined {
-  if (!callerAgentId) {
-    return undefined;
+  hasCallerRoleBinding: boolean,
+  resolvePolicy: () => ReturnType<AgentManager["resolveSlpPolicyForRoleBinding"]>,
+) {
+  const hasResolver = hasCallerRoleBinding
+    ? typeof (
+        agentManager as AgentManager & {
+          resolveSlpPolicyForRoleBinding?: AgentManager["resolveSlpPolicyForRoleBinding"];
+        }
+      ).resolveSlpPolicyForRoleBinding === "function"
+    : typeof (
+        agentManager as AgentManager & {
+          resolveActiveSlpPolicy?: AgentManager["resolveActiveSlpPolicy"];
+        }
+      ).resolveActiveSlpPolicy === "function";
+  const unavailable = "Requires an active bundled role policy.";
+  const fallback = {
+    prepareLeadHandoff: unavailable,
+    transitionLeadHandoff: unavailable,
+    signalAgent: unavailable,
+    resolveAgentSignal: unavailable,
+  };
+  if (!hasResolver) return fallback;
+  try {
+    return resolvePolicy().coordinationPolicy.descriptions;
+  } catch (error) {
+    if (hasCallerRoleBinding) throw error;
+    return fallback;
   }
-  return resolveCatalogRoleBinding(agentManager, callerAgentId)?.roleId;
 }
 
 function executionProfileInputShape(enabled: boolean): z.ZodRawShape {
@@ -737,9 +769,12 @@ function executionProfileInputShape(enabled: boolean): z.ZodRawShape {
     return {};
   }
   return {
-    executionProfile: FoundationExecutionProfileIdSchema.optional().describe(
-      "Lead-only Peer execution specialization. solution-architect frames architecture; reviewer performs a focused review method; review is the private OCR exhaustive-review route.",
-    ),
+    executionProfile: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Optional execution profile ID owned by the selected role policy."),
   };
 }
 
@@ -750,19 +785,19 @@ function executionProfileOutputShape(enabled: boolean): z.ZodRawShape {
   return { executionProfile: ExecutionProfileBindingReceiptSchema.optional() };
 }
 
-function resolveExecutionProfileRequest(parsedArgs: object, callerRoleId: string | undefined) {
+function resolveExecutionProfileRequest(
+  parsedArgs: object,
+  callerRoleId: string | undefined,
+  resolvePolicy: () => ReturnType<AgentManager["resolveSlpPolicyForRoleBinding"]>,
+) {
   if (!("executionProfile" in parsedArgs) || parsedArgs.executionProfile === undefined) {
     return undefined;
   }
-  const executionProfileId = FoundationExecutionProfileIdSchema.parse(parsedArgs.executionProfile);
-  if (callerRoleId !== "lead") {
-    throw new Error("Only a role-bound Lead can create an execution-specialized Peer");
-  }
-  const profile = getFoundationExecutionProfileDefinition(executionProfileId);
-  if (!("role" in parsedArgs) || parsedArgs.role !== profile.authorityRoleId) {
-    throw new Error(`Execution profile '${profile.id}' requires role '${profile.authorityRoleId}'`);
-  }
-  return executionProfileId;
+  return resolvePolicy().executionProfilePolicy.resolveCreateRequest({
+    value: parsedArgs.executionProfile,
+    callerRoleId,
+    requestedRole: "role" in parsedArgs ? parsedArgs.role : undefined,
+  });
 }
 
 type AgentScopedRoleTopologyAction =
@@ -1287,7 +1322,17 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     component: "paseo-tool-catalog",
   });
   const callerContext = callerAgentId ? (resolveCallerContext?.(callerAgentId) ?? null) : null;
-  const callerRoleId = resolveCallerRoleId(agentManager, callerAgentId);
+  const callerRoleBinding = resolveOptionalCatalogRoleBinding(agentManager, callerAgentId);
+  const callerRoleId = callerRoleBinding?.roleId;
+  const resolveSlpPolicy = () =>
+    callerRoleBinding
+      ? agentManager.resolveSlpPolicyForRoleBinding(callerRoleBinding)
+      : agentManager.resolveActiveSlpPolicy();
+  const coordinationDescriptions = resolveCoordinationDescriptions(
+    agentManager,
+    callerRoleBinding !== undefined,
+    resolveSlpPolicy,
+  );
   const canCreateExecutionProfile = callerRoleId === "lead";
 
   const parseToolInput = async (tool: PaseoToolDefinition, input: unknown): Promise<unknown> => {
@@ -2248,7 +2293,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const CouncilSeatPlanSchema = z.object({
         role: CouncilSeatRoleSchema,
         peerSubrole: PeerSubroleSchema,
-        executionProfile: FoundationExecutionProfileIdSchema.optional(),
+        executionProfile: z.string().trim().min(1).optional(),
         reportStartSentinel: z.string(),
         reportEndSentinel: z.string(),
         labels: z.record(z.string(), z.string()),
@@ -2286,11 +2331,8 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           if (!options.councilCaseStore) {
             throw new Error("Canonical Council case store is unavailable");
           }
-          const validatedRoles = CouncilSeatRoleSchema.array().parse(roles);
-          const uniqueRoles = Array.from(new Set(validatedRoles));
-          if (uniqueRoles.length !== validatedRoles.length) {
-            throw new Error("Council seat roles must be unique");
-          }
+          const councilPolicy = resolveSlpPolicy().councilPolicy;
+          const uniqueRoles = councilPolicy.validateSeatRoles(roles);
           const caseId = `case_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
           const { workspaceId, projectId } = await resolveCallerRoomScope();
           const room = await options.chatService!.createRoom({
@@ -2304,12 +2346,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             kickoff = await options.chatService!.dispatchMessage({
               room: room.id,
               authorAgentId: callerAgentId,
-              body: [
-                `Council ${caseId}: ${title}`,
-                `Question: ${question}`,
-                `Tier: ${tier}. Sealed seats: ${uniqueRoles.join(", ")}.`,
-                "Each seat must report independently in this Room before the Lead records integrity.",
-              ].join("\n"),
+              authorKind: "agent",
+              body: councilPolicy.buildKickoffBody({
+                caseId,
+                title,
+                question,
+                tier,
+                roles: uniqueRoles,
+              }),
             });
             await options.councilCaseStore.create({
               id: caseId,
@@ -2327,36 +2371,13 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             await options.chatService!.deleteRoom({ room: room.id }).catch(() => undefined);
             throw error;
           }
-          const seats = uniqueRoles.map((role) => {
-            const seatRole = CouncilSeatRoleSchema.parse(role);
-            let executionProfile: FoundationExecutionProfileId | undefined;
-            if (seatRole === "architect") {
-              executionProfile = "solution-architect";
-            } else if (seatRole === "reviewer") {
-              executionProfile = "reviewer";
-            }
-            const { startSentinel: reportStartSentinel, endSentinel: reportEndSentinel } =
-              councilReportSentinels(seatRole);
-            return {
-              role: seatRole,
-              peerSubrole: PeerSubroleSchema.parse(seatRole),
-              executionProfile,
-              reportStartSentinel,
-              reportEndSentinel,
-              labels: {
-                "council.case_id": caseId,
-                "council.title": title,
-                "council.tier": tier,
-                "council.phase": "sealed",
-                "council.role": seatRole,
-                "council.round": "1",
-                "council.integrity": "unspecified",
-                "council.room_id": room.id,
-                "council.kickoff_message_id": kickoff.id,
-                "council.report_start_sentinel": reportStartSentinel,
-                "council.report_end_sentinel": reportEndSentinel,
-              },
-            };
+          const seats = councilPolicy.buildSeatPlans({
+            caseId,
+            title,
+            tier,
+            roomId: room.id,
+            kickoffMessageId: kickoff.id,
+            roles: uniqueRoles,
           });
           return {
             content: [],
@@ -2512,6 +2533,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             chatService: options.chatService!,
             room,
             authorAgentId: callerAgentId,
+            authorKind: "agent",
             body,
             replyToMessageId,
             logger: childLogger,
@@ -2764,16 +2786,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       const launchSettings = resolveCreateLaunchSettings(resolvedArgs);
       const { launchProfile } = launchSettings;
       const launchProfileReceipt = projectLaunchProfileReceipt(launchProfile);
-      const executionProfileId = resolveExecutionProfileRequest(parsedArgs, callerRoleId);
-      let requestedBackground: boolean;
-      let notifyOnFinish: boolean;
-      if (resolvedArgs.kind === "agent-scoped") {
-        requestedBackground = true;
-        notifyOnFinish = parsedArgs.notifyOnFinish;
-      } else {
-        requestedBackground = resolvedArgs.parsedArgs.background;
-        notifyOnFinish = resolvedArgs.parsedArgs.notifyOnFinish ?? false;
-      }
+      const executionProfileId = resolveExecutionProfileRequest(
+        parsedArgs,
+        callerRoleId,
+        resolveSlpPolicy,
+      );
+      const { requestedBackground, notifyOnFinish } = resolveCreateRunBehavior(resolvedArgs);
       const {
         providerRoute,
         provider: selectedProvider,
@@ -2804,6 +2822,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
           createPaseoWorktree: options.createPaseoWorktree,
           ...(options.ensureWorkspaceForCreate
             ? { ensureWorkspaceForCreate: options.ensureWorkspaceForCreate }
+            : {}),
+          ...(options.rollbackWorkspaceAfterFailedCreate
+            ? { rollbackWorkspaceAfterFailedCreate: options.rollbackWorkspaceAfterFailedCreate }
+            : {}),
+          ...(options.rollbackWorktreeAfterFailedCreate
+            ? { rollbackWorktreeAfterFailedCreate: options.rollbackWorktreeAfterFailedCreate }
             : {}),
         },
         {
@@ -2914,6 +2938,22 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         worktree: CreateAgentFromMcpInput["worktree"];
       };
 
+  function resolveCreateRunBehavior(resolvedArgs: ResolvedCreateAgentToolArgs): {
+    requestedBackground: boolean;
+    notifyOnFinish: boolean;
+  } {
+    if (resolvedArgs.kind === "agent-scoped") {
+      return {
+        requestedBackground: true,
+        notifyOnFinish: resolvedArgs.parsedArgs.notifyOnFinish,
+      };
+    }
+    return {
+      requestedBackground: resolvedArgs.parsedArgs.background,
+      notifyOnFinish: resolvedArgs.parsedArgs.notifyOnFinish ?? false,
+    };
+  }
+
   function resolveCreateLaunchSettings(resolvedArgs: ResolvedCreateAgentToolArgs): {
     launchProfile?: LaunchableAgentProfile;
     requestedProvider?: string;
@@ -2928,13 +2968,14 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
             requestedRole: parsedArgs.role,
             requestedProfileId:
               "launchProfileId" in parsedArgs ? parsedArgs.launchProfileId : undefined,
-            requestedSubrole: resolveRequestedPeerSubrole({
-              executionProfile:
-                "executionProfile" in parsedArgs && parsedArgs.executionProfile !== undefined
-                  ? FoundationExecutionProfileIdSchema.parse(parsedArgs.executionProfile)
-                  : undefined,
-              assignment: parsedArgs.assignment,
-            }),
+            requestedSubrole:
+              callerRoleId === "lead" && parsedArgs.role === "peer"
+                ? resolveSlpPolicy().executionProfilePolicy.resolvePeerSubrole({
+                    executionProfile:
+                      "executionProfile" in parsedArgs ? parsedArgs.executionProfile : undefined,
+                    assignmentDisposition: parsedArgs.assignment?.disposition,
+                  })
+                : undefined,
             requestedProvider: parsedArgs.provider,
             hasRequestedSettings: parsedArgs.settings !== undefined,
           })
@@ -3308,26 +3349,21 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "prepare_lead_handoff",
     {
       title: "Prepare Lead handoff",
-      description:
-        "Persist an immutable adjacent-Lead handoff packet. The predecessor remains write Owner; this does not authorize or release either Lead.",
+      description: coordinationDescriptions.prepareLeadHandoff,
       inputSchema: PrepareLeadHandoffInputSchema.omit({
         predecessorAgentId: true,
       }).shape,
       outputSchema: { handoff: LeadHandoffPacketSchema },
     },
     async (input) => {
-      if (!callerAgentId) {
-        throw new Error("prepare_lead_handoff requires an agent-scoped predecessor Lead");
-      }
-      const caller = await agentStorage.get(callerAgentId);
-      if (caller?.roleBinding?.roleId !== "lead") {
-        throw new Error("prepare_lead_handoff requires a role-bound predecessor Lead");
-      }
-      const handoff = await prepareLeadHandoff(
-        { agentStorage },
-        { ...input, predecessorAgentId: callerAgentId },
-      );
-      agentManager.notifyAgentState(callerAgentId);
+      const caller = callerAgentId ? await agentStorage.get(callerAgentId) : null;
+      const predecessorAgentId =
+        resolveSlpPolicy().coordinationPolicy.assertPrepareLeadHandoffAuthority({
+          callerAgentId,
+          callerRoleId: caller?.roleBinding?.roleId,
+        });
+      const handoff = await prepareLeadHandoff({ agentStorage }, { ...input, predecessorAgentId });
+      agentManager.notifyAgentState(predecessorAgentId);
       return { content: [], structuredContent: ensureValidJson({ handoff }) };
     },
   );
@@ -3336,8 +3372,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "transition_lead_handoff",
     {
       title: "Transition Lead handoff",
-      description:
-        "Record explicit Human authorization/release or the designated successor's acknowledgement/rejection. Final release requires an idle predecessor, closes its runtime while retaining the durable record, transfers current write ownership, and blocks later predecessor prompts without detaching, archiving, or changing role binding.",
+      description: coordinationDescriptions.transitionLeadHandoff,
       inputSchema: {
         predecessorAgentId: z.string().min(1),
         handoffId: z.string().min(1),
@@ -3348,9 +3383,10 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       outputSchema: { handoff: LeadHandoffPacketSchema },
     },
     async ({ predecessorAgentId, handoffId, transition, successorAgentId, note }) => {
-      if (callerAgentId && transition !== "successor_acknowledged" && transition !== "rejected") {
-        throw new Error("Only a Human-facing caller can authorize or release a Lead handoff");
-      }
+      resolveSlpPolicy().coordinationPolicy.assertLeadHandoffTransitionAuthority({
+        callerAgentId,
+        transition,
+      });
       const handoff = await transitionLeadHandoff(
         {
           agentStorage,
@@ -3377,8 +3413,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "signal_agent",
     {
       title: "Signal agent",
-      description:
-        "Send a durable advisory handoff or detach recommendation to a role-bound Lead. Delivery waits for an idle boundary and never replaces an active run.",
+      description: coordinationDescriptions.signalAgent,
       inputSchema: {
         agentId: z.string().min(1),
         kind: ManualCoordinationSignalKindSchema,
@@ -3398,21 +3433,19 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       if (!target || target.internal || target.archivedAt) {
         throw new Error(`Agent ${agentId} is not available`);
       }
-      if (target.roleBinding?.roleId !== "lead") {
-        throw new Error(
-          `Coordination signals require a role-bound Lead target; ${agentId} is not one`,
-        );
-      }
-      if (kind === "detach_recommended" && !relatedAgentId) {
-        throw new Error("detach_recommended requires relatedAgentId");
-      }
+      let requesterRoleId: PaseoRoleId | undefined;
       if (callerAgentId) {
         const caller = await agentStorage.get(callerAgentId);
-        const callerRole = caller?.roleBinding?.roleId;
-        if (callerRole !== "lead" && callerRole !== "supervisor") {
-          throw new Error("Only a role-bound Lead or Supervisor can signal another Lead");
-        }
+        requesterRoleId = caller?.roleBinding?.roleId;
       }
+      resolveSlpPolicy().coordinationPolicy.assertSignalAgentAuthority({
+        targetAgentId: agentId,
+        targetRoleId: target.roleBinding?.roleId,
+        callerRoleId: requesterRoleId,
+        callerAgentId,
+        kind,
+        relatedAgentId,
+      });
       const signal = await requestCoordinationSignal(
         {
           agentManager,
@@ -3440,8 +3473,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
     "resolve_agent_signal",
     {
       title: "Resolve agent signal",
-      description:
-        "Record the receiving role's autonomous disposition of a coordination signal. This does not report to or transfer authority to the sender.",
+      description: coordinationDescriptions.resolveAgentSignal,
       inputSchema: {
         agentId: z.string().min(1).optional(),
         signalId: z.string().min(1),
@@ -3453,13 +3485,12 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
       },
     },
     async ({ agentId, signalId, resolution, note }) => {
-      const targetAgentId = callerAgentId ?? agentId;
-      if (!targetAgentId) {
-        throw new Error("agentId is required outside an agent-scoped session");
-      }
-      if (callerAgentId && agentId && agentId !== callerAgentId) {
-        throw new Error("An agent may resolve only its own coordination signals");
-      }
+      const targetAgentId = resolveSlpPolicy().coordinationPolicy.assertResolveAgentSignalAuthority(
+        {
+          callerAgentId,
+          requestedAgentId: agentId,
+        },
+      );
       const signal = await resolveCoordinationSignal(
         {
           agentManager,

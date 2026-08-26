@@ -25,7 +25,6 @@ import { useDraftStore } from "@/stores/draft-store";
 import { toDraftInputIfReady } from "@/stores/draft-store/state";
 import {
   isProviderRoleBindingSupportedForRole,
-  PASEO_ROLE_SUMMARIES,
   type PaseoRoleId,
   type ProviderRoleBindingSupport,
 } from "@getpaseo/protocol/role-binding";
@@ -40,6 +39,7 @@ import {
   defaultAssignmentEffectForRole,
   ordinaryAssignmentAuthorityOptionsForRole,
 } from "@/workspace-protocol/assignment-authority";
+import { resolveRoleOptions } from "@/workspace-protocol/legacy-role-options";
 
 const ASSIGNMENT_EFFECT_FEATURE_ID = "foundation_assignment_effect";
 const BEADS_ISSUE_GRANT_FEATURE_ID = "foundation_beads_issue_grant";
@@ -582,8 +582,8 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
     const roleBindingAvailable = formState.allProviderEntries?.some(
       (entry) => entry.roleBinding !== undefined,
     );
-    const roleSelectionAvailable =
-      roleBindingAvailable && (!roleProfiles.supported || roleProfiles.catalog !== null);
+    const roleOptions = resolveRoleOptions(roleProfiles.catalog, roleProfiles.supported);
+    const roleSelectionAvailable = roleBindingAvailable && roleOptions.length > 0;
     const compatibleProviderIds = new Set(
       (formState.allProviderEntries ?? [])
         .filter((entry) => isProviderRoleBindingSupportedForRole(entry.roleBinding, selectedRole))
@@ -610,7 +610,7 @@ export function useAgentInputDraft(input: UseAgentInputDraftInput): AgentInputDr
       featureValues: draftFeatureValues,
       agentControls: buildDraftAgentControls({
         formState: roleAwareFormState,
-        roleOptions: roleSelectionAvailable ? PASEO_ROLE_SUMMARIES : [],
+        roleOptions: roleSelectionAvailable ? roleOptions : [],
         selectedRole: roleSelectionAvailable ? selectedRole : null,
         onSelectRole: setRoleAndNormalizeEffect,
         features:

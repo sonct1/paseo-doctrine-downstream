@@ -85,7 +85,6 @@ import {
 } from "./workspace-labels/index.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
-import { buildRoleProfileCatalog } from "./agent/role-profiles.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -2493,7 +2492,9 @@ export class Session {
           type: "role_profiles.get.response",
           payload: {
             requestId: msg.requestId,
-            catalog: buildRoleProfileCatalog(this.daemonConfigStore.get().roleProfiles ?? {}),
+            catalog: this.agentManager.buildActiveSlpRoleProfileCatalog(
+              this.daemonConfigStore.get().roleProfiles ?? {},
+            ),
           },
         });
         return Promise.resolve();
@@ -3769,6 +3770,24 @@ export class Session {
   /**
    * Handle create agent request
    */
+  private async preflightCreateAgentRequest(msg: CreateAgentRequestMessage): Promise<void> {
+    const requestedCwd = resolve(msg.config.cwd);
+    const needsRequestedDirectory =
+      Boolean(msg.worktreeName || msg.git || msg.worktree) ||
+      (!msg.workspaceId && !msg.callerAgentId);
+    if (needsRequestedDirectory && !(await this.filesystem.isDirectory(requestedCwd))) {
+      throw new Error(`Working directory does not exist or is not a directory: ${requestedCwd}`);
+    }
+    if (!msg.roleId) return;
+    this.agentManager.preflightRoleCreate({
+      provider: msg.config.provider,
+      roleId: msg.roleId,
+      assignment: msg.assignment,
+      systemPrompt: msg.config.systemPrompt ?? undefined,
+      ...(!msg.worktree && !msg.worktreeName && !msg.git ? { cwd: requestedCwd } : {}),
+    });
+  }
+
   private async handleCreateAgentRequest(msg: CreateAgentRequestMessage): Promise<void> {
     const {
       config,
@@ -3794,14 +3813,13 @@ export class Session {
     );
 
     let createdWorktreeForCleanup: CreatePaseoWorktreeWorkflowResult | null = null;
+    let createdDirectoryWorkspaceIdForCleanup: string | null = null;
     let createdAgentId: string | null = null;
     try {
-      const requestedCwd = resolve(config.cwd);
-      const needsRequestedDirectory =
-        Boolean(worktreeName || git || worktree) || (!msg.workspaceId && !msg.callerAgentId);
-      if (needsRequestedDirectory && !(await this.filesystem.isDirectory(requestedCwd))) {
-        throw new Error(`Working directory does not exist or is not a directory: ${requestedCwd}`);
-      }
+      // The modern session path provisions worktrees/workspaces outside
+      // createAgentCommand. Run the same pure bundled-policy admission here so
+      // missing/invalid SLP and malformed assignments cannot leave artifacts.
+      await this.preflightCreateAgentRequest(msg);
       const trimmedPrompt = initialPrompt?.trim();
       const { provisionalTitle } = resolveCreateAgentTitles({
         configTitle: config.title,
@@ -3825,6 +3843,9 @@ export class Session {
         createdWorktree,
         workspacePromptTitle,
       });
+      if (resolvedIntent.createdDirectoryWorkspace) {
+        createdDirectoryWorkspaceIdForCleanup = resolvedIntent.intent.workspaceId;
+      }
       const resolvedCwd = resolve(resolvedIntent.config.cwd);
       if (!(await this.filesystem.isDirectory(resolvedCwd))) {
         throw new Error(`Working directory does not exist or is not a directory: ${resolvedCwd}`);
@@ -3904,6 +3925,16 @@ export class Session {
         createdWorktree: createdWorktreeForCleanup,
         createdAgentId,
       });
+      if (createdDirectoryWorkspaceIdForCleanup && !createdAgentId) {
+        await this.archiveWorkspaceRecord(createdDirectoryWorkspaceIdForCleanup).catch(
+          (archiveError) => {
+            this.sessionLogger.warn(
+              { err: archiveError, workspaceId: createdDirectoryWorkspaceIdForCleanup },
+              "Failed to roll back directory workspace after create_agent_request failed",
+            );
+          },
+        );
+      }
       const wireError = toWorktreeWireError(error);
       this.sessionLogger.error({ err: error }, "Failed to create agent");
       if (requestId) {

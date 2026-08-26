@@ -104,6 +104,10 @@ import type {
   AssignmentEnvelope,
 } from "@getpaseo/protocol/assignment-contract";
 import type { RoleProfilePreferences } from "@getpaseo/protocol/role-profile";
+import type {
+  RoleProfileCatalog,
+  RoleProfilePreferencesMap,
+} from "@getpaseo/protocol/role-profile";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
@@ -113,7 +117,9 @@ import {
   applyRolePaseoToolPolicy,
   assertPersistedRoleAdmissionCurrent,
   assertPersistedRoleBindingMatches,
-  materializeRoleBinding,
+  policyOwnerForRoleBinding,
+  preflightWorkspaceProtocolAdmission,
+  resolveProviderRoleBindingSupport,
   type PersistedRoleBinding,
 } from "./role-binding.js";
 import {
@@ -121,7 +127,12 @@ import {
   materializeLaunchContract,
   type PersistedLaunchContract,
 } from "./launch-contract.js";
-import type { FoundationExecutionProfileId } from "./foundation-execution-profiles.js";
+import type { BundledPolicyPackRegistry } from "../policy/bundled-policy-pack.js";
+import {
+  createFailClosedSlpBundledPolicyRegistry,
+  type SlpBundledPolicyContribution,
+} from "../policy/bundled/slp.js";
+import { LEGACY_CORE_OPERATIONAL_POLICY } from "./legacy-role-binding.js";
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
 const STORED_AGENT_CAPABILITIES: AgentCapabilityFlags = {
@@ -326,7 +337,7 @@ export interface CreateAgentOptions {
   owner?: AgentOwner;
   roleId?: PaseoRoleId;
   /** Lead-only private specialization for a newly materialized role binding. */
-  executionProfileId?: FoundationExecutionProfileId;
+  executionProfileId?: string;
   assignment?: AssignmentEnvelope;
   assignmentAssigner?: AssignmentAssignerReceipt;
   /** Internal storage reload path; callers must not materialize bindings. */
@@ -337,7 +348,7 @@ export interface CreateAgentOptions {
 
 interface RoleSessionInput {
   roleId?: PaseoRoleId;
-  executionProfileId?: FoundationExecutionProfileId;
+  executionProfileId?: string;
   assignment?: AssignmentEnvelope;
   assignmentAssigner?: AssignmentAssignerReceipt;
   workspaceId?: string;
@@ -391,6 +402,7 @@ export interface AgentManagerOptions {
   resolvePaseoToolPolicy?: (provider: AgentProvider) => ProviderPaseoToolsPolicy | undefined;
   resolveRoleProfilePreferences?: (roleId: PaseoRoleId) => RoleProfilePreferences | undefined;
   verifyRoleResourceGrants?: RoleResourceGrantVerifier;
+  bundledPolicyPacks?: BundledPolicyPackRegistry<SlpBundledPolicyContribution>;
   appendSystemPrompt?: string;
   agentStreamCoalesceWindowMs?: number;
   durableTimelineCoalesceWindowMs?: number;
@@ -801,6 +813,12 @@ function detachedAgentLabelPatch(labels: Record<string, string>): AgentLabelPatc
   return patch;
 }
 
+function resolveBundledPolicyPacks(
+  options: AgentManagerOptions,
+): BundledPolicyPackRegistry<SlpBundledPolicyContribution> {
+  return options.bundledPolicyPacks ?? createFailClosedSlpBundledPolicyRegistry();
+}
+
 export class AgentManager {
   private readonly clients = new Map<AgentProvider, AgentClient>();
   private readonly providerEnabled = new Map<AgentProvider, boolean>();
@@ -844,6 +862,7 @@ export class AgentManager {
     roleId: PaseoRoleId,
   ) => RoleProfilePreferences | undefined;
   private readonly verifyRoleResourceGrants?: RoleResourceGrantVerifier;
+  private readonly bundledPolicyPacks: BundledPolicyPackRegistry<SlpBundledPolicyContribution>;
   private readonly trustedSembleRuntime: TrustedSembleRuntime | null;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
@@ -868,6 +887,7 @@ export class AgentManager {
     this.resolvePaseoToolPolicy = options.resolvePaseoToolPolicy ?? (() => undefined);
     this.resolveRoleProfilePreferences = options.resolveRoleProfilePreferences ?? (() => undefined);
     this.verifyRoleResourceGrants = options.verifyRoleResourceGrants;
+    this.bundledPolicyPacks = resolveBundledPolicyPacks(options);
     this.appendSystemPrompt = options.appendSystemPrompt ?? "";
     this.logger = options.logger.child({
       module: "agent",
@@ -1392,6 +1412,62 @@ export class AgentManager {
   ): AgentTimelineFetchResult {
     this.requirePublicAgent(parentAgentId);
     return this.providerSubagents.fetchTimeline(parentAgentId, subagentId, options);
+  }
+
+  preflightRoleCreate(input: {
+    provider: string;
+    roleId: PaseoRoleId;
+    executionProfileId?: string;
+    assignment?: AssignmentEnvelope;
+    systemPrompt?: string;
+    cwd?: string;
+  }): void {
+    const slpGeneration = this.bundledPolicyPacks.resolveActive("slp");
+    assertRoleSessionInput(
+      { provider: input.provider, cwd: "", systemPrompt: input.systemPrompt },
+      { roleId: input.roleId, executionProfileId: input.executionProfileId },
+    );
+    this.requireClient(input.provider);
+    const providerBaseId = this.providerBaseIds.get(input.provider) ?? null;
+    const support =
+      this.providerRoleBindingSupport.get(input.provider) ??
+      resolveProviderRoleBindingSupport(input.provider, providerBaseId);
+    if (!isProviderRoleBindingSupportedForRole(support, input.roleId)) {
+      const reason = support.status === "unsupported" ? support.reason : "role is not admitted";
+      throw new Error(
+        `Provider '${input.provider}' cannot bind Paseo role '${input.roleId}': ${reason}`,
+      );
+    }
+    const assignment = slpGeneration.contribution.preflightRoleBinding(input);
+    if (input.cwd) {
+      preflightWorkspaceProtocolAdmission({
+        cwd: input.cwd,
+        readership: slpGeneration.contribution.workspaceProtocolReadership(input.roleId),
+        assignment,
+      });
+    }
+  }
+
+  buildActiveSlpRoleProfileCatalog(preferences: RoleProfilePreferencesMap): RoleProfileCatalog {
+    return this.bundledPolicyPacks
+      .resolveActive("slp")
+      .contribution.buildRoleProfileCatalog(preferences);
+  }
+
+  resolveSlpPolicyForRoleBinding(
+    roleBinding: PersistedRoleBinding,
+  ): Pick<
+    SlpBundledPolicyContribution,
+    "councilPolicy" | "coordinationPolicy" | "executionProfilePolicy"
+  > {
+    const owner = policyOwnerForRoleBinding(roleBinding);
+    return owner.kind === "plugin"
+      ? this.bundledPolicyPacks.resolvePinned(owner).contribution
+      : LEGACY_CORE_OPERATIONAL_POLICY;
+  }
+
+  resolveActiveSlpPolicy(): SlpBundledPolicyContribution {
+    return this.bundledPolicyPacks.resolveActive("slp").contribution;
   }
 
   createAgent(
@@ -5417,20 +5493,24 @@ export class AgentManager {
       );
     }
     if (!roleBinding && role?.roleId) {
-      roleBinding = await materializeRoleBinding({
-        roleId: role.roleId,
-        executionProfileId: role.executionProfileId,
-        provider: storedConfig.provider,
-        providerBaseId,
-        providerSupport: this.providerRoleBindingSupport.get(storedConfig.provider),
-        cwd: storedConfig.cwd,
-        workspaceId: role.workspaceId ?? "",
-        assignment: role.assignment,
-        assignmentAssigner: role.assignmentAssigner ?? {
-          kind: "human-session",
+      const slpGeneration = this.bundledPolicyPacks.resolveActive("slp");
+      roleBinding = await slpGeneration.contribution.materializeRoleBinding(
+        {
+          roleId: role.roleId,
+          executionProfileId: role.executionProfileId,
+          provider: storedConfig.provider,
+          providerBaseId,
+          providerSupport: this.providerRoleBindingSupport.get(storedConfig.provider),
+          cwd: storedConfig.cwd,
+          workspaceId: role.workspaceId ?? "",
+          assignment: role.assignment,
+          assignmentAssigner: role.assignmentAssigner ?? {
+            kind: "human-session",
+          },
+          roleProfilePreferences: this.resolveRoleProfilePreferences(role.roleId),
         },
-        roleProfilePreferences: this.resolveRoleProfilePreferences(role.roleId),
-      });
+        slpGeneration.owner,
+      );
       const providerBinding = await this.materializeProviderLaunchBinding({
         config: storedConfig,
         providerBaseId,
@@ -5493,11 +5573,15 @@ export class AgentManager {
     if (!roleBinding && !this.paseoToolsEnabled && !client.capabilities.supportsNativePaseoTools) {
       return { enabled: false };
     }
+    const legacyAssignmentEffectClass =
+      roleBinding && policyOwnerForRoleBinding(roleBinding).kind === "legacy-core"
+        ? roleBinding.assignmentContract?.envelope.effectClass
+        : undefined;
     return applyRolePaseoToolPolicy(
       roleBinding?.roleId,
       this.resolvePaseoToolPolicy(provider),
       roleBinding?.roleProfile?.allowedTools,
-      roleBinding?.assignmentContract?.envelope.effectClass,
+      legacyAssignmentEffectClass,
     );
   }
 
@@ -5506,6 +5590,10 @@ export class AgentManager {
     provider: AgentProvider,
     cwd: string,
   ): void {
+    const policyOwner = policyOwnerForRoleBinding(roleBinding);
+    if (policyOwner.kind === "plugin") {
+      this.bundledPolicyPacks.resolvePinned(policyOwner);
+    }
     const currentSupport = this.providerRoleBindingSupport.get(provider);
     if (
       currentSupport &&

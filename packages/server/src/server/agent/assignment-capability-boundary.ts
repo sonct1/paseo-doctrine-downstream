@@ -6,7 +6,7 @@ import type {
   AgentSessionConfig,
 } from "./agent-sdk-types.js";
 import type { PersistedRoleBinding } from "./role-binding.js";
-import { ROLE_TOOL_CEILINGS } from "./role-profiles.js";
+import { ROLE_TOOL_CEILINGS } from "../policy/bundled/slp/role-profiles.js";
 
 export const ASSIGNMENT_CAPABILITY_BOUNDARY_ERROR = "assignment_capability_boundary_required";
 
@@ -98,7 +98,9 @@ export function assertRoleAssignmentPermissionResponseAllowed(
       return false;
     }
     if (request?.kind !== "tool") return false;
-    return ROLE_TOOL_CEILINGS[roleBinding.roleId].some((toolName) => {
+    const admittedTools =
+      roleBinding.roleProfile?.allowedTools ?? ROLE_TOOL_CEILINGS[roleBinding.roleId];
+    return admittedTools.some((toolName) => {
       const exactTransportName = `paseo-${toolName}`;
       return request.name === exactTransportName || request.title === exactTransportName;
     });

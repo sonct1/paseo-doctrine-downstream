@@ -165,6 +165,35 @@ test("no-write Cursor assignment permits exact role-ceiling Paseo MCP transport 
   ).toThrow("cannot approve a permission escalation");
 });
 
+test("no-write Cursor assignment rejects a tool omitted from the immutable role profile", () => {
+  const binding = {
+    ...roleBinding({ injectionMethod: "cursor-project-rule-capsule" }),
+    roleId: "supervisor",
+    roleProfile: {
+      schemaVersion: 1,
+      profileDigest: "a".repeat(64),
+      defaults: {},
+      allowedTools: ["beads_status"],
+      allowedSkills: ["beads-issue-tracker"],
+    },
+  } as PersistedRoleBinding;
+
+  expect(() =>
+    assertRoleAssignmentPermissionResponseAllowed(
+      binding,
+      { behavior: "allow" },
+      {
+        id: "permission-disabled-tool",
+        provider: "cursor",
+        name: "paseo-read_room",
+        kind: "tool",
+        title: "paseo-read_room",
+        actions: [],
+      },
+    ),
+  ).toThrow("cannot approve a permission escalation");
+});
+
 test("no-write Cursor assignment permits opaque MCP consent only for the role-scoped Paseo server", () => {
   const binding = {
     ...roleBinding({ injectionMethod: "cursor-project-rule-capsule" }),

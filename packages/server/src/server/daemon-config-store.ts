@@ -11,7 +11,7 @@ import {
 } from "@getpaseo/protocol/messages";
 import { resolvePeerDelegationProviderPriority } from "@getpaseo/protocol/peer-delegation-priority";
 import { resolveFoundationCredentialFile } from "./foundation-credential-store.js";
-import { validateRoleProfilePreferencesMap } from "./agent/role-profiles.js";
+import { validateRoleProfilePreferencesMap } from "./policy/bundled/slp/role-profiles.js";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";

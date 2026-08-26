@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, LockKeyhole, RotateCcw, Save } from "lucide-
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import type {
   RoleProfileDescriptor,
   RoleProfilePreferences,
@@ -18,11 +18,6 @@ import { useRoleProfiles } from "@/hooks/use-role-profiles";
 import { settingsStyles } from "@/styles/settings";
 import type { Theme } from "@/styles/theme";
 
-const ROLE_OPTIONS = PASEO_ROLE_SUMMARIES.map((role) => ({
-  value: role.id,
-  label: role.label,
-  testID: `role-profile-tab-${role.id}`,
-}));
 const ThemedLockKeyhole = withUnistyles(LockKeyhole);
 const ThemedChevronDown = withUnistyles(ChevronDown);
 const ThemedChevronRight = withUnistyles(ChevronRight);
@@ -221,6 +216,15 @@ export function RoleProfilesCard({ serverId }: { serverId: string }) {
   const descriptor = roleProfiles.catalog?.profiles.find(
     (profile) => profile.roleId === selectedRole,
   );
+  const roleOptions = useMemo(
+    () =>
+      (roleProfiles.catalog?.profiles ?? []).map((profile) => ({
+        value: profile.roleId,
+        label: profile.label,
+        testID: `role-profile-tab-${profile.roleId}`,
+      })),
+    [roleProfiles.catalog],
+  );
 
   useEffect(() => {
     setDraft(descriptor?.preferences ?? {});
@@ -321,7 +325,7 @@ export function RoleProfilesCard({ serverId }: { serverId: string }) {
       </View>
       <View style={styles.roleTabs}>
         <SegmentedControl
-          options={ROLE_OPTIONS}
+          options={roleOptions}
           value={selectedRole}
           onValueChange={setSelectedRole}
           size="sm"

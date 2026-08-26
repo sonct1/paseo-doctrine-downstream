@@ -20,6 +20,10 @@ export const ChatMessageSchema = z.object({
   id: z.string(),
   roomId: z.string(),
   authorAgentId: z.string(),
+  // COMPAT(chatAuthorProvenance): legacy persisted messages have no provenance.
+  // They remain readable, but security-sensitive consumers must require an
+  // explicit agent provenance before accepting a message as agent-authored.
+  authorKind: z.enum(["agent", "client"]).optional(),
   body: z.string(),
   replyToMessageId: z.string().nullable(),
   mentionAgentIds: z.array(z.string()),

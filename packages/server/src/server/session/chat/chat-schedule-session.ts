@@ -172,11 +172,19 @@ export class ChatScheduleSession {
     request: Extract<SessionInboundMessage, { type: "chat/post" }>,
   ): Promise<void> {
     try {
-      const authorAgentId = request.authorAgentId?.trim() || this.clientId;
+      const requestedAuthorAgentId = request.authorAgentId?.trim();
+      if (requestedAuthorAgentId && requestedAuthorAgentId !== "manual") {
+        throw new ChatServiceError(
+          "chat_agent_author_impersonation_denied",
+          "chat/post cannot claim an agent identity; agents must use the trusted post_room tool",
+        );
+      }
+      const authorAgentId = requestedAuthorAgentId || this.clientId;
       const message = await postChatMessageWithMentions({
         chatService: this.chatService,
         room: request.room,
         authorAgentId,
+        authorKind: "client",
         body: request.body,
         replyToMessageId: request.replyToMessageId,
         logger: this.logger,

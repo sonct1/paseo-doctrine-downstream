@@ -97,14 +97,20 @@ describe("Claude SDK env", () => {
 
   test("forwards launch-context env through Claude resume env", async () => {
     let capturedEnv: Record<string, string | undefined> | undefined;
+    let capturedSystemPrompt: unknown;
     const launchContext: AgentLaunchContext = {
       env: {
         PASEO_AGENT_ID: "00000000-0000-4000-8000-000000000202",
         PASEO_TEST_FLAG: "resume-launch-value",
       },
+      roleBinding: {
+        roleId: "peer",
+        instructions: "EXACT PERSISTED SLP PEER INSTRUCTIONS",
+      },
     };
     const queryFactory = vi.fn(({ options }: ClaudeQueryInput) => {
       capturedEnv = options.env;
+      capturedSystemPrompt = options.systemPrompt;
       return createQueryMock([
         {
           type: "system",
@@ -154,6 +160,11 @@ describe("Claude SDK env", () => {
       expect(result.sessionId).toBe("persisted-session");
       expect(capturedEnv?.PASEO_AGENT_ID).toBe(launchContext.env?.PASEO_AGENT_ID);
       expect(capturedEnv?.PASEO_TEST_FLAG).toBe(launchContext.env?.PASEO_TEST_FLAG);
+      expect(capturedSystemPrompt).toEqual({
+        type: "preset",
+        preset: "claude_code",
+        append: "EXACT PERSISTED SLP PEER INSTRUCTIONS",
+      });
     } finally {
       await session.close();
     }

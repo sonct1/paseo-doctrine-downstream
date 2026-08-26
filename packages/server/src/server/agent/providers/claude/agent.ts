@@ -155,7 +155,7 @@ import {
   narrowFoundationSkillPolicy,
   mergeClaudeMandatoryFoundationPlugins,
   type FoundationSkillPolicy,
-} from "../../foundation-skill-policy.js";
+} from "../../../policy/bundled/slp/skill-policy.js";
 
 const fsPromises = promises;
 const CLAUDE_SETTING_SOURCES: NonNullable<ClaudeOptions["settingSources"]> = [

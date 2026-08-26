@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AssignmentContractReceiptSchema } from "./assignment-contract.js";
+import { PolicyOwnerSchema } from "./policy-owner.js";
 
 export const PASEO_ROLE_IDS = ["lead", "peer", "supervisor"] as const;
 
@@ -7,35 +8,6 @@ export const PaseoRoleIdSchema = z.enum(PASEO_ROLE_IDS);
 export type PaseoRoleId = z.infer<typeof PaseoRoleIdSchema>;
 
 export const PASEO_ROLE_CONTRACT_VERSION = "3.2.0-topology-recovery";
-
-export const PASEO_ROLE_SUMMARIES = [
-  {
-    id: "lead",
-    label: "Lead",
-    description:
-      "Owns routing, integration, engineering decisions, and acceptance. Reads the full Workspace Protocol.",
-    protocolReadership: "full",
-  },
-  {
-    id: "peer",
-    label: "Peer",
-    description:
-      "Owns independent technical judgment inside one bounded assignment. Receives only relevant protocol constraints.",
-    protocolReadership: "assignment-only",
-  },
-  {
-    id: "supervisor",
-    label: "Supervisor",
-    description:
-      "Observes orchestration and advises Human without becoming a super-Lead. Reads protocol only under a governance mandate.",
-    protocolReadership: "governance-only",
-  },
-] as const satisfies ReadonlyArray<{
-  id: PaseoRoleId;
-  label: string;
-  description: string;
-  protocolReadership: "full" | "assignment-only" | "governance-only";
-}>;
 
 export const RoleBindingInjectionMethodSchema = z.enum([
   "codex-developer-instructions",
@@ -120,6 +92,8 @@ export const WorkspaceProtocolBindingReceiptSchema = z.object({
 export type WorkspaceProtocolBindingReceipt = z.infer<typeof WorkspaceProtocolBindingReceiptSchema>;
 
 export const RoleBindingReceiptSchema = z.object({
+  // COMPAT(policyOwner): role bindings persisted before bundled policy packs are legacy-core.
+  policyOwner: PolicyOwnerSchema.optional(),
   roleId: PaseoRoleIdSchema,
   definitionVersion: z.string(),
   definitionDigest: Sha256DigestSchema,

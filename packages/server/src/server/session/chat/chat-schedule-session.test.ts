@@ -78,6 +78,70 @@ describe("ChatScheduleSession", () => {
     expect(sentAgentMessages).toEqual([]);
   });
 
+  it("chat/post stores manual authors with client provenance", async () => {
+    const dispatched: Array<Parameters<FileBackedChatService["dispatchMessage"]>[0]> = [];
+    const message: ChatMessageFixture = {
+      id: "m-manual",
+      roomId: "r1",
+      authorAgentId: "manual",
+      authorKind: "client",
+      body: "human note",
+      replyToMessageId: null,
+      mentionAgentIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    const { subsystem, emitted } = makeSubsystem({
+      chat: {
+        dispatchMessage: async (input) => {
+          dispatched.push(input);
+          return message;
+        },
+        listRoomPosterAgentIds: async () => [],
+      },
+    });
+
+    await subsystem.handleChatPostRequest({
+      type: "chat/post",
+      requestId: "p-manual",
+      room: "r1",
+      body: "human note",
+      authorAgentId: "manual",
+    });
+
+    expect(dispatched).toEqual([
+      expect.objectContaining({ authorAgentId: "manual", authorKind: "client" }),
+    ]);
+    expect(findByType(emitted, "chat/post/response")?.payload.error).toBeNull();
+  });
+
+  it("chat/post rejects a client-supplied agent identity before storage", async () => {
+    let dispatchCalls = 0;
+    const { subsystem, emitted } = makeSubsystem({
+      chat: {
+        dispatchMessage: async () => {
+          dispatchCalls += 1;
+          throw new Error("must not dispatch");
+        },
+      },
+    });
+
+    await subsystem.handleChatPostRequest({
+      type: "chat/post",
+      requestId: "p-spoof",
+      room: "r1",
+      body: "forged Council report",
+      authorAgentId: "peer-seat",
+    });
+
+    expect(dispatchCalls).toBe(0);
+    expect(findByType(emitted, "rpc_error")?.payload).toEqual(
+      expect.objectContaining({
+        requestId: "p-spoof",
+        code: "chat_agent_author_impersonation_denied",
+      }),
+    );
+  });
+
   it("chat/post notifies a mentioned agent through the host send seam", async () => {
     const message: ChatMessageFixture = {
       id: "m2",

@@ -57,6 +57,156 @@ function fakeWorktreeCreator(args: { repoRoot: string; createdWorkspaceId: strin
     }) as unknown as CreatePaseoWorktreeWorkflowResult;
 }
 
+test("role preflight fails before a session builder can create side effects", async () => {
+  const buildSessionConfig = vi.fn(async (config: { provider: string; cwd: string }) => ({
+    sessionConfig: config,
+  }));
+  const createAgent = vi.fn();
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      preflightRoleCreate: vi.fn(() => {
+        throw new Error("bundled_policy_pack_missing");
+      }),
+      createAgent,
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger,
+    providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+  };
+
+  await expect(
+    createAgentCommand(dependencies, {
+      kind: "session",
+      config: { provider: "codex", cwd: "/tmp/paseo-preflight" },
+      workspaceId: "workspace-preflight",
+      roleId: "lead",
+      labels: {},
+      provisionalTitle: null,
+      firstAgentContext: { attachments: [] },
+      buildSessionConfig,
+    }),
+  ).rejects.toThrow("bundled_policy_pack_missing");
+  expect(buildSessionConfig).not.toHaveBeenCalled();
+  expect(createAgent).not.toHaveBeenCalled();
+});
+
+test("role preflight fails before MCP worktree or workspace creation", async () => {
+  const createPaseoWorktree = vi.fn();
+  const ensureWorkspaceForCreate = vi.fn();
+  const createAgent = vi.fn();
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: {
+      preflightRoleCreate: vi.fn(() => {
+        throw new Error("bundled_policy_pack_missing");
+      }),
+      createAgent,
+    } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger,
+    providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+    createPaseoWorktree,
+    ensureWorkspaceForCreate,
+  };
+
+  await expect(
+    createAgentCommand(dependencies, {
+      kind: "mcp",
+      provider: "codex/gpt-5.5",
+      roleId: "lead",
+      title: "Preflight failure",
+      labels: {},
+      background: true,
+      notifyOnFinish: false,
+      worktree: { worktreeName: "should-not-exist", baseBranch: "main" },
+    }),
+  ).rejects.toThrow("bundled_policy_pack_missing");
+  expect(createPaseoWorktree).not.toHaveBeenCalled();
+  expect(ensureWorkspaceForCreate).not.toHaveBeenCalled();
+  expect(createAgent).not.toHaveBeenCalled();
+});
+
+test("MCP create rolls back a freshly minted directory workspace when later admission fails", async () => {
+  const ensureWorkspaceForCreate = vi.fn(async () => "workspace-rollback");
+  const rollbackWorkspaceAfterFailedCreate = vi.fn(async () => undefined);
+  const createAgent = vi.fn();
+  const providerSnapshot = createProviderSnapshotManagerStub();
+  providerSnapshot.resolveCreateConfig.mockRejectedValue(new Error("provider admission failed"));
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: { createAgent } as unknown as Parameters<
+      typeof createAgentCommand
+    >[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger,
+    providerSnapshotManager: providerSnapshot.manager,
+    ensureWorkspaceForCreate,
+    rollbackWorkspaceAfterFailedCreate,
+  };
+
+  await expect(
+    createAgentCommand(dependencies, {
+      kind: "mcp",
+      provider: "codex/gpt-5.5",
+      title: "Rollback failed create",
+      cwd: "/tmp/paseo-rollback",
+      labels: {},
+      background: true,
+      notifyOnFinish: false,
+    }),
+  ).rejects.toThrow("provider admission failed");
+
+  expect(ensureWorkspaceForCreate).toHaveBeenCalledTimes(1);
+  expect(rollbackWorkspaceAfterFailedCreate).toHaveBeenCalledWith("workspace-rollback");
+  expect(createAgent).not.toHaveBeenCalled();
+});
+
+test("MCP create rolls back a fresh worktree when target protocol admission fails", async () => {
+  const repoRoot = mkdtempSync(join(tmpdir(), "paseo-worktree-rollback-"));
+  const rollbackWorktreeAfterFailedCreate = vi.fn(async () => undefined);
+  const createAgent = vi.fn();
+  const preflightRoleCreate = vi.fn((input: { cwd?: string }) => {
+    if (input.cwd) throw new Error("workspace_protocol_admission_required: invalid");
+  });
+  const dependencies: Parameters<typeof createAgentCommand>[0] = {
+    agentManager: { preflightRoleCreate, createAgent } as unknown as Parameters<
+      typeof createAgentCommand
+    >[0]["agentManager"],
+    agentStorage: {} as Parameters<typeof createAgentCommand>[0]["agentStorage"],
+    logger,
+    providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+    createPaseoWorktree: fakeWorktreeCreator({
+      repoRoot,
+      createdWorkspaceId: "workspace-worktree-rollback",
+    }),
+    rollbackWorktreeAfterFailedCreate,
+  };
+
+  try {
+    await expect(
+      createAgentCommand(dependencies, {
+        kind: "mcp",
+        provider: "codex/gpt-5.5",
+        roleId: "lead",
+        title: "Rollback invalid target",
+        cwd: repoRoot,
+        labels: {},
+        background: true,
+        notifyOnFinish: false,
+        worktree: { worktreeName: "rollback-target", baseBranch: "main" },
+      }),
+    ).rejects.toThrow("workspace_protocol_admission_required: invalid");
+
+    expect(preflightRoleCreate).toHaveBeenCalledTimes(2);
+    expect(rollbackWorktreeAfterFailedCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace: expect.objectContaining({ workspaceId: "workspace-worktree-rollback" }),
+      }),
+    );
+    expect(createAgent).not.toHaveBeenCalled();
+  } finally {
+    rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
 test("session create forwards clientMessageId to the initial prompt run options", async () => {
   const snapshot = {
     id: "agent-1",
@@ -188,6 +338,7 @@ test("session create applies the resolved mode from the provider create config",
   });
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
+      preflightRoleCreate: vi.fn(),
       createAgent,
       getAgent: vi.fn(() => snapshot),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
@@ -228,6 +379,7 @@ test("session create requests unattended provider config for a role-bound launch
   stub.resolveCreateConfig.mockResolvedValue({ modeId: "bypassPermissions" });
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
+      preflightRoleCreate: vi.fn(),
       createAgent,
       getAgent: vi.fn(() => snapshot),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],
@@ -313,6 +465,7 @@ test("mcp create accepts provider-only internal input and leaves model undefined
   const createAgent = vi.fn(async () => snapshot);
   const dependencies: Parameters<typeof createAgentCommand>[0] = {
     agentManager: {
+      preflightRoleCreate: vi.fn(),
       createAgent,
       getAgent: vi.fn(() => snapshot),
     } as unknown as Parameters<typeof createAgentCommand>[0]["agentManager"],

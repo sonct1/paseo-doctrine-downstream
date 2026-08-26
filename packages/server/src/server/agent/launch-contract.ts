@@ -6,7 +6,11 @@ import {
 } from "@getpaseo/protocol/launch-contract";
 import { z } from "zod";
 import type { AgentSessionConfig, ProviderLaunchBinding } from "./agent-sdk-types.js";
-import { PersistedRoleBindingSchema, type PersistedRoleBinding } from "./role-binding.js";
+import {
+  PersistedRoleBindingSchema,
+  policyOwnerForRoleBinding,
+  type PersistedRoleBinding,
+} from "./role-binding.js";
 
 const ProviderLaunchBindingSchema = z.discriminatedUnion("routeKind", [
   z.object({
@@ -70,7 +74,10 @@ function canonicalContractBytes(
   roleBinding: PersistedRoleBinding,
   providerBinding: ProviderLaunchBinding,
 ): string {
+  const policyOwner = policyOwnerForRoleBinding(roleBinding);
   return JSON.stringify({
+    // COMPAT(policyOwner): legacy-core bindings preserve their existing launch-contract digest.
+    ...(policyOwner.kind === "plugin" ? { policyOwner } : {}),
     roleId: roleBinding.roleId,
     roleDefinitionVersion: roleBinding.definitionVersion,
     roleDefinitionDigest: roleBinding.definitionDigest,

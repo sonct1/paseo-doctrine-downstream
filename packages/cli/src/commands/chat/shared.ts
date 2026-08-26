@@ -131,7 +131,15 @@ export function parseTimeoutMs(input?: string): number | undefined {
   }
 }
 
-export function resolveChatAuthorAgentId(): string {
-  const agentId = process.env.PASEO_AGENT_ID?.trim();
-  return agentId && agentId.length > 0 ? agentId : "manual";
+export function resolveChatAuthorAgentId(env: { PASEO_AGENT_ID?: string } = process.env): "manual" {
+  const agentId = env.PASEO_AGENT_ID?.trim();
+  if (agentId) {
+    const error: CommandError = {
+      code: "CHAT_AGENT_AUTHOR_UNTRUSTED",
+      message: "Agents must post Room messages with the trusted post_room tool",
+      details: `paseo chat post cannot prove agent identity '${agentId}'`,
+    };
+    throw error;
+  }
+  return "manual";
 }

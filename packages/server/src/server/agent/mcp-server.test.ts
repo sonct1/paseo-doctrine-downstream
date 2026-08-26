@@ -63,10 +63,12 @@ import {
   assignmentExternalEffectBoundaryFor,
   type AssignmentEffectClass,
 } from "@getpaseo/protocol/assignment-contract";
+import { createDefaultSlpBundledPolicyRegistry } from "../policy/bundled/slp.js";
 
 const REPO_CWD = resolvePath("/tmp/repo");
 const TARGET_CWD = resolvePath("/tmp/target");
 const BROWSER_WORKSPACE_ID = "wks_browser_tools";
+const slpContribution = createDefaultSlpBundledPolicyRegistry().resolveActive("slp").contribution;
 
 interface LooseSafeParseResult {
   success: boolean;
@@ -240,6 +242,9 @@ function buildAgentManagerSpies() {
     getPendingPermissions: vi.fn(),
     getRegisteredProviderIds: vi.fn().mockReturnValue(["claude"]),
     listDraftFeatures: vi.fn(),
+    preflightRoleCreate: vi.fn(),
+    resolveSlpPolicyForRoleBinding: vi.fn(() => slpContribution),
+    resolveActiveSlpPolicy: vi.fn(() => slpContribution),
   };
 }
 

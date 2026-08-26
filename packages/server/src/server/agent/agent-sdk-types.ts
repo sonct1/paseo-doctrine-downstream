@@ -633,16 +633,16 @@ export interface AgentLaunchContext {
   agentId?: string;
   env?: Record<string, string>;
   /**
-   * Daemon-owned, immutable Foundation role instructions. Clients cannot set
+   * Daemon-owned, immutable policy instructions. Clients cannot set
    * this field; provider adapters map it to their native durable channel.
    */
   roleBinding?: {
     roleId: import("@getpaseo/protocol/role-binding").PaseoRoleId;
     instructions: string;
     executionProfile?: {
-      id: import("./foundation-execution-profiles.js").FoundationExecutionProfileId;
+      id: string;
     };
-    /** Immutable Foundation skill allowlist captured when the role binding was created. */
+    /** Immutable policy skill allowlist captured when the role binding was created. */
     allowedSkills?: string[];
     /** Daemon-owned assignment capability. Provider adapters must enforce this technically. */
     noWrite?: boolean;

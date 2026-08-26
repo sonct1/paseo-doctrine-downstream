@@ -9,11 +9,12 @@ import {
   ASSIGNMENT_CONTRACT_EXPIRED_ERROR,
   detectLegacyProviderRole,
   LEGACY_PROVIDER_ROLE_DETECTION_EXPIRES_AT,
-  materializeRoleBinding,
+  policyOwnerForRoleBinding,
   resolveProviderRoleBindingSupport,
   toRoleBindingReceipt,
   WORKSPACE_PROTOCOL_ADMISSION_ERROR,
 } from "./role-binding.js";
+import { materializeRoleBinding } from "./legacy-role-binding.js";
 import { buildWorkspaceProtocolTemplate } from "../../utils/workspace-protocol-file.js";
 import type { AssignmentEnvelope } from "@getpaseo/protocol/assignment-contract";
 import { MANDATORY_ROLE_TOOLS } from "./role-profiles.js";
@@ -92,6 +93,8 @@ describe("native Foundation role materialization", () => {
     });
 
     expect(binding.injectionMethod).toBe("codex-developer-instructions");
+    expect(binding.policyOwner).toEqual({ kind: "legacy-core" });
+    expect(policyOwnerForRoleBinding(binding)).toEqual({ kind: "legacy-core" });
     expect(binding.workspaceProtocol).toMatchObject({
       status: "bound",
       readership: "full",
@@ -116,11 +119,30 @@ describe("native Foundation role materialization", () => {
     expect(binding.instructions).toContain("Mandatory Beads Central checkpoint");
     expect(binding.assignment).toMatchObject({ effectClass: "read-only" });
     const receipt = toRoleBindingReceipt(binding);
+    expect(receipt.policyOwner).toEqual({ kind: "legacy-core" });
     expect(receipt).not.toHaveProperty("instructions");
     expect(receipt).not.toHaveProperty("assignmentContract");
     expect(JSON.stringify(receipt)).not.toContain("Inspect the bounded target");
     expect(JSON.stringify(receipt)).not.toContain("Report exact inspected paths");
     expect(JSON.stringify(receipt)).not.toContain("Stop after evidence handback");
+  });
+
+  test("reads bindings created before policy ownership as legacy-core", async () => {
+    const cwd = await createWorkspace();
+    await writeFile(
+      join(cwd, "WORKSPACE_PROTOCOL.md"),
+      buildWorkspaceProtocolTemplate(cwd),
+      "utf8",
+    );
+    const binding = await materializeRoleBinding({
+      roleId: "lead",
+      provider: "codex",
+      cwd,
+      ...assignmentBinding("lead", cwd),
+    });
+    const { policyOwner: _policyOwner, ...legacyBinding } = binding;
+
+    expect(policyOwnerForRoleBinding(legacyBinding)).toEqual({ kind: "legacy-core" });
   });
 
   test("keeps Peer protocol readership assignment-only", async () => {

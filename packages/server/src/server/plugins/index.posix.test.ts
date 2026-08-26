@@ -151,6 +151,24 @@ function createPluginSelectivePausedRuntime(pausedPluginId: string) {
 }
 
 describe("PluginService", () => {
+  it("reserves the bundled SLP policy ID from local plugins", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
+    roots.push(home);
+    const directory = await createPlugin(
+      "slp",
+      `export default function contribute(plugin: unknown) { void plugin; return () => undefined; }`,
+    );
+    const store = createStore(home);
+    const service = bindTestSessionHost(new PluginService(pino({ level: "silent" }), store));
+    await service.start();
+
+    await expect(service.installDirectory({ path: directory })).rejects.toThrow(
+      "bundled_policy_pack_reserved_id",
+    );
+    expect(store.get().plugins).toEqual({});
+    await service.stopAllPlugins();
+  });
+
   it("retains logs when disabled and clears them only when removed", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "paseo-plugin-home-"));
     roots.push(home);

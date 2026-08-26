@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
+  buildFoundationSkillArtifactDescriptor,
   claudeMandatoryFoundationSkillDenyRules,
   filterFoundationSkills,
   loadFoundationSkillPolicy,
@@ -81,6 +82,21 @@ describe("Foundation skill policy", () => {
     expect([...loadFoundationSkillPolicy("supervisor", source).enabledNames]).toEqual([
       "paseo-supervisor",
     ]);
+  });
+
+  test("binds exact skill package bytes into the bundled artifact descriptor", () => {
+    const source = manifestPath();
+    const first = buildFoundationSkillArtifactDescriptor(source);
+    writeFileSync(
+      path.join(path.dirname(source), "frontend-design", "SKILL.md"),
+      "# frontend-design\nchanged\n",
+    );
+    const second = buildFoundationSkillArtifactDescriptor(source);
+
+    expect(first.roles.peer).toEqual(["frontend-design"]);
+    expect(first.packages.find((entry) => entry.name === "frontend-design")?.files).not.toEqual(
+      second.packages.find((entry) => entry.name === "frontend-design")?.files,
+    );
   });
 
   test("fails closed when the manifest is missing", () => {

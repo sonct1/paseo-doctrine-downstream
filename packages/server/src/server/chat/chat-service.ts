@@ -84,6 +84,7 @@ export interface DeleteChatRoomInput {
 export interface PostChatMessageInput {
   room: string;
   authorAgentId: string;
+  authorKind: "agent" | "client";
   body: string;
   replyToMessageId?: string | null;
 }
@@ -219,6 +220,7 @@ export class FileBackedChatService {
       id: randomUUID(),
       roomId: room.id,
       authorAgentId,
+      authorKind: input.authorKind,
       body,
       replyToMessageId,
       mentionAgentIds: parseMentionAgentIds(body),

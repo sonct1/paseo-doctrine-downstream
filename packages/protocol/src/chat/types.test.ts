@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ChatRoomDetailSchema, ChatRoomSchema } from "./types.js";
+import { ChatMessageSchema, ChatRoomDetailSchema, ChatRoomSchema } from "./types.js";
 import { ChatCreateRequestSchema } from "./rpc-schemas.js";
 
 describe("ChatRoomSchema workspace scope compatibility", () => {
@@ -71,5 +71,30 @@ describe("ChatCreateRequestSchema workspace scope compatibility", () => {
 
     const parsed = ChatCreateRequestSchema.parse(scopedRequest);
     expect(parsed.workspaceId).toBe("wks_abc");
+  });
+});
+
+describe("ChatMessageSchema author provenance compatibility", () => {
+  const legacyMessage = {
+    id: "message_1",
+    roomId: "room_1",
+    authorAgentId: "peer_1",
+    body: "legacy receipt",
+    replyToMessageId: null,
+    mentionAgentIds: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("keeps legacy messages readable without upgrading their provenance", () => {
+    expect(ChatMessageSchema.parse(legacyMessage).authorKind).toBeUndefined();
+  });
+
+  it("records explicit agent and client provenance on new messages", () => {
+    expect(ChatMessageSchema.parse({ ...legacyMessage, authorKind: "agent" }).authorKind).toBe(
+      "agent",
+    );
+    expect(ChatMessageSchema.parse({ ...legacyMessage, authorKind: "client" }).authorKind).toBe(
+      "client",
+    );
   });
 });

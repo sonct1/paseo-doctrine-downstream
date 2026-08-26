@@ -53,7 +53,7 @@ import type {
   AgentProvider,
 } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
-import { PASEO_ROLE_SUMMARIES, type PaseoRoleId } from "@getpaseo/protocol/role-binding";
+import type { PaseoRoleId } from "@getpaseo/protocol/role-binding";
 import { formatRoleBindingReceiptDescription } from "@/workspace-protocol/role-binding-receipt";
 import { assignmentAuthorityLabel } from "@/workspace-protocol/assignment-authority";
 import {
@@ -94,6 +94,8 @@ import {
   type DraftAgentProfileControls,
 } from "@/agent-profiles";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { useRoleProfiles } from "@/hooks/use-role-profiles";
+import { resolveRoleOptions } from "@/workspace-protocol/legacy-role-options";
 
 interface AgentControlOption {
   id: string;
@@ -223,24 +225,33 @@ function toCommandCenterModes(modeControl: AgentModeControlValue | null) {
   };
 }
 
-function useBoundRoleControls(agent: AgentControlsSlice) {
+function useBoundRoleControls(
+  agent: AgentControlsSlice,
+  roleDescriptors: ReadonlyArray<{
+    id: PaseoRoleId;
+    label: string;
+    description: string;
+  }>,
+) {
   const roleId = resolveBoundRoleId(agent);
   const options = useMemo(
     () =>
-      PASEO_ROLE_SUMMARIES.filter((role) => role.id === roleId).map((role) =>
-        Object.assign({}, role, {
-          label: agent?.roleBinding?.assignment
-            ? `${role.label} · ${assignmentAuthorityLabel(
-                role.id,
-                agent.roleBinding.assignment.effectClass,
-              )}`
-            : role.label,
-          description: agent?.roleBinding
-            ? formatRoleBindingReceiptDescription(role.description, agent.roleBinding)
-            : role.description,
-        }),
-      ),
-    [agent?.roleBinding, roleId],
+      roleDescriptors
+        .filter((role) => role.id === roleId)
+        .map((role) =>
+          Object.assign({}, role, {
+            label: agent?.roleBinding?.assignment
+              ? `${role.label} · ${assignmentAuthorityLabel(
+                  role.id,
+                  agent.roleBinding.assignment.effectClass,
+                )}`
+              : role.label,
+            description: agent?.roleBinding
+              ? formatRoleBindingReceiptDescription(role.description, agent.roleBinding)
+              : role.description,
+          }),
+        ),
+    [agent?.roleBinding, roleDescriptors, roleId],
   );
   return { roleId, options };
 }
@@ -1853,7 +1864,15 @@ export const AgentControls = memo(function AgentControls({
   const agentProvider = agent?.provider;
   const agentIsRoleBound = isRoleBoundAgent(agent);
   const activeModelId = modelSelection.activeModelId;
-  const { roleId: boundRoleId, options: boundRoleOptions } = useBoundRoleControls(agent);
+  const roleProfiles = useRoleProfiles(serverId);
+  const boundRoleDescriptors = useMemo(
+    () => resolveRoleOptions(roleProfiles.catalog, roleProfiles.supported),
+    [roleProfiles.catalog, roleProfiles.supported],
+  );
+  const { roleId: boundRoleId, options: boundRoleOptions } = useBoundRoleControls(
+    agent,
+    boundRoleDescriptors,
+  );
 
   const handleSelectModel = useCallback(
     async (modelId: string) => {
