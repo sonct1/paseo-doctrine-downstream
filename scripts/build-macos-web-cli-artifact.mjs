@@ -105,7 +105,9 @@ function assertReleaseInputs(nodeRoot) {
     fail(`Unsupported ${PLATFORM_NAME} architecture: ${ARCH}`);
   }
   const status = run("git", ["status", "--porcelain"], { capture: true });
-  const unstaged = run("git", ["diff", "--no-ext-diff", "--binary"], { capture: true });
+  const unstaged = run("git", ["diff", "--no-ext-diff", "--binary"], {
+    capture: true,
+  });
   const staged = run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], {
     capture: true,
   });
@@ -179,7 +181,11 @@ function installProductionPayload(nodeRoot, tarballs) {
   mkdirSync(appRoot, { recursive: true });
   writeFileSync(
     path.join(appRoot, "package.json"),
-    `${JSON.stringify({ name: "paseo-web-cli-runtime", private: true, version: VERSION }, null, 2)}\n`,
+    `${JSON.stringify(
+      { name: "paseo-web-cli-runtime", private: true, version: VERSION },
+      null,
+      2,
+    )}\n`,
   );
   const npmEnv = {
     ...process.env,
@@ -228,7 +234,10 @@ function createLaunchers() {
     ]) {
       writeFileSync(
         path.join(binRoot, `${name}.cmd`),
-        `@echo off\r\nsetlocal\r\nset "ROOT=%~dp0.."\r\nset "PASEO_BEADS_CENTRAL_SIDECAR=%ROOT%\\components\\beads-central\\beads-central.exe"\r\nset "PASEO_BEADS_CENTRAL_BD_BIN=%ROOT%\\components\\beads-central\\bin\\bd.exe"\r\n"%ROOT%\\runtime\\node.exe" "%ROOT%\\app\\node_modules\\${packageName.replaceAll("/", "\\")}\\dist\\index.js" %*\r\n`,
+        `@echo off\r\nsetlocal\r\nset "ROOT=%~dp0.."\r\nset "PASEO_BEADS_CENTRAL_SIDECAR=%ROOT%\\components\\beads-central\\beads-central.exe"\r\nset "PASEO_BEADS_CENTRAL_BD_BIN=%ROOT%\\components\\beads-central\\bin\\bd.exe"\r\n"%ROOT%\\runtime\\node.exe" "%ROOT%\\app\\node_modules\\${packageName.replaceAll(
+          "/",
+          "\\",
+        )}\\dist\\index.js" %*\r\n`,
       );
     }
     return;
@@ -337,6 +346,38 @@ RELEASE_DIR="$RELEASES_DIR/$VERSION"
 CURRENT_LINK="$PREFIX/current"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 USER_ID=$(id -u)
+PLIST_EXISTED=0
+if [ -f "$PLIST" ]; then PLIST_EXISTED=1; fi
+INSTALL_CONFIG="$PREFIX/install-config.json"
+INSTALL_CONFIG_EXISTED=0
+if [ -f "$INSTALL_CONFIG" ]; then INSTALL_CONFIG_EXISTED=1; fi
+UPDATE_STATUS_DIR="\${PASEO_HOME:-$HOME/.paseo}/updates"
+write_update_status() {
+  mkdir -p "$UPDATE_STATUS_DIR" || return 1
+  updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if [ "$1" = "idle" ]; then
+    printf '{"phase":"idle","version":null,"message":null,"updatedAt":"%s","preparedBundlePath":null}\n' "$updated_at" > "$UPDATE_STATUS_DIR/status.json.tmp"
+  else
+    printf '{"phase":"failed","version":"%s","message":"Update failed and the previous release was restored.","updatedAt":"%s","preparedBundlePath":null}\n' "$VERSION" "$updated_at" > "$UPDATE_STATUS_DIR/status.json.tmp"
+  fi
+  mv "$UPDATE_STATUS_DIR/status.json.tmp" "$UPDATE_STATUS_DIR/status.json"
+}
+PREVIOUS_RELEASE=""
+if [ -L "$CURRENT_LINK" ]; then
+  PREVIOUS_RELEASE=$(readlink "$CURRENT_LINK")
+fi
+if [ "$PREVIOUS_RELEASE" = "$RELEASE_DIR" ]; then
+  echo "Paseo $VERSION is already the active portable release." >&2
+  exit 1
+fi
+PREFLIGHT_ROOT=""
+preflight_cleanup() {
+  exit_code=$?
+  trap - EXIT INT TERM
+  [ -z "$PREFLIGHT_ROOT" ] || rm -rf "$PREFLIGHT_ROOT"
+  if [ "$exit_code" -ne 0 ]; then write_update_status failed || true; fi
+  exit "$exit_code"
+}
 
 EXISTING_PASEO=$(command -v paseo 2>/dev/null || true)
 if [ -z "$EXISTING_PASEO" ]; then
@@ -349,7 +390,8 @@ if [ -z "$EXISTING_PASEO" ]; then
 fi
 if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
   PREFLIGHT_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/paseo-downstream-preflight.XXXXXX")
-  trap 'rm -rf "$PREFLIGHT_ROOT"' EXIT INT TERM
+  trap 'preflight_cleanup' EXIT
+  trap 'exit 130' INT TERM
   LAUNCHD_LOADED=0
   if launchctl print "gui/$USER_ID/$LABEL" >/dev/null 2>&1; then
     LAUNCHD_LOADED=1
@@ -418,32 +460,50 @@ if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
     exit 1
   fi
   rm -rf "$PREFLIGHT_ROOT"
+  PREFLIGHT_ROOT=""
   trap - EXIT INT TERM
 fi
 
+STAGING=""
+ROLLBACK_ARMED=0
+rollback_install() {
+  exit_code=$?
+  trap - EXIT INT TERM
+  [ -z "$STAGING" ] || rm -rf "$STAGING"
+  if [ "$ROLLBACK_ARMED" -eq 1 ] && [ "$exit_code" -ne 0 ]; then
+    echo "Update failed; restoring the previous Paseo release." >&2
+    launchctl bootout "gui/$USER_ID/$LABEL" >/dev/null 2>&1 || true
+    if [ -n "$PREVIOUS_RELEASE" ]; then
+      ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
+      if [ "$START" -eq 1 ] && [ -f "$PLIST" ]; then
+        launchctl bootstrap "gui/$USER_ID" "$PLIST" >/dev/null 2>&1 || true
+        launchctl kickstart -k "gui/$USER_ID/$LABEL" >/dev/null 2>&1 || true
+      fi
+    else
+      rm -f "$CURRENT_LINK"
+    fi
+    if [ "$PLIST_EXISTED" -eq 0 ]; then rm -f "$PLIST"; fi
+    if [ "$INSTALL_CONFIG_EXISTED" -eq 0 ]; then rm -f "$INSTALL_CONFIG"; fi
+    rm -rf "$RELEASE_DIR"
+  fi
+  if [ "$exit_code" -ne 0 ]; then write_update_status failed || true; fi
+  exit "$exit_code"
+}
+trap 'rollback_install' EXIT
+trap 'exit 130' INT TERM
+
 mkdir -p "$RELEASES_DIR" "$BIN_DIR" "$HOME/Library/LaunchAgents"
 STAGING="$RELEASES_DIR/.install-$VERSION-$$"
-trap 'rm -rf "$STAGING"' EXIT INT TERM
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 cp -R "$SOURCE_ROOT/." "$STAGING/"
-rm -f "$STAGING/install.sh"
 rm -rf "$RELEASE_DIR"
 mv "$STAGING" "$RELEASE_DIR"
-trap - EXIT INT TERM
+STAGING=""
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+ROLLBACK_ARMED=1
 ln -sfn "$CURRENT_LINK/bin/paseo" "$BIN_DIR/paseo"
 ln -sfn "$CURRENT_LINK/bin/paseo-foundation" "$BIN_DIR/paseo-foundation"
-
-if [ "$INSTALL_FOUNDATION" -eq 1 ]; then
-  PLAN="$PREFIX/foundation-install-plan.json"
-  MODE="clean-empty"
-  if "$CURRENT_LINK/bin/paseo-foundation" inspect --json 2>/dev/null | grep -q '"status": "active"'; then
-    MODE="update"
-  fi
-  "$CURRENT_LINK/bin/paseo-foundation" plan --mode "$MODE" --output "$PLAN"
-  "$CURRENT_LINK/bin/paseo-foundation" install --plan "$PLAN"
-fi
 
 escape_xml() {
   printf '%s' "$1" | sed -e 's/&/\\&amp;/g' -e 's/</\\&lt;/g' -e 's/>/\\&gt;/g' -e 's/"/\\&quot;/g' -e "s/'/\\&apos;/g"
@@ -467,6 +527,7 @@ PATH_XML=$(escape_xml "$BIN_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/
 LOG_DIR="$HOME/Library/Logs/Paseo"
 mkdir -p "$LOG_DIR"
 LOG_XML=$(escape_xml "$LOG_DIR/daemon.log")
+if [ ! -f "$PLIST" ]; then
 cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -494,7 +555,8 @@ cat > "$PLIST" <<PLIST
   <key>StandardErrorPath</key><string>$LOG_XML</string>
 </dict></plist>
 PLIST
-plutil -lint "$PLIST" >/dev/null
+  plutil -lint "$PLIST" >/dev/null
+fi
 
 if [ "$START" -eq 1 ]; then
   launchctl bootout "gui/$USER_ID/$LABEL" >/dev/null 2>&1 || true
@@ -523,16 +585,45 @@ if [ "$START" -eq 1 ]; then
     fi
     sleep 1
   done
-  rm -f "$PREFIX/daemon-readback.json"
   if [ "$READY" -ne 1 ]; then
     echo "Installed the release, but the downstream daemon failed authoritative startup readback." >&2
     echo "Inspect $LOG_DIR/daemon.log before retrying." >&2
+    exit 1
+  fi
+  READBACK_LISTEN=$("$CURRENT_LINK/runtime/bin/node" -e 'const fs=require("fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(typeof value.listen!=="string")process.exit(1);process.stdout.write(value.listen)' "$PREFIX/daemon-readback.json")
+  rm -f "$PREFIX/daemon-readback.json"
+  HEALTHY=0
+  for _attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+    if PASEO_UPDATE_BASE_URL="http://$READBACK_LISTEN" "$CURRENT_LINK/runtime/bin/node" -e 'const base=process.env.PASEO_UPDATE_BASE_URL;Promise.all([fetch(base+"/api/health"),fetch(base+"/"),fetch("http://127.0.0.1:6769/health/ready")]).then((responses)=>{if(responses.some((response)=>!response.ok))process.exit(1)}).catch(()=>process.exit(1))'; then
+      HEALTHY=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$HEALTHY" -ne 1 ]; then
+    echo "Installed release failed health, WebUI, or Beads Central readback." >&2
     exit 1
   fi
 fi
 
 cp "$RELEASE_DIR/uninstall.sh" "$PREFIX/uninstall.sh"
 chmod 755 "$PREFIX/uninstall.sh"
+if [ "$INSTALL_CONFIG_EXISTED" -eq 0 ]; then
+  PASEO_INSTALL_CONFIG="$INSTALL_CONFIG" PASEO_INSTALL_PREFIX_VALUE="$PREFIX" PASEO_INSTALL_BIN_VALUE="$BIN_DIR" "$CURRENT_LINK/runtime/bin/node" -e 'const fs=require("fs");const value={schemaVersion:1,prefix:process.env.PASEO_INSTALL_PREFIX_VALUE,binDir:process.env.PASEO_INSTALL_BIN_VALUE};fs.writeFileSync(process.env.PASEO_INSTALL_CONFIG+".tmp",JSON.stringify(value,null,2)+"\\n");fs.renameSync(process.env.PASEO_INSTALL_CONFIG+".tmp",process.env.PASEO_INSTALL_CONFIG)'
+fi
+
+if [ "$INSTALL_FOUNDATION" -eq 1 ]; then
+  PLAN="$PREFIX/foundation-install-plan.json"
+  MODE="clean-empty"
+  if "$CURRENT_LINK/bin/paseo-foundation" inspect --json 2>/dev/null | grep -q '"status": "active"'; then
+    MODE="update"
+  fi
+  "$CURRENT_LINK/bin/paseo-foundation" plan --mode "$MODE" --output "$PLAN"
+  "$CURRENT_LINK/bin/paseo-foundation" install --plan "$PLAN"
+fi
+
+ROLLBACK_ARMED=0
+write_update_status idle || true
 printf 'Installed Paseo WebUI + CLI %s at %s\\n' "$VERSION" "$RELEASE_DIR"
 printf 'CLI: %s\\n' "$BIN_DIR/paseo"
 printf 'WebUI: http://%s\\n' "$LISTEN"
@@ -543,7 +634,7 @@ fi
 `;
 }
 
-function linuxInstallerScript() {
+export function linuxInstallerScript() {
   return `#!/bin/sh
 set -eu
 
@@ -603,6 +694,36 @@ RELEASES_DIR="$PREFIX/releases"
 RELEASE_DIR="$RELEASES_DIR/$VERSION"
 CURRENT_LINK="$PREFIX/current"
 UNIT="$SERVICE_DIR/$SERVICE_NAME"
+UNIT_EXISTED=0
+if [ -f "$UNIT" ]; then UNIT_EXISTED=1; fi
+INSTALL_CONFIG="$PREFIX/install-config.json"
+INSTALL_CONFIG_EXISTED=0
+if [ -f "$INSTALL_CONFIG" ]; then INSTALL_CONFIG_EXISTED=1; fi
+UPDATE_STATUS_DIR="\${PASEO_HOME:-$HOME/.paseo}/updates"
+write_update_status() {
+  mkdir -p "$UPDATE_STATUS_DIR" || return 1
+  updated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if [ "$1" = "idle" ]; then
+    printf '{"phase":"idle","version":null,"message":null,"updatedAt":"%s","preparedBundlePath":null}\n' "$updated_at" > "$UPDATE_STATUS_DIR/status.json.tmp"
+  else
+    printf '{"phase":"failed","version":"%s","message":"Update failed and the previous release was restored.","updatedAt":"%s","preparedBundlePath":null}\n' "$VERSION" "$updated_at" > "$UPDATE_STATUS_DIR/status.json.tmp"
+  fi
+  mv "$UPDATE_STATUS_DIR/status.json.tmp" "$UPDATE_STATUS_DIR/status.json"
+}
+PREVIOUS_RELEASE=""
+if [ -L "$CURRENT_LINK" ]; then PREVIOUS_RELEASE=$(readlink "$CURRENT_LINK"); fi
+if [ "$PREVIOUS_RELEASE" = "$RELEASE_DIR" ]; then
+  echo "Paseo $VERSION is already the active portable release." >&2
+  exit 1
+fi
+PREFLIGHT_ROOT=""
+preflight_cleanup() {
+  exit_code=$?
+  trap - EXIT INT TERM
+  [ -z "$PREFLIGHT_ROOT" ] || rm -rf "$PREFLIGHT_ROOT"
+  if [ "$exit_code" -ne 0 ]; then write_update_status failed || true; fi
+  exit "$exit_code"
+}
 
 EXISTING_PASEO=$(command -v paseo 2>/dev/null || true)
 if [ -z "$EXISTING_PASEO" ]; then
@@ -612,7 +733,8 @@ if [ -z "$EXISTING_PASEO" ]; then
 fi
 if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
   PREFLIGHT_ROOT=$(mktemp -d "\${TMPDIR:-/tmp}/paseo-downstream-preflight.XXXXXX")
-  trap 'rm -rf "$PREFLIGHT_ROOT"' EXIT INT TERM
+  trap 'preflight_cleanup' EXIT
+  trap 'exit 130' INT TERM
   if ! PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/status.json"; then
     echo "Refusing to replace the existing Paseo installation because daemon status could not be read." >&2
     exit 1
@@ -645,33 +767,66 @@ if [ "$START" -eq 1 ] && [ -n "$EXISTING_PASEO" ]; then
       done
     systemctl --user stop "$SERVICE_NAME" >/dev/null 2>&1 || true
     PASEO_HOST= "$EXISTING_PASEO" daemon stop --json >/dev/null 2>&1 || true
+    STOPPED=0
+    for _attempt in $(seq 1 15); do
+      if PASEO_HOST= "$EXISTING_PASEO" daemon status --json > "$PREFLIGHT_ROOT/stopped.json" 2>/dev/null &&
+         grep -Eq '"localDaemon"[[:space:]]*:[[:space:]]*"stopped"' "$PREFLIGHT_ROOT/stopped.json"; then
+        STOPPED=1; break
+      fi
+      sleep 1
+    done
+    if [ "$STOPPED" -ne 1 ]; then
+      echo "Existing Paseo daemon did not report a stopped readback; installation aborted." >&2
+      exit 1
+    fi
   fi
   rm -rf "$PREFLIGHT_ROOT"
+  PREFLIGHT_ROOT=""
   trap - EXIT INT TERM
 fi
 
+STAGING=""
+ROLLBACK_ARMED=0
+rollback_install() {
+  exit_code=$?
+  trap - EXIT INT TERM
+  [ -z "$STAGING" ] || rm -rf "$STAGING"
+  if [ "$ROLLBACK_ARMED" -eq 1 ] && [ "$exit_code" -ne 0 ]; then
+    echo "Update failed; restoring the previous Paseo release." >&2
+    systemctl --user stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+    if [ -n "$PREVIOUS_RELEASE" ]; then
+      ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
+      if [ "$START" -eq 1 ]; then systemctl --user start "$SERVICE_NAME" >/dev/null 2>&1 || true; fi
+    else
+      rm -f "$CURRENT_LINK"
+    fi
+    if [ "$UNIT_EXISTED" -eq 0 ]; then
+      rm -f "$UNIT"
+      systemctl --user daemon-reload >/dev/null 2>&1 || true
+    fi
+    if [ "$INSTALL_CONFIG_EXISTED" -eq 0 ]; then rm -f "$INSTALL_CONFIG"; fi
+    rm -rf "$RELEASE_DIR"
+  fi
+  if [ "$exit_code" -ne 0 ]; then write_update_status failed || true; fi
+  exit "$exit_code"
+}
+trap 'rollback_install' EXIT
+trap 'exit 130' INT TERM
+
 mkdir -p "$RELEASES_DIR" "$BIN_DIR" "$SERVICE_DIR"
 STAGING="$RELEASES_DIR/.install-$VERSION-$$"
-trap 'rm -rf "$STAGING"' EXIT INT TERM
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 cp -R "$SOURCE_ROOT/." "$STAGING/"
-rm -f "$STAGING/install.sh"
 rm -rf "$RELEASE_DIR"
 mv "$STAGING" "$RELEASE_DIR"
-trap - EXIT INT TERM
+STAGING=""
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
+ROLLBACK_ARMED=1
 ln -sfn "$CURRENT_LINK/bin/paseo" "$BIN_DIR/paseo"
 ln -sfn "$CURRENT_LINK/bin/paseo-foundation" "$BIN_DIR/paseo-foundation"
 
-if [ "$INSTALL_FOUNDATION" -eq 1 ]; then
-  PLAN="$PREFIX/foundation-install-plan.json"
-  MODE="clean-empty"
-  if "$CURRENT_LINK/bin/paseo-foundation" inspect --json 2>/dev/null | grep -q '"status": "active"'; then MODE="update"; fi
-  "$CURRENT_LINK/bin/paseo-foundation" plan --mode "$MODE" --output "$PLAN"
-  "$CURRENT_LINK/bin/paseo-foundation" install --plan "$PLAN"
-fi
-
+if [ ! -f "$UNIT" ]; then
 cat > "$UNIT" <<UNIT
 [Unit]
 Description=Paseo Foundation Downstream WebUI and CLI
@@ -691,6 +846,7 @@ Environment=PASEO_VOICE_MODE_ENABLED=0
 [Install]
 WantedBy=default.target
 UNIT
+fi
 
 if [ "$START" -eq 1 ]; then
   systemctl --user daemon-reload
@@ -704,16 +860,43 @@ if [ "$START" -eq 1 ]; then
     fi
     sleep 1
   done
-  rm -f "$PREFIX/daemon-readback.json"
   if [ "$READY" -ne 1 ]; then
     echo "Installed the release, but the downstream daemon failed authoritative startup readback." >&2
     echo "Inspect: journalctl --user -u $SERVICE_NAME" >&2
+    exit 1
+  fi
+  READBACK_LISTEN=$("$CURRENT_LINK/runtime/bin/node" -e 'const fs=require("fs");const value=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(typeof value.listen!=="string")process.exit(1);process.stdout.write(value.listen)' "$PREFIX/daemon-readback.json")
+  rm -f "$PREFIX/daemon-readback.json"
+  HEALTHY=0
+  for _attempt in $(seq 1 30); do
+    if PASEO_UPDATE_BASE_URL="http://$READBACK_LISTEN" "$CURRENT_LINK/runtime/bin/node" -e 'const base=process.env.PASEO_UPDATE_BASE_URL;Promise.all([fetch(base+"/api/health"),fetch(base+"/"),fetch("http://127.0.0.1:6769/health/ready")]).then((responses)=>{if(responses.some((response)=>!response.ok))process.exit(1)}).catch(()=>process.exit(1))'; then
+      HEALTHY=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$HEALTHY" -ne 1 ]; then
+    echo "Installed release failed health, WebUI, or Beads Central readback." >&2
     exit 1
   fi
 fi
 
 cp "$RELEASE_DIR/uninstall.sh" "$PREFIX/uninstall.sh"
 chmod 755 "$PREFIX/uninstall.sh"
+if [ "$INSTALL_CONFIG_EXISTED" -eq 0 ]; then
+  PASEO_INSTALL_CONFIG="$INSTALL_CONFIG" PASEO_INSTALL_PREFIX_VALUE="$PREFIX" PASEO_INSTALL_BIN_VALUE="$BIN_DIR" "$CURRENT_LINK/runtime/bin/node" -e 'const fs=require("fs");const value={schemaVersion:1,prefix:process.env.PASEO_INSTALL_PREFIX_VALUE,binDir:process.env.PASEO_INSTALL_BIN_VALUE};fs.writeFileSync(process.env.PASEO_INSTALL_CONFIG+".tmp",JSON.stringify(value,null,2)+"\\n");fs.renameSync(process.env.PASEO_INSTALL_CONFIG+".tmp",process.env.PASEO_INSTALL_CONFIG)'
+fi
+
+if [ "$INSTALL_FOUNDATION" -eq 1 ]; then
+  PLAN="$PREFIX/foundation-install-plan.json"
+  MODE="clean-empty"
+  if "$CURRENT_LINK/bin/paseo-foundation" inspect --json 2>/dev/null | grep -q '"status": "active"'; then MODE="update"; fi
+  "$CURRENT_LINK/bin/paseo-foundation" plan --mode "$MODE" --output "$PLAN"
+  "$CURRENT_LINK/bin/paseo-foundation" install --plan "$PLAN"
+fi
+
+ROLLBACK_ARMED=0
+write_update_status idle || true
 printf 'Installed Paseo WebUI + CLI %s at %s\n' "$VERSION" "$RELEASE_DIR"
 printf 'CLI: %s\nWebUI: http://%s\n' "$BIN_DIR/paseo" "$LISTEN"
 `;
@@ -747,6 +930,7 @@ for name in paseo paseo-foundation; do
   fi
 done
 rm -rf "$PREFIX/releases" "$PREFIX/current" "$PREFIX/foundation-install-plan.json"
+rm -f "$PREFIX/install-config.json"
 rm -f "$PREFIX/uninstall.sh"
 printf 'Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces.\n'
 `;
@@ -810,12 +994,13 @@ for name in paseo paseo-foundation; do
 done
 
 rm -rf "$PREFIX/releases" "$PREFIX/current" "$PREFIX/foundation-install-plan.json"
+rm -f "$PREFIX/install-config.json"
 rm -f "$PREFIX/uninstall.sh"
 printf 'Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces.\\n'
 `;
 }
 
-function windowsInstallerScript() {
+export function windowsInstallerScript() {
   return `#Requires -Version 5.1
 [CmdletBinding()]
 param(
@@ -843,6 +1028,45 @@ $SourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ReleasesDir = Join-Path $Prefix "releases"
 $ReleaseDir = Join-Path $ReleasesDir $Version
 $Current = Join-Path $Prefix "current"
+$PreviousRelease = $null
+if (Test-Path $Current) {
+  $CurrentItem = Get-Item -Force $Current
+  if (-not ($CurrentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw "Refusing to replace a non-junction current path: $Current"
+  }
+  $PreviousRelease = [string]@($CurrentItem.Target)[0]
+  if ([IO.Path]::GetFullPath($PreviousRelease) -eq [IO.Path]::GetFullPath($ReleaseDir)) {
+    throw "Paseo $Version is already the active portable release."
+  }
+}
+$RunDaemon = Join-Path $Prefix "run-daemon.ps1"
+$RunDaemonExisted = Test-Path $RunDaemon
+$InstallConfig = Join-Path $Prefix "install-config.json"
+$InstallConfigExisted = Test-Path $InstallConfig
+$UpdateHome = if ($env:PASEO_HOME) { $env:PASEO_HOME } else { Join-Path $env:USERPROFILE ".paseo" }
+$UpdateStatusDir = Join-Path $UpdateHome "updates"
+function Write-UpdateStatus([string]$Phase) {
+  New-Item -ItemType Directory -Force -Path $UpdateStatusDir | Out-Null
+  $Status = if ($Phase -eq "idle") {
+    @{ phase = "idle"; version = $null; message = $null; updatedAt = [DateTime]::UtcNow.ToString("o"); preparedBundlePath = $null }
+  } else {
+    @{ phase = "failed"; version = $Version; message = "Update failed and the previous release was restored."; updatedAt = [DateTime]::UtcNow.ToString("o"); preparedBundlePath = $null }
+  }
+  $StatusPath = Join-Path $UpdateStatusDir "status.json"
+  $StatusTemp = "$StatusPath.tmp"
+  $Utf8 = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($StatusTemp, (($Status | ConvertTo-Json -Compress) + "\`n"), $Utf8)
+  Move-Item -Force $StatusTemp $StatusPath
+}
+$ExistingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$TaskExisted = $null -ne $ExistingTask
+$PaseoCmd = Join-Path $BinDir "paseo.cmd"
+$FoundationCmd = Join-Path $BinDir "paseo-foundation.cmd"
+$PaseoCmdExisted = Test-Path $PaseoCmd
+$FoundationCmdExisted = Test-Path $FoundationCmd
+$Staging = Join-Path $ReleasesDir ".install-$Version-$PID"
+$Switched = $false
+try {
 $ExistingPaseo = Get-Command paseo -ErrorAction SilentlyContinue
 if (-not $NoStart -and $ExistingPaseo) {
   $status = & $ExistingPaseo.Source daemon status --json | ConvertFrom-Json
@@ -862,33 +1086,37 @@ if (-not $NoStart -and $ExistingPaseo) {
         throw "Refusing to replace Paseo while workspace $($workspace.workspaceId) has a running script."
       }
     }
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if ($TaskExisted) { Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue }
     & $ExistingPaseo.Source daemon stop --json | Out-Null
+    $Stopped = $false
+    foreach ($attempt in 1..15) {
+      try {
+        $stoppedReadback = & $ExistingPaseo.Source daemon status --json | ConvertFrom-Json
+        if ($stoppedReadback.localDaemon -eq "stopped") { $Stopped = $true; break }
+      } catch {}
+      Start-Sleep -Seconds 1
+    }
+    if (-not $Stopped) { throw "Existing Paseo daemon did not report a stopped readback; installation aborted." }
   }
 }
 
 New-Item -ItemType Directory -Force -Path $ReleasesDir, $BinDir | Out-Null
-$Staging = Join-Path $ReleasesDir ".install-$Version-$PID"
 Remove-Item -Recurse -Force $Staging -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 Copy-Item -Recurse -Force (Join-Path $SourceRoot "*") $Staging
-Remove-Item -Force (Join-Path $Staging "install.ps1") -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $ReleaseDir -ErrorAction SilentlyContinue
 Move-Item $Staging $ReleaseDir
 if (Test-Path $Current) {
-  $CurrentItem = Get-Item -Force $Current
-  if (-not ($CurrentItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-    throw "Refusing to replace a non-junction current path: $Current"
-  }
   [IO.Directory]::Delete($Current)
 }
 New-Item -ItemType Junction -Path $Current -Target $ReleaseDir | Out-Null
+$Switched = $true
 
 $PaseoEntry = Join-Path $Current "app\\node_modules\\@getpaseo\\cli\\dist\\index.js"
 $FoundationEntry = Join-Path $Current "app\\node_modules\\@getpaseo\\foundation-cli\\dist\\index.js"
 $Node = Join-Path $Current "runtime\\node.exe"
-Set-Content -Encoding Ascii -Path (Join-Path $BinDir "paseo.cmd") -Value "@echo off\`r\`n\`"$Node\`" \`"$PaseoEntry\`" %*"
-Set-Content -Encoding Ascii -Path (Join-Path $BinDir "paseo-foundation.cmd") -Value "@echo off\`r\`n\`"$Node\`" \`"$FoundationEntry\`" %*"
+Set-Content -Encoding Ascii -Path $PaseoCmd -Value "@echo off\`r\`n\`"$Node\`" \`"$PaseoEntry\`" %*"
+Set-Content -Encoding Ascii -Path $FoundationCmd -Value "@echo off\`r\`n\`"$Node\`" \`"$FoundationEntry\`" %*"
 
 $CurrentPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $PathParts = @($CurrentPath -split ";" | Where-Object { $_ })
@@ -897,7 +1125,63 @@ if ($BinDir -notin $PathParts) {
 }
 $env:Path = "$BinDir;$env:Path"
 
-$Foundation = Join-Path $BinDir "paseo-foundation.cmd"
+$LogDir = Join-Path $env:LOCALAPPDATA "Paseo\\Logs"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$DaemonLog = Join-Path $LogDir "daemon.log"
+if (-not $RunDaemonExisted) {
+  $DaemonScript = @(
+    '$env:PASEO_DICTATION_ENABLED = "0"'
+    '$env:PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD = "0"'
+    '$env:PASEO_VOICE_MODE_ENABLED = "0"'
+    "& \`"$Node\`" \`"$PaseoEntry\`" daemon start --foreground --listen \`"$Listen\`" --web-ui --no-relay *>> \`"$DaemonLog\`""
+    'exit $LASTEXITCODE'
+  )
+  Set-Content -Encoding UTF8 -Path $RunDaemon -Value $DaemonScript
+}
+
+if (-not $NoStart) {
+  if (-not $TaskExisted) {
+    $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File \`"$RunDaemon\`""
+    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\\$env:USERNAME"
+    $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Paseo Foundation Downstream WebUI and CLI" | Out-Null
+  }
+  Start-ScheduledTask -TaskName $TaskName
+  $Ready = $false
+  foreach ($attempt in 1..30) {
+    Start-Sleep -Seconds 1
+    try {
+      $readback = & $PaseoCmd daemon status --json | ConvertFrom-Json
+      if ($readback.localDaemon -eq "running" -and $readback.connectedDaemon -eq "reachable") { $Ready = $true; break }
+    } catch {}
+  }
+  if (-not $Ready) { throw "Installed the release, but the downstream daemon failed authoritative startup readback. Inspect $DaemonLog." }
+  $BaseUrl = "http://$($readback.listen)"
+  $Healthy = $false
+  foreach ($attempt in 1..30) {
+    try {
+      Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/api/health" | Out-Null
+      Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/" | Out-Null
+      Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:6769/health/ready" | Out-Null
+      $Healthy = $true
+      break
+    } catch {
+      Start-Sleep -Seconds 1
+    }
+  }
+  if (-not $Healthy) { throw "Installed release failed health, WebUI, or Beads Central readback." }
+}
+
+Copy-Item -Force (Join-Path $ReleaseDir "uninstall.ps1") (Join-Path $Prefix "uninstall.ps1")
+if (-not $InstallConfigExisted) {
+  $InstallConfigValue = @{ schemaVersion = 1; prefix = $Prefix; binDir = $BinDir }
+  $InstallConfigTemp = "$InstallConfig.tmp"
+  $Utf8 = New-Object System.Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($InstallConfigTemp, (($InstallConfigValue | ConvertTo-Json -Compress) + "\`n"), $Utf8)
+  Move-Item -Force $InstallConfigTemp $InstallConfig
+}
+
+$Foundation = $FoundationCmd
 if (-not $SkipFoundation) {
   $Mode = "clean-empty"
   try {
@@ -911,41 +1195,32 @@ if (-not $SkipFoundation) {
   if ($LASTEXITCODE -ne 0) { throw "Foundation installation failed." }
 }
 
-$RunDaemon = Join-Path $Prefix "run-daemon.ps1"
-$LogDir = Join-Path $env:LOCALAPPDATA "Paseo\\Logs"
-New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$DaemonLog = Join-Path $LogDir "daemon.log"
-$DaemonScript = @(
-  '$env:PASEO_DICTATION_ENABLED = "0"'
-  '$env:PASEO_LOCAL_SPEECH_AUTO_DOWNLOAD = "0"'
-  '$env:PASEO_VOICE_MODE_ENABLED = "0"'
-  "& \`"$Node\`" \`"$PaseoEntry\`" daemon start --foreground --listen \`"$Listen\`" --web-ui --no-relay *>> \`"$DaemonLog\`""
-  'exit $LASTEXITCODE'
-)
-Set-Content -Encoding UTF8 -Path $RunDaemon -Value $DaemonScript
-
-if (-not $NoStart) {
-  $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File \`"$RunDaemon\`""
-  $Trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\\$env:USERNAME"
-  $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
-  Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Description "Paseo Foundation Downstream WebUI and CLI" -Force | Out-Null
-  Start-ScheduledTask -TaskName $TaskName
-  $Paseo = Join-Path $BinDir "paseo.cmd"
-  $Ready = $false
-  foreach ($attempt in 1..30) {
-    Start-Sleep -Seconds 1
-    try {
-      $readback = & $Paseo daemon status --json | ConvertFrom-Json
-      if ($readback.localDaemon -eq "running" -and $readback.connectedDaemon -eq "reachable") { $Ready = $true; break }
-    } catch {}
-  }
-  if (-not $Ready) { throw "Installed the release, but the downstream daemon failed authoritative startup readback. Inspect $DaemonLog." }
-}
-
-Copy-Item -Force (Join-Path $ReleaseDir "uninstall.ps1") (Join-Path $Prefix "uninstall.ps1")
+try { Write-UpdateStatus "idle" } catch {}
 Write-Output "Installed Paseo WebUI + CLI $Version at $ReleaseDir"
-Write-Output "CLI: $(Join-Path $BinDir 'paseo.cmd')"
+Write-Output "CLI: $PaseoCmd"
 Write-Output "WebUI: http://$Listen"
+} catch {
+  Remove-Item -Recurse -Force $Staging -ErrorAction SilentlyContinue
+  try { Write-UpdateStatus "failed" } catch {}
+  if ($Switched) {
+    Write-Warning "Update failed; restoring the previous Paseo release."
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if (Test-Path $Current) { [IO.Directory]::Delete($Current) }
+    if ($PreviousRelease) {
+      New-Item -ItemType Junction -Path $Current -Target $PreviousRelease | Out-Null
+      if (-not $NoStart -and $TaskExisted) { Start-ScheduledTask -TaskName $TaskName }
+    }
+    if (-not $TaskExisted) {
+      Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    if (-not $RunDaemonExisted) { Remove-Item -Force $RunDaemon -ErrorAction SilentlyContinue }
+    if (-not $InstallConfigExisted) { Remove-Item -Force $InstallConfig -ErrorAction SilentlyContinue }
+    if (-not $PaseoCmdExisted) { Remove-Item -Force $PaseoCmd -ErrorAction SilentlyContinue }
+    if (-not $FoundationCmdExisted) { Remove-Item -Force $FoundationCmd -ErrorAction SilentlyContinue }
+    Remove-Item -Recurse -Force $ReleaseDir -ErrorAction SilentlyContinue
+  }
+  throw
+}
 `;
 }
 
@@ -966,7 +1241,7 @@ Remove-Item -Force (Join-Path $BinDir "paseo.cmd"), (Join-Path $BinDir "paseo-fo
 $Current = Join-Path $Prefix "current"
 if (Test-Path $Current) { [IO.Directory]::Delete($Current) }
 Remove-Item -Recurse -Force (Join-Path $Prefix "releases") -ErrorAction SilentlyContinue
-Remove-Item -Force (Join-Path $Prefix "foundation-install-plan.json"), (Join-Path $Prefix "run-daemon.ps1"), (Join-Path $Prefix "uninstall.ps1") -ErrorAction SilentlyContinue
+Remove-Item -Force (Join-Path $Prefix "foundation-install-plan.json"), (Join-Path $Prefix "install-config.json"), (Join-Path $Prefix "run-daemon.ps1"), (Join-Path $Prefix "uninstall.ps1") -ErrorAction SilentlyContinue
 Write-Output "Removed Paseo WebUI + CLI. Preserved ~/.paseo and user workspaces."
 `;
 }
@@ -993,7 +1268,9 @@ function createInstallScripts() {
 
 function walkFiles(root, relative = "") {
   const output = [];
-  for (const entry of readdirSync(path.join(root, relative), { withFileTypes: true })) {
+  for (const entry of readdirSync(path.join(root, relative), {
+    withFileTypes: true,
+  })) {
     const child = path.join(relative, entry.name);
     if (entry.isDirectory()) output.push(...walkFiles(root, child));
     else if (entry.isFile()) output.push(child);
@@ -1008,7 +1285,9 @@ function sha256(file) {
 function createManifest(nodeRoot) {
   const commit = run("git", ["rev-parse", "HEAD"], { capture: true });
   const gitDirty = Boolean(run("git", ["status", "--porcelain"], { capture: true }));
-  const nodeVersion = run(nodeExecutable(nodeRoot), ["--version"], { capture: true });
+  const nodeVersion = run(nodeExecutable(nodeRoot), ["--version"], {
+    capture: true,
+  });
   const webUiRoot = path.join(STAGING_ROOT, "app/node_modules/@getpaseo/server/dist/server/web-ui");
   if (!statSync(webUiRoot).isDirectory())
     fail("Packaged server is missing the daemon WebUI bundle");
@@ -1093,7 +1372,9 @@ function validateStaging(nodeRoot) {
     ...(PLATFORM === "win32" ? ["node.exe"] : ["bin", "node"]),
   );
   const bundledNodeVersion = run(stagedNode, ["--version"], { capture: true });
-  const sourceNodeVersion = run(nodeExecutable(nodeRoot), ["--version"], { capture: true });
+  const sourceNodeVersion = run(nodeExecutable(nodeRoot), ["--version"], {
+    capture: true,
+  });
   if (bundledNodeVersion !== sourceNodeVersion) fail("Bundled Node validation failed");
   const componentRoot = path.join(STAGING_ROOT, "components", "beads-central");
   const sidecarExecutable = path.join(
@@ -1116,7 +1397,10 @@ function emitArtifact() {
     run("powershell.exe", [
       "-NoProfile",
       "-Command",
-      `Compress-Archive -Path '${OUTPUT_DIR.replaceAll("'", "''")}' -DestinationPath '${OUTPUT_ARCHIVE.replaceAll("'", "''")}' -Force`,
+      `Compress-Archive -Path '${OUTPUT_DIR.replaceAll(
+        "'",
+        "''",
+      )}' -DestinationPath '${OUTPUT_ARCHIVE.replaceAll("'", "''")}' -Force`,
     ]);
   } else {
     run("tar", ["-czf", OUTPUT_ARCHIVE, "-C", ARTIFACTS_ROOT, BUNDLE_NAME], {

@@ -3,19 +3,14 @@ import { gotoAppShell, openSettings } from "../../app/e2e/support/helpers/app";
 import { getServerId } from "../../app/e2e/support/helpers/server-id";
 import {
   openHostSection,
+  openSettingsSection,
   openSettingsHost,
   seedSavedSettingsHosts,
 } from "../../app/e2e/support/helpers/settings";
 import {
   loadRealDaemonState,
   installDesktopRuntime,
-  openDesktopAboutSettings,
   openDesktopSettings,
-  expectUpdateBanner,
-  clickCheckForUpdates,
-  expectPendingUpdateCheckResult,
-  clickInstallUpdate,
-  expectInstallInProgress,
   interceptDaemonManagementConfirmDialog,
   toggleDaemonManagement,
   expectDaemonManagementConfirmDialog,
@@ -47,7 +42,9 @@ test.describe("Desktop updates", () => {
     await expect(page.getByTestId("host-page-update-button")).toBeDisabled();
   });
 
-  test("update banner appears in the sidebar when an app update is available", async ({ page }) => {
+  test("keeps Electron update surfaces hidden until downstream installer assets are qualified", async ({
+    page,
+  }) => {
     await installDesktopRuntime(page, {
       serverId: getServerId(),
       updateAvailable: true,
@@ -55,36 +52,10 @@ test.describe("Desktop updates", () => {
     });
     await gotoAppShell(page);
 
-    await expectUpdateBanner(page, "1.2.3");
-  });
-
-  test("clicking install shows the installing state on the callout", async ({ page }) => {
-    await installDesktopRuntime(page, {
-      serverId: getServerId(),
-      updateAvailable: true,
-      latestVersion: "1.2.3",
-      slowInstall: true,
-    });
-    await gotoAppShell(page);
-
-    await expectUpdateBanner(page, "1.2.3");
-    await clickInstallUpdate(page);
-    await expectInstallInProgress(page);
-  });
-
-  test("manual check reports a found update while it downloads", async ({ page }) => {
-    await installDesktopRuntime(page, {
-      serverId: getServerId(),
-      updateAvailable: true,
-      latestVersion: "1.2.3",
-      updateReadyToInstall: false,
-    });
-    await gotoAppShell(page);
-    await openDesktopAboutSettings(page);
-
-    await clickCheckForUpdates(page);
-
-    await expectPendingUpdateCheckResult(page, "1.2.3");
+    await expect(page.getByTestId("update-callout")).toHaveCount(0);
+    await openSettings(page);
+    await openSettingsSection(page, "about");
+    await expect(page.getByText("App updates", { exact: true })).toHaveCount(0);
   });
 });
 

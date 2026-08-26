@@ -9,8 +9,16 @@ const dockerWorkflowPath = new URL(".github/workflows/docker.yml", repoRoot);
 const nixWorkflowPath = new URL(".github/workflows/nix.yml", repoRoot);
 const nixUpdateHashWorkflowPath = new URL(".github/workflows/nix-update-hash.yml", repoRoot);
 const websiteWorkflowPath = new URL(".github/workflows/deploy-website.yml", repoRoot);
-const portableReleaseWorkflowPath = new URL(
+const portableReleaseCoreWorkflowPath = new URL(
+  ".github/workflows/downstream-portable-release-core.yml",
+  repoRoot,
+);
+const portablePrereleaseWorkflowPath = new URL(
   ".github/workflows/downstream-macos-release.yml",
+  repoRoot,
+);
+const stableReleaseWorkflowPath = new URL(
+  ".github/workflows/downstream-stable-release.yml",
   repoRoot,
 );
 const filtersPath = new URL(".github/ci-paths.yml", repoRoot);
@@ -163,16 +171,19 @@ test("focused contracts stay inside existing required checks", () => {
 });
 
 test("portable release gates the downstream distribution instead of upstream release surfaces", () => {
-  const source = readFileSync(portableReleaseWorkflowPath, "utf8");
+  const source = readFileSync(portableReleaseCoreWorkflowPath, "utf8");
 
+  assert.match(source, /^  workflow_call:\s*$/m);
   assert.match(source, /name: downstream-release-contracts/);
   assert.match(source, /npm run acp:pin-consistency:check/);
   assert.doesNotMatch(source, /npm run acp:version-drift:check/);
   assert.match(source, /npm run build:web-cli-artifact/);
   assert.match(source, /npm run test:web-cli-artifact/);
-  assert.match(source, /packages\/app\/src\/composer\/draft\/create-flow\.test\.ts/);
-  assert.match(source, /packages\/app\/src\/composer\/draft\/input-draft\.live\.test\.tsx/);
-  assert.match(source, /packages\/app\/src\/utils\/agent-snapshots\.test\.ts/);
+  assert.match(source, /npm run test --workspace=@getpaseo\/app --/);
+  assert.doesNotMatch(source, /npx vitest run/);
+  assert.match(source, /src\/composer\/draft\/create-flow\.test\.ts/);
+  assert.match(source, /src\/composer\/draft\/input-draft\.live\.test\.tsx/);
+  assert.match(source, /src\/utils\/agent-snapshots\.test\.ts/);
   assert.ok(
     source.indexOf("Build shared server dependencies") <
       source.indexOf("Verify downstream role-bound workspace creation"),
@@ -188,7 +199,63 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /beads-central\.lock\.json'\)\.uvVersion/);
   assert.match(source, /needs: \[qualification, create-release\]/);
   assert.match(source, /needs\.qualification\.result == 'success'/);
+  assert.match(source, /^  qualify-release:\s*$/m);
+  assert.match(source, /name: downstream-qualified-update-manifest/);
+  assert.match(source, /needs: \[qualification, build\]/);
+  assert.match(source, /scripts\/create-paseo-update-manifest\.mjs/);
+  assert.match(source, /artifacts\/paseo-update-manifest\.json/);
+  assert.match(source, /gh release delete-asset "\$RELEASE_TAG" paseo-update-manifest\.json/);
+  assert.ok(
+    source.indexOf('gh release delete-asset "$RELEASE_TAG" paseo-update-manifest.json') <
+      source.indexOf("Upload verified release assets"),
+  );
+  assert.ok(
+    source.indexOf("Create final qualified update manifest") <
+      source.indexOf("Publish final update qualification sentinel"),
+  );
+  assert.ok(
+    source.indexOf("Publish final update qualification sentinel") <
+      source.indexOf("Publish qualified GitHub Release"),
+  );
   assert.doesNotMatch(source, /build:desktop|android:release|release:publish|npm publish/);
+});
+
+test("stable and prerelease entrypoints pin separate modes on one portable core", () => {
+  const core = readFileSync(portableReleaseCoreWorkflowPath, "utf8");
+  const prerelease = readFileSync(portablePrereleaseWorkflowPath, "utf8");
+  const stable = readFileSync(stableReleaseWorkflowPath, "utf8");
+
+  assert.doesNotMatch(core, /^  workflow_dispatch:\s*$/m);
+  assert.doesNotMatch(core, /^  push:\s*$/m);
+  assert.match(core, /RELEASE_PRERELEASE: \$\{\{ inputs\.prerelease \}\}/);
+  assert.match(core, /git cat-file -t "\$RELEASE_TAG"/);
+  assert.match(core, /Existing release mode mismatch/);
+  assert.match(core, /--draft/);
+  assert.match(core, /release_args\+=\(--prerelease --latest=false\)/);
+  assert.match(core, /Publish qualified GitHub Release/);
+  assert.match(core, /--draft=false/);
+  assert.match(core, /--prerelease=false/);
+  assert.match(core, /--latest/);
+
+  assert.match(prerelease, /^name: Downstream Portable Qualification \/ Prerelease$/m);
+  assert.match(prerelease, /^  workflow_dispatch:\s*$/m);
+  assert.doesNotMatch(prerelease, /^  push:\s*$/m);
+  assert.match(prerelease, /uses: \.\/\.github\/workflows\/downstream-portable-release-core\.yml/);
+  assert.match(prerelease, /publish: \$\{\{ inputs\.publish \}\}/);
+  assert.match(prerelease, /prerelease: true/);
+
+  assert.match(stable, /^name: Downstream Stable Release$/m);
+  assert.match(stable, /^  workflow_dispatch:\s*$/m);
+  assert.doesNotMatch(stable, /^  push:\s*$/m);
+  assert.match(stable, /create-or-validate-stable-tag/);
+  assert.match(stable, /Expected an exact 40-character source commit/);
+  assert.match(stable, /git merge-base --is-ancestor/);
+  assert.match(stable, /git tag -a|tag -a "\$RELEASE_TAG"/);
+  assert.match(stable, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(stable, /needs: create-tag/);
+  assert.match(stable, /uses: \.\/\.github\/workflows\/downstream-portable-release-core\.yml/);
+  assert.match(stable, /publish: true/);
+  assert.match(stable, /prerelease: false/);
 });
 
 test("server builds exclude test utilities at every domain depth", () => {

@@ -198,7 +198,7 @@ function requireWriteAuthority(caller: BeadsCaller): void {
 }
 
 function requirePeerIssueGrant(caller: BeadsCaller, issueId: string): void {
-  if (caller.roleId !== "peer") return;
+  if (caller.roleId !== "peer" || caller.assignment.envelope.effectClass !== "mutating") return;
   const grants = caller.assignment.envelope.resourceGrants?.beadsIssueIds ?? [];
   if (!grants.includes(issueId)) {
     throw new Error(`Peer assignment does not grant Beads issue ${issueId}`);

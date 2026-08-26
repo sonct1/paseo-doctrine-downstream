@@ -15,17 +15,27 @@ Quy trình downstream:
    WebUI + CLI + Foundation là hard blocker, còn upstream-only desktop/mobile/npm publishing không
    được dùng làm proxy hoặc blocker cho downstream portable release.
 3. Commit `CHANGELOG.md`, synchronized workspace versions và lockfile bằng một release commit riêng.
-4. Dispatch `Downstream Portable Release` trên exact release commit với `publish=false`. Workflow tự
-   chạy frozen install, deterministic downstream contracts, format/lint, typecheck các package được
-   ship và host-native artifact build/install/smoke trên macOS `arm64`/`x64`, Linux `x64`, Windows
-   `x64`. Docker/Nix là distribution channels độc lập và chỉ là hard gate khi release đó tuyên bố ship
-   hoặc thay đổi các channel này.
-5. Tạo annotated tag `paseo-v<package-version>`, push `main` và tag, rồi chờ
-   `Downstream Portable Release` hoàn tất cho đủ bốn matrix leg.
+4. Dispatch `Downstream Portable Qualification / Prerelease` trên exact release commit với
+   `publish=false`. Workflow gọi reusable portable core để chạy frozen install, deterministic
+   downstream contracts, format/lint, typecheck các package được ship và host-native
+   artifact build/install/smoke trên macOS `arm64`/`x64`, Linux `x64`, Windows `x64`. Docker/Nix là
+   distribution channels độc lập và chỉ là hard gate khi release đó tuyên bố ship hoặc thay đổi các
+   channel này.
+5. Push release line vào `main`, rồi dispatch `Downstream Stable Release` với exact 40-character
+   release source commit và target tag `paseo-v<package-version>`. Stable lane chỉ nhận source đã nằm
+   trong `main`, tự create hoặc validate annotated tag bằng `GITHUB_TOKEN`, rồi chạy lại cùng portable
+   core với `publish=true`, `prerelease=false`. Release được stage ở draft, upload đủ assets + final
+   manifest, rồi mới publish non-draft GitHub Release và đánh dấu `Latest`.
 
-Trước tag, dispatch `Downstream Portable Release` với exact commit và `publish=false`; chỉ đi tiếp khi
-cả bốn host-native build/install/smoke leg xanh. Tag release chạy lại cùng matrix với `publish=true`.
-Không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
+Stable và prerelease là hai entrypoint riêng, không suy release mode từ tag push và không flip mode
+sau khi release đã tồn tại. Stable tag được push bên trong lane bằng `GITHUB_TOKEN`, nên không đánh
+thức một tag-push workflow khác; release intent vẫn là exact stable dispatch. `Downstream Stable
+Release` luôn stable; muốn publish prerelease thì dispatch `Downstream Portable Qualification /
+Prerelease` với exact annotated tag và `publish=true`. Core fail closed nếu tag không annotated,
+tag/version/checkout không khớp hoặc existing release có `prerelease` mode khác lane được chọn. Draft
+đúng mode được reuse khi rerun; release chỉ thành public sau khi job cuối upload
+`paseo-update-manifest.json`. Trước tag, preflight `publish=false` phải xanh đủ bốn host-native
+build/install/smoke leg; không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
 
 ### Boundary của downstream release gate
 
@@ -61,6 +71,35 @@ receipts mới. Không được claim local stack mới nhất chỉ từ semver
 
 Không dùng `release:publish` hoặc upstream `vX.Y.Z` tag cho distribution này. Các lệnh stable/beta npm
 ở phần dưới chỉ áp dụng cho upstream release track.
+
+### Update portable downstream
+
+Updater chỉ đọc GitHub Releases của `webplode/paseo-doctrine-downstream`. Client thử check đúng một lần
+khi WebUI process mở và kết nối host; daemon cache kết quả automatic trong 24 giờ, gộp request đồng
+thời, dùng `ETag`, và giữ cooldown manual 5 phút. Reconnect, focus, resume hoặc timer không tạo thêm
+GitHub request.
+
+Release chỉ được discover sau khi job cuối upload `paseo-update-manifest.json`. Khi rerun cùng tag,
+workflow xóa manifest cũ trước khi thay platform assets; vì vậy client không bao giờ coi matrix đang
+upload dở là qualified. Manifest khóa đủ bốn archive/checksum macOS `arm64`/`x64`, Linux `x64` và
+Windows `x64`.
+
+Người dùng portable có thể apply từ WebUI callout hoặc CLI:
+
+```bash
+paseo update check
+paseo update apply
+paseo update status
+paseo update rollback
+```
+
+Installer chạy lại idle gate ngay trước switch, giữ service config hiện hữu, verify daemon, WebUI và
+Beads Central, rồi mới commit Foundation. Failure sau switch trả `current` về local release cũ. Mỗi
+release updater-enabled giữ installer của chính nó để `rollback` không phụ thuộc GitHub.
+
+`0.5.0-paseo.41` là bootstrap boundary: release cũ hơn chưa có protocol updater nên cần chạy portable
+installer downstream một lần. Từ release này trở đi WebUI/CLI dùng update flow ở trên. Electron updater
+upstream bị ẩn tới khi downstream publish đủ Electron metadata riêng.
 
 ## Two steps
 

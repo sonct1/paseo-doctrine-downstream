@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.6.0-paseo.44 - 2026-08-25
+
+Bản này đưa Product downstream lên cùng stable base `v0.6.0` của upstream bằng exact two-parent merge,
+đồng thời giữ nguyên authority và orchestration contracts của Foundation.
+
+### Added
+
+- Dedicated Explorer dock có Files/Changes, ordinary closable side pane và per-source main/side
+  placement; file, diff, agent, terminal, pull request và plugin panel có thể mở thành tab độc lập.
+- Tablet có Explorer dock resizable; Windows/Linux dùng shared custom window chrome contract mới.
+
+### Fixed
+
+- OpenCode initial SSE stream được retry có giới hạn và readiness chờ authoritative
+  `server.connected`, tránh nhận prompt khi provider chưa thật sự sẵn sàng.
+- Multiline composer tiếp tục resize đúng sau workspace/agent transition; Android tablet/foldable
+  không crash và settings persistence chịu được app revision khác nhau.
+
+### Compatibility
+
+- Topology, Project Issues, role-bound workspace admission, Room/Council, Beads Central, trusted
+  Semble và portable updater tiếp tục do downstream sở hữu; chúng được thích nghi sang pane host mới
+  thay vì bị thay wholesale bởi upstream.
+- Merge parent upstream là `6da9fa43fa97629af365c280b2ad7d0e7692c025`; post-tag
+  `upstream/main` không thuộc release input.
+
+### Qualified
+
+- Focused App/Server/Protocol/Desktop suites pass `677` unique assertions; isolated Playwright cho
+  Explorer placement, Explorer lifecycle và workspace restart pass `3/3`.
+- All-workspace typecheck, full lint/format, Server/CLI build, daemon WebUI bundle và local macOS
+  Desktop ZIP/DMG build đều pass.
+- `package-lock.json` pass completeness check; official `prefetch-npm-deps` từ exact pinned nixpkgs
+  tính lại `npmDepsHash` thành `sha256-43VSgJglb7fbyZmjeNdRM4WVV9i/JM7BKRk4ZloLThc=`.
+
+## 0.5.0-paseo.43 - 2026-08-25
+
+Bản follow-up này sửa boundary giữa assignment authority và provider execution: `read-only` tiếp tục
+được enforce bằng provider no-write mode, trong khi exact read tools do Paseo quản lý không còn rơi vào
+approval deadlock hoặc mutation ACL không liên quan.
+
+### Added
+
+- Role-bound provider có trusted Semble MCP manifest cho đúng `search` và `find_related`, với exact
+  per-tool auto-approval thay vì blanket approval.
+- Paseo-owned Semble proxy pin `semble[mcp]==0.5.4` và uv-managed Python 3.12; canonical workspace root,
+  remote URL, symlink escape và toàn bộ Python/index/model/uv/temp cache đều có explicit boundary.
+- Daemon prepare pinned Semble package/model trước role launch; assignment-side proxy chạy offline để
+  cold bootstrap không làm timeout Codex MCP inventory.
+
+### Fixed
+
+- Peer `read-only` có thể gọi `beads_get` mà không cần issue mutation grant, đúng assignment contract;
+  Peer `mutating` vẫn bắt buộc exact daemon-verified Beads issue grant.
+- Effective Peer tool projection loại `beads_create`, `beads_claim`, `beads_update` và
+  `beads_add_dependency` khỏi read-only launch thay vì chỉ chờ handler từ chối mutation.
+
+### Compatibility
+
+- Trusted Semble chỉ được inject khi provider hỗ trợ MCP và exact per-tool preapproval, đồng thời host
+  có `uvx`; thiếu runtime thì giữ assignment mode hiện tại, không fallback sang `full-access`.
+- Caller-supplied MCP server tên `semble` không được nhận trusted status hoặc auto-approval; namespace
+  này được reserve khi Product inject trusted runtime.
+
 ## 0.5.0-paseo.38 - 2026-08-25
 
 Bản follow-up này tiếp tục giữ exact upstream `v0.5.0` và gỡ các đường ownership bị phân mảnh khi

@@ -891,7 +891,11 @@ export class VoiceAssistantWebSocketServer {
 
   // Main-loop stall visibility: terminal frames and agent traffic share one event
   // loop, so delay percentiles here are the ground truth for "the daemon is busy".
-  private snapshotEventLoopDelay(): { p50Ms: number; p99Ms: number; maxMs: number } | null {
+  private snapshotEventLoopDelay(): {
+    p50Ms: number;
+    p99Ms: number;
+    maxMs: number;
+  } | null {
     const monitor = this.eventLoopDelayMonitor;
     if (!monitor) {
       return null;
@@ -1439,8 +1443,16 @@ export class VoiceAssistantWebSocketServer {
     };
     connection =
       lifecycle.kind === "ephemeral-plugin"
-        ? { ...base, lifecycle: "ephemeral-plugin", pluginId: lifecycle.pluginId }
-        : { ...base, lifecycle: "reconnectable", externalDisconnectCleanupTimeout: null };
+        ? {
+            ...base,
+            lifecycle: "ephemeral-plugin",
+            pluginId: lifecycle.pluginId,
+          }
+        : {
+            ...base,
+            lifecycle: "reconnectable",
+            externalDisconnectCleanupTimeout: null,
+          };
     session.updateClientCapabilities(clientCapabilities, ws);
     return connection;
   }
@@ -1714,6 +1726,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseDaemonStatusRpc ? { daemonStatusRpc: true } : {}),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: true,
+        // COMPAT(distributionUpdate): added in v0.5.0-paseo.41, remove gate after 2027-08-25.
+        distributionUpdate: true,
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
@@ -2324,7 +2338,12 @@ export class VoiceAssistantWebSocketServer {
 
       if (message.type === "session") {
         void this.dispatchSessionMessage(ws, activeConnection, message).catch((error: unknown) => {
-          this.handleRawMessageError({ ws, data, error, log: activeConnection.connectionLogger });
+          this.handleRawMessageError({
+            ws,
+            data,
+            error,
+            log: activeConnection.connectionLogger,
+          });
         });
       }
     } catch (error) {

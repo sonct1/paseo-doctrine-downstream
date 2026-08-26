@@ -3,11 +3,9 @@ import { appendFile } from "node:fs/promises";
 import { expect, type Page } from "@playwright/test";
 import { openSettings } from "../../../app/e2e/support/helpers/app";
 import { getE2EDaemonPort } from "../../../app/e2e/support/helpers/daemon-port";
-import { escapeRegex } from "../../../app/e2e/support/helpers/regex";
 import {
   openSettingsHost,
   openSettingsHostSection,
-  openSettingsSection,
 } from "../../../app/e2e/support/helpers/settings";
 
 interface DaemonApiStatus {
@@ -324,41 +322,6 @@ export async function openDesktopSettings(page: Page, serverId: string): Promise
   await expect(page.getByTestId("host-page-daemon-lifecycle-card")).toBeVisible({
     timeout: 15_000,
   });
-}
-
-export async function openDesktopAboutSettings(page: Page): Promise<void> {
-  await openSettings(page);
-  await openSettingsSection(page, "about");
-  await expect(page.getByText("App updates", { exact: true })).toBeVisible();
-}
-
-export async function expectUpdateBanner(page: Page, version: string): Promise<void> {
-  const callout = page.getByTestId("update-callout");
-  await expect(callout).toBeVisible({ timeout: 15_000 });
-  await expect(callout).toContainText(`v${version.replace(/^v/i, "")}`);
-}
-
-export async function clickCheckForUpdates(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Check" }).click();
-}
-
-export async function expectPendingUpdateCheckResult(page: Page, version: string): Promise<void> {
-  const normalizedVersion = `v${version.replace(/^v/i, "")}`;
-  await expect(
-    page.getByText(
-      new RegExp(`Update found: ${escapeRegex(normalizedVersion)}\\. Downloading\\.\\.\\.`),
-    ),
-  ).toBeVisible();
-  await expect(page.getByText(`Ready to install: ${normalizedVersion}`)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Update" })).toBeDisabled();
-}
-
-export async function clickInstallUpdate(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Install & restart" }).click();
-}
-
-export async function expectInstallInProgress(page: Page): Promise<void> {
-  await expect(page.getByRole("button", { name: "Installing..." })).toBeVisible();
 }
 
 /**

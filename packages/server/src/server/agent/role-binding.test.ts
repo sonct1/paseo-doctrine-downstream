@@ -685,6 +685,27 @@ describe("native Foundation role materialization", () => {
         "beads_add_dependency",
       ]),
     });
+    expect(applyRolePaseoToolPolicy("peer", { enabled: false }, undefined, "read-only")).toEqual({
+      enabled: true,
+      allowedTools: expect.arrayContaining([
+        "post_room",
+        "beads_status",
+        "beads_ready",
+        "beads_list",
+        "beads_get",
+        "beads_prime",
+      ]),
+    });
+    expect(
+      applyRolePaseoToolPolicy("peer", { enabled: false }, undefined, "read-only")?.allowedTools,
+    ).not.toEqual(
+      expect.arrayContaining([
+        "beads_create",
+        "beads_claim",
+        "beads_update",
+        "beads_add_dependency",
+      ]),
+    );
     expect(applyRolePaseoToolPolicy("peer", { enabled: false })).toEqual({
       enabled: true,
       allowedTools: expect.not.arrayContaining(["read_room", "create_agent"]),

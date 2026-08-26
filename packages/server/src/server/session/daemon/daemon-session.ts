@@ -8,6 +8,7 @@ import {
   type DaemonWebSocketRuntimeDiagnosticSnapshot,
 } from "./diagnostics.js";
 import { DaemonSelfUpdateSessionController } from "./daemon-self-update-session-controller.js";
+import { DistributionUpdateSessionController } from "../distribution-update/distribution-update-session-controller.js";
 import type { ManagedAgent } from "../../agent/agent-manager.js";
 import type { PersistedProjectRecord, PersistedWorkspaceRecord } from "../../workspace-registry.js";
 import type { HubRelationshipManagement } from "../../hub/relationship-controller.js";
@@ -76,6 +77,7 @@ export class DaemonSession {
   private readonly getWebSocketRuntimeMetrics: () => DaemonWebSocketRuntimeDiagnosticSnapshot | null;
   private readonly logger: pino.Logger;
   private readonly selfUpdate: DaemonSelfUpdateSessionController;
+  private readonly distributionUpdate: DistributionUpdateSessionController;
   private readonly hubRelationships: HubRelationshipManagement | null;
   private readonly reloadConfig: () => DaemonConfigReloadResult;
 
@@ -101,6 +103,12 @@ export class DaemonSession {
       emit: (msg) => this.host.emit(msg),
       emitLifecycleIntent: (intent) => this.host.emitLifecycleIntent(intent),
       sessionLogger: this.logger,
+    });
+    this.distributionUpdate = new DistributionUpdateSessionController({
+      paseoHome: this.paseoHome,
+      daemonVersion: this.daemonVersion ?? null,
+      emit: (message) => this.host.emit(message),
+      logger: this.logger,
     });
   }
 
@@ -129,7 +137,9 @@ export class DaemonSession {
         return;
       }
       if (msg.type === "hub.management.daemon.disconnect.request") {
-        const result = await this.hubRelationships.disconnect({ force: msg.force ?? false });
+        const result = await this.hubRelationships.disconnect({
+          force: msg.force ?? false,
+        });
         this.host.emit({
           type: "hub.management.daemon.disconnect.response",
           payload: { requestId: msg.requestId, ...result },
@@ -138,7 +148,10 @@ export class DaemonSession {
       }
       this.host.emit({
         type: "hub.management.daemon.get_status.response",
-        payload: { requestId: msg.requestId, status: this.hubRelationships.status() },
+        payload: {
+          requestId: msg.requestId,
+          status: this.hubRelationships.status(),
+        },
       });
     } catch (error) {
       this.logger.error({ err: error }, "Failed to handle Hub relationship request");
@@ -300,5 +313,9 @@ export class DaemonSession {
     msg: Extract<SessionInboundMessage, { type: "daemon.update.request" }>,
   ): Promise<void> {
     await this.selfUpdate.dispatch(msg);
+  }
+
+  handleDistributionUpdateRequest(msg: SessionInboundMessage): Promise<void> | undefined {
+    return this.distributionUpdate.dispatch(msg);
   }
 }

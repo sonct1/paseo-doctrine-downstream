@@ -1,7 +1,13 @@
-import { describe, expect, test } from "vitest";
+import path from "node:path";
+import { describe, expect, test, vi } from "vitest";
 
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
-import { withRuntimePaseoMcpServer } from "./runtime-mcp-config.js";
+import {
+  resolveTrustedSembleRuntime,
+  stripInternalTrustedSembleMcpServer,
+  withRuntimePaseoMcpServer,
+  withRuntimeTrustedSembleMcpServer,
+} from "./runtime-mcp-config.js";
 
 const BASE_CONFIG: AgentSessionConfig = {
   provider: "claude",
@@ -102,5 +108,120 @@ describe("withRuntimePaseoMcpServer", () => {
         mcpAuthToken: "cap-token",
       }),
     ).toThrow("MCP server name paseo is reserved for Paseo runtime");
+  });
+});
+
+describe("withRuntimeTrustedSembleMcpServer", () => {
+  const runtime = {
+    uvxPath: "/opt/homebrew/bin/uvx",
+    proxyPath: "/opt/paseo/trusted-semble-proxy.mjs",
+    paseoHome: "/var/lib/paseo",
+  };
+
+  test("injects only the confined proxy and exact trusted-tool preapprovals", () => {
+    const toolCacheRoot = path.join(runtime.paseoHome, "tool-cache", "semble");
+    const result = withRuntimeTrustedSembleMcpServer({
+      config: {
+        ...BASE_CONFIG,
+        toolPolicy: {
+          preapproved: [{ kind: "mcp", server: "paseo", tool: "beads_status" }],
+        },
+      },
+      agentId: "agent-1",
+      runtime,
+      roleBound: true,
+      supportsMcpServers: true,
+      supportsExactMcpPreapproval: true,
+    });
+
+    expect(result.mcpServers?.semble).toMatchObject({
+      type: "stdio",
+      command: process.execPath,
+      args: [runtime.proxyPath],
+      alwaysLoad: true,
+      env: {
+        PASEO_TRUSTED_SEMBLE_REPO_ROOT: "/tmp/agent",
+        PASEO_TRUSTED_SEMBLE_UVX_PATH: runtime.uvxPath,
+        SEMBLE_CACHE_LOCATION: expect.stringContaining(
+          `${path.join("tool-cache", "semble", "agents")}${path.sep}`,
+        ),
+        HF_HOME: path.join(toolCacheRoot, "model-cache"),
+        UV_CACHE_DIR: path.join(toolCacheRoot, "uv-cache"),
+        UV_PYTHON_INSTALL_DIR: path.join(toolCacheRoot, "python"),
+        UV_OFFLINE: "1",
+        HF_HUB_OFFLINE: "1",
+      },
+    });
+    expect(result.toolPolicy?.preapproved).toEqual([
+      { kind: "mcp", server: "paseo", tool: "beads_status" },
+      { kind: "mcp", server: "semble", tool: "search" },
+      { kind: "mcp", server: "semble", tool: "find_related" },
+    ]);
+    const stripped = stripInternalTrustedSembleMcpServer(result);
+    expect(stripped.mcpServers).toBeUndefined();
+    expect(stripped.toolPolicy?.preapproved).toEqual([
+      { kind: "mcp", server: "paseo", tool: "beads_status" },
+    ]);
+  });
+
+  test("does not inject without a role binding and rejects reserved-name collisions", () => {
+    expect(
+      withRuntimeTrustedSembleMcpServer({
+        config: BASE_CONFIG,
+        agentId: "agent-1",
+        runtime,
+        roleBound: false,
+        supportsMcpServers: true,
+        supportsExactMcpPreapproval: true,
+      }),
+    ).toEqual(BASE_CONFIG);
+
+    expect(() =>
+      withRuntimeTrustedSembleMcpServer({
+        config: {
+          ...BASE_CONFIG,
+          mcpServers: {
+            semble: { type: "stdio", command: "untrusted-semble" },
+          },
+        },
+        agentId: "agent-1",
+        runtime,
+        roleBound: true,
+        supportsMcpServers: true,
+        supportsExactMcpPreapproval: true,
+      }),
+    ).toThrow("MCP server name semble is reserved for Paseo trusted tools");
+  });
+});
+
+describe("resolveTrustedSembleRuntime", () => {
+  test("returns a runtime only after pinned preparation succeeds", async () => {
+    const paseoHome = path.resolve("/var/lib/paseo");
+    const uvxPath = path.resolve("/opt/homebrew/bin/uvx");
+    const prepareRuntime = vi.fn(async () => true);
+    const runtime = await resolveTrustedSembleRuntime({
+      paseoHome,
+      proxyPath: process.execPath,
+      resolveExecutable: async () => uvxPath,
+      prepareRuntime,
+    });
+
+    expect(runtime).toEqual({
+      paseoHome,
+      proxyPath: process.execPath,
+      uvxPath,
+    });
+    expect(prepareRuntime).toHaveBeenCalledWith(runtime);
+  });
+
+  test("keeps trusted Semble unavailable when preparation fails", async () => {
+    await expect(
+      resolveTrustedSembleRuntime({
+        paseoHome: "/var/lib/paseo",
+        proxyPath: process.execPath,
+        resolveExecutable: async () => "/opt/homebrew/bin/uvx",
+        prepareRuntime: async () => false,
+      }),
+    ).resolves.toBeNull();
   });
 });
