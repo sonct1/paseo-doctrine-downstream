@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       tag:
-        description: "paseo-v* annotated tag to create or validate and publish as stable/latest"
+        description: "Existing paseo-v* annotated tag to validate and publish as stable/latest"
         required: true
         type: string
 
@@ -20,8 +20,8 @@ permissions:
   contents: write
 
 jobs:
-  create-tag:
-    name: create-or-validate-stable-tag
+  validate-tag:
+    name: validate-stable-tag
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.source_ref }}
 
-      - name: Create or validate annotated release tag
+      - name: Validate annotated release tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
           SOURCE_REF: ${{ inputs.source_ref }}
@@ -49,23 +49,17 @@ jobs:
           git fetch origin main:refs/remotes/origin/main
           git merge-base --is-ancestor "$SOURCE_REF" refs/remotes/origin/main
 
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
-            test "$(git cat-file -t "$RELEASE_TAG")" = "tag"
-            test "$(git rev-parse "$RELEASE_TAG^{}")" = "$SOURCE_REF"
-          else
-            git \
-              -c user.name="github-actions[bot]" \
-              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              tag -a "$RELEASE_TAG" \
-              -m "Paseo Foundation Downstream ${RELEASE_TAG#paseo-v} stable release"
-            # GITHUB_TOKEN-authenticated pushes do not trigger recursive push workflows.
-            git push origin "refs/tags/$RELEASE_TAG"
-          fi
+          git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1 || {
+            echo "Annotated release tag $RELEASE_TAG must exist before stable dispatch" >&2
+            exit 1
+          }
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git cat-file -t "$RELEASE_TAG")" = "tag"
+          test "$(git rev-parse "$RELEASE_TAG^{}")" = "$SOURCE_REF"
 
   stable:
     name: qualify-and-publish-stable
-    needs: create-tag
+    needs: validate-tag
     uses: ./.github/workflows/downstream-portable-release-core.yml
     with:
       source_ref: ${{ inputs.tag }}
