@@ -23,6 +23,7 @@ jobs:
     uses: ./.github/workflows/downstream-portable-release-core.yml
     with:
       source_ref: ${{ inputs.ref }}
+      tooling_ref: ${{ github.sha }}
       release_tag: ${{ inputs.ref }}
       publish: ${{ inputs.publish }}
       prerelease: true

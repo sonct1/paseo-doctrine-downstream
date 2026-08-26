@@ -6,6 +6,7 @@ const source = readFileSync(new URL("smoke-web-cli-artifact.mjs", import.meta.ur
 const gitAttributes = readFileSync(new URL("../.gitattributes", import.meta.url), "utf8");
 
 test("portable artifact smoke binds every CLI probe to its isolated daemon", () => {
+  assert.match(source, /PASEO_RELEASE_ARTIFACT_ROOT/);
   assert.match(source, /PASEO_LISTEN: listen/);
   assert.match(source, /PASEO_RELAY_ENABLED: "false"/);
   assert.match(source, /PASEO_DICTATION_ENABLED: "0"/);
@@ -17,6 +18,16 @@ test("portable artifact smoke binds every CLI probe to its isolated daemon", () 
   assert.match(source, /manifest\.bundledBeadsBinary !== true/);
   assert.match(source, /await waitForExit\(daemon\)/);
   assert.match(source, /await terminateChild\(daemon\)/);
+});
+
+test("portable artifact smoke uses a bounded host startup budget with daemon diagnostics", () => {
+  assert.match(source, /PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS/);
+  assert.match(source, /PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS \?\? 120_000/);
+  assert.match(source, /Math\.ceil\(healthTimeoutMs \/ healthPollIntervalMs\)/);
+  assert.match(source, /daemon exited before health became ready/);
+  assert.match(source, /daemon health endpoint did not become ready within/);
+  assert.match(source, /--- daemon log tail ---/);
+  assert.match(source, /waitForHealth\(listen, \{ child: daemon, logPath: daemonLogPath \}\)/);
 });
 
 test("portable artifact smoke fails closed when an installed command hangs", () => {

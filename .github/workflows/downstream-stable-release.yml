@@ -69,6 +69,7 @@ jobs:
     uses: ./.github/workflows/downstream-portable-release-core.yml
     with:
       source_ref: ${{ inputs.tag }}
+      tooling_ref: ${{ github.sha }}
       release_tag: ${{ inputs.tag }}
       publish: true
       prerelease: false

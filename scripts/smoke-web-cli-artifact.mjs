@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const releaseToolingRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(process.env.PASEO_RELEASE_ARTIFACT_ROOT ?? releaseToolingRoot);
 const version = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
 const platformName = { darwin: "macos", linux: "linux", win32: "windows" }[process.platform];
 const extension = process.platform === "win32" ? ".zip" : ".tar.gz";
@@ -34,6 +35,13 @@ const installedBd = path.join(
   process.platform === "win32" ? "bd.exe" : "bd",
 );
 const windowsBundleIoTimeoutMs = 10 * 60_000;
+const healthPollIntervalMs = 500;
+const healthTimeoutMs = Number(process.env.PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS ?? 120_000);
+if (!Number.isSafeInteger(healthTimeoutMs) || healthTimeoutMs < healthPollIntervalMs) {
+  throw new Error(
+    `PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS must be an integer >= ${healthPollIntervalMs}`,
+  );
+}
 const env = {
   ...process.env,
   HOME: home,
@@ -100,17 +108,40 @@ function runCli(name, args, options) {
   return run(cli.command, [...cli.prefix, ...args], options);
 }
 
-async function waitForHealth(target = listen) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+function daemonDiagnostics(child, logPath) {
+  if (!child && !logPath) return "";
+  let logTail = "";
+  if (logPath && existsSync(logPath)) {
+    logTail = readFileSync(logPath, "utf8").trim().slice(-16_384);
+  }
+  const state = child
+    ? ` pid=${child.pid ?? "unknown"} exitCode=${child.exitCode ?? "null"} signal=${
+        child.signalCode ?? "null"
+      }`
+    : "";
+  return `${state}${logTail ? `\n--- daemon log tail ---\n${logTail}` : ""}`;
+}
+
+async function waitForHealth(target = listen, { child, logPath } = {}) {
+  const attempts = Math.ceil(healthTimeoutMs / healthPollIntervalMs);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (child && (child.exitCode !== null || child.signalCode !== null)) {
+      fail(`daemon exited before health became ready${daemonDiagnostics(child, logPath)}`);
+    }
     try {
       const response = await fetch(`http://${target}/api/health`);
       if (response.ok) return await response.json();
     } catch {
       // The daemon is still starting.
     }
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, healthPollIntervalMs));
   }
-  fail("daemon health endpoint did not become ready");
+  fail(
+    `daemon health endpoint did not become ready within ${healthTimeoutMs}ms${daemonDiagnostics(
+      child,
+      logPath,
+    )}`,
+  );
 }
 
 async function waitForBeadsHealthStatus(target, status) {
@@ -123,7 +154,8 @@ async function waitForBeadsHealthStatus(target, status) {
 }
 
 async function smokeDegradedBeadsLifecycle(runtimeNode, cliEntry) {
-  const degradedLog = openSync(path.join(smokeRoot, "daemon-degraded.log"), "w");
+  const degradedLogPath = path.join(smokeRoot, "daemon-degraded.log");
+  const degradedLog = openSync(degradedLogPath, "w");
   const degradedEnv = {
     ...env,
     PASEO_HOME: path.join(home, ".paseo-degraded"),
@@ -145,7 +177,10 @@ async function smokeDegradedBeadsLifecycle(runtimeNode, cliEntry) {
     { env: degradedEnv, stdio: ["ignore", degradedLog, degradedLog] },
   );
   try {
-    const health = await waitForHealth(degradedListen);
+    const health = await waitForHealth(degradedListen, {
+      child: daemon,
+      logPath: degradedLogPath,
+    });
     if (health.status !== "ok" || health.components?.beads?.status !== "degraded") {
       fail(`Daemon did not isolate Beads startup failure: ${JSON.stringify(health)}`);
     }
@@ -372,7 +407,8 @@ async function main() {
     "dist",
     "index.js",
   );
-  const log = openSync(path.join(smokeRoot, "daemon.log"), "w");
+  const daemonLogPath = path.join(smokeRoot, "daemon.log");
+  const log = openSync(daemonLogPath, "w");
   const daemon = spawn(
     runtimeNode,
     [cliEntry, "daemon", "start", "--foreground", "--listen", listen, "--web-ui", "--no-relay"],
@@ -380,7 +416,7 @@ async function main() {
   );
   let success;
   try {
-    await waitForHealth();
+    await waitForHealth(listen, { child: daemon, logPath: daemonLogPath });
     const beadsReady = await waitForBeadsCentral();
     if (
       beadsReady.central !== componentManifest.version ||
