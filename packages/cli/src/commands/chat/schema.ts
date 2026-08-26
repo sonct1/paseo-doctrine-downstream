@@ -12,6 +12,7 @@ export interface ChatRoomRow {
 export interface ChatMessageRow {
   id: string;
   author: string;
+  authorKind: "agent" | "client" | null;
   authorName: string | null;
   createdAt: string;
   replyTo: string;
@@ -36,6 +37,7 @@ export const chatMessageSchema: OutputSchema<ChatMessageRow> = {
   columns: [
     { header: "ID", field: "id", width: 36 },
     { header: "AUTHOR", field: "author", width: 16 },
+    { header: "AUTHOR KIND", field: (row) => row.authorKind ?? "legacy", width: 12 },
     { header: "AUTHOR NAME", field: (row) => row.authorName ?? "-", width: 20 },
     { header: "CREATED", field: "createdAt", width: 24 },
     { header: "REPLY TO", field: "replyTo", width: 36 },
@@ -61,7 +63,7 @@ function renderChatMessageBlock(message: ChatMessageRow): string {
     ? `${message.authorName} (${message.author})`
     : message.author;
   const lines = [
-    `┌─ ${authorLabel} ── ${formatTimestamp(message.createdAt)} ── [msg ${message.id}]`,
+    `┌─ ${authorLabel} [${message.authorKind ?? "legacy"}] ── ${formatTimestamp(message.createdAt)} ── [msg ${message.id}]`,
   ];
 
   if (message.replyTo !== "-") {
@@ -110,6 +112,7 @@ export function toChatRoomRow(room: {
 export function toChatMessageRow(message: {
   id: string;
   authorAgentId: string;
+  authorKind?: "agent" | "client";
   createdAt: string;
   replyToMessageId: string | null;
   mentionAgentIds: string[];
@@ -118,6 +121,7 @@ export function toChatMessageRow(message: {
   return {
     id: message.id,
     author: message.authorAgentId,
+    authorKind: message.authorKind ?? null,
     authorName: null,
     createdAt: message.createdAt,
     replyTo: message.replyToMessageId ?? "-",

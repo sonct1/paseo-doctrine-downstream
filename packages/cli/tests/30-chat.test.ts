@@ -27,22 +27,30 @@ try {
 
   {
     console.log("Test 2: chat post/read/wait work");
-    const posted = await ctx.paseo(["chat", "post", "coord-room", "first message for @agent-1"], {
-      env: { PASEO_AGENT_ID: "00000000-0000-4000-8000-000000000111" },
-    });
+    const forgedAgentPost = await ctx.paseo(
+      ["chat", "post", "coord-room", "forged agent message"],
+      {
+        env: { PASEO_AGENT_ID: "00000000-0000-4000-8000-000000000111" },
+      },
+    );
+    assert.notStrictEqual(forgedAgentPost.exitCode, 0, "CLI must not forge agent authorship");
+    assert(forgedAgentPost.stderr.includes("trusted post_room tool"), forgedAgentPost.stderr);
+
+    const posted = await ctx.paseo(["chat", "post", "coord-room", "first message for @agent-1"]);
     assert.strictEqual(posted.exitCode, 0, posted.stderr);
     assert(posted.stdout.includes("first message"), posted.stdout);
-    assert(posted.stdout.includes("00000000-0000-4000-8000-000000000111"), posted.stdout);
+    assert(posted.stdout.includes("manual"), posted.stdout);
 
     const read = await ctx.paseo(["chat", "read", "coord-room", "--limit", "10"]);
     assert.strictEqual(read.exitCode, 0, read.stderr);
     assert(read.stdout.includes("first message"), read.stdout);
-    assert(read.stdout.includes("00000000-0000-4000-8000-000000000111"), read.stdout);
+    assert(read.stdout.includes("manual"), read.stdout);
 
     const readJson = await ctx.paseo(["chat", "read", "coord-room", "--limit", "10", "--json"]);
     assert.strictEqual(readJson.exitCode, 0, readJson.stderr);
     const readPayload = JSON.parse(readJson.stdout);
-    assert.strictEqual(readPayload[0]?.author, "00000000-0000-4000-8000-000000000111");
+    assert.strictEqual(readPayload[0]?.author, "manual");
+    assert.strictEqual(readPayload[0]?.authorKind, "client");
 
     // `chat wait` reads "latest message id" then subscribes for newer ones.
     // Under CI load the subprocess can take >1s to bootstrap, so a single
