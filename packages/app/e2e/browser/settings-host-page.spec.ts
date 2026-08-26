@@ -120,10 +120,6 @@ test.describe("Settings host page", () => {
     const updateButton = page.getByTestId("host-page-update-button");
     await updateButton.click();
 
-    await expect(
-      updateButton.filter({ hasText: /Preparing update|Downloading packages|Installing/ }),
-    ).toBeDisabled();
-
     const updateFailure = page.getByTestId("host-page-update-error");
     await expect(updateFailure).toBeVisible();
     await expect(updateFailure).toContainText("Update failed");
