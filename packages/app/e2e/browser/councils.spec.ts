@@ -219,11 +219,6 @@ interface StartCouncilResult {
 }
 
 interface CouncilSeedClient {
-  postChatMessage(input: {
-    room: string;
-    body: string;
-    authorAgentId?: string;
-  }): Promise<{ message: { id: string } | null; error: string | null }>;
   waitForFinish(agentId: string, timeout?: number): Promise<{ status: string }>;
 }
 
@@ -343,6 +338,22 @@ async function recordCouncilSeatVerdict(input: {
   });
 }
 
+async function postCouncilSeatReport(input: {
+  seatId: string;
+  roomId: string;
+  body: string;
+}): Promise<{ id: string }> {
+  const result = await callAgentMcpTool<{ message: { id: string } }>({
+    callerAgentId: input.seatId,
+    name: "post_room",
+    arguments: {
+      room: input.roomId,
+      body: input.body,
+    },
+  });
+  return result.message;
+}
+
 async function createLead(workspace: Awaited<ReturnType<typeof seedWorkspace>>) {
   return workspace.client.createAgent({
     provider: "mock",
@@ -381,19 +392,16 @@ async function seedCouncilScenario(caseTitle: string, options: { verdict?: boole
         await seedClient.waitForFinish(seatId, 60_000);
 
         if (options.verdict) {
-          const report = await seedClient.postChatMessage({
-            room: plan.room.id,
+          const report = await postCouncilSeatReport({
+            seatId,
+            roomId: plan.room.id,
             body: `${seatPlan.reportStartSentinel}\nSeat report body for ${seatPlan.role}.\n${seatPlan.reportEndSentinel}`,
-            authorAgentId: seatId,
           });
-          if (!report.message) {
-            throw new Error(report.error ?? "Failed to post Council seat report message");
-          }
           await recordCouncilSeatVerdict({
             leadId: lead.id,
             caseId: plan.caseId,
             agentId: seatId,
-            reportMessageId: report.message.id,
+            reportMessageId: report.id,
           });
         }
 

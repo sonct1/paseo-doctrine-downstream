@@ -88,14 +88,13 @@ test.describe("Rooms", () => {
 
       const livePost = await roomClient.postChatMessage({
         room: roomId!,
-        body: "Agent status arrived live",
-        authorAgentId: "agent-room-e2e",
+        body: "External client status arrived live",
       });
       expect(livePost.error).toBeNull();
       await expect(
         page
           .locator('[data-testid^="room-message-"]')
-          .getByText("Agent status arrived live", { exact: true }),
+          .getByText("External client status arrived live", { exact: true }),
       ).toBeVisible({ timeout: 30_000 });
 
       await page
