@@ -247,6 +247,12 @@ test("stable and prerelease entrypoints pin separate modes on one portable core"
   assert.match(stable, /^name: Downstream Stable Release$/m);
   assert.match(stable, /^  workflow_dispatch:\s*$/m);
   assert.doesNotMatch(stable, /^  push:\s*$/m);
+  assert.match(stable, /create-or-validate-stable-tag/);
+  assert.match(stable, /Expected an exact 40-character source commit/);
+  assert.match(stable, /git merge-base --is-ancestor/);
+  assert.match(stable, /git tag -a|tag -a "\$RELEASE_TAG"/);
+  assert.match(stable, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(stable, /needs: create-tag/);
   assert.match(stable, /uses: \.\/\.github\/workflows\/downstream-portable-release-core\.yml/);
   assert.match(stable, /publish: true/);
   assert.match(stable, /prerelease: false/);

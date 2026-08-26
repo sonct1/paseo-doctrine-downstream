@@ -21,19 +21,21 @@ Quy trình downstream:
    artifact build/install/smoke trên macOS `arm64`/`x64`, Linux `x64`, Windows `x64`. Docker/Nix là
    distribution channels độc lập và chỉ là hard gate khi release đó tuyên bố ship hoặc thay đổi các
    channel này.
-5. Tạo annotated tag `paseo-v<package-version>`, push `main` và tag, rồi dispatch
-   `Downstream Stable Release` với exact tag. Stable lane chạy lại cùng portable core với
-   `publish=true`, `prerelease=false`, stage release ở draft, upload đủ assets + final manifest, rồi
-   mới publish non-draft GitHub Release và đánh dấu `Latest`.
+5. Push release line vào `main`, rồi dispatch `Downstream Stable Release` với exact 40-character
+   release source commit và target tag `paseo-v<package-version>`. Stable lane chỉ nhận source đã nằm
+   trong `main`, tự create hoặc validate annotated tag bằng `GITHUB_TOKEN`, rồi chạy lại cùng portable
+   core với `publish=true`, `prerelease=false`. Release được stage ở draft, upload đủ assets + final
+   manifest, rồi mới publish non-draft GitHub Release và đánh dấu `Latest`.
 
 Stable và prerelease là hai entrypoint riêng, không suy release mode từ tag push và không flip mode
-sau khi release đã tồn tại. `Downstream Stable Release` luôn stable; muốn publish prerelease thì
-dispatch `Downstream Portable Qualification / Prerelease` với exact annotated tag và `publish=true`.
-Core fail closed nếu tag không annotated, tag/version/checkout không khớp hoặc existing release có
-`prerelease` mode khác lane được chọn. Draft đúng mode được reuse khi rerun; release chỉ thành public
-sau khi job cuối upload `paseo-update-manifest.json`. Trước tag, preflight `publish=false` phải xanh
-đủ bốn host-native build/install/smoke leg; không claim OS-qualified từ compile/typecheck hoặc artifact
-của OS khác.
+sau khi release đã tồn tại. Stable tag được push bên trong lane bằng `GITHUB_TOKEN`, nên không đánh
+thức một tag-push workflow khác; release intent vẫn là exact stable dispatch. `Downstream Stable
+Release` luôn stable; muốn publish prerelease thì dispatch `Downstream Portable Qualification /
+Prerelease` với exact annotated tag và `publish=true`. Core fail closed nếu tag không annotated,
+tag/version/checkout không khớp hoặc existing release có `prerelease` mode khác lane được chọn. Draft
+đúng mode được reuse khi rerun; release chỉ thành public sau khi job cuối upload
+`paseo-update-manifest.json`. Trước tag, preflight `publish=false` phải xanh đủ bốn host-native
+build/install/smoke leg; không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
 
 ### Boundary của downstream release gate
 
