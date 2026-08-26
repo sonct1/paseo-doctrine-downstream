@@ -178,7 +178,20 @@ test("portable release gates the downstream distribution instead of upstream rel
   assert.match(source, /npm run acp:pin-consistency:check/);
   assert.doesNotMatch(source, /npm run acp:version-drift:check/);
   assert.match(source, /npm run build:web-cli-artifact/);
-  assert.match(source, /npm run test:web-cli-artifact/);
+  assert.match(source, /tooling_ref:/);
+  assert.match(source, /TOOLING_REF: \$\{\{ inputs\.tooling_ref \}\}/);
+  assert.equal(source.match(/path: \.downstream-release-tooling/gu)?.length, 2);
+  assert.match(
+    source,
+    /node --test \.downstream-release-tooling\/scripts\/smoke-web-cli-artifact\.test\.mjs/,
+  );
+  assert.match(source, /node \.downstream-release-tooling\/scripts\/smoke-web-cli-artifact\.mjs/);
+  assert.match(source, /PASEO_RELEASE_ARTIFACT_ROOT: \$\{\{ github\.workspace \}\}/);
+  assert.match(
+    source,
+    /PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS: \$\{\{ matrix\.health_timeout_ms \}\}/,
+  );
+  assert.equal(source.match(/health_timeout_ms: 120000/gu)?.length, 4);
   assert.match(source, /npm run test --workspace=@getpaseo\/app --/);
   assert.doesNotMatch(source, /npx vitest run/);
   assert.match(source, /src\/composer\/draft\/create-flow\.test\.ts/);
@@ -241,6 +254,7 @@ test("stable and prerelease entrypoints pin separate modes on one portable core"
   assert.match(prerelease, /^  workflow_dispatch:\s*$/m);
   assert.doesNotMatch(prerelease, /^  push:\s*$/m);
   assert.match(prerelease, /uses: \.\/\.github\/workflows\/downstream-portable-release-core\.yml/);
+  assert.match(prerelease, /tooling_ref: \$\{\{ github\.sha \}\}/);
   assert.match(prerelease, /publish: \$\{\{ inputs\.publish \}\}/);
   assert.match(prerelease, /prerelease: true/);
 
@@ -254,6 +268,7 @@ test("stable and prerelease entrypoints pin separate modes on one portable core"
   assert.match(stable, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
   assert.match(stable, /needs: create-tag/);
   assert.match(stable, /uses: \.\/\.github\/workflows\/downstream-portable-release-core\.yml/);
+  assert.match(stable, /tooling_ref: \$\{\{ github\.sha \}\}/);
   assert.match(stable, /publish: true/);
   assert.match(stable, /prerelease: false/);
 });

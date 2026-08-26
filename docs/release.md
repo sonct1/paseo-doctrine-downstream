@@ -37,6 +37,13 @@ tag/version/checkout không khớp hoặc existing release có `prerelease` mode
 `paseo-update-manifest.json`. Trước tag, preflight `publish=false` phải xanh đủ bốn host-native
 build/install/smoke leg; không claim OS-qualified từ compile/typecheck hoặc artifact của OS khác.
 
+Portable core pin riêng `source_ref` của candidate và `tooling_ref` của workflow commit. Candidate được
+build nguyên trạng; sau bước build, lane checkout smoke harness từ exact `tooling_ref` vào
+`.downstream-release-tooling` để pipeline có thể sửa qualification logic mà không dời tag khỏi source
+đã được activate. Harness đọc artifact qua `PASEO_RELEASE_ARTIFACT_ROOT`, giữ startup budget `120s` trên
+cả bốn native host để chịu được cold start dưới runner load. Daemon exit hoặc quá budget vẫn fail
+closed và phải in state cùng log tail; timeout dài hơn không được biến health failure thành pass.
+
 ### Boundary của downstream release gate
 
 Hard gate của `paseo-vX.Y.Z-paseo.N` chỉ chứng minh distribution hiện tại:

@@ -7,6 +7,10 @@ on:
         description: "Exact commit or annotated paseo-v* tag to qualify"
         required: true
         type: string
+      tooling_ref:
+        description: "Exact caller commit that owns the release qualification harness"
+        required: true
+        type: string
       release_tag:
         description: "Annotated paseo-v* tag used when publishing"
         required: true
@@ -29,6 +33,7 @@ permissions:
 
 env:
   SOURCE_REF: ${{ inputs.source_ref }}
+  TOOLING_REF: ${{ inputs.tooling_ref }}
   SHOULD_PUBLISH: ${{ inputs.publish }}
   RELEASE_TAG: ${{ inputs.release_tag }}
   RELEASE_PRERELEASE: ${{ inputs.prerelease }}
@@ -97,6 +102,16 @@ jobs:
           npm run typecheck --workspace=@getpaseo/app
           npm run typecheck --workspace=@getpaseo/cli
           npm run typecheck --workspace=@getpaseo/foundation-cli
+
+      - name: Check out pinned release tooling
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ env.TOOLING_REF }}
+          path: .downstream-release-tooling
+
+      - name: Verify pinned release tooling
+        run: node --test .downstream-release-tooling/scripts/smoke-web-cli-artifact.test.mjs
 
   create-release:
     needs: qualification
@@ -167,18 +182,22 @@ jobs:
             platform_name: macos
             arch: arm64
             extension: .tar.gz
+            health_timeout_ms: 120000
           - runner: macos-15-intel
             platform_name: macos
             arch: x64
             extension: .tar.gz
+            health_timeout_ms: 120000
           - runner: ubuntu-22.04
             platform_name: linux
             arch: x64
             extension: .tar.gz
+            health_timeout_ms: 120000
           - runner: windows-2025
             platform_name: windows
             arch: x64
             extension: .zip
+            health_timeout_ms: 120000
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -234,8 +253,18 @@ jobs:
       - name: Build host-native WebUI + CLI artifact
         run: npm run build:web-cli-artifact
 
+      - name: Check out pinned release tooling
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ env.TOOLING_REF }}
+          path: .downstream-release-tooling
+
       - name: Smoke installed artifact
-        run: npm run test:web-cli-artifact
+        env:
+          PASEO_RELEASE_ARTIFACT_ROOT: ${{ github.workspace }}
+          PASEO_RELEASE_SMOKE_HEALTH_TIMEOUT_MS: ${{ matrix.health_timeout_ms }}
+        run: node .downstream-release-tooling/scripts/smoke-web-cli-artifact.mjs
 
       - name: Upload verified release assets
         if: env.SHOULD_PUBLISH == 'true'
