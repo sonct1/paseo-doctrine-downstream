@@ -37,6 +37,12 @@ describe("desktop-updates helpers", () => {
     expect(formatVersionWithPrefix(null)).toBe("\u2014");
   });
 
+  it("keeps Electron updates hidden until downstream installer assets are qualified", async () => {
+    const { shouldShowDesktopUpdateSection } = await loadModuleForPlatform("web");
+
+    expect(shouldShowDesktopUpdateSection()).toBe(false);
+  });
+
   it("parses valid local daemon version result", async () => {
     const { parseLocalDaemonVersionResult } = await loadModuleForPlatform("web");
 

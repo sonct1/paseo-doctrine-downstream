@@ -24,7 +24,7 @@ describe("trusted Semble workspace confinement", () => {
         workspace,
       ),
     ).resolves.toMatchObject({
-      file_path: "src/index.ts",
+      file_path: join("src", "index.ts"),
       line: 1,
       repo: canonicalWorkspace,
     });

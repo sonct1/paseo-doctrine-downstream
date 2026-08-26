@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
@@ -118,6 +119,7 @@ describe("withRuntimeTrustedSembleMcpServer", () => {
   };
 
   test("injects only the confined proxy and exact trusted-tool preapprovals", () => {
+    const toolCacheRoot = path.join(runtime.paseoHome, "tool-cache", "semble");
     const result = withRuntimeTrustedSembleMcpServer({
       config: {
         ...BASE_CONFIG,
@@ -140,10 +142,12 @@ describe("withRuntimeTrustedSembleMcpServer", () => {
       env: {
         PASEO_TRUSTED_SEMBLE_REPO_ROOT: "/tmp/agent",
         PASEO_TRUSTED_SEMBLE_UVX_PATH: runtime.uvxPath,
-        SEMBLE_CACHE_LOCATION: expect.stringContaining("/tool-cache/semble/agents/"),
-        HF_HOME: "/var/lib/paseo/tool-cache/semble/model-cache",
-        UV_CACHE_DIR: "/var/lib/paseo/tool-cache/semble/uv-cache",
-        UV_PYTHON_INSTALL_DIR: "/var/lib/paseo/tool-cache/semble/python",
+        SEMBLE_CACHE_LOCATION: expect.stringContaining(
+          `${path.join("tool-cache", "semble", "agents")}${path.sep}`,
+        ),
+        HF_HOME: path.join(toolCacheRoot, "model-cache"),
+        UV_CACHE_DIR: path.join(toolCacheRoot, "uv-cache"),
+        UV_PYTHON_INSTALL_DIR: path.join(toolCacheRoot, "python"),
         UV_OFFLINE: "1",
         HF_HUB_OFFLINE: "1",
       },
@@ -192,18 +196,20 @@ describe("withRuntimeTrustedSembleMcpServer", () => {
 
 describe("resolveTrustedSembleRuntime", () => {
   test("returns a runtime only after pinned preparation succeeds", async () => {
+    const paseoHome = path.resolve("/var/lib/paseo");
+    const uvxPath = path.resolve("/opt/homebrew/bin/uvx");
     const prepareRuntime = vi.fn(async () => true);
     const runtime = await resolveTrustedSembleRuntime({
-      paseoHome: "/var/lib/paseo",
+      paseoHome,
       proxyPath: process.execPath,
-      resolveExecutable: async () => "/opt/homebrew/bin/uvx",
+      resolveExecutable: async () => uvxPath,
       prepareRuntime,
     });
 
     expect(runtime).toEqual({
-      paseoHome: "/var/lib/paseo",
+      paseoHome,
       proxyPath: process.execPath,
-      uvxPath: "/opt/homebrew/bin/uvx",
+      uvxPath,
     });
     expect(prepareRuntime).toHaveBeenCalledWith(runtime);
   });

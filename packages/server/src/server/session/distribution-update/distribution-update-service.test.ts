@@ -274,8 +274,9 @@ describe("DistributionUpdateService", () => {
       error: null,
     });
     expect(spawned).toHaveLength(1);
-    expect(spawned[0]?.installerPath).toMatch(
-      /paseo-web-cli-0\.5\.0-paseo\.39-macos-arm64\/install\.sh$/u,
+    expect(path.basename(spawned[0]?.installerPath ?? "")).toBe("install.sh");
+    expect(path.basename(path.dirname(spawned[0]?.installerPath ?? ""))).toBe(
+      "paseo-web-cli-0.5.0-paseo.39-macos-arm64",
     );
     await expect(service.getStatus()).resolves.toMatchObject({
       phase: "installing",
