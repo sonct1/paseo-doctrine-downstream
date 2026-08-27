@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.6.0-paseo.45 - 2026-08-27
+
+Bản này tách SLP khỏi semantic ownership của Product kernel thành first-party bundled policy plugin,
+trong khi giữ provider transport, persistence và technical enforcement ở đúng owning layer.
+
+### Added
+
+- Bundled `slp` policy generation sở hữu Lead/Peer/Supervisor definitions, execution profiles,
+  Assignment/Workspace Protocol composition, tool/skill ceilings, Council và coordination policy.
+- Mỗi role-bound agent persist đúng một owner receipt: `legacy-core` hoặc
+  `plugin:slp@<generation-digest>`; WebUI/CLI hiển thị owner và daemon cung cấp dynamic role/profile
+  catalog từ active bundled generation.
+- Bundled lifecycle có reserved plugin ID, immutable generation retention và fail-closed resolution;
+  không bật global local-plugin switch hoặc cho local plugin shadow first-party `slp`.
+
+### Changed
+
+- Kernel chỉ materialize, validate, persist và inject exact role/profile/assignment bytes qua native
+  provider channels; resume và hot reload resolve generation đã pin thay vì rematerialize từ active
+  policy mới.
+- Execution-profile, Council seat/kickoff và Lead handoff/coordination semantics resolve qua bundled
+  contribution; Room/Beads identity, durable lifecycle và no-write enforcement vẫn do kernel giữ.
+- Room messages persist trusted `agent`/`client` provenance. Human CLI post dùng unprivileged `manual`
+  author; CLI JSON/transcript expose `authorKind`, còn agent phải dùng trusted `post_room` tool.
+
+### Fixed
+
+- Duplicate owner, missing/unsupported bundled generation và local-plugin collision fail closed thay
+  vì silent fallback về legacy core hoặc dual injection.
+- Create preflight/rollback không để orphan directory workspace hoặc worktree khi SLP admission fail
+  sau provisioning; persisted tool ceiling tiếp tục được enforce trên daemon restart và native resume.
+- Council report chỉ hợp lệ khi exact Peer-authored Room message có trusted provenance và generation-
+  pinned policy validation.
+
+### Compatibility
+
+- Persisted legacy agents tiếp tục dùng frozen `legacy-core` policy; compatibility imports và static
+  role labels chỉ phục vụ daemon cũ, không được active SLP mượn ngược hoặc dùng khi daemon mới báo lỗi.
+- Codex developer instructions, Claude system append, Pi/OMP native hooks, Cursor capsule và
+  Antigravity custom-agent injection vẫn ở provider adapters; không thay bằng initial user prompt.
+- Ordinary non-SLP Paseo tiếp tục hoạt động khi bundled SLP unavailable, nhưng mọi launch yêu cầu SLP
+  đều fail closed.
+
+### Qualified
+
+- Focused protocol/server/app/CLI/provider suites, all-workspace format/lint/typecheck, clean
+  Server/CLI build và bundled daemon WebUI build đều pass trên feature bytes.
+- Exact CLI Room integration pass Human post/read/wait, forged-agent rejection và `client` provenance
+  readback; năm regression files bị sandbox `EPERM`/`EMFILE` đã rerun serial ngoài sandbox và pass
+  `50/50`.
+- Exact source SHA `554a519a0da56537082bdfc2728597c1199e0438` pass toàn bộ GitHub CI run
+  `33010105304`; Docker/distribution run `33010105258` của cùng SHA cũng pass.
+- Bundled owner digest là
+  `569c7f4633b7ffacb2e63c0ee3dda1ea882bc050bc456fdc8ac0c466f4f483f0`; canonical role và execution
+  artifact SHA-256 lần lượt là `8d0f521248b2713b38fdcd8f13502e0f22cc6951da568aefd78447c010506e74`
+  và `22a49ef57d7ca26ce1540a5ab28e911015d7aa3f568c05b94a5d627e7b372ec6`.
+
 ## 0.6.0-paseo.44 - 2026-08-25
 
 Bản này đưa Product downstream lên cùng stable base `v0.6.0` của upstream bằng exact two-parent merge,
