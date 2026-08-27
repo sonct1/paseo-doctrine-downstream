@@ -181,6 +181,21 @@ describe("editor target registry", () => {
     ]);
   });
 
+  it("recognizes IntelliJ IDEA's Linux Snap launcher", async () => {
+    const runtime = new FakeEditorTargets("linux");
+    runtime.installCommand("intellij-idea", "/snap/bin/intellij-idea");
+
+    expect(await intellijIdeaTarget.isInstalled(runtime)).toBe(true);
+    await intellijIdeaTarget.launch({ workspacePath: "/repo" }, runtime);
+
+    expect(runtime.launches).toEqual([
+      {
+        command: "/snap/bin/intellij-idea",
+        args: ["/repo"],
+      },
+    ]);
+  });
+
   it("recognizes Windows 64-bit project IDE launchers", async () => {
     const runtime = new FakeEditorTargets("win32");
     runtime.installCommand("pycharm64", "C:/Tools/PyCharm/bin/pycharm64.exe");

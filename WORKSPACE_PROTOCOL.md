@@ -2,12 +2,13 @@
 
 <!-- PASEO_WORKSPACE_PROTOCOL_VERSION: 3 -->
 
-- identity: `owner=Human/project owner; version=1; last_reviewed=2026-08-12; applies_to=repository root`
+- identity: `owner=Human/project owner; version=1; applies_to=repository root; review_trigger=material change to repository risk, topology, ownership, routing, evidence, or escalation policy`
 - project risk/protected areas: daemon lifecycle, role/assignment authority, project identity, credentials, release packaging và WebUI control surface là protected; preserve unrelated dirty state và không restart khi chưa có fresh idle readback.
 - default topology: Human-pinned Lead làm exact tiny work trực tiếp khi lease cho phép hoặc route smallest useful Peer set; Supervisor observe/advice trừ exact Human recovery mandate.
 - ownership/hotspots: mỗi moving/coupled scope có một write Owner; shared protocol, daemon config, generated Foundation dist, release artifact và issue graph contract cần exact owner trước mutation.
 - routing defaults: discover rồi pin provider/model/effort trong bounded assignment; không silent fallback; mỗi Peer nhận objective, scope, authority, evidence, handback và expiry rõ ràng.
 - issue tracker: Beads Central là durable issue/work graph bắt buộc cho Lead, Peer và Supervisor. Mỗi role gọi `beads_status` khi bắt đầu assignment, dùng đúng project do Paseo bind, đọc issue liên quan trước action và ghi authoritative readback ở material handoff; Central unavailable thì mutation `BLOCKED` và issue state giữ `UNKNOWN`, việc inspect không mutation vẫn tiếp tục, không fallback native `bd`/tracker khác. Lead create/update và chỉ close sau verdict; mutating Peer claim/update exact granted issue và dùng `discoveredFrom`; read-only Peer không cần issue grant để inspect; Supervisor read-only.
+- existing harness: repository `AGENTS.md`/`CLAUDE.md` và `docs/` là standing source of truth; dùng npm workspace scripts, focused tests, typecheck, lint, format và local completion gate theo scope hiện hành.
 - project policy: canonical imported Paseo Foundation distribution và repository `AGENTS.md` áp dụng theo exact current bytes; task-local package/override khác cần Human decision hoặc explicit protocol revision.
 - review/evidence: build dependencies trước server typecheck; dùng focused tests, current diff và release/package checks theo risk; Lead/Human giữ acceptance authority.
 - escalation/Human decisions: dùng `REOPEN_REQUEST`, `DEPENDENCY_REQUEST`, `BLOCKED` hoặc `COUNCIL_REQUEST` với evidence và exact decision cần Human chốt.

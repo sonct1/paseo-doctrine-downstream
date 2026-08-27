@@ -1,6 +1,6 @@
 import type { EditorTarget } from "../target.js";
 
-const COMMANDS = ["idea", "idea64"] as const;
+const COMMANDS = ["idea", "idea64", "intellij-idea"] as const;
 
 export const intellijIdeaTarget: EditorTarget = {
   id: "intellij-idea",

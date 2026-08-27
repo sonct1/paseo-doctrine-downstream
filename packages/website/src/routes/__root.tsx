@@ -20,10 +20,6 @@ const ReleaseCtx = createContext<ReleaseChannels>({
 });
 const StarsCtx = createContext<StarsContext>({ stars: "" });
 
-const PLAUSIBLE_INIT_SCRIPT = {
-  __html: `window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()`,
-};
-
 /** The latest stable release. Everything on the site points here by default. */
 export function useRelease(): ReleaseInfo {
   return useContext(ReleaseCtx).stable;
@@ -81,8 +77,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
     <html lang="en">
       <head>
         <HeadContent />
-        <script async src="https://plausible.io/js/pa-cKNUoWbeH_Iksb2fh82s3.js" />
-        <script dangerouslySetInnerHTML={PLAUSIBLE_INIT_SCRIPT} />
       </head>
       <body className="antialiased bg-background text-foreground">
         {children}

@@ -36,6 +36,7 @@ import { useProjects } from "@/hooks/use-projects";
 import type { ProjectEditFormSnapshot } from "@/projects/edit-form";
 import { useProjectIcons } from "@/projects/icons";
 import { createProjectIconTarget } from "@/projects/icon-target";
+import { shouldShowProjectConfiguration } from "@/screens/project-settings-screen-policy";
 import { useHostRuntimeClient, useHostRuntimeSnapshot } from "@/runtime/host-runtime";
 import { useHostFeature } from "@/runtime/host-features";
 import { useToast } from "@/contexts/toast-context";
@@ -321,20 +322,22 @@ function ProjectSettingsBody({
         supported={supportsWorkspaceProtocol}
       />
 
-      {renderContent({
-        readQuery,
-        loadedConfig,
-        loadedRevision,
-        hasUncommittedWorktreeSetupChanges,
-        readError,
-        selectedHost,
-        queryKey,
-        client,
-        onReload: handleReload,
-        isHostGone,
-        onBackToProjects,
-        showBackToProjects,
-      })}
+      {shouldShowProjectConfiguration(protocolRoot)
+        ? renderContent({
+            readQuery,
+            loadedConfig,
+            loadedRevision,
+            hasUncommittedWorktreeSetupChanges,
+            readError,
+            selectedHost,
+            queryKey,
+            client,
+            onReload: handleReload,
+            isHostGone,
+            onBackToProjects,
+            showBackToProjects,
+          })
+        : null}
     </View>
   );
 }
