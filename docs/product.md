@@ -72,7 +72,7 @@ Anyone who builds software:
 ## Current upstream state (May 2026) and candidate additions
 
 - Desktop (Electron), mobile (iOS/Android), web, CLI
-- Current downstream provider support: Claude Code, Codex, Cursor, Antigravity, and Codex-derived custom providers. Other upstream adapters remain source-only and disabled.
+- Current downstream provider support: Claude Code, Codex, Cursor, Antigravity, Pi, and custom providers derived from Codex or Pi. Other upstream adapters remain source-only and disabled.
 - One-click ACP provider catalog: CodeWhale, Cursor, Hermes, Qwen Coder, Kimi Code, and others — plus custom ACP providers
 - Voice mode: dictate prompts or talk through problems hands-free
 - MCP server exposes the daemon to other agents (workspaces, create/detach agent, schedules, heartbeats, terminals, workspace renaming)

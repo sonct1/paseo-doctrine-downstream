@@ -691,9 +691,12 @@ test("unsupported built-ins remain disabled even when legacy config enables them
   expect(registry.omp.enabled).toBe(false);
 });
 
-test("exposes only supported native providers plus custom Codex routes", () => {
+test("exposes supported native providers plus custom Codex and Pi routes", () => {
   const registry = buildProviderRegistry(logger, {
     providerOverrides: {
+      pi: {
+        enabled: true,
+      },
       cursor: {
         extends: "acp",
         label: "Cursor",
@@ -708,6 +711,10 @@ test("exposes only supported native providers plus custom Codex routes", () => {
         extends: "codex",
         label: "Codex proxy",
       },
+      "pi-proxy": {
+        extends: "pi",
+        label: "Pi proxy",
+      },
       zai: {
         extends: "claude",
         label: "ZAI",
@@ -718,8 +725,10 @@ test("exposes only supported native providers plus custom Codex routes", () => {
   expect(registry.claude.enabled).toBe(true);
   expect(registry.codex.enabled).toBe(true);
   expect(registry["gemini-antigravity"].enabled).toBe(true);
+  expect(registry.pi.enabled).toBe(true);
   expect(registry.cursor.enabled).toBe(true);
   expect(registry["codex-proxy"].enabled).toBe(true);
+  expect(registry["pi-proxy"].enabled).toBe(true);
   expect(registry.devin.enabled).toBe(false);
   expect(registry.zai.enabled).toBe(false);
   expect(registry.opencode.enabled).toBe(false);

@@ -371,8 +371,8 @@ One deliberate non-violation: `AgentFileExplorerState.directories`/`files` cache
 
 Each provider implements the `AgentClient` interface in `agent/agent-sdk-types.ts`. Provider implementations live in `agent/providers/`.
 
-The shipped downstream runtime exposes Claude Code, Codex, Cursor, Antigravity, and user-defined
-providers derived from Codex. Copilot, OpenCode, Pi, OMP, Devin, and other compatibility adapters may
+The shipped downstream runtime exposes Claude Code, Codex, Cursor, Antigravity, Pi, and user-defined
+providers derived from Codex or Pi. Copilot, OpenCode, OMP, Devin, and other compatibility adapters may
 remain in source for upstream parity and tests, but the daemon filters them out of the user-facing
 provider registry and they cannot be enabled through Provider Settings.
 
@@ -384,8 +384,10 @@ Provider implementations and compatibility adapters live in the same directory:
 | Codex                | Codex AppServer (`codex-app-server`) | Supported              | `~/.codex/sessions/{date}/rollout-{ts}-{id}.jsonl` |
 | Cursor               | ACP wrapper (`acp-agent`)            | Supported              | Provider-managed                                   |
 | Antigravity          | Native Antigravity CLI               | Supported              | Provider-managed                                   |
+| Pi                   | Pi RPC (`pi --mode rpc`)             | Supported              | Pi JSONL sessions                                  |
 | Codex-derived custom | OpenAI-compatible Codex adapter      | Supported when defined | Provider-managed                                   |
-| Other adapters       | ACP, OpenCode, Pi, OMP, or fixtures  | Source-only/disabled   | Provider-specific                                  |
+| Pi-derived custom    | Pi RPC adapter                       | Supported when defined | Pi-compatible JSONL sessions                       |
+| Other adapters       | ACP, OpenCode, OMP, or fixtures      | Source-only/disabled   | Provider-specific                                  |
 
 All providers:
 

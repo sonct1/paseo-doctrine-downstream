@@ -2,10 +2,10 @@
 
 This guide walks through adding a new agent provider end-to-end. There are two integration patterns, and this doc covers both.
 
-The shipped downstream runtime currently exposes Claude, Codex, Cursor, Antigravity, and custom
-providers derived from Codex. Other adapters documented below remain useful implementation references
-and upstream compatibility code, but they are disabled by Product policy and do not appear in Provider
-Settings.
+The shipped downstream runtime currently exposes Claude, Codex, Cursor, Antigravity, Pi, and custom
+providers derived from Codex or Pi. Other adapters documented below remain useful implementation
+references and upstream compatibility code, but they are disabled by Product policy and do not appear
+in Provider Settings.
 
 ## Provider-native session options
 
